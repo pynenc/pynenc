@@ -7,7 +7,7 @@ import pytest
 from pynenc import Pynenc
 from pynenc.orchestrator.base_orchestrator import BaseOrchestrator
 from pynenc.broker.base_broker import BaseBroker
-from pynenc.invocation import DistributedInvocation, ReusedInvocation
+from pynenc.invocation import DistributedInvocation, ReusedInvocation, InvocationStatus
 from pynenc import exceptions as exc
 from pynenc import conf
 
@@ -51,17 +51,17 @@ def test_route_default(app: MockPynenc) -> None:
     """
 
     @app.task
-    def add(x: int, y: int) -> int:
+    def dummy(x: int, y: int) -> int:
         return x + y
 
     actual_invocations = []
     for i in range(2):
-        actual_invocations.append(add(i, i))
+        actual_invocations.append(dummy(i, i))
         assert isinstance(actual_invocations[-1], DistributedInvocation)
         app.broker.route_invocation.assert_called_once()
         app.broker.route_invocation.reset_mock()
     # test that app.broker.route_invocation (MockBroker.route_invocation) has been called
-    _iter = app.orchestrator.get_existing_invocations(task=add)
+    _iter = app.orchestrator.get_existing_invocations(task=dummy)
     stored_invocations = list(_iter)
     assert actual_invocations == stored_invocations
 
@@ -75,23 +75,23 @@ def test_single_invocation_raising(app: MockPynenc) -> None:
     """
 
     @app.task(single_invocation=conf.SingleInvocation(on_diff_args_raise=True))
-    def add(arg: str) -> str:
+    def dummy(arg: str) -> str:
         return arg
 
     # Get existing invocation doesn't find any pending match
-    first_invocation = add("0")
+    first_invocation = dummy("0")
     # We are calling but the previous invocation is still at REGISTERED status
     # So the new invocation cannot run
     # But we cannot return the first_invocation because the arguments doesn't match
     # So it will return an exception with the different arguments
     # The user of the library should handle this (or add ignore option in Pynenc)
     with pytest.raises(exc.SingleInvocationWithDifferentArgumentsError) as excinfo:
-        _ = add("1")
-    assert excinfo.value.task == add
+        _ = dummy("1")
+    assert excinfo.value.task == dummy
     assert excinfo.value.existing_invocation == first_invocation
     assert excinfo.value.call_arguments == {"arg": "1"}
     # Trying with same arguments
-    next_invocation = add("0")
+    next_invocation = dummy("0")
     assert isinstance(first_invocation, DistributedInvocation)
     assert isinstance(next_invocation, ReusedInvocation)
     assert first_invocation.invocation_id == next_invocation.invocation_id
@@ -109,15 +109,15 @@ def test_single_invocation_not_raising(app: MockPynenc) -> None:
     """
 
     @app.task(single_invocation=conf.SingleInvocation(on_diff_args_raise=False))
-    def add(arg: str) -> str:
+    def dummy(arg: str) -> str:
         return arg
 
     # Get existing invocation doesn't find any pending match
-    first_invocation = add("0")
+    first_invocation = dummy("0")
     # In this test case, it will find the previous invocation with different arguments
     # But on_diff_args_raise is False, so it will return the Reused invocation
     # specifying previous invocation arguments and diff_args on the current call
-    next_invocation = add("1")
+    next_invocation = dummy("1")
     assert isinstance(first_invocation, DistributedInvocation)
     assert isinstance(next_invocation, ReusedInvocation)
     assert first_invocation.invocation_id == next_invocation.invocation_id
@@ -135,15 +135,15 @@ def test_single_invocation_arguments(app: MockPynenc) -> None:
     """
 
     @app.task(single_invocation=conf.SingleInvocationPerArguments())
-    def add(arg0: str, arg1: str) -> str:
+    def dummy(arg0: str, arg1: str) -> str:
         return f"{arg0=},{arg1=}"
 
     # Get existing invocation doesn't find any pending match
-    inv_ab = add("a", "b")
-    inv_cd = add("c", "d")
+    inv_ab = dummy("a", "b")
+    inv_cd = dummy("c", "d")
     assert inv_ab.invocation_id != inv_cd.invocation_id
-    assert inv_ab.invocation_id == add("a", "b").invocation_id
-    assert inv_cd.invocation_id == add("c", "d").invocation_id
+    assert inv_ab.invocation_id == dummy("a", "b").invocation_id
+    assert inv_cd.invocation_id == dummy("c", "d").invocation_id
 
 
 def test_single_invocation_keys_raising(app: MockPynenc) -> None:
@@ -158,23 +158,23 @@ def test_single_invocation_keys_raising(app: MockPynenc) -> None:
             ["key"], on_diff_args_raise=True
         )
     )
-    def add(key: str, arg: str) -> str:
+    def dummy(key: str, arg: str) -> str:
         return f"{key}:{arg}"
 
     # Get existing invocation doesn't find any pending match
-    inv_k0 = add("key0", "a")
-    inv_k1 = add("key1", "a")
+    inv_k0 = dummy("key0", "a")
+    inv_k1 = dummy("key1", "a")
     assert inv_k0.invocation_id != inv_k1.invocation_id
     # Finds invocation with same key but different arguments -> Exception
     #
     with pytest.raises(exc.SingleInvocationWithDifferentArgumentsError) as excinfo:
-        _ = add("key0", "b")
-    assert excinfo.value.task == add
+        _ = dummy("key0", "b")
+    assert excinfo.value.task == dummy
     assert excinfo.value.existing_invocation == inv_k0
     assert excinfo.value.call_arguments == {"key": "key0", "arg": "b"}
 
-    assert inv_k0.invocation_id == add("key0", "a").invocation_id
-    assert inv_k1.invocation_id == add("key1", "a").invocation_id
+    assert inv_k0.invocation_id == dummy("key0", "a").invocation_id
+    assert inv_k1.invocation_id == dummy("key1", "a").invocation_id
 
 
 def test_single_invocation_keys_not_raising(app: MockPynenc) -> None:
@@ -189,17 +189,17 @@ def test_single_invocation_keys_not_raising(app: MockPynenc) -> None:
             ["key"], on_diff_args_raise=False
         )
     )
-    def add(key: str, arg: str) -> str:
+    def dummy(key: str, arg: str) -> str:
         return f"{key}:{arg}"
 
     # Get existing invocation doesn't find any pending match
-    inv_k0 = add("key0", "a")
-    inv_k1 = add("key1", "a")
+    inv_k0 = dummy("key0", "a")
+    inv_k1 = dummy("key1", "a")
     assert inv_k0.invocation_id != inv_k1.invocation_id
     # Finds invocation with same key but different arguments -> Exception
     #
-    next_inv_k0 = add("key0", "b")
-    next_inv_k1 = add("key1", "b")
+    next_inv_k0 = dummy("key0", "b")
+    next_inv_k1 = dummy("key1", "b")
     assert isinstance(next_inv_k0, ReusedInvocation)
     assert isinstance(next_inv_k1, ReusedInvocation)
     # Reuse invocations

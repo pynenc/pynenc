@@ -5,6 +5,7 @@ from .task import Task
 from .broker import BaseBroker, MemBroker
 from .orchestrator import BaseOrchestrator, MemOrchestrator
 from .state_backend import BaseStateBackend, MemStateBackend
+from .serializer import BaseSerializer, JsonSerializer
 from .conf import Config
 
 if TYPE_CHECKING:
@@ -43,6 +44,7 @@ class Pynenc:
     _orchestrator_cls: Type[BaseOrchestrator] = MemOrchestrator
     _broker_cls: Type[BaseBroker] = MemBroker
     _state_backend_cls: Type[BaseStateBackend] = MemStateBackend
+    _serializer_cls: Type[BaseSerializer] = JsonSerializer
 
     def __init__(self) -> None:
         self.conf = Config()
@@ -64,6 +66,10 @@ class Pynenc:
     def state_backend(self) -> BaseStateBackend:
         return self._state_backend_cls(self)
 
+    @cached_property
+    def serializer(self) -> BaseSerializer:
+        return self._serializer_cls()
+
     def set_orchestrator_cls(self, orchestrator_cls: Type[BaseOrchestrator]) -> None:
         if self.is_initialized(prop := "orchestrator"):
             raise Exception(
@@ -77,6 +83,13 @@ class Pynenc:
                 f"Not possible to set broker, already initialized {self._broker_cls}"
             )
         self._broker_cls = broker_cls
+
+    def set_serializer(self, serializer_cls: Type[BaseSerializer]) -> None:
+        if self.is_initialized(prop := "serializer"):
+            raise Exception(
+                f"Not possible to set serializer, already initialized {self._serializer_cls}"
+            )
+        self._serializer_cls = serializer_cls
 
     @overload
     def task(self, func: "Func", **options: Any) -> "Task":

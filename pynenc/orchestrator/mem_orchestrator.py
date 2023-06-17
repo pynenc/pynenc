@@ -1,4 +1,6 @@
 from collections import defaultdict
+import pickle
+import hashlib
 from typing import Any, Iterator, Optional, TYPE_CHECKING, Generic
 
 from .base_orchestrator import BaseOrchestrator
@@ -18,7 +20,7 @@ class ArgPair:
         self.value = value
 
     def __hash__(self) -> int:
-        return hash((self.key, self.value))
+        return hash((self.key, pickle.dumps(self.value)))
 
     def __eq__(self, other: Any) -> bool:
         if isinstance(other, ArgPair):
@@ -35,36 +37,37 @@ class ArgPair:
 class TaskInvocationCache(Generic[Result]):
     def __init__(self) -> None:
         self.invocations: dict[str, "DistributedInvocation"] = {}
-        self.args_index: dict[frozenset[ArgPair], set[str]] = defaultdict(set)
+        self.args_index: dict[ArgPair, set[str]] = defaultdict(set)
         self.status_index: dict["InvocationStatus", set[str]] = defaultdict(set)
         self.invocation_status: dict[str, "InvocationStatus"] = {}
-
-    @staticmethod
-    def match_arguments(
-        arg_pairs: frozenset[ArgPair], invocation: "DistributedInvocation"
-    ) -> bool:
-        """Check if the invocation.arguments match the key_arguments"""
-        for arg_pair in arg_pairs:
-            if invocation.arguments[arg_pair.key] != arg_pair.value:
-                return False
-        return True
 
     def get_invocations(
         self,
         key_arguments: Optional[dict[str, Any]],
         status: Optional["InvocationStatus"],
     ) -> Iterator["DistributedInvocation"]:
+        # Filtering by key_arguments
         if key_arguments:
-            arg_pairs = frozenset(
-                ArgPair(key, value) for key, value in key_arguments.items()
-            )
-            for invocation_id in self.args_index[arg_pairs]:
-                if status and self.invocation_status[invocation_id] != status:
-                    continue
-                yield self.invocations[invocation_id]
+            matches: list[set[str]] = []
+            # Check all the task invocations related per each key_argument
+            for key, value in key_arguments.items():
+                invocation_ids = set()
+                for _id in self.args_index[ArgPair(key, value)]:
+                    # Check if the invocation also matches the (optionally) specified status
+                    if not status or _id in self.status_index[status]:
+                        invocation_ids.add(_id)
+                # add the matching invocations for the key:val pair to the list
+                if invocation_ids:
+                    matches.append(invocation_ids)
+            # yield the invocations that matches all the specified key:val pairs
+            if matches:
+                for invocation_id in set.intersection(*matches):
+                    yield self.invocations[invocation_id]
+        # Filtered only by statys
         elif status:
             for invocation_id in self.status_index[status]:
                 yield self.invocations[invocation_id]
+        # No filters, return all invocations
         else:
             for invocation in self.invocations.values():
                 yield invocation
@@ -76,11 +79,11 @@ class TaskInvocationCache(Generic[Result]):
     ) -> None:
         if (_id := invocation.invocation_id) not in self.invocations:
             self.invocations[_id] = invocation
-            for key_args, invocations in self.args_index.items():
-                if self.match_arguments(key_args, invocation):
-                    invocations.add(_id)
+            for key, value in invocation.arguments.items():
+                self.args_index[ArgPair(key, value)].add(_id)
             self.status_index[status].add(_id)
         else:
+            # already exists, remove previous status
             self.status_index[self.invocation_status[_id]].discard(_id)
             self.status_index[status].add(_id)
         self.invocation_status[_id] = status
