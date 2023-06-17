@@ -1,11 +1,12 @@
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ..invocation import InvocationStatus, DistributedInvocation
+from ..types import Params, Result, Args
 
 if TYPE_CHECKING:
     from ..app import Pynenc
-    from ..task import BaseTask
+    from ..task import Task
 
 
 class BaseBroker(ABC):
@@ -17,8 +18,8 @@ class BaseBroker(ABC):
         ...
 
     def route_task(
-        self, task: "BaseTask", arguments: dict[str, Any]
-    ) -> DistributedInvocation:
+        self, task: "Task[Params, Result]", arguments: "Args"
+    ) -> DistributedInvocation[Result]:
         self.route_invocation(invocation := DistributedInvocation(task, arguments))
         self.app.orchestrator.set_invocation_status(
             invocation, InvocationStatus.REGISTERED

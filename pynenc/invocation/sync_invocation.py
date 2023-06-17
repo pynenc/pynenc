@@ -1,22 +1,19 @@
 from __future__ import annotations
-from typing import Any, TYPE_CHECKING, TypeVar, ParamSpec
+from typing import TYPE_CHECKING
 
 from .base_invocation import BaseInvocation
 
 if TYPE_CHECKING:
-    P = ParamSpec("P")
-else:
-    P = TypeVar("P")
-R = TypeVar("R")
+    from ..types import Result, Args
 
 
-class SynchronousInvocation(BaseInvocation[R]):
+class SynchronousInvocation(BaseInvocation["Result"]):
     """The SynchronousInvocation class is used only for dev"""
 
-    def __init__(self, value: R, arguments: dict[str, Any]) -> None:
+    def __init__(self, value: "Result", arguments: "Args") -> None:
         self._value = value
         self.arguments = arguments
 
     @property
-    def value(self) -> R:
+    def value(self) -> "Result":
         return self._value

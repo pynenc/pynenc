@@ -1,36 +1,37 @@
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Optional, Iterator, Generic, TypeVar
+from typing import TYPE_CHECKING, Optional, Iterator
 
 if TYPE_CHECKING:
     from ..app import Pynenc
-    from ..task import BaseTask
+    from ..task import Task
     from ..invocation import InvocationStatus, DistributedInvocation
+    from ..types import Params, Result, Args
 
-R = TypeVar("R")
 
-
-class BaseOrchestrator(ABC, Generic[R]):
+class BaseOrchestrator(ABC):
     def __init__(self, app: "Pynenc") -> None:
         self.app = app
 
     @abstractmethod
     def get_existing_invocations(
         self,
-        task: "BaseTask",
-        key_arguments: Optional[dict[str, Any]] = None,
+        task: "Task[Params, Result]",
+        key_arguments: Optional["Args"] = None,
         status: Optional["InvocationStatus"] = None,
-    ) -> Iterator["DistributedInvocation[R]"]:
+    ) -> Iterator["DistributedInvocation[Result]"]:
         ...
 
     @abstractmethod
     def set_invocation_status(
-        self, invocation: "DistributedInvocation[R]", status: "InvocationStatus"
+        self,
+        invocation: "DistributedInvocation",
+        status: "InvocationStatus",
     ) -> None:
         ...
 
     def route_task(
-        self, task: "BaseTask", arguments: dict[str, Any]
-    ) -> "DistributedInvocation":
+        self, task: "Task", arguments: "Args"
+    ) -> "DistributedInvocation[Result]":
         if task.options.single_pending:
             if invocation := next(
                 self.get_existing_invocations(

@@ -1,33 +1,16 @@
-from typing import (
-    TYPE_CHECKING,
-    Callable,
-    Type,
-    TypeVar,
-    overload,
-    Optional,
-    Any,
-    Generic,
-)
+from typing import TYPE_CHECKING, Callable, overload, Optional, Any
 
-from .task import Task, BaseTask
+from .task import Task
 from .broker import BaseBroker, MemBroker
 from .orchestrator import BaseOrchestrator, MemOrchestrator
 from .state_backend import BaseStateBackend, MemStateBackend
 from .conf import Config
 
 if TYPE_CHECKING:
-    from typing_extensions import ParamSpec
-
-    P = ParamSpec("P")
-else:
-    P = TypeVar("P")
-R = TypeVar("R")
-TaskG = BaseTask[P, R]
-FuncG = Callable[P, R]
-T = TypeVar("T", bound=TaskG)
+    from .types import Func, Params, Result
 
 
-class Pynenc(Generic[T]):
+class Pynenc:
     """
     The main class of the Pynenc library that creates an application object.
 
@@ -56,25 +39,24 @@ class Pynenc(Generic[T]):
     >>> app = Pynenc()
     """
 
-    def __init__(self, task_cls: Optional[Type[T]]) -> None:
+    def __init__(self) -> None:
         self.conf = Config()
         self.task_broker: BaseBroker = MemBroker(self)
         self.state_backend: BaseStateBackend = MemStateBackend(self)
         self.orchestrator: BaseOrchestrator = MemOrchestrator(self)
         self.reporting = None
-        self.task_cls: Type[T] = task_cls if task_cls else Task
 
     @overload
-    def task(self, func: FuncG, **options: Any) -> T:
+    def task(self, func: "Func", **options: Any) -> "Task":
         ...
 
     @overload
-    def task(self, func: None = None, **options: Any) -> Callable[[FuncG], T]:
+    def task(self, func: None = None, **options: Any) -> Callable[["Func"], "Task"]:
         ...
 
     def task(
-        self, func: Optional[FuncG] = None, **options: Any
-    ) -> T | Callable[[FuncG], T]:
+        self, func: Optional["Func"] = None, **options: Any
+    ) -> "Task" | Callable[["Func"], "Task"]:
         """
         The task decorator converts the function into an instance of a BaseTask. It accepts any kind of options,
         however these options will be validated with the options class assigned to the class.
@@ -103,8 +85,8 @@ class Pynenc(Generic[T]):
         >>> result = my_func(1, 2)
         """
 
-        def init_task(_func: Callable[P, R]) -> T:
-            return self.task_cls(self, _func, options)
+        def init_task(_func: "Func") -> Task["Params", "Result"]:
+            return Task(self, _func, options)
 
         if func is None:
             return init_task

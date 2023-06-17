@@ -1,9 +1,10 @@
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..app import Pynenc
     from ..invocation import DistributedInvocation
+    from ..types import Result
 
 
 class BaseStateBackend(ABC):
@@ -11,5 +12,5 @@ class BaseStateBackend(ABC):
         self.app = app
 
     @abstractmethod
-    def insert_invocation(self, invocation: "DistributedInvocation") -> None:
+    def insert_invocation(self, invocation: "DistributedInvocation[Result]") -> None:
         ...

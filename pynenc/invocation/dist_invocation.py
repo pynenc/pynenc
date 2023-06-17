@@ -1,22 +1,18 @@
 from __future__ import annotations
-from typing import Any, TYPE_CHECKING, TypeVar, ParamSpec
+from typing import TYPE_CHECKING
 import uuid
 
 from .base_invocation import BaseInvocation
+from ..types import Params, Result, Args
 
 if TYPE_CHECKING:
-    from ..task import BaseTask
-
-    P = ParamSpec("P")
-else:
-    P = TypeVar("P")
-R = TypeVar("R")
+    from ..task import Task
 
 
-class DistributedInvocation(BaseInvocation[R]):
+class DistributedInvocation(BaseInvocation[Result]):
     """"""
 
-    def __init__(self, task: BaseTask[P, R], arguments: dict[str, Any]) -> None:
+    def __init__(self, task: "Task[Params, Result]", arguments: Args) -> None:
         self.app = task.app
         self.task = task
         self.arguments = arguments
@@ -24,6 +20,7 @@ class DistributedInvocation(BaseInvocation[R]):
         self.app.state_backend.insert_invocation(self)
 
     @property
-    def value(self) -> R:
-        ...
+    def value(self) -> Result:
+        raise NotImplementedError("TODO")
         # self.app.state_backend...
+        # HERE SPECIFIC WAITING BEHAVIOUR!!!

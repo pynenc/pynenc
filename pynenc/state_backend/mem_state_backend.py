@@ -1,10 +1,11 @@
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from .base_state_backend import BaseStateBackend
 
 if TYPE_CHECKING:
     from ..app import Pynenc
     from ..invocation import DistributedInvocation
+    from ..types import Result
 
 
 class MemStateBackend(BaseStateBackend):

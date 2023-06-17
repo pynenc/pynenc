@@ -1,11 +1,12 @@
 from collections import defaultdict
-from typing import Any, Iterator, Optional, TYPE_CHECKING
+from typing import Any, Iterator, Optional, TYPE_CHECKING, Generic
 
 from .base_orchestrator import BaseOrchestrator
+from ..types import Params, Result
 
 if TYPE_CHECKING:
     from ..app import Pynenc
-    from ..task import BaseTask
+    from ..task import Task
     from ..invocation import InvocationStatus, DistributedInvocation
 
 
@@ -20,7 +21,7 @@ class ArgPair:
         return hash(self.key)
 
 
-class TaskInvocationCache:
+class TaskInvocationCache(Generic[Result]):
     def __init__(self) -> None:
         self.invocations: dict[str, "DistributedInvocation"] = {}
         self.args_index: dict[set[ArgPair], set[str]] = defaultdict(set)
@@ -55,7 +56,9 @@ class TaskInvocationCache:
             iter(self.invocations.values())
 
     def set_status(
-        self, invocation: "DistributedInvocation", status: "InvocationStatus"
+        self,
+        invocation: "DistributedInvocation[Result]",
+        status: "InvocationStatus",
     ) -> None:
         if (_id := invocation.invocation_id) not in self.invocations:
             self.invocations[_id] = invocation
@@ -75,13 +78,15 @@ class MemOrchestrator(BaseOrchestrator):
 
     def get_existing_invocations(
         self,
-        task: "BaseTask",
+        task: "Task[Params, Result]",
         key_arguments: Optional[dict[str, Any]] = None,
         status: Optional["InvocationStatus"] = None,
     ) -> Iterator["DistributedInvocation"]:
         return self.cache[task.task_id].get_invocations(key_arguments, status)
 
     def set_invocation_status(
-        self, invocation: "DistributedInvocation", status: "InvocationStatus"
+        self,
+        invocation: "DistributedInvocation[Result]",
+        status: "InvocationStatus",
     ) -> None:
         self.cache[invocation.task.task_id].set_status(invocation, status)
