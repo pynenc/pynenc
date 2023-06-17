@@ -1,19 +1,22 @@
 from __future__ import annotations
+from functools import cached_property
 from typing import TYPE_CHECKING
 
 from .base_invocation import BaseInvocation
+from ..types import Params, Result, Args
+
 
 if TYPE_CHECKING:
-    from ..types import Result, Args
+    from ..task import Task
 
 
-class SynchronousInvocation(BaseInvocation["Result"]):
-    """The SynchronousInvocation class is used only for dev"""
+class SynchronousInvocation(BaseInvocation[Params, Result]):
+    def __init__(
+        self, task: "Task[Params, Result]", arguments: "Args", result: "Result"
+    ) -> None:
+        super().__init__(task, arguments)
+        self._result = result
 
-    def __init__(self, value: "Result", arguments: "Args") -> None:
-        self._value = value
-        self.arguments = arguments
-
-    @property
-    def value(self) -> "Result":
-        return self._value
+    @cached_property
+    def result(self) -> "Result":
+        return self._result

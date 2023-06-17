@@ -18,19 +18,30 @@ class ArgPair:
         self.value = value
 
     def __hash__(self) -> int:
-        return hash(self.key)
+        return hash((self.key, self.value))
+
+    def __eq__(self, other: Any) -> bool:
+        if isinstance(other, ArgPair):
+            return self.key == other.key and self.value == other.value
+        return False
+
+    def __str__(self) -> str:
+        return f"{self.key}:{self.value}"
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({self.__str__()})"
 
 
 class TaskInvocationCache(Generic[Result]):
     def __init__(self) -> None:
         self.invocations: dict[str, "DistributedInvocation"] = {}
-        self.args_index: dict[set[ArgPair], set[str]] = defaultdict(set)
+        self.args_index: dict[frozenset[ArgPair], set[str]] = defaultdict(set)
         self.status_index: dict["InvocationStatus", set[str]] = defaultdict(set)
         self.invocation_status: dict[str, "InvocationStatus"] = {}
 
     @staticmethod
     def match_arguments(
-        arg_pairs: set[ArgPair], invocation: "DistributedInvocation"
+        arg_pairs: frozenset[ArgPair], invocation: "DistributedInvocation"
     ) -> bool:
         """Check if the invocation.arguments match the key_arguments"""
         for arg_pair in arg_pairs:
@@ -44,7 +55,9 @@ class TaskInvocationCache(Generic[Result]):
         status: Optional["InvocationStatus"],
     ) -> Iterator["DistributedInvocation"]:
         if key_arguments:
-            arg_pairs = {ArgPair(key, value) for key, value in key_arguments.items()}
+            arg_pairs = frozenset(
+                ArgPair(key, value) for key, value in key_arguments.items()
+            )
             for invocation_id in self.args_index[arg_pairs]:
                 if status and self.invocation_status[invocation_id] != status:
                     continue
@@ -53,11 +66,12 @@ class TaskInvocationCache(Generic[Result]):
             for invocation_id in self.status_index[status]:
                 yield self.invocations[invocation_id]
         else:
-            iter(self.invocations.values())
+            for invocation in self.invocations.values():
+                yield invocation
 
     def set_status(
         self,
-        invocation: "DistributedInvocation[Result]",
+        invocation: "DistributedInvocation[Params, Result]",
         status: "InvocationStatus",
     ) -> None:
         if (_id := invocation.invocation_id) not in self.invocations:
@@ -69,6 +83,7 @@ class TaskInvocationCache(Generic[Result]):
         else:
             self.status_index[self.invocation_status[_id]].discard(_id)
             self.status_index[status].add(_id)
+        self.invocation_status[_id] = status
 
 
 class MemOrchestrator(BaseOrchestrator):
@@ -86,7 +101,7 @@ class MemOrchestrator(BaseOrchestrator):
 
     def set_invocation_status(
         self,
-        invocation: "DistributedInvocation[Result]",
+        invocation: "DistributedInvocation[Params, Result]",
         status: "InvocationStatus",
     ) -> None:
         self.cache[invocation.task.task_id].set_status(invocation, status)

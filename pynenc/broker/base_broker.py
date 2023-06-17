@@ -19,7 +19,7 @@ class BaseBroker(ABC):
 
     def route_task(
         self, task: "Task[Params, Result]", arguments: "Args"
-    ) -> DistributedInvocation[Result]:
+    ) -> DistributedInvocation[Params, Result]:
         self.route_invocation(invocation := DistributedInvocation(task, arguments))
         self.app.orchestrator.set_invocation_status(
             invocation, InvocationStatus.REGISTERED

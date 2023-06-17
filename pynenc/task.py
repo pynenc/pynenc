@@ -8,7 +8,7 @@ from .types import Params, Result, Func
 
 if TYPE_CHECKING:
     from .app import Pynenc
-    from .conf.single_invocation_pending import SingleInvocationPending
+    from .conf.single_invocation_pending import SingleInvocation
 
 
 @dataclass
@@ -17,7 +17,7 @@ class TaskOptions:
 
     #: If True, only one request will be routed by the broker.
     #: Use this option for tasks that make no sense to execute multiple times in parallel or to avoid generating too much unnecessary tasks in the system.
-    single_pending: Optional[SingleInvocationPending] = None
+    single_invocation: Optional[SingleInvocation] = None
 
     #: Profiling will take care of storing profiling information for the task (this is a todo, will require further options).
     profiling: Optional[str] = None
@@ -72,11 +72,13 @@ class Task(Generic[Params, Result]):
 
     def __call__(
         self, *args: Params.args, **kwargs: Params.kwargs
-    ) -> "BaseInvocation[Task[Params, Result]]":
+    ) -> "BaseInvocation[Params, Result]":
         """"""
         arguments = self.extract_arguments(*args, **kwargs)
         if self.app.conf.dev_mode_force_sync_tasks:
             return SynchronousInvocation(
-                value=self.func(*args, **kwargs), arguments=arguments
+                task=self,
+                arguments=arguments,
+                result=self.func(*args, **kwargs),
             )
         return self.app.orchestrator.route_task(self, arguments)

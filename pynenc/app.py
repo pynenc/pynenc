@@ -1,4 +1,5 @@
-from typing import TYPE_CHECKING, Callable, overload, Optional, Any
+from functools import cached_property
+from typing import TYPE_CHECKING, Callable, overload, Optional, Any, Type
 
 from .task import Task
 from .broker import BaseBroker, MemBroker
@@ -39,12 +40,43 @@ class Pynenc:
     >>> app = Pynenc()
     """
 
+    _orchestrator_cls: Type[BaseOrchestrator] = MemOrchestrator
+    _broker_cls: Type[BaseBroker] = MemBroker
+    _state_backend_cls: Type[BaseStateBackend] = MemStateBackend
+
     def __init__(self) -> None:
         self.conf = Config()
-        self.task_broker: BaseBroker = MemBroker(self)
-        self.state_backend: BaseStateBackend = MemStateBackend(self)
-        self.orchestrator: BaseOrchestrator = MemOrchestrator(self)
         self.reporting = None
+
+    def is_initialized(self, property_name: str) -> bool:
+        """Returns True if the given cached_property has been initialized"""
+        return property_name in self.__dict__
+
+    @cached_property
+    def orchestrator(self) -> BaseOrchestrator:
+        return self._orchestrator_cls(self)
+
+    @cached_property
+    def broker(self) -> BaseBroker:
+        return self._broker_cls(self)
+
+    @cached_property
+    def state_backend(self) -> BaseStateBackend:
+        return self._state_backend_cls(self)
+
+    def set_orchestrator_cls(self, orchestrator_cls: Type[BaseOrchestrator]) -> None:
+        if self.is_initialized(prop := "orchestrator"):
+            raise Exception(
+                f"Not possible to set orchestrator instance, already initialized {self._orchestrator_cls}"
+            )
+        self._orchestrator_cls = orchestrator_cls
+
+    def set_broker_cls(self, broker_cls: Type[BaseBroker]) -> None:
+        if self.is_initialized(prop := "broker"):
+            raise Exception(
+                f"Not possible to set broker, already initialized {self._broker_cls}"
+            )
+        self._broker_cls = broker_cls
 
     @overload
     def task(self, func: "Func", **options: Any) -> "Task":

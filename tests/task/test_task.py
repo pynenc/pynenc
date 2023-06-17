@@ -3,14 +3,13 @@ from typing import Any
 import os
 
 import pytest
-from _pytest.python import Metafunc
 
 from pynenc import Pynenc, Task, TaskOptions
 from pynenc.invocation import SynchronousInvocation, DistributedInvocation
 
 
 @pytest.fixture
-def app(request: pytest.FixtureRequest) -> Pynenc:
+def app() -> Pynenc:
     return Pynenc()
 
 
@@ -50,10 +49,10 @@ def test_sync_run_with_dev_mode_force_sync_invocation(app: Pynenc) -> None:
         return x + y
 
     with patch.dict(os.environ, {"DEV_MODE_FORCE_SYNC_TASK": "True"}):
-        result = add(1, 2)
+        invocation = add(1, 2)
 
-    assert isinstance(result, SynchronousInvocation)
-    assert result.value == 3
+    assert isinstance(invocation, SynchronousInvocation)
+    assert invocation.result == 3
 
 
 def test_async_invocation(app: Pynenc) -> None:
@@ -73,8 +72,8 @@ def test_extract_arguments_unpacking(app: Pynenc) -> None:
     def f_unpacking(*args: Any, **kwargs: Any) -> None:
         """Does nothing"""
 
-    result = f_unpacking("x", "y", z="z")
-    assert result.arguments == {"args": ("x", "y"), "kwargs": {"z": "z"}}
+    invocation = f_unpacking("x", "y", z="z")
+    assert invocation.arguments == {"args": ("x", "y"), "kwargs": {"z": "z"}}
 
 
 def test_extract_arguments_named_regardless_call(app: Pynenc) -> None:
@@ -85,9 +84,9 @@ def test_extract_arguments_named_regardless_call(app: Pynenc) -> None:
         """Does nothing"""
 
     expected = {"arg0": 0, "arg1": 1, "arg2": 2, "arg3": 3}
-    result = dummy(0, 1, 2, 3)
-    assert result.arguments == expected
-    result = dummy(0, 1, arg2=2, arg3=3)
-    assert result.arguments == expected
-    result = dummy(arg0=0, arg1=1, arg2=2, arg3=3)
-    assert result.arguments == expected
+    invocation = dummy(0, 1, 2, 3)
+    assert invocation.arguments == expected
+    invocation = dummy(0, 1, arg2=2, arg3=3)
+    assert invocation.arguments == expected
+    invocation = dummy(arg0=0, arg1=1, arg2=2, arg3=3)
+    assert invocation.arguments == expected
