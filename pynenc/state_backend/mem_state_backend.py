@@ -13,5 +13,5 @@ class MemStateBackend(BaseStateBackend):
         self._cache: dict[str, "DistributedInvocation"] = {}
         super().__init__(app)
 
-    def insert_invocation(self, invocation: "DistributedInvocation") -> None:
+    def _upsert_invocation(self, invocation: "DistributedInvocation") -> None:
         self._cache[invocation.invocation_id] = invocation

@@ -1,5 +1,7 @@
 from collections import deque
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
+
+from pynenc.invocation import DistributedInvocation
 
 from .base_broker import BaseBroker
 
@@ -13,5 +15,8 @@ class MemBroker(BaseBroker):
         self._queue: deque = deque()
         super().__init__(app)
 
-    def route_invocation(self, invocation: "DistributedInvocation") -> None:
+    def _route_invocation(self, invocation: "DistributedInvocation") -> None:
         self._queue.append(invocation)
+
+    def _retrieve_invocation(self) -> "DistributedInvocation":
+        return self._queue.pop()

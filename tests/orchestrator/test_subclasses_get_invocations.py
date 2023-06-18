@@ -1,14 +1,11 @@
 from dataclasses import dataclass
-from unittest.mock import MagicMock
 from typing import TYPE_CHECKING
-from functools import cached_property
 
 import pytest
 
-from pynenc import Pynenc
 from pynenc.orchestrator.base_orchestrator import BaseOrchestrator
-from pynenc.broker.base_broker import BaseBroker
 from pynenc.invocation import DistributedInvocation, InvocationStatus
+from tests.conftest import MockPynenc
 
 
 if TYPE_CHECKING:
@@ -25,25 +22,15 @@ def pytest_generate_tests(metafunc: "Metafunc") -> None:
         metafunc.parametrize("app", subclasses, indirect=True)
 
 
-class MockBroker(BaseBroker):
-    route_invocation = MagicMock()
-
-
-class MockPynenc(Pynenc):
-    @cached_property
-    def broker(self) -> MockBroker:
-        return MockBroker(self)
-
-
 @pytest.fixture
 def app(request: "FixtureRequest") -> MockPynenc:
     app = MockPynenc()
-    app.set_orchestrator_cls(request.param)
+    app.orchestrator = request.param(app)
     return app
 
 
 @dataclass
-class TestVars:
+class Vars:
     task: "Task"
     inv1: DistributedInvocation
     inv2: DistributedInvocation
@@ -52,7 +39,7 @@ class TestVars:
 
 
 @pytest.fixture
-def test_vars(app: MockPynenc) -> TestVars:
+def test_vars(app: MockPynenc) -> Vars:
     """Test the implementation of abstract methods:
     set_invocation_status, get_existing_invocations
     """
@@ -74,10 +61,10 @@ def test_vars(app: MockPynenc) -> TestVars:
     app.orchestrator.set_invocation_status(inv2, status=InvocationStatus.SUCCESS)
     app.orchestrator.set_invocation_status(inv3, status=InvocationStatus.SUCCESS)
     expected_ids = {inv1.invocation_id, inv2.invocation_id, inv3.invocation_id}
-    return TestVars(dummy, inv1, inv2, inv3, expected_ids)
+    return Vars(dummy, inv1, inv2, inv3, expected_ids)
 
 
-def test_get_all_invocations(app: MockPynenc, test_vars: TestVars) -> None:
+def test_get_all_invocations(app: MockPynenc, test_vars: Vars) -> None:
     """Test get without filters"""
 
     invocations = list(app.orchestrator.get_existing_invocations(test_vars.task))
@@ -85,7 +72,7 @@ def test_get_all_invocations(app: MockPynenc, test_vars: TestVars) -> None:
     assert invocations_ids == test_vars.expected_ids
 
 
-def test_get_by_arguments(app: MockPynenc, test_vars: TestVars) -> None:
+def test_get_by_arguments(app: MockPynenc, test_vars: Vars) -> None:
     """Test filter by arguments"""
     # argument arg0:a is the same for both
     invocations = list(
@@ -106,7 +93,7 @@ def test_get_by_arguments(app: MockPynenc, test_vars: TestVars) -> None:
     assert len(invocations) == 0
 
 
-def test_get_by_status(app: MockPynenc, test_vars: TestVars) -> None:
+def test_get_by_status(app: MockPynenc, test_vars: Vars) -> None:
     """Test filter by status"""
     invocations = list(
         app.orchestrator.get_existing_invocations(
@@ -128,7 +115,7 @@ def test_get_by_status(app: MockPynenc, test_vars: TestVars) -> None:
     }
 
 
-def test_get_mix(app: MockPynenc, test_vars: TestVars) -> None:
+def test_get_mix(app: MockPynenc, test_vars: Vars) -> None:
     """Test mixed filter (status and arguments)"""
     # The only way of getting just one invocation is combining filters
     # - arg1: a         --> inv1 and inv3

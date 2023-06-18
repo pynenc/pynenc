@@ -1,15 +1,12 @@
-from unittest.mock import MagicMock
 from typing import TYPE_CHECKING
-from functools import cached_property
 
 import pytest
 
-from pynenc import Pynenc
 from pynenc.orchestrator.base_orchestrator import BaseOrchestrator
-from pynenc.broker.base_broker import BaseBroker
-from pynenc.invocation import DistributedInvocation, ReusedInvocation, InvocationStatus
+from pynenc.invocation import DistributedInvocation, ReusedInvocation
 from pynenc import exceptions as exc
 from pynenc import conf
+from tests.conftest import MockPynenc
 
 
 if TYPE_CHECKING:
@@ -25,20 +22,10 @@ def pytest_generate_tests(metafunc: "Metafunc") -> None:
         metafunc.parametrize("app", subclasses, indirect=True)
 
 
-class MockBroker(BaseBroker):
-    route_invocation = MagicMock()
-
-
-class MockPynenc(Pynenc):
-    @cached_property
-    def broker(self) -> MockBroker:
-        return MockBroker(self)
-
-
 @pytest.fixture
 def app(request: "FixtureRequest") -> MockPynenc:
     app = MockPynenc()
-    app.set_orchestrator_cls(request.param)
+    app.orchestrator = request.param(app)
     return app
 
 
@@ -58,8 +45,8 @@ def test_route_default(app: MockPynenc) -> None:
     for i in range(2):
         actual_invocations.append(dummy(i, i))
         assert isinstance(actual_invocations[-1], DistributedInvocation)
-        app.broker.route_invocation.assert_called_once()
-        app.broker.route_invocation.reset_mock()
+        app.broker._route_invocation.assert_called_once()
+        app.broker._route_invocation.reset_mock()
     # test that app.broker.route_invocation (MockBroker.route_invocation) has been called
     _iter = app.orchestrator.get_existing_invocations(task=dummy)
     stored_invocations = list(_iter)

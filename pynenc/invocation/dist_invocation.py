@@ -10,7 +10,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
     """"""
 
     def __post_init__(self) -> None:
-        self.app.state_backend.insert_invocation(self)
+        self.app.state_backend.upsert_invocation(self)
 
     @property
     def result(self) -> "Result":

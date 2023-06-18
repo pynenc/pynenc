@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import threading
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -12,7 +13,12 @@ class BaseStateBackend(ABC):
         self.app = app
 
     @abstractmethod
-    def insert_invocation(
+    def _upsert_invocation(
         self, invocation: "DistributedInvocation[Params, Result]"
     ) -> None:
         ...
+
+    def upsert_invocation(
+        self, invocation: "DistributedInvocation[Params, Result]"
+    ) -> None:
+        threading.Thread(target=self._upsert_invocation, args=(invocation,)).start()

@@ -70,6 +70,12 @@ class Task(Generic[Params, Result]):
         bound_args.apply_defaults()
         return bound_args.arguments
 
+    def __str__(self) -> str:
+        return f"Task(func={self.func.__name__})"
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
     def __call__(
         self, *args: Params.args, **kwargs: Params.kwargs
     ) -> "BaseInvocation[Params, Result]":
