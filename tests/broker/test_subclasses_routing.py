@@ -1,10 +1,9 @@
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import pytest
 
 from pynenc.broker import BaseBroker
-from pynenc.invocation import DistributedInvocation, InvocationStatus
+from pynenc.invocation import DistributedInvocation
 from tests.conftest import MockPynenc
 
 

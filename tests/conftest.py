@@ -1,11 +1,19 @@
 from unittest.mock import MagicMock
 from functools import cached_property
+from typing import TYPE_CHECKING
 
 import pytest
 
 from pynenc import Pynenc
 from pynenc.orchestrator.base_orchestrator import BaseOrchestrator
 from pynenc.broker.base_broker import BaseBroker
+from pynenc.invocation import DistributedInvocation
+from pynenc.runner import BaseRunner
+from pynenc.state_backend.base_state_backend import BaseStateBackend
+from pynenc.runner.base_runner import BaseRunner
+
+if TYPE_CHECKING:
+    from pynenc.task import Task
 
 
 class MockBroker(BaseBroker):
@@ -28,7 +36,40 @@ class MockBaseOrchestrator(BaseOrchestrator):
         self.set_invocation_status.reset_mock()
 
 
+class MockStateBackend(BaseStateBackend):
+    _upsert_invocation = MagicMock()
+    _get_invocation = MagicMock()
+    _insert_history = MagicMock()
+    _get_history = MagicMock()
+    _insert_result = MagicMock()
+    _get_result = MagicMock()
+
+    def __init__(self, app: "Pynenc") -> None:
+        super().__init__(app)
+        self._upsert_invocation.reset_mock()
+        self._get_invocation.reset_mock()
+        self._insert_history.reset_mock()
+        self._get_history.reset_mock()
+        self._insert_result.reset_mock()
+        self._get_result.reset_mock()
+
+
+class MockRunner(BaseRunner):
+    on_start = MagicMock()
+    on_stop = MagicMock()
+    start_runner_loop = MagicMock()
+
+    def __init__(self, app: "Pynenc") -> None:
+        self.on_start.reset_mock()
+        self.on_stop.reset_mock()
+        self.start_runner_loop.reset_mock()
+
+
 class MockPynenc(Pynenc):
+    def __init__(self) -> None:
+        super().__init__()
+        self._runner_instance: MockRunner = MockRunner(self)
+
     @cached_property
     def broker(self) -> MockBroker:
         return MockBroker(self)
@@ -37,7 +78,35 @@ class MockPynenc(Pynenc):
     def orchestrator(self) -> MockBaseOrchestrator:
         return MockBaseOrchestrator(self)
 
+    @cached_property
+    def state_backend(self) -> MockStateBackend:
+        return MockStateBackend(self)
+
+    @property  # type: ignore
+    def runner(self) -> MockRunner:
+        return self._runner_instance
+
+    @runner.setter
+    def runner(
+        self, runner_instance: MockRunner
+    ) -> None:  # This matches the base setter signature
+        self._runner_instance = runner_instance
+
 
 @pytest.fixture
 def mock_base_app() -> MockPynenc:
     return MockPynenc()
+
+
+@pytest.fixture
+def dummy_task(mock_base_app: MockPynenc) -> "Task":
+    @mock_base_app.task
+    def dummy() -> None:
+        ...
+
+    return dummy
+
+
+@pytest.fixture
+def dummy_invocation(dummy_task: "Task") -> "DistributedInvocation":
+    return DistributedInvocation(dummy_task, {})

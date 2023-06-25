@@ -6,6 +6,7 @@ from .broker import BaseBroker, MemBroker
 from .orchestrator import BaseOrchestrator, MemOrchestrator
 from .state_backend import BaseStateBackend, MemStateBackend
 from .serializer import BaseSerializer, JsonSerializer
+from .runner import BaseRunner, DummyRunner
 from .conf import Config
 
 if TYPE_CHECKING:
@@ -45,10 +46,12 @@ class Pynenc:
     _broker_cls: Type[BaseBroker] = MemBroker
     _state_backend_cls: Type[BaseStateBackend] = MemStateBackend
     _serializer_cls: Type[BaseSerializer] = JsonSerializer
+    _runner_cls: Type[BaseRunner] = DummyRunner
 
     def __init__(self) -> None:
         self.conf = Config()
         self.reporting = None
+        self._runner_instance: Optional[BaseRunner] = None
 
     def is_initialized(self, property_name: str) -> bool:
         """Returns True if the given cached_property has been initialized"""
@@ -69,6 +72,16 @@ class Pynenc:
     @cached_property
     def serializer(self) -> BaseSerializer:
         return self._serializer_cls()
+
+    @property
+    def runner(self) -> BaseRunner:
+        if self._runner_instance is None:
+            self._runner_instance = self._runner_cls(self)
+        return self._runner_instance
+
+    @runner.setter
+    def runner(self, runner_instance: BaseRunner) -> None:
+        self._runner_instance = runner_instance
 
     def set_orchestrator_cls(self, orchestrator_cls: Type[BaseOrchestrator]) -> None:
         if self.is_initialized(prop := "orchestrator"):

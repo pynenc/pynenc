@@ -50,3 +50,41 @@ class SingleInvocationWithDifferentArgumentsError(TaskRoutingError):
             return f"SingleInvocationWithDifferentArgumentsError({self.task.task_id}) {diff=}: {self.message}"
         else:
             return f"SingleInvocationWithDifferentArgumentsError({self.task.task_id}) {diff=}"
+
+
+class InvocationError(Exception):
+    """Base class for all Task related errors."""
+
+    def __init__(
+        self, invocation: "BaseInvocation", message: Optional[str] = None
+    ) -> None:
+        self.invocation = invocation
+        self.message = message
+
+    def __str__(self) -> str:
+        if self.message:
+            return f"InvocationError({self.invocation.invocation_id}): {self.message}"
+        else:
+            return f"InvocationError({self.invocation.invocation_id})"
+
+
+class StateBackendError(Exception):
+    """Error raised when a task will not be routed."""
+
+
+class InvocationNotFoundError(StateBackendError):
+    """Error raised when the invocation is not present in the State Backend."""
+
+    def __init__(self, invocation_id: str, message: Optional[str] = None) -> None:
+        self.invocation_id = invocation_id
+        self.message = message
+
+    def __str__(self) -> str:
+        if self.message:
+            return f"InvocationNotFoundError({self.invocation_id}): {self.message}"
+        else:
+            return f"InvocationNotFoundError({self.invocation_id})"
+
+
+class RunnerNotExecutableError(Exception):
+    """Raised when trying to execute a runner that is not meant to be executed."""
