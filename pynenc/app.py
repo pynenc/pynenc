@@ -11,6 +11,7 @@ from .conf import Config
 
 if TYPE_CHECKING:
     from .types import Func, Params, Result
+    from .invocation import DistributedInvocation
 
 
 class Pynenc:
@@ -52,6 +53,7 @@ class Pynenc:
         self.conf = Config()
         self.reporting = None
         self._runner_instance: Optional[BaseRunner] = None
+        self.running_invocation: Optional["DistributedInvocation"] = None
 
     def is_initialized(self, property_name: str) -> bool:
         """Returns True if the given cached_property has been initialized"""
@@ -96,6 +98,13 @@ class Pynenc:
                 f"Not possible to set broker, already initialized {self._broker_cls}"
             )
         self._broker_cls = broker_cls
+
+    def set_state_backend_cls(self, state_backend_cls: Type[BaseStateBackend]) -> None:
+        if self.is_initialized(prop := "state_backend"):
+            raise Exception(
+                f"Not possible to set state backend, already initialized {self._state_backend_cls}"
+            )
+        self._state_backend_cls = state_backend_cls
 
     def set_serializer(self, serializer_cls: Type[BaseSerializer]) -> None:
         if self.is_initialized(prop := "serializer"):

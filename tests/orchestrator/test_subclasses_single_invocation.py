@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from pynenc.arguments import Arguments
 from pynenc.orchestrator.base_orchestrator import BaseOrchestrator
 from pynenc.invocation import DistributedInvocation, ReusedInvocation
 from pynenc import exceptions as exc
@@ -76,14 +77,14 @@ def test_single_invocation_raising(app: MockPynenc) -> None:
         _ = dummy("1")
     assert excinfo.value.task == dummy
     assert excinfo.value.existing_invocation == first_invocation
-    assert excinfo.value.call_arguments == {"arg": "1"}
+    assert excinfo.value.call_arguments.kwargs == {"arg": "1"}
     # Trying with same arguments
     next_invocation = dummy("0")
     assert isinstance(first_invocation, DistributedInvocation)
     assert isinstance(next_invocation, ReusedInvocation)
     assert first_invocation.invocation_id == next_invocation.invocation_id
     assert first_invocation.arguments == next_invocation.arguments
-    assert first_invocation.arguments["arg"] == "0"
+    assert first_invocation.arguments.kwargs["arg"] == "0"
     assert next_invocation.diff_arg is None
 
 
@@ -109,9 +110,9 @@ def test_single_invocation_not_raising(app: MockPynenc) -> None:
     assert isinstance(next_invocation, ReusedInvocation)
     assert first_invocation.invocation_id == next_invocation.invocation_id
     assert first_invocation.arguments == next_invocation.arguments
-    assert first_invocation.arguments["arg"] == "0"
-    assert isinstance(next_invocation.diff_arg, dict)
-    assert next_invocation.diff_arg["arg"] == "1"
+    assert first_invocation.arguments.kwargs["arg"] == "0"
+    assert isinstance(next_invocation.diff_arg, Arguments)
+    assert next_invocation.diff_arg.kwargs["arg"] == "1"
 
 
 def test_single_invocation_arguments(app: MockPynenc) -> None:
@@ -158,7 +159,7 @@ def test_single_invocation_keys_raising(app: MockPynenc) -> None:
         _ = dummy("key0", "b")
     assert excinfo.value.task == dummy
     assert excinfo.value.existing_invocation == inv_k0
-    assert excinfo.value.call_arguments == {"key": "key0", "arg": "b"}
+    assert excinfo.value.call_arguments.kwargs == {"key": "key0", "arg": "b"}
 
     assert inv_k0.invocation_id == dummy("key0", "a").invocation_id
     assert inv_k1.invocation_id == dummy("key1", "a").invocation_id
@@ -195,11 +196,11 @@ def test_single_invocation_keys_not_raising(app: MockPynenc) -> None:
     assert inv_k0.arguments == next_inv_k0.arguments
     assert inv_k1.arguments == next_inv_k1.arguments
     # with diff_args specified for the differences
-    assert isinstance(next_inv_k0.diff_arg, dict)
-    assert isinstance(next_inv_k1.diff_arg, dict)
+    assert isinstance(next_inv_k0.diff_arg, Arguments)
+    assert isinstance(next_inv_k1.diff_arg, Arguments)
     # keys are the same
-    assert inv_k0.arguments["key"] == next_inv_k0.diff_arg["key"]
-    assert inv_k1.arguments["key"] == next_inv_k1.diff_arg["key"]
+    assert inv_k0.arguments.kwargs["key"] == next_inv_k0.diff_arg.kwargs["key"]
+    assert inv_k1.arguments.kwargs["key"] == next_inv_k1.diff_arg.kwargs["key"]
     # not key arguments differ
-    assert inv_k0.arguments["arg"] != next_inv_k0.diff_arg["arg"]
-    assert inv_k1.arguments["arg"] != next_inv_k1.diff_arg["arg"]
+    assert inv_k0.arguments.kwargs["arg"] != next_inv_k0.diff_arg.kwargs["arg"]
+    assert inv_k1.arguments.kwargs["arg"] != next_inv_k1.diff_arg.kwargs["arg"]

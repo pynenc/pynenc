@@ -6,6 +6,7 @@ from ..exceptions import SingleInvocationWithDifferentArgumentsError
 
 if TYPE_CHECKING:
     from ..app import Pynenc
+    from ..arguments import Arguments
     from ..task import Task
     from ..invocation import DistributedInvocation
     from ..types import Params, Result, Args
@@ -32,8 +33,41 @@ class BaseOrchestrator(ABC):
     ) -> None:
         ...
 
+    @abstractmethod
+    def set_invocations_status(
+        self,
+        invocations: list["DistributedInvocation[Params, Result]"],
+        status: "InvocationStatus",
+    ) -> None:
+        ...
+
+    @abstractmethod
+    def get_invocation_status(
+        self, invocation: "DistributedInvocation[Params, Result]"
+    ) -> "InvocationStatus":
+        ...
+
+    def waiting_for_result(
+        self,
+        context_invocation: Optional["DistributedInvocation[Params, Result]"],
+        result_invocation: "DistributedInvocation[Params, Result]",
+    ) -> None:
+        """Called when an Optional[invocation] is waiting in the result result of another invocation."""
+
+    def get_invocations_to_run(
+        self, max_num_invocations: int
+    ) -> Iterator["DistributedInvocation"]:
+        """Returns an iterator of max_num_invocations that are ready for running"""
+        # TODO check priorities based in graph waiting_for_result
+        # TODO check for cycles based in graph
+        for _ in range(max_num_invocations):
+            if invocation := self.app.broker.retrieve_invocation():
+                yield invocation
+            else:
+                break
+
     def route_task(
-        self, task: "Task", arguments: "Args"
+        self, task: "Task", arguments: "Arguments"
     ) -> "DistributedInvocation[Params, Result]":
         if not task.options.single_invocation:
             return self.app.broker.route_task(task, arguments)

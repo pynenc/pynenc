@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING
 
+from pynenc.arguments import Arguments
 from pynenc.invocation import DistributedInvocation, InvocationStatus
 
 if TYPE_CHECKING:
@@ -17,7 +18,7 @@ def test_route_task(mock_base_app: "MockPynenc") -> None:
         return x + y
 
     invocation: DistributedInvocation = mock_base_app.broker.route_task(
-        dummy_task, {"x": 0, "y": 0}
+        dummy_task, Arguments(dummy_task.func, x=0, y=0)
     )
     assert isinstance(invocation, DistributedInvocation)
     mock_base_app.broker._route_invocation.assert_called_once()
@@ -35,7 +36,7 @@ def test_retrieve_invocation(mock_base_app: "MockPynenc") -> None:
 
     # mock the abstract methods with a fake invocation
     invocation: DistributedInvocation = DistributedInvocation(
-        dummy_task, {"x": 0, "y": 0}
+        dummy_task, Arguments(dummy_task.func, x=0, y=0)
     )
     mock_base_app.broker._retrieve_invocation.return_value = invocation
 

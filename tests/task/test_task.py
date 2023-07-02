@@ -73,7 +73,7 @@ def test_extract_arguments_unpacking(app: Pynenc) -> None:
         """Does nothing"""
 
     invocation = f_unpacking("x", "y", z="z")
-    assert invocation.arguments == {"args": ("x", "y"), "kwargs": {"z": "z"}}
+    assert invocation.arguments.kwargs == {"args": ("x", "y"), "kwargs": {"z": "z"}}
 
 
 def test_extract_arguments_named_regardless_call(app: Pynenc) -> None:
@@ -85,8 +85,8 @@ def test_extract_arguments_named_regardless_call(app: Pynenc) -> None:
 
     expected = {"arg0": 0, "arg1": 1, "arg2": 2, "arg3": 3}
     invocation = dummy(0, 1, 2, 3)
-    assert invocation.arguments == expected
+    assert invocation.arguments.kwargs == expected
     invocation = dummy(0, 1, arg2=2, arg3=3)
-    assert invocation.arguments == expected
+    assert invocation.arguments.kwargs == expected
     invocation = dummy(arg0=0, arg1=1, arg2=2, arg3=3)
-    assert invocation.arguments == expected
+    assert invocation.arguments.kwargs == expected

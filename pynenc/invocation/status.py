@@ -37,3 +37,13 @@ class InvocationStatus(Enum):
     FAILED = "Failed"
     RETRY = "Retry"
     PENDING = "Pending"
+
+    def is_final(self) -> bool:
+        """
+        Checks if the status is a final status.
+
+        Returns:
+        bool
+            True if the status is final, False otherwise.
+        """
+        return self in {InvocationStatus.SUCCESS, InvocationStatus.FAILED}

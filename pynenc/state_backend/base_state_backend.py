@@ -42,7 +42,7 @@ class BaseStateBackend(ABC):
         ...
 
     @abstractmethod
-    def _insert_history(
+    def _add_history(
         self,
         invocation: "DistributedInvocation[Params, Result]",
         invocation_history: InvocationHistory,
@@ -56,15 +56,29 @@ class BaseStateBackend(ABC):
         ...
 
     @abstractmethod
-    def _insert_result(
+    def _get_result(
+        self, invocation: "DistributedInvocation[Params, Result]"
+    ) -> "Result":
+        ...
+
+    @abstractmethod
+    def _set_result(
         self, invocation: "DistributedInvocation[Params, Result]", result: "Result"
     ) -> None:
         ...
 
     @abstractmethod
-    def _get_result(
+    def _get_exception(
         self, invocation: "DistributedInvocation[Params, Result]"
-    ) -> "Result":
+    ) -> "Exception":
+        ...
+
+    @abstractmethod
+    def _set_exception(
+        self,
+        invocation: "DistributedInvocation[Params, Result]",
+        exception: "Exception",
+    ) -> None:
         ...
 
     def upsert_invocation(self, invocation: "DistributedInvocation") -> None:
@@ -77,7 +91,7 @@ class BaseStateBackend(ABC):
             return invocation
         raise InvocationNotFoundError(invocation_id, "The invocation wasn't stored")
 
-    def insert_history(
+    def add_history(
         self,
         invocation: "DistributedInvocation[Params, Result]",
         status: Optional["InvocationStatus"] = None,
@@ -87,7 +101,7 @@ class BaseStateBackend(ABC):
             invocation.invocation_id, status, execution_context
         )
         thread = threading.Thread(
-            target=self._insert_history, args=(invocation, invocation_history)
+            target=self._add_history, args=(invocation, invocation_history)
         )
         self.threads.append(thread)
         thread.start()
@@ -98,13 +112,22 @@ class BaseStateBackend(ABC):
         # todo fork open threads
         return self._get_history(invocation)
 
-    def insert_result(
-        self, invocation: "DistributedInvocation", result: "Result"
-    ) -> None:
-        self._insert_result(invocation, result)
+    def set_result(self, invocation: "DistributedInvocation", result: "Result") -> None:
+        self._set_result(invocation, result)
 
     def get_result(
         self, invocation: "DistributedInvocation[Params, Result]"
     ) -> "Result":
         # insert result is block, no need for thread control
         return self._get_result(invocation)
+
+    def set_exception(
+        self, invocation: "DistributedInvocation", exception: "Exception"
+    ) -> None:
+        self._set_exception(invocation, exception)
+
+    def get_exception(
+        self, invocation: "DistributedInvocation[Params, Result]"
+    ) -> Exception:
+        # todo
+        return self._get_exception(invocation)

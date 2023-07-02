@@ -5,10 +5,11 @@ from functools import cached_property
 from typing import TYPE_CHECKING, Generic, Any
 import uuid
 
-from ..types import Params, Result, Args
+from ..types import Params, Result
 
 if TYPE_CHECKING:
     from ..app import Pynenc
+    from ..arguments import Arguments
     from ..task import Task
 
 
@@ -17,7 +18,7 @@ class BaseInvocation(ABC, Generic[Params, Result]):
     """"""
 
     task: "Task[Params, Result]"
-    arguments: "Args"
+    arguments: "Arguments"
 
     @cached_property
     def app(self) -> "Pynenc":
@@ -25,7 +26,16 @@ class BaseInvocation(ABC, Generic[Params, Result]):
 
     @cached_property
     def invocation_id(self) -> str:
+        """Returns a unique id for this invocation
+
+        A task with the same arguments can have multiple invocations, the invocation id is used to differentiate them
+        """
         return str(uuid.uuid4())
+
+    @cached_property
+    def call_id(self) -> str:
+        """Returns a unique id for each task and arguments"""
+        return self.task.task_id + self.arguments.args_id
 
     @property
     @abstractmethod
@@ -39,13 +49,10 @@ class BaseInvocation(ABC, Generic[Params, Result]):
         return self.__str__()
 
     def __hash__(self) -> int:
-        return hash((self.task, self.arguments, self.invocation_id))
+        return hash(self.invocation_id)
 
     def __eq__(self, other: Any) -> bool:
+        # TODO equality based in task and arguments or in invocation_id?
         if not isinstance(other, BaseInvocation):
             return False
-        return (self.task, self.arguments, self.invocation_id) == (
-            other.task,
-            other.arguments,
-            other.invocation_id,
-        )
+        return self.invocation_id == other.invocation_id

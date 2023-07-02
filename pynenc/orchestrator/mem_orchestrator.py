@@ -79,7 +79,7 @@ class TaskInvocationCache(Generic[Result]):
     ) -> None:
         if (_id := invocation.invocation_id) not in self.invocations:
             self.invocations[_id] = invocation
-            for key, value in invocation.arguments.items():
+            for key, value in invocation.arguments.kwargs.items():
                 self.args_index[ArgPair(key, value)].add(_id)
             self.status_index[status].add(_id)
         else:
@@ -108,3 +108,18 @@ class MemOrchestrator(BaseOrchestrator):
         status: "InvocationStatus",
     ) -> None:
         self.cache[invocation.task.task_id].set_status(invocation, status)
+
+    def set_invocations_status(
+        self,
+        invocations: list["DistributedInvocation[Params, Result]"],
+        status: "InvocationStatus",
+    ) -> None:
+        for invocation in invocations:
+            self.cache[invocation.task.task_id].set_status(invocation, status)
+
+    def get_invocation_status(
+        self, invocation: "DistributedInvocation[Params, Result]"
+    ) -> "InvocationStatus":
+        return self.cache[invocation.task.task_id].invocation_status[
+            invocation.invocation_id
+        ]

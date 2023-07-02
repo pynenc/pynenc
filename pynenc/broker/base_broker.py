@@ -1,8 +1,9 @@
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Optional
 
+from ..arguments import Arguments
 from ..invocation import InvocationStatus, DistributedInvocation
-from ..types import Params, Result, Args
+from ..types import Params, Result
 
 if TYPE_CHECKING:
     from ..app import Pynenc
@@ -30,7 +31,7 @@ class BaseBroker(ABC):
     #     ...
 
     def route_task(
-        self, task: "Task[Params, Result]", arguments: "Args"
+        self, task: "Task[Params, Result]", arguments: "Arguments"
     ) -> DistributedInvocation[Params, Result]:
         """Creates a new invocation and routes it"""
         self.route_invocation(invocation := DistributedInvocation(task, arguments))

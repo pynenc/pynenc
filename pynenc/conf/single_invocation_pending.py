@@ -1,5 +1,8 @@
 from abc import ABC
-from typing import Any, Optional
+from typing import Any, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..arguments import Arguments
 
 
 class SingleInvocation:
@@ -17,7 +20,7 @@ class SingleInvocation:
     def __init__(self, on_diff_args_raise: bool = False) -> None:
         self.on_diff_args_raise = on_diff_args_raise
 
-    def get_key_arguments(self, arguments: dict[str, Any]) -> Optional[dict[str, Any]]:
+    def get_key_arguments(self, arguments: "Arguments") -> Optional[dict[str, Any]]:
         del arguments
         return None
 
@@ -25,8 +28,8 @@ class SingleInvocation:
 class SingleInvocationPerArguments(SingleInvocation):
     """Only one task request per unique set of arguments can be status:registed in the system"""
 
-    def get_key_arguments(self, arguments: dict[str, Any]) -> Optional[dict[str, Any]]:
-        return arguments
+    def get_key_arguments(self, arguments: "Arguments") -> Optional[dict[str, Any]]:
+        return arguments.kwargs
 
 
 class SingleInvocationPerKeyArguments(SingleInvocation):
@@ -42,5 +45,5 @@ class SingleInvocationPerKeyArguments(SingleInvocation):
         self.on_diff_args_raise = on_diff_args_raise
         self.keys = keys
 
-    def get_key_arguments(self, arguments: dict[str, Any]) -> Optional[dict[str, Any]]:
-        return {key: arguments[key] for key in self.keys}
+    def get_key_arguments(self, arguments: "Arguments") -> Optional[dict[str, Any]]:
+        return {key: arguments.kwargs[key] for key in self.keys}

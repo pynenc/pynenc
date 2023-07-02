@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from pynenc.arguments import Arguments
 from pynenc.orchestrator.base_orchestrator import BaseOrchestrator
 from pynenc.invocation import DistributedInvocation, InvocationStatus
 from tests.conftest import MockPynenc
@@ -49,13 +50,13 @@ def test_vars(app: MockPynenc) -> Vars:
         return f"{arg0}:{arg1}"
 
     inv1: DistributedInvocation = DistributedInvocation(
-        dummy, {"arg0": "a", "arg1": "a"}
+        dummy, Arguments(dummy.func, arg0="a", arg1="a")
     )
     inv2: DistributedInvocation = DistributedInvocation(
-        dummy, {"arg0": "a", "arg1": "b"}
+        dummy, Arguments(dummy.func, arg0="a", arg1="b")
     )
     inv3: DistributedInvocation = DistributedInvocation(
-        dummy, {"arg0": "a", "arg1": "a"}
+        dummy, Arguments(dummy.func, arg0="a", arg1="a")
     )
     app.orchestrator.set_invocation_status(inv1, status=InvocationStatus.REGISTERED)
     app.orchestrator.set_invocation_status(inv2, status=InvocationStatus.SUCCESS)

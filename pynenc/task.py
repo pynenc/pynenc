@@ -1,8 +1,10 @@
 from __future__ import annotations
 from dataclasses import dataclass
+from functools import cached_property
 import inspect
 from typing import TYPE_CHECKING, Generic, Any, Optional
 
+from .arguments import Arguments
 from .invocation import BaseInvocation, SynchronousInvocation
 from .types import Params, Result, Func
 
@@ -61,14 +63,10 @@ class Task(Generic[Params, Result]):
         self.func = func
         self.options: TaskOptions = TaskOptions(**options)
 
-    def extract_arguments(
-        self, *args: Params.args, **kwargs: Params.kwargs
-    ) -> dict[str, Any]:
-        """Extracts the arguments of the task.func function call and returns them as a dictionary."""
-        sig = inspect.signature(self.func)
-        bound_args = sig.bind(*args, **kwargs)
-        bound_args.apply_defaults()
-        return bound_args.arguments
+    @cached_property
+    def task_id(self) -> str:
+        """The id of the task, which is the module and function name."""
+        return f"{self.func.__module__}.{self.func.__name__}"
 
     def __str__(self) -> str:
         return f"Task(func={self.func.__name__})"
@@ -80,7 +78,7 @@ class Task(Generic[Params, Result]):
         self, *args: Params.args, **kwargs: Params.kwargs
     ) -> "BaseInvocation[Params, Result]":
         """"""
-        arguments = self.extract_arguments(*args, **kwargs)
+        arguments = Arguments(self.func, *args, **kwargs)
         if self.app.conf.dev_mode_force_sync_tasks:
             return SynchronousInvocation(
                 task=self,

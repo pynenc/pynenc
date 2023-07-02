@@ -18,5 +18,5 @@ class MemBroker(BaseBroker):
     def _route_invocation(self, invocation: "DistributedInvocation") -> None:
         self._queue.append(invocation)
 
-    def _retrieve_invocation(self) -> "DistributedInvocation":
-        return self._queue.pop()
+    def _retrieve_invocation(self) -> Optional["DistributedInvocation"]:
+        return self._queue.pop() if self._queue else None

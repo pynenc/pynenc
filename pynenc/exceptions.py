@@ -4,9 +4,9 @@ Global Pynenc exception and warning classes.
 from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .task import Task
+    from .arguments import Arguments
     from .invocation import BaseInvocation
-    from .types import Args
+    from .task import Task
 
 
 class TaskError(Exception):
@@ -37,7 +37,7 @@ class SingleInvocationWithDifferentArgumentsError(TaskRoutingError):
         self,
         task: "Task",
         existing_invocation: "BaseInvocation",
-        call_arguments: "Args",
+        call_arguments: "Arguments",
         message: Optional[str] = None,
     ) -> None:
         self.existing_invocation = existing_invocation
@@ -45,7 +45,9 @@ class SingleInvocationWithDifferentArgumentsError(TaskRoutingError):
         super().__init__(task, message)
 
     def __str__(self) -> str:
-        diff = set(self.existing_invocation.arguments) - set(self.call_arguments)
+        diff = set(self.existing_invocation.arguments.kwargs) - set(
+            self.call_arguments.kwargs
+        )
         if self.message:
             return f"SingleInvocationWithDifferentArgumentsError({self.task.task_id}) {diff=}: {self.message}"
         else:

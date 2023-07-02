@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from pynenc.arguments import Arguments
 from pynenc.state_backend import BaseStateBackend, InvocationHistory
 from pynenc.invocation import DistributedInvocation, InvocationStatus
 from tests.conftest import MockPynenc
@@ -36,7 +37,7 @@ def invocation(app: MockPynenc) -> "DistributedInvocation[Params, Result]":
     def dummy() -> None:
         ...
 
-    return DistributedInvocation(dummy, {})
+    return DistributedInvocation(dummy, Arguments(dummy.func))
 
 
 def test_store_invocation(
@@ -67,13 +68,13 @@ def test_store_history_status(
             prev_datetime = inv_hist.timestamp
 
     assert [] == app.state_backend.get_history(invocation)
-    app.state_backend.insert_history(invocation, status=InvocationStatus.REGISTERED)
+    app.state_backend.add_history(invocation, status=InvocationStatus.REGISTERED)
     _check_history(
         invocation.invocation_id,
         [InvocationStatus.REGISTERED],
         app.state_backend.get_history(invocation),
     )
-    app.state_backend.insert_history(invocation, status=InvocationStatus.RUNNING)
+    app.state_backend.add_history(invocation, status=InvocationStatus.RUNNING)
     _check_history(
         invocation.invocation_id,
         [InvocationStatus.REGISTERED, InvocationStatus.RUNNING],
@@ -86,5 +87,5 @@ def test_store_result(
 ) -> None:
     """Test that it will store and retrieve a task result"""
     app.state_backend.upsert_invocation(invocation)
-    app.state_backend.insert_result(invocation, result="res_x")
+    app.state_backend.set_result(invocation, result="res_x")
     assert "res_x" == app.state_backend.get_result(invocation)
