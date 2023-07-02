@@ -1,4 +1,7 @@
+import threading
 import time
+import signal
+import os
 import pytest
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
@@ -14,10 +17,18 @@ if TYPE_CHECKING:
 
 def test_run(mock_base_app: "MockPynenc") -> None:
     """Test that the runner method will always call on_start and on_stop"""
-    mock_base_app.runner.run()
-    mock_base_app.runner.on_start.assert_called_once()
-    mock_base_app.runner.start_runner_loop.assert_called_once()
-    mock_base_app.runner.on_stop.assert_called_once()
+
+    def run_in_thread() -> None:
+        mock_base_app.runner.run()
+
+    # Create a thread to run the loop
+    thread = threading.Thread(target=run_in_thread, daemon=True)
+    thread.start()
+    mock_base_app.runner.stop_runner_loop()
+    thread.join()
+    mock_base_app.runner._on_start.assert_called_once()
+    mock_base_app.runner.runner_loop_iteration.assert_called()
+    mock_base_app.runner._on_stop.assert_called_once()
 
 
 def test_dummy_runner(mock_base_app: "MockPynenc") -> None:

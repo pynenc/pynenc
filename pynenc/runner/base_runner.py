@@ -1,5 +1,10 @@
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Optional, Type
+import signal
+import threading
+import time
+from typing import TYPE_CHECKING, Optional
+import warnings
+
 
 from pynenc.exceptions import RunnerNotExecutableError
 
@@ -7,7 +12,7 @@ if TYPE_CHECKING:
     from ..app import Pynenc
     from ..invocation import DistributedInvocation
     from ..types import Params, Result
-    from types import TracebackType
+    from types import FrameType
 
 
 class BaseRunner(ABC):
@@ -32,27 +37,69 @@ class BaseRunner(ABC):
     def __init__(self, app: "Pynenc") -> None:
         self.app = app
         self.app.runner = self
+        self.running = False
 
     @abstractmethod
-    def on_start(self) -> None:
+    def _on_start(self) -> None:
         """This method is called when the runner starts"""
 
-    @abstractmethod
-    def on_stop(self) -> None:
-        """This method is called when the runner stops"""
+    def on_start(self) -> None:
+        """This method is called when the runner starts"""
+        if threading.current_thread() is threading.main_thread():
+            signal.signal(signal.SIGINT, self.stop_runner_loop)
+            signal.signal(signal.SIGTERM, self.stop_runner_loop)
+        else:
+            warnings.warn(
+                "Running in a secondary thread. Signal handling will be skipped."
+            )
+        self.running = True
+        self._on_start()
 
     @abstractmethod
-    def start_runner_loop(self) -> None:
+    def _on_stop(self) -> None:
+        """This method is called when the runner stops"""
+
+    def on_stop(self) -> None:
+        """This method is called when the runner stops"""
+        self.running = False
+        self._on_stop()
+
+    @abstractmethod
+    def runner_loop_iteration(self) -> None:
         """
-        Starts the runner loop. Subclasses should implement this method to start the main
-        runner loop that retrieves task invocations from the broker and executes them.
+        One iteration of the runner loop.
+        Subclasses should implement this method to process invocations.
+        """
+
+    def stop_runner_loop(
+        self, signum: Optional[int] = None, frame: Optional["FrameType"] = None
+    ) -> None:
+        """Stops the runner loop"""
+        del signum, frame
+        self.running = False
+
+    @abstractmethod
+    def waiting_for_result(
+        self,
+        running_invocation: Optional["DistributedInvocation"],
+        result_invocation: "DistributedInvocation",
+    ) -> None:
+        """This method is called from the result method of an invocation
+        It signals the runner that the running invocation is waiting for the result of the result invocation
+
+        The running invocation may be None, when the result was called from outside a runner (e.g. user environment)
+        In that case will be handle by the DummyRunner (default in the pynenc app to handle this cases)
+
+        The runner has the oportunity to define the waiting behaviour of the running invocation in this method
+        Otherwise the running invocation will infinetely loop until the result invocation is ready
         """
 
     def run(self) -> None:
         """Starts the runner"""
         self.on_start()
         try:
-            self.start_runner_loop()
+            while self.running:
+                self.runner_loop_iteration()
         except KeyboardInterrupt:
             print("Shutting down gracefully...")
         finally:
@@ -68,17 +115,27 @@ class DummyRunner(BaseRunner):
 
     """
 
-    def on_start(self) -> None:
+    def _on_start(self) -> None:
         raise RunnerNotExecutableError(
             "This runner is a placeholder for the Pynenc app"
         )
 
-    def on_stop(self) -> None:
+    def _on_stop(self) -> None:
         raise RunnerNotExecutableError(
             "This runner is a placeholder for the Pynenc app"
         )
 
-    def start_runner_loop(self) -> None:
+    def runner_loop_iteration(self) -> None:
         raise RunnerNotExecutableError(
             "This runner is a placeholder for the Pynenc app"
         )
+
+    def waiting_for_result(
+        self,
+        running_invocation: Optional["DistributedInvocation"],
+        result_invocation: "DistributedInvocation",
+    ) -> None:
+        del running_invocation, result_invocation
+        # invocation.result() was called from outside a runner
+        # it will block and loop indefinetely until result is available
+        time.sleep(1)

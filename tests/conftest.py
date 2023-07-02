@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from pynenc import Pynenc
+from pynenc.arguments import Arguments
 from pynenc.orchestrator.base_orchestrator import BaseOrchestrator
 from pynenc.broker.base_broker import BaseBroker
 from pynenc.invocation import DistributedInvocation
@@ -29,40 +30,53 @@ class MockBroker(BaseBroker):
 class MockBaseOrchestrator(BaseOrchestrator):
     get_existing_invocations = MagicMock()
     set_invocation_status = MagicMock()
+    set_invocations_status = MagicMock()
+    get_invocation_status = MagicMock()
+    waiting_for_result = MagicMock()
 
     def __init__(self, app: "Pynenc") -> None:
         super().__init__(app)
         self.get_existing_invocations.reset_mock()
         self.set_invocation_status.reset_mock()
+        self.set_invocations_status.reset_mock()
+        self.get_invocation_status.reset_mock()
+        self.waiting_for_result.reset_mock()
 
 
 class MockStateBackend(BaseStateBackend):
     _upsert_invocation = MagicMock()
     _get_invocation = MagicMock()
-    _insert_history = MagicMock()
+    _add_history = MagicMock()
     _get_history = MagicMock()
-    _insert_result = MagicMock()
+    _set_result = MagicMock()
     _get_result = MagicMock()
+    _set_exception = MagicMock()
+    _get_exception = MagicMock()
 
     def __init__(self, app: "Pynenc") -> None:
         super().__init__(app)
         self._upsert_invocation.reset_mock()
         self._get_invocation.reset_mock()
-        self._insert_history.reset_mock()
+        self._add_history.reset_mock()
         self._get_history.reset_mock()
-        self._insert_result.reset_mock()
+        self._set_result.reset_mock()
         self._get_result.reset_mock()
+        self._set_exception.reset_mock()
+        self._get_exception.reset_mock()
 
 
 class MockRunner(BaseRunner):
-    on_start = MagicMock()
-    on_stop = MagicMock()
-    start_runner_loop = MagicMock()
+    _on_start = MagicMock()
+    _on_stop = MagicMock()
+    runner_loop_iteration = MagicMock()
+    waiting_for_result = MagicMock()
 
     def __init__(self, app: "Pynenc") -> None:
-        self.on_start.reset_mock()
-        self.on_stop.reset_mock()
-        self.start_runner_loop.reset_mock()
+        super().__init__(app)
+        self._on_start.reset_mock()
+        self._on_stop.reset_mock()
+        self.runner_loop_iteration.reset_mock()
+        self.waiting_for_result.reset_mock()
 
 
 class MockPynenc(Pynenc):
@@ -109,4 +123,4 @@ def dummy_task(mock_base_app: MockPynenc) -> "Task":
 
 @pytest.fixture
 def dummy_invocation(dummy_task: "Task") -> "DistributedInvocation":
-    return DistributedInvocation(dummy_task, {})
+    return DistributedInvocation(dummy_task, Arguments(dummy_task.func))
