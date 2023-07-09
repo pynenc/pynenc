@@ -4,6 +4,7 @@ from typing import Any
 import pytest
 
 from pynenc import Pynenc
+from pynenc.exceptions import CycleDetectedError
 from pynenc.runner import MemRunner
 from pynenc.orchestrator.mem_orchestrator import MemOrchestrator
 
@@ -76,20 +77,33 @@ def test_mem_sub_invocation_dependency(app: Pynenc) -> None:
 def test_avoid_cycles(app: Pynenc) -> None:
     """Test that a cycle in the dependency graph is detected"""
 
-    raise NotImplementedError(
-        "TODO - pending invocation graph using invocation.call_id"
-    )
+    # raise NotImplementedError()
 
     def run_in_thread() -> None:
         app.runner.run()
 
     @app.task
     def get_upper() -> str:
-        return get_upper().result.upper()
+        invocation = get_upper()
+        return invocation.result.upper()
 
     thread = threading.Thread(target=run_in_thread, daemon=True)
     thread.start()
-    with pytest.raises(Exception):
-        get_upper().result
+    # the request of invocation should work without problem,
+    # as the cycle wasn't executed yet
+    invocation = get_upper()
+    with pytest.raises(CycleDetectedError) as exc_info:
+        # however, when retrieving the result, an exception should be raised
+        # because the function is calling itself
+        invocation.result
+
+    expected_error = (
+        "A cycle was detected: Cycle detected:\n"
+        "- test_mem_app.get_upper()\n"
+        "- back to test_mem_app.get_upper()"
+    )
+
+    assert str(exc_info.value) == expected_error
+
     app.runner.stop_runner_loop()
     thread.join()

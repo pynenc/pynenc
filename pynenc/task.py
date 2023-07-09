@@ -5,6 +5,7 @@ import inspect
 from typing import TYPE_CHECKING, Generic, Any, Optional
 
 from .arguments import Arguments
+from .call import Call
 from .invocation import BaseInvocation, SynchronousInvocation
 from .types import Params, Result, Func
 
@@ -78,11 +79,10 @@ class Task(Generic[Params, Result]):
         self, *args: Params.args, **kwargs: Params.kwargs
     ) -> "BaseInvocation[Params, Result]":
         """"""
-        arguments = Arguments(self.func, *args, **kwargs)
+        arguments = Arguments.from_call(self.func, *args, **kwargs)
         if self.app.conf.dev_mode_force_sync_tasks:
             return SynchronousInvocation(
-                task=self,
-                arguments=arguments,
+                call=Call(self, arguments),
                 result=self.func(*args, **kwargs),
             )
-        return self.app.orchestrator.route_task(self, arguments)
+        return self.app.orchestrator.route_call(Call(self, arguments))

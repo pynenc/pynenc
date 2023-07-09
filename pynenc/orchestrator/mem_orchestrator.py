@@ -1,15 +1,178 @@
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 import pickle
-import hashlib
 from typing import Any, Iterator, Optional, TYPE_CHECKING, Generic
+
+from pynenc.invocation import DistributedInvocation
 
 from .base_orchestrator import BaseOrchestrator
 from ..types import Params, Result
+from ..exceptions import CycleDetectedError
 
 if TYPE_CHECKING:
     from ..app import Pynenc
+    from ..call import Call
     from ..task import Task
     from ..invocation import InvocationStatus, DistributedInvocation
+
+
+class CallGraph:
+    """A directed acyclic graph representing the call dependencies"""
+
+    def __init__(self) -> None:
+        self.invocations: dict[str, "DistributedInvocation"] = {}
+        self.calls: dict[str, "Call"] = {}
+        self.call_to_invocation: dict[
+            str, OrderedDict[str, "DistributedInvocation"]
+        ] = defaultdict(OrderedDict)
+        self.edges: dict[str, set[str]] = defaultdict(set)
+        self.waiting_for: dict[str, set[str]] = defaultdict(set)
+        self.waited_by: dict[str, set[str]] = defaultdict(set)
+
+    def add_invocation_call(
+        self, caller: "DistributedInvocation", callee: "DistributedInvocation"
+    ) -> None:
+        """
+        Add a new invocation to the graph. This represents a dependency where the caller
+        is dependent on the callee.
+
+        Raises a CycleDetectedError if the invocation would cause a cycle.
+        """
+        if caller.call_id == callee.call_id:
+            raise CycleDetectedError([caller.call])
+        if cycle := self.find_cycle_caused_by_new_invocation(caller, callee):
+            raise CycleDetectedError(cycle)
+        self.invocations[caller.invocation_id] = caller
+        self.invocations[callee.invocation_id] = callee
+        self.calls[caller.call_id] = caller.call
+        self.calls[callee.call_id] = callee.call
+        self.call_to_invocation[caller.call_id][caller.invocation_id] = caller
+        self.call_to_invocation[callee.call_id][callee.invocation_id] = callee
+        self.edges[caller.call_id].add(callee.call_id)
+
+    def add_waiting_for(
+        self, waiter: "DistributedInvocation", waited: "DistributedInvocation"
+    ) -> None:
+        """
+        Register that an invocation (waiter) is waiting for the results of another invocation (waited).
+        """
+        self.waiting_for[waiter.invocation_id].add(waited.invocation_id)
+        self.waited_by[waited.invocation_id].add(waiter.invocation_id)
+
+    def remove_invocation(self, invocation: "DistributedInvocation") -> None:
+        """
+        Remove an invocation from the graph. Also removes any edges to or from the invocation.
+        """
+        call_id = invocation.call_id
+        if call_id in self.call_to_invocation:
+            self.call_to_invocation[call_id].pop(invocation.invocation_id, None)
+            if not self.call_to_invocation[call_id]:
+                del self.call_to_invocation[call_id]
+                if call_id in self.edges:
+                    del self.edges[call_id]
+                for edges in self.edges.values():
+                    edges.discard(call_id)
+
+    def get_blocking_invocations(
+        self, max_num_invocations: int
+    ) -> list["DistributedInvocation"]:
+        """
+        Returns the invocations that are blocking the maximum number of other invocations.
+
+        Parameters
+        ----------
+        max_num_invocations : int
+            The maximum number of invocations to return.
+
+        Returns
+        -------
+        Optional[Set[DistributedInvocation]]
+            A set of blocking invocations or None if no invocations are blocking.
+        """
+        if not any(self.waited_by.values()):
+            return []
+        blocking_invocations_ids = {i for i in self.waited_by if self.waited_by[i]}
+        sorted_invocations_ids = sorted(
+            blocking_invocations_ids, key=self._depth, reverse=True
+        )
+        sorted_invocations = [
+            self.invocations[inv_id]
+            for inv_id in sorted_invocations_ids[:max_num_invocations]
+        ]
+        return sorted_invocations
+
+    def find_cycle_caused_by_new_invocation(
+        self, caller: "DistributedInvocation", callee: "DistributedInvocation"
+    ) -> list["Call"]:
+        """
+        Determines if adding an edge from the caller to the callee would create a cycle.
+
+        Parameters
+        ----------
+        caller : DistributedInvocation
+            The invocation making the call.
+        callee : DistributedInvocation
+            The invocation being called.
+
+        Returns
+        -------
+        list
+            List of invocations that would form the cycle after adding the new invocation, else an empty list.
+        """
+        # Temporarily add the edge to check if it would cause a cycle
+        self.edges[caller.call_id].add(callee.call_id)
+
+        # Set for tracking visited nodes
+        visited: set[str] = set()
+
+        # List for tracking the nodes on the path from caller to callee
+        path: list[str] = []
+
+        cycle = self._is_cyclic_util(caller.call_id, visited, path)
+
+        # Remove the temporarily added edge
+        self.edges[caller.call_id].remove(callee.call_id)
+
+        return cycle
+
+    def _is_cyclic_util(
+        self,
+        current_call_id: str,
+        visited: set[str],
+        path: list[str],
+    ) -> list["Call"]:
+        visited.add(current_call_id)
+        path.append(current_call_id)
+
+        for neighbour_call_id in self.edges.get(current_call_id, []):
+            if neighbour_call_id not in visited:
+                cycle = self._is_cyclic_util(neighbour_call_id, visited, path)
+                if cycle:
+                    return cycle
+            elif neighbour_call_id in path:
+                cycle_start_index = path.index(neighbour_call_id)
+                return [self.calls[_id] for _id in path[cycle_start_index:]]
+
+        path.pop()
+        return []
+
+    def _depth(self, node: str) -> int:
+        """
+        Calculates the depth of a node in terms of dependent invocations.
+
+        Parameters
+        ----------
+        node : str
+            The node to calculate the depth for.
+
+        Returns
+        -------
+        int
+            The depth of the node.
+        """
+        if not self.waited_by[node]:
+            return 1
+        else:
+            return 1 + max(self._depth(child) for child in self.waited_by[node])
 
 
 class ArgPair:
@@ -92,6 +255,7 @@ class TaskInvocationCache(Generic[Result]):
 class MemOrchestrator(BaseOrchestrator):
     def __init__(self, app: "Pynenc") -> None:
         self.cache: dict[str, TaskInvocationCache] = defaultdict(TaskInvocationCache)
+        self.call_graph = CallGraph()
         super().__init__(app)
 
     def get_existing_invocations(
@@ -116,6 +280,21 @@ class MemOrchestrator(BaseOrchestrator):
     ) -> None:
         for invocation in invocations:
             self.cache[invocation.task.task_id].set_status(invocation, status)
+
+    def check_for_call_cycle(
+        self,
+        caller_invocation: DistributedInvocation[Params, Result],
+        callee_invocation: DistributedInvocation[Params, Result],
+    ) -> None:
+        self.call_graph.add_invocation_call(caller_invocation, callee_invocation)
+
+    def waiting_for_result(
+        self,
+        caller_invocation: Optional[DistributedInvocation[Params, Result]],
+        result_invocation: DistributedInvocation[Params, Result],
+    ) -> None:
+        if caller_invocation:
+            self.call_graph.add_waiting_for(caller_invocation, result_invocation)
 
     def get_invocation_status(
         self, invocation: "DistributedInvocation[Params, Result]"

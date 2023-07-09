@@ -54,6 +54,7 @@ class Pynenc:
         self.reporting = None
         self._runner_instance: Optional[BaseRunner] = None
         self.running_invocation: Optional["DistributedInvocation"] = None
+        self.invocation_context: Optional["DistributedInvocation"] = None
 
     def is_initialized(self, property_name: str) -> bool:
         """Returns True if the given cached_property has been initialized"""

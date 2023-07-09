@@ -2,7 +2,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from functools import cached_property
-from typing import TYPE_CHECKING, Generic, Any
+from typing import TYPE_CHECKING, Generic, Any, Optional, TypeVar
 import uuid
 
 from ..types import Params, Result
@@ -10,19 +10,36 @@ from ..types import Params, Result
 if TYPE_CHECKING:
     from ..app import Pynenc
     from ..arguments import Arguments
+    from ..call import Call
     from ..task import Task
+
+
+T = TypeVar("T", bound="BaseInvocation")
 
 
 @dataclass(frozen=True)
 class BaseInvocation(ABC, Generic[Params, Result]):
-    """"""
+    """Invocation of a task call
 
-    task: "Task[Params, Result]"
-    arguments: "Arguments"
+    A call can have several invocations in the system"""
 
-    @cached_property
+    call: "Call[Params, Result]"
+
+    @property
     def app(self) -> "Pynenc":
-        return self.task.app
+        return self.call.app
+
+    @property
+    def task(self) -> "Task[Params, Result]":
+        return self.call.task
+
+    @property
+    def arguments(self) -> "Arguments":
+        return self.call.arguments
+
+    @property
+    def call_id(self) -> str:
+        return self.call.call_id
 
     @cached_property
     def invocation_id(self) -> str:
@@ -32,18 +49,13 @@ class BaseInvocation(ABC, Generic[Params, Result]):
         """
         return str(uuid.uuid4())
 
-    @cached_property
-    def call_id(self) -> str:
-        """Returns a unique id for each task and arguments"""
-        return self.task.task_id + self.arguments.args_id
-
     @property
     @abstractmethod
     def result(self) -> "Result":
         """"""
 
     def __str__(self) -> str:
-        return f"{self.__class__.__name__}(invocation_id={self.invocation_id}, task={self.task}, arguments={self.arguments})"
+        return f"{self.__class__.__name__}(invocation_id={self.invocation_id}, {self.call})"
 
     def __repr__(self) -> str:
         return self.__str__()

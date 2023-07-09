@@ -5,6 +5,7 @@ from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .arguments import Arguments
+    from .call import Call
     from .invocation import BaseInvocation
     from .task import Task
 
@@ -90,3 +91,27 @@ class InvocationNotFoundError(StateBackendError):
 
 class RunnerNotExecutableError(Exception):
     """Raised when trying to execute a runner that is not meant to be executed."""
+
+
+class CycleDetectedError(Exception):
+    """Raised when a cycle is detected in the DependencyGraph"""
+
+    def __init__(self, cycle: list["Call"]) -> None:
+        self.cycle = cycle
+        message = f"A cycle was detected: {self._format_cycle(cycle)}"
+        super().__init__(message)
+
+    @staticmethod
+    def _format_cycle(cycle: list["Call"]) -> str:
+        calls_repr = []
+        for call in cycle:
+            task = call.task
+            func_repr = f"{task.func.__module__}.{task.func.__name__}"
+            args_repr = ", ".join(f"{k}:{v}" for k, v in call.arguments.kwargs.items())
+            calls_repr.append(f"{func_repr}({args_repr})")
+
+        calls_repr.append(f"back to {calls_repr[0]}")  # Closing the cycle
+
+        formatted_cycle = "\n".join(f"- {call}" for call in calls_repr)
+
+        return f"Cycle detected:\n{formatted_cycle}"

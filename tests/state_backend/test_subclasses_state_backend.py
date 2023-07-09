@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from pynenc.arguments import Arguments
+from pynenc.call import Call
 from pynenc.state_backend import BaseStateBackend, InvocationHistory
 from pynenc.invocation import DistributedInvocation, InvocationStatus
 from tests.conftest import MockPynenc
@@ -37,7 +38,7 @@ def invocation(app: MockPynenc) -> "DistributedInvocation[Params, Result]":
     def dummy() -> None:
         ...
 
-    return DistributedInvocation(dummy, Arguments(dummy.func))
+    return DistributedInvocation(Call(dummy), None)
 
 
 def test_store_invocation(

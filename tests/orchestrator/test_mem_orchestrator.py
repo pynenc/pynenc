@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import pytest
 
 from pynenc.arguments import Arguments
+from pynenc.call import Call
 from pynenc.orchestrator.mem_orchestrator import TaskInvocationCache
 from pynenc.invocation import DistributedInvocation, InvocationStatus
 from tests.conftest import MockPynenc
@@ -29,13 +30,13 @@ def test_vars() -> Vars:
         return f"{arg0}:{arg1}"
 
     inv1: DistributedInvocation = DistributedInvocation(
-        dummy, Arguments(dummy.func, arg0="a", arg1="a")
+        Call(dummy, Arguments({"arg0": "a", "arg1": "a"})), None
     )
     inv2: DistributedInvocation = DistributedInvocation(
-        dummy, Arguments(dummy.func, arg0="a", arg1="b")
+        Call(dummy, Arguments({"arg0": "a", "arg1": "b"})), None
     )
     inv3: DistributedInvocation = DistributedInvocation(
-        dummy, Arguments(dummy.func, arg0="a", arg1="a")
+        Call(dummy, Arguments({"arg0": "a", "arg1": "a"})), None
     )
     cache = TaskInvocationCache[str]()
     cache.set_status(inv1, status=InvocationStatus.REGISTERED)

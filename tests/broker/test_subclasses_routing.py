@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from pynenc.arguments import Arguments
+from pynenc.call import Call
 from pynenc.broker import BaseBroker
 from pynenc.invocation import DistributedInvocation
 from tests.conftest import MockPynenc
@@ -30,21 +31,20 @@ def app(request: "FixtureRequest") -> MockPynenc:
 
 
 @pytest.fixture
-def task(app: MockPynenc) -> "Task":
+def call(app: MockPynenc) -> "Call":
     @app.task
     def dummy() -> None:
         ...
 
-    return dummy
+    return Call(dummy)
 
 
-def test_routing(app: MockPynenc, task: "Task") -> None:
+def test_routing(app: MockPynenc, call: "Call") -> None:
     """Test that it routes and retrieve all the invocations"""
-    args = Arguments(task.func)
-    inv1: DistributedInvocation = app.broker.route_task(task, args)
+    inv1: DistributedInvocation = app.broker.route_call(call)
     app.orchestrator.set_invocation_status.assert_called_once()
     app.orchestrator.set_invocation_status.reset_mock()
-    inv2: DistributedInvocation = DistributedInvocation(task, args)
+    inv2: DistributedInvocation = DistributedInvocation(call, None)
     expected_ids = {inv1.invocation_id, inv2.invocation_id}
     app.broker.route_invocation(inv2)
     app.orchestrator.set_invocation_status.assert_called_once()

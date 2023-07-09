@@ -1,12 +1,12 @@
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Optional, Iterator
+from typing import TYPE_CHECKING, Optional, Iterator, Any
 
 from ..invocation import InvocationStatus, ReusedInvocation
 from ..exceptions import SingleInvocationWithDifferentArgumentsError
 
 if TYPE_CHECKING:
     from ..app import Pynenc
-    from ..arguments import Arguments
+    from ..call import Call
     from ..task import Task
     from ..invocation import DistributedInvocation
     from ..types import Params, Result, Args
@@ -47,12 +47,47 @@ class BaseOrchestrator(ABC):
     ) -> "InvocationStatus":
         ...
 
+    @abstractmethod
+    def check_for_call_cycle(
+        self,
+        caller_invocation: "DistributedInvocation[Params, Result]",
+        callee_invocation: "DistributedInvocation[Params, Result]",
+    ) -> None:
+        """Raises an exception if there is a cycle in the invocation graph"""
+
+    @abstractmethod
     def waiting_for_result(
         self,
-        context_invocation: Optional["DistributedInvocation[Params, Result]"],
+        caller_invocation: Optional["DistributedInvocation[Params, Result]"],
         result_invocation: "DistributedInvocation[Params, Result]",
     ) -> None:
         """Called when an Optional[invocation] is waiting in the result result of another invocation."""
+
+    def set_invocation_run(
+        self,
+        caller: Optional["DistributedInvocation[Params, Result]"],
+        callee: "DistributedInvocation[Params, Result]",
+    ) -> None:
+        """Called when an invocation is started"""
+        if caller:
+            self.check_for_call_cycle(caller, callee)
+        self.set_invocation_status(callee, InvocationStatus.RUNNING)
+
+    def set_invocation_result(
+        self, invocation: "DistributedInvocation", result: Any
+    ) -> None:
+        """Called when an invocation is finished successfully"""
+        self.app.state_backend.set_result(invocation, result)
+        self.app.orchestrator.set_invocation_status(
+            invocation, InvocationStatus.SUCCESS
+        )
+
+    def set_invocation_exception(
+        self, invocation: "DistributedInvocation", exception: Exception
+    ) -> None:
+        """Called when an invocation is finished with an exception"""
+        self.app.state_backend.set_exception(invocation, exception)
+        self.app.orchestrator.set_invocation_status(invocation, InvocationStatus.FAILED)
 
     def get_invocations_to_run(
         self, max_num_invocations: int
@@ -66,28 +101,26 @@ class BaseOrchestrator(ABC):
             else:
                 break
 
-    def route_task(
-        self, task: "Task", arguments: "Arguments"
-    ) -> "DistributedInvocation[Params, Result]":
-        if not task.options.single_invocation:
-            return self.app.broker.route_task(task, arguments)
+    def route_call(self, call: "Call") -> "DistributedInvocation[Params, Result]":
+        if not call.task.options.single_invocation:
+            return self.app.broker.route_call(call)
         # Handleling single invocation routings
         invocation = next(
             self.get_existing_invocations(
-                task=task,
-                key_arguments=task.options.single_invocation.get_key_arguments(
-                    arguments
+                task=call.task,
+                key_arguments=call.task.options.single_invocation.get_key_arguments(
+                    call.arguments
                 ),
                 status=InvocationStatus.REGISTERED,
             ),
             None,
         )
         if not invocation:
-            return self.app.broker.route_task(task, arguments)
-        if invocation.arguments == arguments:
+            return self.app.broker.route_call(call)
+        if invocation.arguments == call.arguments:
             return ReusedInvocation.from_existing(invocation)
-        if task.options.single_invocation.on_diff_args_raise:
+        if call.task.options.single_invocation.on_diff_args_raise:
             raise SingleInvocationWithDifferentArgumentsError(
-                task, invocation, arguments
+                call.task, invocation, call.arguments
             )
-        return ReusedInvocation.from_existing(invocation, arguments)
+        return ReusedInvocation.from_existing(invocation, call.arguments)

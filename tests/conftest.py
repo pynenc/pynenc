@@ -6,6 +6,7 @@ import pytest
 
 from pynenc import Pynenc
 from pynenc.arguments import Arguments
+from pynenc.call import Call
 from pynenc.orchestrator.base_orchestrator import BaseOrchestrator
 from pynenc.broker.base_broker import BaseBroker
 from pynenc.invocation import DistributedInvocation
@@ -32,6 +33,7 @@ class MockBaseOrchestrator(BaseOrchestrator):
     set_invocation_status = MagicMock()
     set_invocations_status = MagicMock()
     get_invocation_status = MagicMock()
+    check_for_call_cycle = MagicMock()
     waiting_for_result = MagicMock()
 
     def __init__(self, app: "Pynenc") -> None:
@@ -40,6 +42,7 @@ class MockBaseOrchestrator(BaseOrchestrator):
         self.set_invocation_status.reset_mock()
         self.set_invocations_status.reset_mock()
         self.get_invocation_status.reset_mock()
+        self.check_for_call_cycle.reset_mock()
         self.waiting_for_result.reset_mock()
 
 
@@ -123,4 +126,4 @@ def dummy_task(mock_base_app: MockPynenc) -> "Task":
 
 @pytest.fixture
 def dummy_invocation(dummy_task: "Task") -> "DistributedInvocation":
-    return DistributedInvocation(dummy_task, Arguments(dummy_task.func))
+    return DistributedInvocation(Call(dummy_task), None)

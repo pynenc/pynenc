@@ -7,15 +7,12 @@ from ..types import Params, Result
 
 
 if TYPE_CHECKING:
-    from ..arguments import Arguments
-    from ..task import Task
+    from ..call import Call
 
 
 class SynchronousInvocation(BaseInvocation[Params, Result]):
-    def __init__(
-        self, task: "Task[Params, Result]", arguments: "Arguments", result: "Result"
-    ) -> None:
-        super().__init__(task, arguments)
+    def __init__(self, call: "Call[Params, Result]", result: "Result") -> None:
+        super().__init__(call)
         self._result = result
 
     @cached_property

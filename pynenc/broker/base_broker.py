@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Optional
 
-from ..arguments import Arguments
+from ..call import Call
 from ..invocation import InvocationStatus, DistributedInvocation
 from ..types import Params, Result
 
@@ -30,11 +30,15 @@ class BaseBroker(ABC):
     # def _requeue_invocation(self, invocation: DistributedInvocation) -> None:
     #     ...
 
-    def route_task(
-        self, task: "Task[Params, Result]", arguments: "Arguments"
+    def route_call(
+        self, call: "Call[Params, Result]"
     ) -> DistributedInvocation[Params, Result]:
         """Creates a new invocation and routes it"""
-        self.route_invocation(invocation := DistributedInvocation(task, arguments))
+        self.route_invocation(
+            invocation := DistributedInvocation(
+                call, parent_invocation=self.app.invocation_context
+            )
+        )
         return invocation
 
     def route_invocation(self, invocation: DistributedInvocation) -> None:
