@@ -6,7 +6,7 @@ from pynenc.arguments import Arguments
 from pynenc.call import Call
 from pynenc.broker import BaseBroker
 from pynenc.invocation import DistributedInvocation
-from tests.conftest import MockPynenc
+from tests.unit.conftest import MockPynenc
 
 
 if TYPE_CHECKING:

@@ -1,8 +1,4 @@
-from abc import ABC
-from typing import Any, Optional, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from ..arguments import Arguments
+from typing import Optional
 
 
 class SingleInvocation:
@@ -20,16 +16,20 @@ class SingleInvocation:
     def __init__(self, on_diff_args_raise: bool = False) -> None:
         self.on_diff_args_raise = on_diff_args_raise
 
-    def get_key_arguments(self, arguments: "Arguments") -> Optional[dict[str, Any]]:
-        del arguments
+    def get_key_arguments(
+        self, serialized_arguments: dict[str, str]
+    ) -> Optional[dict[str, str]]:
+        del serialized_arguments
         return None
 
 
 class SingleInvocationPerArguments(SingleInvocation):
     """Only one task request per unique set of arguments can be status:registed in the system"""
 
-    def get_key_arguments(self, arguments: "Arguments") -> Optional[dict[str, Any]]:
-        return arguments.kwargs
+    def get_key_arguments(
+        self, serialized_arguments: dict[str, str]
+    ) -> Optional[dict[str, str]]:
+        return serialized_arguments
 
 
 class SingleInvocationPerKeyArguments(SingleInvocation):
@@ -45,5 +45,7 @@ class SingleInvocationPerKeyArguments(SingleInvocation):
         self.on_diff_args_raise = on_diff_args_raise
         self.keys = keys
 
-    def get_key_arguments(self, arguments: "Arguments") -> Optional[dict[str, Any]]:
-        return {key: arguments.kwargs[key] for key in self.keys}
+    def get_key_arguments(
+        self, serialized_arguments: dict[str, str]
+    ) -> Optional[dict[str, str]]:
+        return {key: serialized_arguments[key] for key in self.keys}

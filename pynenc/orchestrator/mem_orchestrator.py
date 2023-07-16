@@ -2,8 +2,6 @@ from collections import defaultdict, OrderedDict
 import pickle
 from typing import Any, Iterator, Optional, TYPE_CHECKING, Generic
 
-from pynenc.invocation import DistributedInvocation
-
 from .base_orchestrator import BaseOrchestrator
 from ..types import Params, Result
 from ..exceptions import CycleDetectedError
@@ -38,9 +36,9 @@ class CallGraph:
         Raises a CycleDetectedError if the invocation would cause a cycle.
         """
         if caller.call_id == callee.call_id:
-            raise CycleDetectedError([caller.call])
+            raise CycleDetectedError.from_cycle([caller.call])
         if cycle := self.find_cycle_caused_by_new_invocation(caller, callee):
-            raise CycleDetectedError(cycle)
+            raise CycleDetectedError.from_cycle(cycle)
         self.invocations[caller.invocation_id] = caller
         self.invocations[callee.invocation_id] = callee
         self.calls[caller.call_id] = caller.call
@@ -206,7 +204,7 @@ class TaskInvocationCache(Generic[Result]):
 
     def get_invocations(
         self,
-        key_arguments: Optional[dict[str, Any]],
+        key_arguments: Optional[dict[str, str]],
         status: Optional["InvocationStatus"],
     ) -> Iterator["DistributedInvocation"]:
         # Filtering by key_arguments
@@ -242,7 +240,7 @@ class TaskInvocationCache(Generic[Result]):
     ) -> None:
         if (_id := invocation.invocation_id) not in self.invocations:
             self.invocations[_id] = invocation
-            for key, value in invocation.arguments.kwargs.items():
+            for key, value in invocation.serialized_arguments.items():
                 self.args_index[ArgPair(key, value)].add(_id)
             self.status_index[status].add(_id)
         else:
@@ -261,10 +259,12 @@ class MemOrchestrator(BaseOrchestrator):
     def get_existing_invocations(
         self,
         task: "Task[Params, Result]",
-        key_arguments: Optional[dict[str, Any]] = None,
+        key_serialized_arguments: Optional[dict[str, str]] = None,
         status: Optional["InvocationStatus"] = None,
     ) -> Iterator["DistributedInvocation"]:
-        return self.cache[task.task_id].get_invocations(key_arguments, status)
+        return self.cache[task.task_id].get_invocations(
+            key_serialized_arguments, status
+        )
 
     def set_invocation_status(
         self,
@@ -283,15 +283,15 @@ class MemOrchestrator(BaseOrchestrator):
 
     def check_for_call_cycle(
         self,
-        caller_invocation: DistributedInvocation[Params, Result],
-        callee_invocation: DistributedInvocation[Params, Result],
+        caller_invocation: "DistributedInvocation[Params, Result]",
+        callee_invocation: "DistributedInvocation[Params, Result]",
     ) -> None:
         self.call_graph.add_invocation_call(caller_invocation, callee_invocation)
 
     def waiting_for_result(
         self,
-        caller_invocation: Optional[DistributedInvocation[Params, Result]],
-        result_invocation: DistributedInvocation[Params, Result],
+        caller_invocation: Optional["DistributedInvocation[Params, Result]"],
+        result_invocation: "DistributedInvocation[Params, Result]",
     ) -> None:
         if caller_invocation:
             self.call_graph.add_waiting_for(caller_invocation, result_invocation)

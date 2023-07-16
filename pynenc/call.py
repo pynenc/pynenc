@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from functools import cached_property
+import json
 from typing import TYPE_CHECKING, Generic, Any
 
 from .types import Params, Result
@@ -27,6 +28,36 @@ class Call(Generic[Params, Result]):
     def call_id(self) -> str:
         """Returns a unique id for each task and arguments"""
         return "#task_id#" + self.task.task_id + "#args_id#" + self.arguments.args_id
+
+    @cached_property
+    def serialized_arguments(self) -> dict[str, str]:
+        """Returns a dictionary with each of the call arguments serialized into a string"""
+        return {
+            k: self.app.serializer.serialize(v)
+            for k, v in self.arguments.kwargs.items()
+        }
+
+    def to_json(self) -> str:
+        """Returns a string with the serialized call"""
+        return json.dumps(
+            {"task": self.task.to_json(), "arguments": self.serialized_arguments}
+        )
+
+    @classmethod
+    def from_json(cls, app: "Pynenc", serialized: str) -> "Call":
+        """Returns a new call from a serialized call"""
+        from .task import Task
+
+        call_dict = json.loads(serialized)
+        return cls(
+            task=Task.from_json(app, call_dict["task"]),
+            arguments=Arguments(
+                {
+                    k: app.serializer.deserialize(v)
+                    for k, v in call_dict["arguments"].items()
+                }
+            ),
+        )
 
     def __str__(self) -> str:
         return f"Call(call_id={self.call_id}, task={self.task}, arguments={self.arguments})"

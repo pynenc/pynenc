@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
+import json
 import threading
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -24,6 +25,15 @@ class InvocationHistory:
     @property
     def timestamp(self) -> datetime:
         return self._timestamp
+
+    def to_json(self) -> str:
+        return json.dumps({**self.__dict__, "_timestamp": self._timestamp.isoformat()})
+
+    @classmethod
+    def from_json(cls, json_str: str) -> "InvocationHistory":
+        data = json.loads(json_str)
+        data["_timestamp"] = datetime.fromisoformat(data["_timestamp"])
+        return cls(**data)
 
 
 class BaseStateBackend(ABC):

@@ -7,7 +7,7 @@ from pynenc.arguments import Arguments
 from pynenc.call import Call
 from pynenc.orchestrator.base_orchestrator import BaseOrchestrator
 from pynenc.invocation import DistributedInvocation, InvocationStatus
-from tests.conftest import MockPynenc
+from tests.unit.conftest import MockPynenc
 
 
 if TYPE_CHECKING:
@@ -78,19 +78,19 @@ def test_get_by_arguments(app: MockPynenc, test_vars: Vars) -> None:
     """Test filter by arguments"""
     # argument arg0:a is the same for both
     invocations = list(
-        app.orchestrator.get_existing_invocations(test_vars.task, {"arg0": "a"})
+        app.orchestrator.get_existing_invocations(test_vars.task, {"arg0": '"a"'})
     )
     invocations_ids = set(i.invocation_id for i in invocations)
     assert invocations_ids == test_vars.expected_ids
     # argument arg1:a is only valid for inv1
     invocations = list(
-        app.orchestrator.get_existing_invocations(test_vars.task, {"arg1": "b"})
+        app.orchestrator.get_existing_invocations(test_vars.task, {"arg1": '"b"'})
     )
     assert len(invocations) == 1
     assert invocations[0].invocation_id == test_vars.inv2.invocation_id
     # argument without any invocation
     invocations = list(
-        app.orchestrator.get_existing_invocations(test_vars.task, {"arg1": "x"})
+        app.orchestrator.get_existing_invocations(test_vars.task, {"arg1": '"x"'})
     )
     assert len(invocations) == 0
 
@@ -125,7 +125,7 @@ def test_get_mix(app: MockPynenc, test_vars: Vars) -> None:
     # The only filtered invocation should be inv3
     invocations = list(
         app.orchestrator.get_existing_invocations(
-            test_vars.task, {"arg1": "a"}, status=InvocationStatus.SUCCESS
+            test_vars.task, {"arg1": '"a"'}, status=InvocationStatus.SUCCESS
         )
     )
     assert len(invocations) == 1

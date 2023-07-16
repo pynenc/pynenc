@@ -1,17 +1,18 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from functools import cached_property
-import inspect
+import importlib
+import json
 from typing import TYPE_CHECKING, Generic, Any, Optional
 
 from .arguments import Arguments
 from .call import Call
+from .conf.single_invocation_pending import SingleInvocation
 from .invocation import BaseInvocation, SynchronousInvocation
 from .types import Params, Result, Func
 
 if TYPE_CHECKING:
     from .app import Pynenc
-    from .conf.single_invocation_pending import SingleInvocation
 
 
 @dataclass
@@ -24,6 +25,25 @@ class TaskOptions:
 
     #: Profiling will take care of storing profiling information for the task (this is a todo, will require further options).
     profiling: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if isinstance(self.single_invocation, dict):
+            self.single_invocation = SingleInvocation(**self.single_invocation)
+
+    def to_json(self) -> str:
+        """Returns a string with the serialized options"""
+        return json.dumps(
+            {**self.__dict__, "single_invocation": self.single_invocation.__dict__}
+        )
+
+    @classmethod
+    def from_dict(cls, options_dict: dict[str, Any]) -> "TaskOptions":
+        """Returns a new options from a dictionary"""
+        return cls(**options_dict)
+
+    @classmethod
+    def from_json(cls, serialized: str) -> "TaskOptions":
+        return cls.from_dict(json.loads(serialized))
 
 
 class Task(Generic[Params, Result]):
@@ -63,6 +83,20 @@ class Task(Generic[Params, Result]):
         self.app = app
         self.func = func
         self.options: TaskOptions = TaskOptions(**options)
+
+    def to_json(self) -> str:
+        """Returns a string with the serialized task"""
+        return json.dumps({"task_id": self.task_id, "options": self.options.to_json()})
+
+    @classmethod
+    def from_json(cls, app: Pynenc, serialized: str) -> "Task":
+        """Returns a new task from a serialized task"""
+        task_dict = json.loads(serialized)
+        task_id = task_dict["task_id"]
+        module_name, function_name = task_id.rsplit(".", 1)
+        module = importlib.import_module(module_name)
+        function = getattr(module, function_name)
+        return cls(app, function, task_dict["options"])
 
     @cached_property
     def task_id(self) -> str:

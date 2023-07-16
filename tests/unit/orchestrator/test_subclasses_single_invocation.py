@@ -7,7 +7,7 @@ from pynenc.orchestrator.base_orchestrator import BaseOrchestrator
 from pynenc.invocation import DistributedInvocation, ReusedInvocation
 from pynenc import exceptions as exc
 from pynenc import conf
-from tests.conftest import MockPynenc
+from tests.unit.conftest import MockPynenc
 
 
 if TYPE_CHECKING:
@@ -75,9 +75,19 @@ def test_single_invocation_raising(app: MockPynenc) -> None:
     # The user of the library should handle this (or add ignore option in Pynenc)
     with pytest.raises(exc.SingleInvocationWithDifferentArgumentsError) as excinfo:
         _ = dummy("1")
-    assert excinfo.value.task == dummy
-    assert excinfo.value.existing_invocation == first_invocation
-    assert excinfo.value.call_arguments.kwargs == {"arg": "1"}
+    assert excinfo.value.task_id == dummy.task_id
+    assert excinfo.value.existing_invocation_id == first_invocation.invocation_id
+    assert excinfo.value.diff == (
+        "==============================\n"
+        "Differences for test_subclasses_single_invocation.dummy:\n"
+        "==============================\n"
+        "  * Original: {'arg': '0'}\n"
+        "  * Updated: {'arg': '1'}\n"
+        "------------------------------\n"
+        "  * Changes: \n"
+        "    - arg: 0 -> 1\n"
+        "=============================="
+    )
     # Trying with same arguments
     next_invocation = dummy("0")
     assert isinstance(first_invocation, DistributedInvocation)
@@ -157,9 +167,19 @@ def test_single_invocation_keys_raising(app: MockPynenc) -> None:
     #
     with pytest.raises(exc.SingleInvocationWithDifferentArgumentsError) as excinfo:
         _ = dummy("key0", "b")
-    assert excinfo.value.task == dummy
-    assert excinfo.value.existing_invocation == inv_k0
-    assert excinfo.value.call_arguments.kwargs == {"key": "key0", "arg": "b"}
+    assert excinfo.value.task_id == dummy.task_id
+    assert excinfo.value.existing_invocation_id == inv_k0.invocation_id
+    assert excinfo.value.diff == (
+        "==============================\n"
+        "Differences for test_subclasses_single_invocation.dummy:\n"
+        "==============================\n"
+        "  * Original: {'key': 'key0', 'arg': 'a'}\n"
+        "  * Updated: {'key': 'key0', 'arg': 'b'}\n"
+        "------------------------------\n"
+        "  * Changes: \n"
+        "    - arg: a -> b\n"
+        "=============================="
+    )
 
     assert inv_k0.invocation_id == dummy("key0", "a").invocation_id
     assert inv_k1.invocation_id == dummy("key1", "a").invocation_id

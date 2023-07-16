@@ -6,7 +6,7 @@ from pynenc.arguments import Arguments
 from pynenc.call import Call
 from pynenc.orchestrator.mem_orchestrator import TaskInvocationCache
 from pynenc.invocation import DistributedInvocation, InvocationStatus
-from tests.conftest import MockPynenc
+from tests.unit.conftest import MockPynenc
 
 
 @dataclass

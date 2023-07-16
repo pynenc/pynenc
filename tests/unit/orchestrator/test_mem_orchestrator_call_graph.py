@@ -8,7 +8,7 @@ from pynenc.orchestrator.mem_orchestrator import CallGraph
 from pynenc.invocation import DistributedInvocation
 
 if TYPE_CHECKING:
-    from tests.conftest import MockPynenc
+    from tests.unit.conftest import MockPynenc
 
 
 @pytest.fixture

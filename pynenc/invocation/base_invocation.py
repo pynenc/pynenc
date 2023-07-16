@@ -2,6 +2,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from functools import cached_property
+import json
 from typing import TYPE_CHECKING, Generic, Any, Optional, TypeVar
 import uuid
 
@@ -36,6 +37,21 @@ class BaseInvocation(ABC, Generic[Params, Result]):
     @property
     def arguments(self) -> "Arguments":
         return self.call.arguments
+
+    @property
+    def serialized_arguments(self) -> dict[str, str]:
+        return self.call.serialized_arguments
+
+    def to_json(self) -> str:
+        """Returns a string with the serialized invocation"""
+        return json.dumps(
+            {"invocation_id": self.invocation_id, "call": self.call.to_json}
+        )
+
+    @classmethod
+    def from_json(cls: type[T], app: "Pynenc", serialized: str) -> T:
+        """Returns a new invocation from a serialized invocation"""
+        return app.serializer.deserialize(serialized)
 
     @property
     def call_id(self) -> str:

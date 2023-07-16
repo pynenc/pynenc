@@ -20,7 +20,7 @@ class BaseOrchestrator(ABC):
     def get_existing_invocations(
         self,
         task: "Task[Params, Result]",
-        key_arguments: Optional["Args"] = None,
+        key_serialized_arguments: Optional[dict[str, str]] = None,
         status: Optional["InvocationStatus"] = None,
     ) -> Iterator["DistributedInvocation"]:
         ...
@@ -108,8 +108,8 @@ class BaseOrchestrator(ABC):
         invocation = next(
             self.get_existing_invocations(
                 task=call.task,
-                key_arguments=call.task.options.single_invocation.get_key_arguments(
-                    call.arguments
+                key_serialized_arguments=call.task.options.single_invocation.get_key_arguments(
+                    call.serialized_arguments
                 ),
                 status=InvocationStatus.REGISTERED,
             ),
@@ -117,10 +117,10 @@ class BaseOrchestrator(ABC):
         )
         if not invocation:
             return self.app.broker.route_call(call)
-        if invocation.arguments == call.arguments:
+        if invocation.serialized_arguments == call.serialized_arguments:
             return ReusedInvocation.from_existing(invocation)
         if call.task.options.single_invocation.on_diff_args_raise:
-            raise SingleInvocationWithDifferentArgumentsError(
-                call.task, invocation, call.arguments
+            raise SingleInvocationWithDifferentArgumentsError.from_call_mismatch(
+                existing_invocation=invocation, new_call=call
             )
         return ReusedInvocation.from_existing(invocation, call.arguments)

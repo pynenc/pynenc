@@ -6,7 +6,6 @@ import pytest
 from pynenc import Pynenc
 from pynenc.exceptions import CycleDetectedError
 from pynenc.runner import MemRunner
-from pynenc.orchestrator.mem_orchestrator import MemOrchestrator
 
 
 @pytest.fixture
