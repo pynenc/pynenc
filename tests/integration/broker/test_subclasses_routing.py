@@ -6,13 +6,21 @@ from pynenc.arguments import Arguments
 from pynenc.call import Call
 from pynenc.broker import BaseBroker
 from pynenc.invocation import DistributedInvocation
-from tests.unit.conftest import MockPynenc
+from tests.conftest import MockPynenc
 
 
 if TYPE_CHECKING:
     from _pytest.python import Metafunc
     from _pytest.fixtures import FixtureRequest
     from pynenc.task import Task
+
+
+base_app = MockPynenc()
+
+
+@base_app.task
+def dummy() -> None:
+    ...
 
 
 def pytest_generate_tests(metafunc: "Metafunc") -> None:
@@ -27,15 +35,13 @@ def pytest_generate_tests(metafunc: "Metafunc") -> None:
 def app(request: "FixtureRequest") -> MockPynenc:
     app = MockPynenc()
     app.broker = request.param(app)
+    app.broker.purge()
     return app
 
 
 @pytest.fixture
 def call(app: MockPynenc) -> "Call":
-    @app.task
-    def dummy() -> None:
-        ...
-
+    dummy.app = app
     return Call(dummy)
 
 

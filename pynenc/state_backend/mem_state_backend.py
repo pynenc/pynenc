@@ -19,6 +19,12 @@ class MemStateBackend(BaseStateBackend):
         self._exceptions: dict[str, Exception] = {}
         super().__init__(app)
 
+    def purge(self) -> None:
+        self._cache.clear()
+        self._history.clear()
+        self._results.clear()
+        self._exceptions.clear()
+
     def _upsert_invocation(self, invocation: "DistributedInvocation") -> None:
         self._cache[invocation.invocation_id] = invocation
 

@@ -4,7 +4,7 @@ from pynenc.invocation import DistributedInvocation, InvocationStatus
 from pynenc.conf import SingleInvocation
 
 if TYPE_CHECKING:
-    from tests.unit.conftest import MockPynenc
+    from tests.conftest import MockPynenc
 
 
 def test_route_default(mock_base_app: "MockPynenc") -> None:

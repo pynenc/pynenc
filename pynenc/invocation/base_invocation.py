@@ -7,11 +7,11 @@ from typing import TYPE_CHECKING, Generic, Any, Optional, TypeVar
 import uuid
 
 from ..types import Params, Result
+from ..call import Call
 
 if TYPE_CHECKING:
     from ..app import Pynenc
     from ..arguments import Arguments
-    from ..call import Call
     from ..task import Task
 
 
@@ -42,20 +42,27 @@ class BaseInvocation(ABC, Generic[Params, Result]):
     def serialized_arguments(self) -> dict[str, str]:
         return self.call.serialized_arguments
 
+    @abstractmethod
     def to_json(self) -> str:
         """Returns a string with the serialized invocation"""
-        return json.dumps(
-            {"invocation_id": self.invocation_id, "call": self.call.to_json}
-        )
 
     @classmethod
+    @abstractmethod
     def from_json(cls: type[T], app: "Pynenc", serialized: str) -> T:
         """Returns a new invocation from a serialized invocation"""
-        return app.serializer.deserialize(serialized)
 
     @property
     def call_id(self) -> str:
         return self.call.call_id
+
+    @staticmethod
+    def _set_frozen_attr(
+        invocation: BaseInvocation, invocation_id: str, app: Optional["Pynenc"] = None
+    ) -> None:
+        """Method used to deserialize or initialize a new invocation from existing data"""
+        if app:
+            object.__setattr__(invocation.call, "app", app)
+        object.__setattr__(invocation, "invocation_id", invocation_id)
 
     @cached_property
     def invocation_id(self) -> str:

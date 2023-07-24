@@ -37,6 +37,9 @@ class CallGraph:
         self.waiting_for: dict[str, set[str]] = defaultdict(set)
         self.waited_by: dict[str, set[str]] = defaultdict(set)
 
+    def purge(self) -> None:
+        self.key.purge(self.client)
+
     def add_invocation_call(
         self, caller: "DistributedInvocation", callee: "DistributedInvocation"
     ) -> None:
@@ -204,6 +207,9 @@ class TaskRedisCache:
         self.client = client
         self.key = Key("orchestrator")
 
+    def purge(self) -> None:
+        self.key.purge(self.client)
+
     def set_status(
         self,
         invocation: "DistributedInvocation[Params, Result]",
@@ -211,15 +217,8 @@ class TaskRedisCache:
     ) -> None:
         task_id = invocation.task.task_id
         invocation_id = invocation.invocation_id
-        if isinstance(
-            invocation.task.options.single_invocation,
-            (
-                SingleInvocationPerArguments,
-                SingleInvocationPerKeyArguments,
-            ),
-        ):
-            for arg, val in invocation.serialized_arguments.items():
-                self.client.sadd(self.key.args(task_id, arg, val), invocation_id)
+        for arg, val in invocation.serialized_arguments.items():
+            self.client.sadd(self.key.args(task_id, arg, val), invocation_id)
         self.client.set(self.key.invocation(invocation_id), invocation.to_json())
         self.client.sadd(self.key.task(task_id), invocation_id)
         self.client.sadd(self.key.status(task_id, status), invocation_id)
@@ -312,3 +311,8 @@ class RedisOrchestrator(BaseOrchestrator):
         self, invocation: "DistributedInvocation[Params, Result]"
     ) -> "InvocationStatus":
         return self.redis_cache.get_invocation_status(invocation)
+
+    def purge(self) -> None:
+        """Remove all invocations from the orchestrator"""
+        self.redis_cache.purge()
+        self.call_graph.purge()

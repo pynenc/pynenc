@@ -7,7 +7,7 @@ from pynenc.arguments import Arguments
 from pynenc.call import Call
 from pynenc.state_backend import BaseStateBackend, InvocationHistory
 from pynenc.invocation import DistributedInvocation, InvocationStatus
-from tests.unit.conftest import MockPynenc
+from tests.conftest import MockPynenc
 
 
 if TYPE_CHECKING:
@@ -25,19 +25,25 @@ def pytest_generate_tests(metafunc: "Metafunc") -> None:
         metafunc.parametrize("app", subclasses, indirect=True)
 
 
+mock_app = MockPynenc()
+
+
+@mock_app.task
+def dummy() -> None:
+    ...
+
+
 @pytest.fixture
 def app(request: "FixtureRequest") -> MockPynenc:
     app = MockPynenc()
     app.state_backend = request.param(app)
+    app.state_backend.purge()
     return app
 
 
 @pytest.fixture
 def invocation(app: MockPynenc) -> "DistributedInvocation[Params, Result]":
-    @app.task
-    def dummy() -> None:
-        ...
-
+    dummy.app = app
     return DistributedInvocation(Call(dummy), None)
 
 
@@ -56,10 +62,10 @@ def test_store_history_status(
     """Test that it will store and retrieve the status change history"""
 
     def _check_history(
-        invocation_id: str,
-        expected_statuses: list[InvocationStatus],
-        history: list[InvocationHistory],
+        invocation_id: str, expected_statuses: list[InvocationStatus]
     ) -> None:
+        app.state_backend.wait_for_invocation_async_operations(invocation_id)
+        history = app.state_backend.get_history(invocation)
         assert len(history) == len(expected_statuses)
         prev_datetime = datetime.min
         for expected_status, inv_hist in zip(expected_statuses, history):
@@ -70,16 +76,11 @@ def test_store_history_status(
 
     assert [] == app.state_backend.get_history(invocation)
     app.state_backend.add_history(invocation, status=InvocationStatus.REGISTERED)
-    _check_history(
-        invocation.invocation_id,
-        [InvocationStatus.REGISTERED],
-        app.state_backend.get_history(invocation),
-    )
+    _check_history(invocation.invocation_id, [InvocationStatus.REGISTERED])
     app.state_backend.add_history(invocation, status=InvocationStatus.RUNNING)
     _check_history(
         invocation.invocation_id,
         [InvocationStatus.REGISTERED, InvocationStatus.RUNNING],
-        app.state_backend.get_history(invocation),
     )
 
 

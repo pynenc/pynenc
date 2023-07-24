@@ -1,7 +1,9 @@
-from typing import Optional
+from typing import Optional, Any
+
+from .base_config_option import BaseConfigOption
 
 
-class SingleInvocation:
+class SingleInvocation(BaseConfigOption):
     """Only one invocation in status REGISTERED for the specific task will exists in the system
 
     on_diff_args_raise: bool -> Behaviour when found an existing invocation with different arguments
@@ -21,6 +23,15 @@ class SingleInvocation:
     ) -> Optional[dict[str, str]]:
         del serialized_arguments
         return None
+
+    def _to_dict(self) -> dict[str, Any]:
+        """Returns a dictionary with the options"""
+        return self.__dict__
+
+    @classmethod
+    def _from_dict(cls, options_dict: dict[str, Any]) -> "SingleInvocation":
+        """Returns a new options from a dictionary"""
+        return cls(**options_dict)
 
 
 class SingleInvocationPerArguments(SingleInvocation):

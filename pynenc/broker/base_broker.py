@@ -22,6 +22,10 @@ class BaseBroker(ABC):
     def _retrieve_invocation(self) -> Optional[DistributedInvocation]:
         ...
 
+    @abstractmethod
+    def purge(self) -> None:
+        ...
+
     # @abstractmethod
     # def _acknowledge_invocation(self, invocation: DistributedInvocation) -> None:
     #     ...

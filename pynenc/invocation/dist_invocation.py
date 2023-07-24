@@ -1,13 +1,17 @@
 from __future__ import annotations
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Optional, Any
+import json
+from typing import Optional, TYPE_CHECKING
 
 from ..arguments import Arguments
 from ..call import Call
 from .status import InvocationStatus
 from .base_invocation import BaseInvocation
 from ..types import Params, Result
+
+if TYPE_CHECKING:
+    from ..app import Pynenc
 
 
 # Create a context variable to store current invocation
@@ -27,6 +31,29 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
     def status(self) -> "InvocationStatus":
         """Get the status of the invocation"""
         return self.app.orchestrator.get_invocation_status(self)
+
+    def to_json(self) -> str:
+        """Returns a string with the serialized invocation"""
+        inv_dict = {"invocation_id": self.invocation_id, "call": self.call.to_json()}
+        if self.parent_invocation:
+            inv_dict["parent_invocation_id"] = self.parent_invocation.invocation_id
+        return json.dumps(inv_dict)
+
+    @classmethod
+    def from_json(cls, app: "Pynenc", serialized: str) -> "DistributedInvocation":
+        """Returns a new invocation from a serialized invocation"""
+        inv_dict = json.loads(serialized)
+        call = Call.from_json(app, inv_dict["call"])
+        parent_invocation = None
+        if "parent_invocation_id" in inv_dict:
+            parent_invocation = app.state_backend.get_invocation(
+                inv_dict["parent_invocation_id"]
+            )
+        invocation = cls(call, parent_invocation)
+        cls._set_frozen_attr(
+            invocation=invocation, invocation_id=inv_dict["invocation_id"]
+        )
+        return invocation
 
     def run(self) -> None:
         # Set current invocation
@@ -73,6 +100,9 @@ class ReusedInvocation(DistributedInvocation):
         )
         # Because the class is frozen, we can't ordinarily set attributes
         # So, we use object.__setattr__() to bypass this
-        object.__setattr__(new_invc.call, "app", invocation.app)
-        object.__setattr__(new_invc, "invocation_id", invocation.invocation_id)
+        cls._set_frozen_attr(
+            invocation=new_invc,
+            app=invocation.app,
+            invocation_id=invocation.invocation_id,
+        )
         return new_invc

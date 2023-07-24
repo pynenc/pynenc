@@ -20,3 +20,6 @@ class MemBroker(BaseBroker):
 
     def _retrieve_invocation(self) -> Optional["DistributedInvocation"]:
         return self._queue.pop() if self._queue else None
+
+    def purge(self) -> None:
+        return self._queue.clear()

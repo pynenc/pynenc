@@ -8,7 +8,7 @@ from pynenc.invocation import DistributedInvocation, InvocationStatus
 from pynenc.exceptions import InvocationNotFoundError
 
 if TYPE_CHECKING:
-    from tests.unit.conftest import MockPynenc
+    from tests.conftest import MockPynenc
     from pynenc.task import Task
     from pynenc.types import Params, Result
 

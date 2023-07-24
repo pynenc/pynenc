@@ -10,7 +10,7 @@ from pynenc.runner.base_runner import DummyRunner
 from pynenc.exceptions import RunnerNotExecutableError
 
 if TYPE_CHECKING:
-    from tests.unit.conftest import MockPynenc
+    from tests.conftest import MockPynenc
     from pynenc.task import Task
     from pynenc.types import Params, Result
 

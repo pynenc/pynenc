@@ -1,12 +1,18 @@
 from typing import Optional, TYPE_CHECKING
 
+import redis
+
 if TYPE_CHECKING:
     from ..invocation.status import InvocationStatus
 
 
 class Key:
-    def __init__(self, prefix: Optional[str]) -> None:
-        self.prefix: str = f"{prefix}:" if prefix else ""
+    def __init__(self, prefix: str) -> None:
+        if not prefix:
+            raise ValueError("Prefix cannot be an empty string or None")
+        if prefix and not prefix.endswith(":"):
+            prefix += ":"
+        self.prefix = prefix
 
     def invocation(self, invocation_id: str) -> str:
         return f"{self.prefix}invocation:{invocation_id}"
@@ -43,3 +49,9 @@ class Key:
 
     def exception(self, invocation_id: str) -> str:
         return f"{self.prefix}exception:{invocation_id}"
+
+    def purge(self, client: redis.Redis) -> None:
+        """Purge all keys with the given prefix"""
+        scan = client.scan_iter(self.prefix + "*")
+        for key in scan:
+            client.delete(key)

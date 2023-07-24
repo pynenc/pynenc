@@ -302,3 +302,7 @@ class MemOrchestrator(BaseOrchestrator):
         return self.cache[invocation.task.task_id].invocation_status[
             invocation.invocation_id
         ]
+
+    def purge(self) -> None:
+        self.cache.clear()
+        self.call_graph = CallGraph()

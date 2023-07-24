@@ -5,7 +5,7 @@ from pynenc.call import Call
 from pynenc.invocation import DistributedInvocation, InvocationStatus
 
 if TYPE_CHECKING:
-    from tests.unit.conftest import MockPynenc
+    from tests.conftest import MockPynenc
 
 
 def test_route_task(mock_base_app: "MockPynenc") -> None:

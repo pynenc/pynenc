@@ -63,6 +63,10 @@ class BaseOrchestrator(ABC):
     ) -> None:
         """Called when an Optional[invocation] is waiting in the result result of another invocation."""
 
+    @abstractmethod
+    def purge(self) -> None:
+        ...
+
     def set_invocation_run(
         self,
         caller: Optional["DistributedInvocation[Params, Result]"],

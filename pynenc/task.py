@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Generic, Any, Optional
 
 from .arguments import Arguments
 from .call import Call
+from .conf.base_config_option import BaseConfigOption
 from .conf.single_invocation_pending import SingleInvocation
 from .invocation import BaseInvocation, SynchronousInvocation
 from .types import Params, Result, Func
@@ -27,18 +28,38 @@ class TaskOptions:
     profiling: Optional[str] = None
 
     def __post_init__(self) -> None:
-        if isinstance(self.single_invocation, dict):
-            self.single_invocation = SingleInvocation(**self.single_invocation)
+        for attr, value in self.__dict__.items():
+            if isinstance(value, dict):
+                self.__dict__[attr] = BaseConfigOption.from_dict(value)
+        self.validate()
+
+    def validate(self) -> None:
+        for attr, value in self.__dict__.items():
+            if isinstance(value, (str, int, bool, type(None))):
+                continue
+            if not issubclass(type(value), BaseConfigOption):
+                raise TypeError(
+                    f"Attribute {attr} must be a basic type or a subclass of BaseConfigOption"
+                )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Returns a dictionary with the options"""
+        options_dict = {**self.__dict__}
+        for attr, value in options_dict.items():
+            if isinstance(value, BaseConfigOption):
+                options_dict[attr] = value.to_dict()
+        return options_dict
 
     def to_json(self) -> str:
         """Returns a string with the serialized options"""
-        return json.dumps(
-            {**self.__dict__, "single_invocation": self.single_invocation.__dict__}
-        )
+        return json.dumps(self.to_dict())
 
     @classmethod
     def from_dict(cls, options_dict: dict[str, Any]) -> "TaskOptions":
         """Returns a new options from a dictionary"""
+        for attr, value in options_dict.items():
+            if isinstance(value, dict):
+                options_dict[attr] = BaseConfigOption.from_dict(value)
         return cls(**options_dict)
 
     @classmethod
@@ -96,7 +117,8 @@ class Task(Generic[Params, Result]):
         module_name, function_name = task_id.rsplit(".", 1)
         module = importlib.import_module(module_name)
         function = getattr(module, function_name)
-        return cls(app, function, task_dict["options"])
+        options_dict = TaskOptions.from_json(task_dict["options"]).to_dict()
+        return cls(app, function.func, options_dict)
 
     @cached_property
     def task_id(self) -> str:

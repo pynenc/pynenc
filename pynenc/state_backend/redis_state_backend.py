@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from ..types import Params, Result
 
 
-class MemStateBackend(BaseStateBackend):
+class RedisStateBackend(BaseStateBackend):
     def __init__(self, app: "Pynenc") -> None:
         self.client = redis.Redis(host="localhost", port=6379, db=0)
         self.key = Key("state_backend")
@@ -25,6 +25,9 @@ class MemStateBackend(BaseStateBackend):
         # self._results: dict[str, Any] = {}
         # self._exceptions: dict[str, Exception] = {}
         super().__init__(app)
+
+    def purge(self) -> None:
+        self.key.purge(self.client)
 
     def _upsert_invocation(self, invocation: "DistributedInvocation") -> None:
         self.client.set(

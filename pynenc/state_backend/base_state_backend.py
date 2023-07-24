@@ -7,12 +7,13 @@ import threading
 from typing import TYPE_CHECKING, Any, Optional
 
 from ..exceptions import InvocationNotFoundError
+from ..invocation import InvocationStatus
 
 if TYPE_CHECKING:
     from ..app import Pynenc
     from ..invocation import DistributedInvocation
     from ..types import Params, Result
-    from ..invocation import DistributedInvocation, InvocationStatus
+    from ..invocation import DistributedInvocation
 
 
 @dataclass
@@ -27,19 +28,43 @@ class InvocationHistory:
         return self._timestamp
 
     def to_json(self) -> str:
-        return json.dumps({**self.__dict__, "_timestamp": self._timestamp.isoformat()})
+        return json.dumps(
+            {
+                "invocation_id": self.invocation_id,
+                "_timestamp": self._timestamp.isoformat(),
+                "status": self.status.value if self.status else None,
+                "execution_context": self.execution_context,  # TODO
+            }
+        )
 
     @classmethod
     def from_json(cls, json_str: str) -> "InvocationHistory":
-        data = json.loads(json_str)
-        data["_timestamp"] = datetime.fromisoformat(data["_timestamp"])
-        return cls(**data)
+        hist_dict = json.loads(json_str)
+        history = cls(hist_dict["invocation_id"])
+        history._timestamp = datetime.fromisoformat(hist_dict["_timestamp"])
+        history.status = InvocationStatus(hist_dict["status"])
+        history.execution_context = hist_dict["execution_context"]
+        return history
 
 
 class BaseStateBackend(ABC):
     def __init__(self, app: "Pynenc") -> None:
         self.app = app
-        self.threads: list[threading.Thread] = []
+        self.invocation_threads: dict[str, list[threading.Thread]] = defaultdict(list)
+
+    def wait_for_all_async_operations(self) -> None:
+        """Blocks until all asynchronous status operations are finished."""
+        for invocation_id in self.invocation_threads:
+            self.wait_for_invocation_async_operations(invocation_id)
+
+    def wait_for_invocation_async_operations(self, invocation_id: str) -> None:
+        """Blocks until all asynchronous operations for a specific invocation are finished."""
+        for thread in self.invocation_threads[invocation_id]:
+            thread.join()
+
+    @abstractmethod
+    def purge(self) -> None:
+        ...
 
     @abstractmethod
     def _upsert_invocation(
@@ -94,7 +119,7 @@ class BaseStateBackend(ABC):
     def upsert_invocation(self, invocation: "DistributedInvocation") -> None:
         thread = threading.Thread(target=self._upsert_invocation, args=(invocation,))
         thread.start()
-        self.threads.append(thread)
+        self.invocation_threads[invocation.invocation_id].append(thread)
 
     def get_invocation(self, invocation_id: str) -> "DistributedInvocation":
         if invocation := self._get_invocation(invocation_id):
@@ -113,7 +138,7 @@ class BaseStateBackend(ABC):
         thread = threading.Thread(
             target=self._add_history, args=(invocation, invocation_history)
         )
-        self.threads.append(thread)
+        self.invocation_threads[invocation.invocation_id].append(thread)
         thread.start()
 
     def get_history(

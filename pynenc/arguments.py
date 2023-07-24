@@ -34,3 +34,9 @@ class Arguments:
         if not isinstance(__value, Arguments):
             return False
         return self.args_id == __value.args_id
+
+    def __str__(self) -> str:
+        return str(self.kwargs)
+
+    def __repr__(self) -> str:
+        return f"Arguments({self.kwargs})"

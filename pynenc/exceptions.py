@@ -15,14 +15,14 @@ if TYPE_CHECKING:
 class PynencError(Exception):
     """Base class for all Pynenc related errors."""
 
-    @abstractmethod
     def _to_json_dict(self) -> dict[str, Any]:
         """Returns a json serializable dictionary"""
+        return self.__dict__
 
     @classmethod
-    @abstractmethod
-    def _from_json_dict(self, json_dict: dict[str, str]) -> "PynencError":
+    def _from_json_dict(cls, json_dict: dict[str, Any]) -> "PynencError":
         """Returns a new error from the serialized json compatible dictionary"""
+        return cls(**json_dict)
 
     def to_json(self) -> str:
         """Returns a string with the serialized error"""
@@ -208,13 +208,6 @@ class InvocationNotFoundError(StateBackendError):
 
 class RunnerNotExecutableError(PynencError):
     """Raised when trying to execute a runner that is not meant to be executed."""
-
-    def _to_json_dict(self) -> dict[str, Any]:
-        return self.__dict__
-
-    @classmethod
-    def _from_json_dict(cls, json_dict: dict[str, Any]) -> "RunnerNotExecutableError":
-        return cls(**json_dict)
 
 
 class CycleDetectedError(PynencError):

@@ -5,34 +5,18 @@ import pytest
 
 from pynenc.arguments import Arguments
 from pynenc.call import Call
-from pynenc.orchestrator.base_orchestrator import BaseOrchestrator
 from pynenc.invocation import DistributedInvocation, InvocationStatus
-from tests.unit.conftest import MockPynenc
+from tests.conftest import MockPynenc
 
 
 if TYPE_CHECKING:
-    from _pytest.python import Metafunc
-    from _pytest.fixtures import FixtureRequest
     from pynenc.task import Task
-
-
-def pytest_generate_tests(metafunc: "Metafunc") -> None:
-    subclasses = [
-        c for c in BaseOrchestrator.__subclasses__() if "mock" not in c.__name__.lower()
-    ]
-    if "app" in metafunc.fixturenames:
-        metafunc.parametrize("app", subclasses, indirect=True)
-
-
-@pytest.fixture
-def app(request: "FixtureRequest") -> MockPynenc:
-    app = MockPynenc()
-    app.orchestrator = request.param(app)
-    return app
+    from pynenc import Pynenc
 
 
 @dataclass
 class Vars:
+    app: "Pynenc"
     task: "Task"
     inv1: DistributedInvocation
     inv2: DistributedInvocation
@@ -41,42 +25,40 @@ class Vars:
 
 
 @pytest.fixture
-def test_vars(app: MockPynenc) -> Vars:
+def test_vars(task_concat: "Task") -> Vars:
     """Test the implementation of abstract methods:
     set_invocation_status, get_existing_invocations
     """
-
-    @app.task
-    def dummy(arg0: str, arg1: str) -> str:
-        return f"{arg0}:{arg1}"
-
     inv1: DistributedInvocation = DistributedInvocation(
-        Call(dummy, Arguments({"arg0": "a", "arg1": "a"})), None
+        Call(task_concat, Arguments({"arg0": "a", "arg1": "a"})), None
     )
     inv2: DistributedInvocation = DistributedInvocation(
-        Call(dummy, Arguments({"arg0": "a", "arg1": "b"})), None
+        Call(task_concat, Arguments({"arg0": "a", "arg1": "b"})), None
     )
     inv3: DistributedInvocation = DistributedInvocation(
-        Call(dummy, Arguments({"arg0": "a", "arg1": "a"})), None
+        Call(task_concat, Arguments({"arg0": "a", "arg1": "a"})), None
     )
+    app = task_concat.app
     app.orchestrator.set_invocation_status(inv1, status=InvocationStatus.REGISTERED)
     app.orchestrator.set_invocation_status(inv2, status=InvocationStatus.SUCCESS)
     app.orchestrator.set_invocation_status(inv3, status=InvocationStatus.SUCCESS)
     expected_ids = {inv1.invocation_id, inv2.invocation_id, inv3.invocation_id}
-    return Vars(dummy, inv1, inv2, inv3, expected_ids)
+    return Vars(app, task_concat, inv1, inv2, inv3, expected_ids)
 
 
-def test_get_all_invocations(app: MockPynenc, test_vars: Vars) -> None:
+def test_get_all_invocations(test_vars: Vars) -> None:
     """Test get without filters"""
 
+    app = test_vars.task.app
     invocations = list(app.orchestrator.get_existing_invocations(test_vars.task))
     invocations_ids = set(i.invocation_id for i in invocations)
     assert invocations_ids == test_vars.expected_ids
 
 
-def test_get_by_arguments(app: MockPynenc, test_vars: Vars) -> None:
+def test_get_by_arguments(test_vars: Vars) -> None:
     """Test filter by arguments"""
     # argument arg0:a is the same for both
+    app = test_vars.app
     invocations = list(
         app.orchestrator.get_existing_invocations(test_vars.task, {"arg0": '"a"'})
     )
@@ -95,8 +77,9 @@ def test_get_by_arguments(app: MockPynenc, test_vars: Vars) -> None:
     assert len(invocations) == 0
 
 
-def test_get_by_status(app: MockPynenc, test_vars: Vars) -> None:
+def test_get_by_status(test_vars: Vars) -> None:
     """Test filter by status"""
+    app = test_vars.app
     invocations = list(
         app.orchestrator.get_existing_invocations(
             test_vars.task, status=InvocationStatus.REGISTERED
@@ -117,12 +100,13 @@ def test_get_by_status(app: MockPynenc, test_vars: Vars) -> None:
     }
 
 
-def test_get_mix(app: MockPynenc, test_vars: Vars) -> None:
+def test_get_mix(test_vars: Vars) -> None:
     """Test mixed filter (status and arguments)"""
     # The only way of getting just one invocation is combining filters
     # - arg1: a         --> inv1 and inv3
     # - status: SUCCESS --> inv2 and inv3
     # The only filtered invocation should be inv3
+    app = test_vars.app
     invocations = list(
         app.orchestrator.get_existing_invocations(
             test_vars.task, {"arg1": '"a"'}, status=InvocationStatus.SUCCESS

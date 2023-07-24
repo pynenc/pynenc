@@ -25,6 +25,9 @@ class RedisQueue:
             return msg.decode()
         return None
 
+    def purge(self) -> None:
+        self.client.delete(self.key)
+
 
 class RedisBroker(BaseBroker):
     def __init__(self, app: "Pynenc") -> None:
@@ -39,3 +42,6 @@ class RedisBroker(BaseBroker):
         if inv := self.queue.receive_message():
             return DistributedInvocation.from_json(self.app, inv)
         return None
+
+    def purge(self) -> None:
+        return self.queue.purge()
