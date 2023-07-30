@@ -24,6 +24,11 @@ class TaskOptions:
     #: Use this option for tasks that make no sense to execute multiple times in parallel or to avoid generating too much unnecessary tasks in the system.
     single_invocation: Optional[SingleInvocation] = None
 
+    #: If 0 auto parallelization will be disabled.
+    #: If > 0, the iterable will be automatically split in chunks of this size and each chunk will be sent to a different worker.
+    #: if the task arguments is not an iterable, nothing will happen.
+    auto_parallel_batch_size: int = 0
+
     #: Profiling will take care of storing profiling information for the task (this is a todo, will require further options).
     profiling: Optional[str] = None
 

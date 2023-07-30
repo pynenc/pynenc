@@ -15,11 +15,11 @@ class BaseBroker(ABC):
         self.app = app
 
     @abstractmethod
-    def _route_invocation(self, invocation: DistributedInvocation) -> None:
+    def route_invocation(self, invocation: DistributedInvocation) -> None:
         ...
 
     @abstractmethod
-    def _retrieve_invocation(self) -> Optional[DistributedInvocation]:
+    def retrieve_invocation(self) -> Optional[DistributedInvocation]:
         ...
 
     @abstractmethod
@@ -43,19 +43,4 @@ class BaseBroker(ABC):
                 call, parent_invocation=self.app.invocation_context
             )
         )
-        return invocation
-
-    def route_invocation(self, invocation: DistributedInvocation) -> None:
-        """Routes the invocation and change status"""
-        self._route_invocation(invocation)
-        self.app.orchestrator.set_invocation_status(
-            invocation, InvocationStatus.REGISTERED
-        )
-
-    def retrieve_invocation(self) -> Optional[DistributedInvocation]:
-        """Returns an invocation if any and change status"""
-        if invocation := self._retrieve_invocation():
-            self.app.orchestrator.set_invocation_status(
-                invocation, InvocationStatus.PENDING
-            )
         return invocation

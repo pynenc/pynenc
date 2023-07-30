@@ -19,34 +19,44 @@ if TYPE_CHECKING:
 
 
 class MockBroker(BaseBroker):
-    _route_invocation = MagicMock()
-    _retrieve_invocation = MagicMock()
+    route_invocation = MagicMock()
+    retrieve_invocation = MagicMock()
     purge = MagicMock()
 
     def __init__(self, app: "Pynenc") -> None:
         super().__init__(app)
-        self._route_invocation.reset_mock()
-        self._retrieve_invocation.reset_mock()
+        self.route_invocation.reset_mock()
+        self.retrieve_invocation.reset_mock()
         self.purge.reset_mock()
 
 
 class MockBaseOrchestrator(BaseOrchestrator):
     get_existing_invocations = MagicMock()
-    set_invocation_status = MagicMock()
-    set_invocations_status = MagicMock()
+    _set_invocation_status = MagicMock()
+    _set_invocation_pending_status = MagicMock()
     get_invocation_status = MagicMock()
-    check_for_call_cycle = MagicMock()
+    set_up_invocation_auto_purge = MagicMock()
+    auto_purge = MagicMock()
+    add_call_and_check_cycles = MagicMock()
+    clean_up_invocation_cycles = MagicMock()
     waiting_for_result = MagicMock()
+    clean_up_waiters = MagicMock()
+    get_blocking_invocations = MagicMock()
     purge = MagicMock()
 
     def __init__(self, app: "Pynenc") -> None:
         super().__init__(app)
         self.get_existing_invocations.reset_mock()
-        self.set_invocation_status.reset_mock()
-        self.set_invocations_status.reset_mock()
+        self._set_invocation_status.reset_mock()
+        self._set_invocation_pending_status.reset_mock()
         self.get_invocation_status.reset_mock()
-        self.check_for_call_cycle.reset_mock()
+        self.set_up_invocation_auto_purge.reset_mock()
+        self.auto_purge.reset_mock()
+        self.add_call_and_check_cycles.reset_mock()
+        self.clean_up_invocation_cycles.reset_mock()
         self.waiting_for_result.reset_mock()
+        self.clean_up_waiters.reset_mock()
+        self.get_blocking_invocations.reset_mock()
         self.purge.reset_mock()
 
 

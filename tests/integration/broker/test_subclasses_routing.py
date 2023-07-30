@@ -48,12 +48,9 @@ def call(app: MockPynenc) -> "Call":
 def test_routing(app: MockPynenc, call: "Call") -> None:
     """Test that it routes and retrieve all the invocations"""
     inv1: DistributedInvocation = app.broker.route_call(call)
-    app.orchestrator.set_invocation_status.assert_called_once()
-    app.orchestrator.set_invocation_status.reset_mock()
     inv2: DistributedInvocation = DistributedInvocation(call, None)
     expected_ids = {inv1.invocation_id, inv2.invocation_id}
     app.broker.route_invocation(inv2)
-    app.orchestrator.set_invocation_status.assert_called_once()
     assert (retrieved_inv_a := app.broker.retrieve_invocation())
     assert (retrieved_inv_b := app.broker.retrieve_invocation())
     assert retrieved_inv_a != retrieved_inv_b

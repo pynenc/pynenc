@@ -11,9 +11,28 @@ class Config:
     def dev_mode_force_sync_tasks(self) -> bool:
         return bool(os.environ.get("DEV_MODE_FORCE_SYNC_TASK", False))
 
+    @cached_property
+    def cycle_control(self) -> bool:
+        return bool(os.environ.get("CYCLE_CONTROL", True))
+
+    @cached_property
+    def blocking_control(self) -> bool:
+        return bool(os.environ.get("BLOCKING_CONTROL", True))
+
+    @cached_property
+    def max_pending_seconds(self) -> float:
+        """max pending time that a task can be in pending state before reverting to registered state"""
+        return float(os.environ.get("MAX_PENDING_SECONDS", 5.0))
+
+    @cached_property
+    def orchestrator_auto_final_invocation_purge_hours(self) -> float:
+        """after how many hours should the orchestrator automatically purge invocations in final state"""
+        return float(os.environ.get("ORC_AUTO_INV_FINAL_PURGE", 24.0))
+
 
 # TODO
 # - [global setting]store full invocation in router (or just id?)
 #   (same for all components) for big tasks maybe better to store args only in state backend and call them each time
 # - [task setting/global default] max concurrency for router
 # - [component setting] redis connection
+# - [globa setting] test_mode_disable_args_hash (for testing) if true show directly arg string to debug tests

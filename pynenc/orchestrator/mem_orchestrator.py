@@ -1,8 +1,12 @@
-from collections import defaultdict, OrderedDict
+from collections import defaultdict, OrderedDict, deque
 import pickle
+from time import time
 from typing import Any, Iterator, Optional, TYPE_CHECKING, Generic
 
+from pynenc.invocation import DistributedInvocation
+
 from .base_orchestrator import BaseOrchestrator
+from ..invocation import InvocationStatus
 from ..types import Params, Result
 from ..exceptions import CycleDetectedError
 
@@ -10,13 +14,14 @@ if TYPE_CHECKING:
     from ..app import Pynenc
     from ..call import Call
     from ..task import Task
-    from ..invocation import InvocationStatus, DistributedInvocation
+    from ..invocation import DistributedInvocation
 
 
 class CallGraph:
     """A directed acyclic graph representing the call dependencies"""
 
-    def __init__(self) -> None:
+    def __init__(self, app: "Pynenc") -> None:
+        self.app = app
         self.invocations: dict[str, "DistributedInvocation"] = {}
         self.calls: dict[str, "Call"] = {}
         self.call_to_invocation: dict[
@@ -24,7 +29,7 @@ class CallGraph:
         ] = defaultdict(OrderedDict)
         self.edges: dict[str, set[str]] = defaultdict(set)
         self.waiting_for: dict[str, set[str]] = defaultdict(set)
-        self.waited_by: dict[str, set[str]] = defaultdict(set)
+        self.waited_by: dict[str, set[str]] = OrderedDict()
 
     def add_invocation_call(
         self, caller: "DistributedInvocation", callee: "DistributedInvocation"
@@ -47,15 +52,6 @@ class CallGraph:
         self.call_to_invocation[callee.call_id][callee.invocation_id] = callee
         self.edges[caller.call_id].add(callee.call_id)
 
-    def add_waiting_for(
-        self, waiter: "DistributedInvocation", waited: "DistributedInvocation"
-    ) -> None:
-        """
-        Register that an invocation (waiter) is waiting for the results of another invocation (waited).
-        """
-        self.waiting_for[waiter.invocation_id].add(waited.invocation_id)
-        self.waited_by[waited.invocation_id].add(waiter.invocation_id)
-
     def remove_invocation(self, invocation: "DistributedInvocation") -> None:
         """
         Remove an invocation from the graph. Also removes any edges to or from the invocation.
@@ -70,11 +66,35 @@ class CallGraph:
                 for edges in self.edges.values():
                     edges.discard(call_id)
 
+    def add_waiting_for(
+        self, waiter: "DistributedInvocation", waited: "DistributedInvocation"
+    ) -> None:
+        """
+        Register that an invocation (waiter) is waiting for the results of another invocation (waited).
+        """
+        self.invocations[waited.invocation_id] = waited
+        self.waiting_for[waiter.invocation_id].add(waited.invocation_id)
+        if waited.invocation_id not in self.waited_by:
+            self.waited_by[waited.invocation_id] = set()
+        self.waited_by[waited.invocation_id].add(waiter.invocation_id)
+
+    def remove_blocking_invocation(self, invocation: "DistributedInvocation") -> None:
+        """
+        Remove an invocation from the graph. Also removes any edges to or from the invocation.
+        """
+        for waiter_id in self.waited_by.get(invocation.invocation_id, []):
+            self.waiting_for[waiter_id].discard(invocation.invocation_id)
+            if not self.waiting_for[waiter_id]:
+                del self.waiting_for[waiter_id]
+        self.waited_by.pop(invocation.invocation_id, None)
+        self.waiting_for.pop(invocation.invocation_id, None)
+
     def get_blocking_invocations(
         self, max_num_invocations: int
-    ) -> list["DistributedInvocation"]:
+    ) -> Iterator["DistributedInvocation[Params, Result]"]:
         """
-        Returns the invocations that are blocking the maximum number of other invocations.
+        Returns the invocations that are blocking others but not waiting for anything themselves.
+        The oldest invocations are returned first.
 
         Parameters
         ----------
@@ -86,17 +106,15 @@ class CallGraph:
         Optional[Set[DistributedInvocation]]
             A set of blocking invocations or None if no invocations are blocking.
         """
-        if not any(self.waited_by.values()):
-            return []
-        blocking_invocations_ids = {i for i in self.waited_by if self.waited_by[i]}
-        sorted_invocations_ids = sorted(
-            blocking_invocations_ids, key=self._depth, reverse=True
-        )
-        sorted_invocations = [
-            self.invocations[inv_id]
-            for inv_id in sorted_invocations_ids[:max_num_invocations]
-        ]
-        return sorted_invocations
+        for inv_id in self.waited_by:
+            if inv_id not in self.waiting_for:
+                if self.app.orchestrator.get_invocation_status(
+                    self.invocations[inv_id]
+                ).is_available_for_run():
+                    max_num_invocations -= 1
+                    yield self.invocations[inv_id]
+                    if max_num_invocations == 0:
+                        return
 
     def find_cycle_caused_by_new_invocation(
         self, caller: "DistributedInvocation", callee: "DistributedInvocation"
@@ -153,25 +171,6 @@ class CallGraph:
         path.pop()
         return []
 
-    def _depth(self, node: str) -> int:
-        """
-        Calculates the depth of a node in terms of dependent invocations.
-
-        Parameters
-        ----------
-        node : str
-            The node to calculate the depth for.
-
-        Returns
-        -------
-        int
-            The depth of the node.
-        """
-        if not self.waited_by[node]:
-            return 1
-        else:
-            return 1 + max(self._depth(child) for child in self.waited_by[node])
-
 
 class ArgPair:
     """Helper to simulate a Memory cache for key:value pairs in Task Invocations"""
@@ -196,11 +195,15 @@ class ArgPair:
 
 
 class TaskInvocationCache(Generic[Result]):
-    def __init__(self) -> None:
+    def __init__(self, app: "Pynenc") -> None:
+        self.app = app
         self.invocations: dict[str, "DistributedInvocation"] = {}
         self.args_index: dict[ArgPair, set[str]] = defaultdict(set)
         self.status_index: dict["InvocationStatus", set[str]] = defaultdict(set)
+        self.pending_timer: dict[str, float] = {}
+        self.pre_pending_status: dict[str, "InvocationStatus"] = {}
         self.invocation_status: dict[str, "InvocationStatus"] = {}
+        self.invocations_to_purge: deque[tuple[float, str]] = deque()
 
     def get_invocations(
         self,
@@ -233,11 +236,38 @@ class TaskInvocationCache(Generic[Result]):
             for invocation in self.invocations.values():
                 yield invocation
 
+    def set_up_invocation_auto_purge(
+        self, invocation: "DistributedInvocation[Params, Result]"
+    ) -> None:
+        self.invocations_to_purge.append((time(), invocation.invocation_id))
+
+    def auto_purge(self) -> None:
+        end_time = (
+            time() - self.app.conf.orchestrator_auto_final_invocation_purge_hours * 3600
+        )
+        while self.invocations_to_purge and self.invocations_to_purge[0][0] <= end_time:
+            _, elem = self.invocations_to_purge.popleft()
+            self.clean_up_invocation(elem)
+
+    def clean_up_invocation(self, invocation_id: str) -> None:
+        invocation = self.invocations.pop(invocation_id, None)
+        if invocation:
+            for key, value in invocation.serialized_arguments.items():
+                self.args_index[ArgPair(key, value)].discard(invocation_id)
+            self.status_index[self.invocation_status[invocation_id]].discard(
+                invocation_id
+            )
+            self.invocation_status.pop(invocation_id, None)
+            self.pending_timer.pop(invocation_id, None)
+            self.pre_pending_status.pop(invocation_id, None)
+
     def set_status(
         self,
         invocation: "DistributedInvocation[Params, Result]",
         status: "InvocationStatus",
     ) -> None:
+        if status != InvocationStatus.PENDING:
+            self.clean_pending_status(invocation)
         if (_id := invocation.invocation_id) not in self.invocations:
             self.invocations[_id] = invocation
             for key, value in invocation.serialized_arguments.items():
@@ -249,11 +279,41 @@ class TaskInvocationCache(Generic[Result]):
             self.status_index[status].add(_id)
         self.invocation_status[_id] = status
 
+    def clean_pending_status(
+        self, invocation: "DistributedInvocation[Params, Result]"
+    ) -> None:
+        self.pending_timer.pop(invocation.invocation_id, None)
+        self.pre_pending_status.pop(invocation.invocation_id, None)
+
+    def set_pending_status(
+        self, invocation: "DistributedInvocation[Params, Result]"
+    ) -> None:
+        self.pending_timer[invocation.invocation_id] = time()
+        if self.invocation_status[invocation.invocation_id] != InvocationStatus.PENDING:
+            self.pre_pending_status[invocation.invocation_id] = self.invocation_status[
+                invocation.invocation_id
+            ]
+        self.set_status(invocation, InvocationStatus.PENDING)
+
+    def get_status(
+        self, invocation: "DistributedInvocation[Params, Result]"
+    ) -> "InvocationStatus":
+        status = self.invocation_status[invocation.invocation_id]
+        if status == InvocationStatus.PENDING:
+            elapsed = time() - self.pending_timer[invocation.invocation_id]
+            if elapsed > self.app.conf.max_pending_seconds:
+                pre_pending_status = self.pre_pending_status[invocation.invocation_id]
+                self.set_status(invocation, pre_pending_status)
+                return pre_pending_status
+        return status
+
 
 class MemOrchestrator(BaseOrchestrator):
     def __init__(self, app: "Pynenc") -> None:
-        self.cache: dict[str, TaskInvocationCache] = defaultdict(TaskInvocationCache)
-        self.call_graph = CallGraph()
+        self.cache: dict[str, TaskInvocationCache] = defaultdict(
+            lambda: TaskInvocationCache(app)
+        )
+        self.call_graph = CallGraph(app)
         super().__init__(app)
 
     def get_existing_invocations(
@@ -266,27 +326,38 @@ class MemOrchestrator(BaseOrchestrator):
             key_serialized_arguments, status
         )
 
-    def set_invocation_status(
+    def _set_invocation_status(
         self,
         invocation: "DistributedInvocation[Params, Result]",
         status: "InvocationStatus",
     ) -> None:
         self.cache[invocation.task.task_id].set_status(invocation, status)
 
-    def set_invocations_status(
-        self,
-        invocations: list["DistributedInvocation[Params, Result]"],
-        status: "InvocationStatus",
+    def _set_invocation_pending_status(
+        self, invocation: DistributedInvocation[Params, Result]
     ) -> None:
-        for invocation in invocations:
-            self.cache[invocation.task.task_id].set_status(invocation, status)
+        self.cache[invocation.task.task_id].set_pending_status(invocation)
 
-    def check_for_call_cycle(
+    def add_call_and_check_cycles(
         self,
         caller_invocation: "DistributedInvocation[Params, Result]",
         callee_invocation: "DistributedInvocation[Params, Result]",
     ) -> None:
         self.call_graph.add_invocation_call(caller_invocation, callee_invocation)
+
+    def set_up_invocation_auto_purge(
+        self, invocation: DistributedInvocation[Params, Result]
+    ) -> None:
+        self.cache[invocation.task.task_id].set_up_invocation_auto_purge(invocation)
+
+    def auto_purge(self) -> None:
+        for cache in self.cache.values():
+            cache.auto_purge()
+
+    def clean_up_invocation_cycles(
+        self, invocation: "DistributedInvocation[Params, Result]"
+    ) -> None:
+        self.call_graph.remove_invocation(invocation)
 
     def waiting_for_result(
         self,
@@ -296,13 +367,19 @@ class MemOrchestrator(BaseOrchestrator):
         if caller_invocation:
             self.call_graph.add_waiting_for(caller_invocation, result_invocation)
 
+    def get_blocking_invocations(
+        self, max_num_invocations: int
+    ) -> Iterator["DistributedInvocation[Params, Result]"]:
+        return self.call_graph.get_blocking_invocations(max_num_invocations)
+
+    def clean_up_waiters(self, waited: "DistributedInvocation[Params, Result]") -> None:
+        return self.call_graph.remove_blocking_invocation(waited)
+
     def get_invocation_status(
         self, invocation: "DistributedInvocation[Params, Result]"
     ) -> "InvocationStatus":
-        return self.cache[invocation.task.task_id].invocation_status[
-            invocation.invocation_id
-        ]
+        return self.cache[invocation.task.task_id].get_status(invocation)
 
     def purge(self) -> None:
         self.cache.clear()
-        self.call_graph = CallGraph()
+        self.call_graph = CallGraph(app=self.app)

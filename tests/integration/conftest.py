@@ -33,8 +33,10 @@ class MockBaseOrchestrator(BaseOrchestrator):
     set_invocation_status = MagicMock()
     set_invocations_status = MagicMock()
     get_invocation_status = MagicMock()
-    check_for_call_cycle = MagicMock()
+    add_call_and_check_cycles = MagicMock()
     waiting_for_result = MagicMock()
+    get_blocking_invocations = MagicMock()
+    purge = MagicMock()
 
     def __init__(self, app: "Pynenc") -> None:
         super().__init__(app)
@@ -42,8 +44,10 @@ class MockBaseOrchestrator(BaseOrchestrator):
         self.set_invocation_status.reset_mock()
         self.set_invocations_status.reset_mock()
         self.get_invocation_status.reset_mock()
-        self.check_for_call_cycle.reset_mock()
+        self.add_call_and_check_cycles.reset_mock()
         self.waiting_for_result.reset_mock()
+        self.get_blocking_invocations.reset_mock()
+        self.purge.reset_mock()
 
 
 class MockStateBackend(BaseStateBackend):
@@ -55,6 +59,7 @@ class MockStateBackend(BaseStateBackend):
     _get_result = MagicMock()
     _set_exception = MagicMock()
     _get_exception = MagicMock()
+    purge = MagicMock()
 
     def __init__(self, app: "Pynenc") -> None:
         super().__init__(app)
@@ -66,6 +71,7 @@ class MockStateBackend(BaseStateBackend):
         self._get_result.reset_mock()
         self._set_exception.reset_mock()
         self._get_exception.reset_mock()
+        self.purge.reset_mock()
 
 
 class MockRunner(BaseRunner):

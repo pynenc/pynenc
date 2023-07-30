@@ -35,10 +35,10 @@ class RedisBroker(BaseBroker):
         self.queue = RedisQueue(client, "default")
         super().__init__(app)
 
-    def _route_invocation(self, invocation: "DistributedInvocation") -> None:
+    def route_invocation(self, invocation: "DistributedInvocation") -> None:
         self.queue.send_message(invocation.to_json())
 
-    def _retrieve_invocation(self) -> Optional["DistributedInvocation"]:
+    def retrieve_invocation(self) -> Optional["DistributedInvocation"]:
         if inv := self.queue.receive_message():
             return DistributedInvocation.from_json(self.app, inv)
         return None

@@ -32,9 +32,7 @@ def test_route_default(app: MockPynenc, task_sum: "Task") -> None:
     for i in range(2):
         actual_invocations.append(task_sum(i, i))
         assert isinstance(actual_invocations[-1], DistributedInvocation)
-        app.broker._route_invocation.assert_called_once()
-        app.broker._route_invocation.reset_mock()
-    # test that app.broker.route_invocation (MockBroker.route_invocation) has been called
+    # test that app.broker.route_invocation (MemBroker.route_invocation) has been called
     _iter = app.orchestrator.get_existing_invocations(task=task_sum)
     stored_invocations = list(_iter)
     assert set(actual_invocations) == set(stored_invocations)

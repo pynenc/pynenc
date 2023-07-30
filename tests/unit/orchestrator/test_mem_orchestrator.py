@@ -38,7 +38,7 @@ def test_vars() -> Vars:
     inv3: DistributedInvocation = DistributedInvocation(
         Call(dummy, Arguments({"arg0": "a", "arg1": "a"})), None
     )
-    cache = TaskInvocationCache[str]()
+    cache = TaskInvocationCache[str](app)
     cache.set_status(inv1, status=InvocationStatus.REGISTERED)
     cache.set_status(inv2, status=InvocationStatus.SUCCESS)
     cache.set_status(inv3, status=InvocationStatus.SUCCESS)

@@ -4,6 +4,8 @@ import pytest
 
 from pynenc.orchestrator.base_orchestrator import BaseOrchestrator
 from tests.conftest import MockPynenc
+from pynenc.call import Call
+from pynenc.invocation import DistributedInvocation
 
 if TYPE_CHECKING:
     from _pytest.python import Metafunc
@@ -20,6 +22,11 @@ def pytest_generate_tests(metafunc: "Metafunc") -> None:
 
 
 mock_app = MockPynenc()
+
+
+@mock_app.task
+def dummy_task() -> None:
+    ...
 
 
 @mock_app.task
@@ -51,6 +58,12 @@ def app(request: "FixtureRequest") -> MockPynenc:
 
 
 @pytest.fixture
+def task_dummy(app: MockPynenc) -> "Task":
+    dummy_task.app = app
+    return dummy_task
+
+
+@pytest.fixture
 def task_sum(app: MockPynenc) -> "Task":
     dummy_sum.app = app
     return dummy_sum
@@ -72,3 +85,8 @@ def task_mirror(app: MockPynenc) -> "Task":
 def task_key_arg(app: MockPynenc) -> "Task":
     dummy_key_arg.app = app
     return dummy_key_arg
+
+
+@pytest.fixture
+def dummy_invocation(task_dummy: "Task") -> "DistributedInvocation":
+    return DistributedInvocation(Call(task_dummy), None)

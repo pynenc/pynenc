@@ -1,5 +1,7 @@
 from typing import TYPE_CHECKING
 
+import pytest
+
 from pynenc.invocation import DistributedInvocation, InvocationStatus
 from pynenc.conf import SingleInvocation
 
@@ -22,10 +24,10 @@ def test_route_default(mock_base_app: "MockPynenc") -> None:
     invocation = add(1, 3)
     assert isinstance(invocation, DistributedInvocation)
     # test that app.broker.route_invocation (MockBroker.route_invocation) has been called
-    mock_base_app.broker._route_invocation.assert_called_once()
+    mock_base_app.broker.route_invocation.assert_called_once()
     # test that app.orchestrator.set_invocation_status (MockBaseOrchestrator.set_invocation_status)
     # has been called with (result, InvocationStatus.REGISTERED)
-    mock_base_app.orchestrator.set_invocation_status.assert_called_once_with(
+    mock_base_app.orchestrator._set_invocation_status.assert_called_once_with(
         invocation, InvocationStatus.REGISTERED
     )
 

@@ -15,10 +15,10 @@ class MemBroker(BaseBroker):
         self._queue: deque = deque()
         super().__init__(app)
 
-    def _route_invocation(self, invocation: "DistributedInvocation") -> None:
+    def route_invocation(self, invocation: "DistributedInvocation") -> None:
         self._queue.append(invocation)
 
-    def _retrieve_invocation(self) -> Optional["DistributedInvocation"]:
+    def retrieve_invocation(self) -> Optional["DistributedInvocation"]:
         return self._queue.pop() if self._queue else None
 
     def purge(self) -> None:

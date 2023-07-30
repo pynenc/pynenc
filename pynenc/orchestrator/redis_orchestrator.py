@@ -1,24 +1,20 @@
-from collections import defaultdict, OrderedDict
-import pickle
+from time import time
 from typing import Any, Iterator, Optional, TYPE_CHECKING
 
 import redis
 
+from pynenc.invocation import DistributedInvocation
+
 from .base_orchestrator import BaseOrchestrator
+from ..call import Call
 from ..types import Params, Result
 from ..exceptions import CycleDetectedError
-from ..conf.single_invocation_pending import (
-    SingleInvocationPerArguments,
-    SingleInvocationPerKeyArguments,
-)
-from ..invocation import DistributedInvocation
+from ..invocation import DistributedInvocation, InvocationStatus
 from ..util.redis_keys import Key
 
 if TYPE_CHECKING:
     from ..app import Pynenc
-    from ..call import Call
     from ..task import Task
-    from ..invocation import InvocationStatus
 
 
 class CallGraph:
@@ -28,14 +24,6 @@ class CallGraph:
         self.app = app
         self.key = Key("call_graph")
         self.client = client
-        self.invocations: dict[str, "DistributedInvocation"] = {}
-        self.calls: dict[str, "Call"] = {}
-        self.call_to_invocation: dict[
-            str, OrderedDict[str, "DistributedInvocation"]
-        ] = defaultdict(OrderedDict)
-        self.edges: dict[str, set[str]] = defaultdict(set)
-        self.waiting_for: dict[str, set[str]] = defaultdict(set)
-        self.waited_by: dict[str, set[str]] = defaultdict(set)
 
     def purge(self) -> None:
         self.key.purge(self.client)
@@ -55,8 +43,14 @@ class CallGraph:
             raise CycleDetectedError.from_cycle(cycle)
         self.client.set(self.key.invocation(caller.invocation_id), caller.to_json())
         self.client.set(self.key.invocation(callee.invocation_id), callee.to_json())
-        self.client.sadd(self.key.call(caller.call_id), caller.invocation_id)
-        self.client.sadd(self.key.call(callee.call_id), callee.invocation_id)
+        self.client.sadd(
+            self.key.call_to_invocation(caller.call_id), caller.invocation_id
+        )
+        self.client.sadd(
+            self.key.call_to_invocation(callee.call_id), callee.invocation_id
+        )
+        self.client.set(self.key.call(caller.call_id), caller.call.to_json())
+        self.client.set(self.key.call(callee.call_id), callee.call.to_json())
         # self.calls[caller.call_id] = caller.call # todo check if it work with invocation_id
         # self.calls[callee.call_id] = callee.call
         # self.call_to_invocation[caller.call_id][caller.invocation_id] = caller
@@ -76,8 +70,16 @@ class CallGraph:
         Remove an invocation from the graph. Also removes any edges to or from the invocation.
         """
         self.client.delete(self.key.invocation(invocation.invocation_id))
-        self.client.srem(self.key.call(invocation.call_id), invocation.invocation_id)
-        self.remove_edges(invocation.call_id)
+        self.client.srem(
+            self.key.call_to_invocation(invocation.call_id), invocation.invocation_id
+        )
+        remaining_call_invocations = self.client.smembers(
+            self.key.call_to_invocation(invocation.call_id)
+        )
+        if not remaining_call_invocations:
+            self.client.delete(self.key.call(invocation.call_id))
+            self.client.delete(self.key.call_to_invocation(invocation.call_id))
+            self.remove_edges(invocation.call_id)
 
     def add_waiting_for(
         self, waiter: "DistributedInvocation", waited: "DistributedInvocation"
@@ -85,33 +87,48 @@ class CallGraph:
         """
         Register that an invocation (waiter) is waiting for the results of another invocation (waited).
         """
-        # self.waiting_for[waiter.invocation_id].add(waited.invocation_id)
-        # self.waited_by[waited.invocation_id].add(waiter.invocation_id)
+        self.client.set(self.key.invocation(waited.invocation_id), waited.to_json())
         self.client.sadd(
             self.key.waiting_for(waiter.invocation_id), waited.invocation_id
         )
         self.client.sadd(self.key.waited_by(waited.invocation_id), waiter.invocation_id)
-        # Find all ancestors of the waited invocation and increment their count in the blocking set
-        ancestors = self.get_all_ancestors(waited.invocation_id)
-        for ancestor_id in ancestors:
-            self.client.zincrby("total_blockers", 1, ancestor_id)
+        # Add the waited invocation to the 'all_waited' sorted set with the current time as the score
+        self.client.zadd(self.key.all_waited(), {waited.invocation_id: time()})
+        # If the waited invocation is not waiting for anything else, add it to the 'not_waiting' sorted set
+        if not self.client.exists(self.key.waiting_for(waited.invocation_id)):
+            self.client.zadd(self.key.not_waiting(), {waited.invocation_id: time()})
+        # If the waiter is in the 'not_waiting' sorted set, remove it
+        if self.client.zscore(self.key.not_waiting(), waiter.invocation_id) is not None:
+            self.client.zrem(self.key.not_waiting(), waiter.invocation_id)
 
-    def get_all_ancestors(self, invocation_id: str) -> set[str]:
-        """Get all ancestors of an invocation in the waiting-for graph."""
-        ancestors = set()
-        waiters = self.client.smembers(self.key.waited_by(invocation_id))
-        while waiters:
-            waiter = waiters.pop()
-            if waiter not in ancestors:
-                ancestors.add(waiter)
-                waiters.update(self.client.smembers(self.key.waited_by(waiter)))
-        return ancestors
+    def remove_blocking_invocation(self, invocation: "DistributedInvocation") -> None:
+        """
+        Remove an invocation from the graph. Also removes any edges to or from the invocation.
+        """
+        # for each invocation thas is waiting for the invocation
+        for waited_invocation_id in self.client.smembers(
+            self.key.waited_by(invocation.invocation_id)
+        ):
+            # remove the invocation from the list of invocations waited by the waiter
+            self.client.srem(
+                self.key.waiting_for(waited_invocation_id.decode()),
+                invocation.invocation_id,
+            )
+            # if the waiter is not waiting for anything else, add it to the 'not_waiting' sorted set
+            if not self.client.exists(self.key.waiting_for(waited_invocation_id)):
+                self.client.zadd(self.key.not_waiting(), {waited_invocation_id: time()})
+        self.client.delete(self.key.invocation(invocation.invocation_id))
+        self.client.delete(self.key.waiting_for(invocation.invocation_id))
+        self.client.delete(self.key.waited_by(invocation.invocation_id))
+        self.client.zrem(self.key.all_waited(), invocation.invocation_id)
+        self.client.zrem(self.key.not_waiting(), invocation.invocation_id)
 
     def get_blocking_invocations(
         self, max_num_invocations: int
-    ) -> list["DistributedInvocation"]:
+    ) -> Iterator["DistributedInvocation[Params, Result]"]:
         """
-        Returns the invocations that are blocking the maximum number of other invocations.
+        Returns the invocations that are blocking others but not waiting for anything themselves.
+        The oldest invocations are returned first.
 
         Parameters
         ----------
@@ -123,27 +140,25 @@ class CallGraph:
         list[DistributedInvocation]
             A list of blocking invocations or an empty list if no invocations are blocking.
         """
-        # Retrieve the invocations with the highest scores
-        ranked_invocations = self.client.zrevrange(
-            "total_blockers", 0, -1, withscores=True
-        )
-
-        # Fetch the invocation objects from Redis
-        invocations: list[DistributedInvocation] = []
-        all_deps: set[str] = set()
-        for invocation_id, _ in ranked_invocations:
-            direct_deps = self.client.smembers(self.key.waiting_for(invocation_id))
-            if not direct_deps.intersection(
-                all_deps
-            ):  # if no dependencies with the already selected invocations
-                if inv := self.client.get(self.key.invocation(invocation_id.decode())):
-                    invocations.append(
-                        DistributedInvocation.from_json(self.app, inv.decode())
-                    )
-                all_deps.update(direct_deps)
-                if len(invocations) == max_num_invocations:
-                    break
-        return invocations
+        index = 0
+        page_size = max(10, max_num_invocations)  # adjust as needed
+        while max_num_invocations > 0:
+            if not (
+                page := self.client.zrange(
+                    self.key.not_waiting(), index, index + page_size - 1
+                )
+            ):
+                break
+            index += page_size
+            for waited_invocation_id in page:
+                invocation_id = waited_invocation_id.decode()
+                if inv := self.client.get(self.key.invocation(invocation_id)):
+                    invocation = DistributedInvocation.from_json(self.app, inv.decode())
+                    if self.app.orchestrator.get_invocation_status(
+                        invocation
+                    ).is_available_for_run():
+                        max_num_invocations -= 1
+                        yield invocation
 
     def find_cycle_caused_by_new_invocation(
         self, caller: "DistributedInvocation", callee: "DistributedInvocation"
@@ -188,14 +203,20 @@ class CallGraph:
         visited.add(current_call_id)
         path.append(current_call_id)
 
-        for neighbour_call_id in self.client.smembers(self.key.edge(current_call_id)):
+        for _neighbour_call_id in self.client.smembers(self.key.edge(current_call_id)):
+            neighbour_call_id = _neighbour_call_id.decode()
             if neighbour_call_id not in visited:
                 cycle = self._is_cyclic_util(neighbour_call_id, visited, path)
                 if cycle:
                     return cycle
             elif neighbour_call_id in path:
                 cycle_start_index = path.index(neighbour_call_id)
-                return [self.calls[_id] for _id in path[cycle_start_index:]]
+                return [
+                    Call.from_json(
+                        self.app, self.client.get(self.key.call(_id)).decode()
+                    )
+                    for _id in path[cycle_start_index:]
+                ]
 
         path.pop()
         return []
@@ -223,6 +244,88 @@ class TaskRedisCache:
         self.client.sadd(self.key.task(task_id), invocation_id)
         self.client.sadd(self.key.status(task_id, status), invocation_id)
         self.client.set(self.key.invocation_status(invocation_id), status.value)
+        if status != InvocationStatus.PENDING:
+            self.clean_pending_status(invocation)
+
+    def set_pending_status(
+        self, invocation: "DistributedInvocation[Params, Result]"
+    ) -> None:
+        invocation_id = invocation.invocation_id
+        self.client.set(self.key.pending_timer(invocation_id), time())
+        previous_status = self.get_invocation_status(invocation)
+        if previous_status != InvocationStatus.PENDING:
+            self.client.set(
+                self.key.previous_status(invocation_id),
+                previous_status.value,
+            )
+        self.set_status(invocation, InvocationStatus.PENDING)
+
+    def set_up_invocation_auto_purge(
+        self, invocation: "DistributedInvocation[Params, Result]"
+    ) -> None:
+        self.client.zadd(
+            self.key.invocation_auto_purge(),
+            {invocation.invocation_id: time()},
+        )
+
+    def auto_purge(self) -> None:
+        end_time = (
+            time() - self.app.conf.orchestrator_auto_final_invocation_purge_hours * 3600
+        )
+        for _invocation_id in self.client.zrangebyscore(
+            self.key.invocation_auto_purge(), 0, end_time
+        ):
+            invocation_id = _invocation_id.decode()
+            if inv := self.client.get(self.key.invocation(invocation_id)):
+                invocation = DistributedInvocation.from_json(self.app, inv.decode())
+                self.client.delete(self.key.invocation(invocation_id))
+                task_id = invocation.task.task_id
+                # clean up task keys
+                self.client.srem(self.key.task(task_id), invocation_id)
+                if not self.client.smembers(self.key.task(task_id)):
+                    self.client.delete(self.key.task(task_id))
+                # clean up task-status keys
+                self.client.srem(
+                    self.key.status(task_id, invocation.status), invocation_id
+                )
+                if not self.client.smembers(
+                    self.key.status(task_id, invocation.status)
+                ):
+                    self.client.delete(self.key.status(task_id, invocation.status))
+            self.client.delete(self.key.invocation_status(invocation_id))
+            self.client.zrem(self.key.invocation_auto_purge(), invocation_id)
+            self.client.delete(self.key.pending_timer(invocation_id))
+            self.client.delete(self.key.previous_status(invocation_id))
+
+    def clean_pending_status(
+        self, invocation: "DistributedInvocation[Params, Result]"
+    ) -> None:
+        self.client.delete(self.key.pending_timer(invocation.invocation_id))
+        self.client.delete(self.key.previous_status(invocation.invocation_id))
+
+    def get_invocation_status(
+        self, invocation: "DistributedInvocation"
+    ) -> "InvocationStatus":
+        if encoded_status := self.client.get(
+            self.key.invocation_status(invocation.invocation_id)
+        ):
+            status = InvocationStatus(encoded_status.decode())
+            if status == InvocationStatus.PENDING:
+                if encoded_pending_timer := self.client.get(
+                    self.key.pending_timer(invocation.invocation_id)
+                ):
+                    elapsed = time() - float(encoded_pending_timer.decode())
+                    if elapsed > self.app.conf.max_pending_seconds:
+                        if encoded_previous_status := self.client.get(
+                            self.key.previous_status(invocation.invocation_id)
+                        ):
+                            previous_status = InvocationStatus(
+                                encoded_previous_status.decode()
+                            )
+                            self.set_status(invocation, previous_status)
+                            return previous_status
+            return status
+        raise ValueError(f"Invocation status {invocation} not found in Redis")
 
     def get_invocations(
         self,
@@ -250,15 +353,6 @@ class TaskRedisCache:
             if inv := self.client.get(self.key.invocation(invocation_id.decode())):
                 yield DistributedInvocation.from_json(self.app, inv.decode())
 
-    def get_invocation_status(
-        self, invocation: "DistributedInvocation"
-    ) -> "InvocationStatus":
-        if status := self.client.get(
-            self.key.invocation_status(invocation.invocation_id)
-        ):
-            return InvocationStatus(status.decode())
-        raise ValueError(f"Invocation status {invocation} not found in Redis")
-
 
 class RedisOrchestrator(BaseOrchestrator):
     def __init__(self, app: "Pynenc") -> None:
@@ -277,27 +371,37 @@ class RedisOrchestrator(BaseOrchestrator):
             task.task_id, key_serialized_arguments, status
         )
 
-    def set_invocation_status(
+    def _set_invocation_status(
         self,
         invocation: "DistributedInvocation[Params, Result]",
         status: "InvocationStatus",
     ) -> None:
         self.redis_cache.set_status(invocation, status)
 
-    def set_invocations_status(
-        self,
-        invocations: list["DistributedInvocation[Params, Result]"],
-        status: "InvocationStatus",
+    def _set_invocation_pending_status(
+        self, invocation: "DistributedInvocation"
     ) -> None:
-        for invocation in invocations:
-            self.redis_cache.set_status(invocation, status)
+        self.redis_cache.set_pending_status(invocation)
 
-    def check_for_call_cycle(
+    def add_call_and_check_cycles(
         self,
         caller_invocation: DistributedInvocation[Params, Result],
         callee_invocation: DistributedInvocation[Params, Result],
     ) -> None:
         self.call_graph.add_invocation_call(caller_invocation, callee_invocation)
+
+    def set_up_invocation_auto_purge(
+        self, invocation: DistributedInvocation[Params, Result]
+    ) -> None:
+        self.redis_cache.set_up_invocation_auto_purge(invocation)
+
+    def auto_purge(self) -> None:
+        self.redis_cache.auto_purge()
+
+    def clean_up_invocation_cycles(
+        self, invocation: DistributedInvocation[Params, Result]
+    ) -> None:
+        self.call_graph.remove_invocation(invocation)
 
     def waiting_for_result(
         self,
@@ -306,6 +410,14 @@ class RedisOrchestrator(BaseOrchestrator):
     ) -> None:
         if caller_invocation:
             self.call_graph.add_waiting_for(caller_invocation, result_invocation)
+
+    def clean_up_waiters(self, waited: "DistributedInvocation[Params, Result]") -> None:
+        self.call_graph.remove_blocking_invocation(waited)
+
+    def get_blocking_invocations(
+        self, max_num_invocations: int
+    ) -> Iterator["DistributedInvocation[Params, Result]"]:
+        return self.call_graph.get_blocking_invocations(max_num_invocations)
 
     def get_invocation_status(
         self, invocation: "DistributedInvocation[Params, Result]"

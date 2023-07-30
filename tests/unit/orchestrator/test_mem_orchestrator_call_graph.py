@@ -36,8 +36,8 @@ def invocations(
 
 def test_add_calls_without_cycles(invocations: tuple) -> None:
     """Test that will add an invocation to the graph"""
-    graph = CallGraph()
     invocation0, invocation1, invocation2 = invocations
+    graph = CallGraph(invocation0.app)
 
     graph.add_invocation_call(invocation0, invocation1)
     assert graph.edges[invocation0.call_id] == {invocation1.call_id}
@@ -55,8 +55,8 @@ def test_add_calls_without_cycles(invocations: tuple) -> None:
 
 
 def test_remove_invocation(invocations: tuple) -> None:
-    graph = CallGraph()
     invocation0, invocation1, invocation2 = invocations
+    graph = CallGraph(invocation0.app)
 
     graph.add_invocation_call(invocation0, invocation1)
     graph.add_invocation_call(invocation1, invocation2)
@@ -67,22 +67,21 @@ def test_remove_invocation(invocations: tuple) -> None:
 
 
 def test_get_blocking_invocations(invocations: tuple) -> None:
-    graph = CallGraph()
     invocation0, invocation1, invocation2 = invocations
+    graph = CallGraph(invocation0.app)
 
     graph.add_invocation_call(invocation0, invocation1)
     graph.add_invocation_call(invocation1, invocation2)
     graph.add_waiting_for(invocation0, invocation1)
 
-    blocking = graph.get_blocking_invocations(2)
-    assert isinstance(blocking, list)
+    blocking: list[DistributedInvocation] = list(graph.get_blocking_invocations(2))
     assert len(blocking) == 1
     assert blocking[0] == invocation1
 
 
 def test_causes_cycle(invocations: tuple) -> None:
-    graph = CallGraph()
     invocation0, invocation1, invocation2 = invocations
+    graph = CallGraph(invocation0.app)
 
     graph.add_invocation_call(invocation0, invocation1)
     graph.add_invocation_call(invocation1, invocation2)
