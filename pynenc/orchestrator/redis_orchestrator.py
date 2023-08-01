@@ -8,7 +8,7 @@ from pynenc.invocation import DistributedInvocation
 from .base_orchestrator import BaseOrchestrator, BaseCycleControl, BaseBlockingControl
 from ..call import Call
 from ..types import Params, Result
-from ..exceptions import CycleDetectedError
+from ..exceptions import CycleDetectedError, PendingInvocationLockError
 from ..invocation import DistributedInvocation, InvocationStatus
 from ..util.redis_keys import Key
 
@@ -233,67 +233,6 @@ class RedisBlockingControl(BaseBlockingControl):
                         max_num_invocations -= 1
                         yield invocation
 
-    def find_cycle_caused_by_new_invocation(
-        self, caller: "DistributedInvocation", callee: "DistributedInvocation"
-    ) -> list["Call"]:
-        """
-        Determines if adding an edge from the caller to the callee would create a cycle.
-
-        Parameters
-        ----------
-        caller : DistributedInvocation
-            The invocation making the call.
-        callee : DistributedInvocation
-            The invocation being called.
-
-        Returns
-        -------
-        list
-            List of invocations that would form the cycle after adding the new invocation, else an empty list.
-        """
-        # Temporarily add the edge to check if it would cause a cycle
-        self.client.sadd(self.key.edge(caller.call_id), callee.call_id)
-
-        # Set for tracking visited nodes
-        visited: set[str] = set()
-
-        # List for tracking the nodes on the path from caller to callee
-        path: list[str] = []
-
-        cycle = self._is_cyclic_util(caller.call_id, visited, path)
-
-        # Remove the temporarily added edge
-        self.client.srem(self.key.edge(caller.call_id), callee.call_id)
-
-        return cycle
-
-    def _is_cyclic_util(
-        self,
-        current_call_id: str,
-        visited: set[str],
-        path: list[str],
-    ) -> list["Call"]:
-        visited.add(current_call_id)
-        path.append(current_call_id)
-
-        for _neighbour_call_id in self.client.smembers(self.key.edge(current_call_id)):
-            neighbour_call_id = _neighbour_call_id.decode()
-            if neighbour_call_id not in visited:
-                cycle = self._is_cyclic_util(neighbour_call_id, visited, path)
-                if cycle:
-                    return cycle
-            elif neighbour_call_id in path:
-                cycle_start_index = path.index(neighbour_call_id)
-                return [
-                    Call.from_json(
-                        self.app, self.client.get(self.key.call(_id)).decode()
-                    )
-                    for _id in path[cycle_start_index:]
-                ]
-
-        path.pop()
-        return []
-
 
 class TaskRedisCache:
     def __init__(self, app: "Pynenc", client: redis.Redis) -> None:
@@ -324,14 +263,23 @@ class TaskRedisCache:
         self, invocation: "DistributedInvocation[Params, Result]"
     ) -> None:
         invocation_id = invocation.invocation_id
-        self.client.set(self.key.pending_timer(invocation_id), time())
-        previous_status = self.get_invocation_status(invocation)
-        if previous_status != InvocationStatus.PENDING:
+        lock = self.client.lock(
+            f"lock:pending_status:{invocation_id}",
+            blocking_timeout=self.app.conf.max_pending_seconds,
+        )
+        if not lock.acquire(blocking=True):
+            raise PendingInvocationLockError(invocation_id)
+        try:
+            self.client.set(self.key.pending_timer(invocation_id), time())
+            previous_status = self.get_invocation_status(invocation)
+            if previous_status == InvocationStatus.PENDING:
+                raise PendingInvocationLockError(invocation_id)
             self.client.set(
-                self.key.previous_status(invocation_id),
-                previous_status.value,
+                self.key.previous_status(invocation_id), previous_status.value
             )
-        self.set_status(invocation, InvocationStatus.PENDING)
+            self.set_status(invocation, InvocationStatus.PENDING)
+        finally:
+            lock.release()
 
     def set_up_invocation_auto_purge(
         self, invocation: "DistributedInvocation[Params, Result]"

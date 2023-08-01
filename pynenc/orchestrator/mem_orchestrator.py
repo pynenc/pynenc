@@ -1,5 +1,6 @@
 from collections import defaultdict, OrderedDict, deque
 import pickle
+import threading
 from time import time
 from typing import Any, Iterator, Optional, TYPE_CHECKING, Generic
 
@@ -8,7 +9,7 @@ from pynenc.invocation import DistributedInvocation
 from .base_orchestrator import BaseOrchestrator, BaseCycleControl, BaseBlockingControl
 from ..invocation import InvocationStatus
 from ..types import Params, Result
-from ..exceptions import CycleDetectedError
+from ..exceptions import CycleDetectedError, PendingInvocationLockError
 
 if TYPE_CHECKING:
     from ..app import Pynenc
@@ -216,6 +217,7 @@ class TaskInvocationCache(Generic[Result]):
         self.pre_pending_status: dict[str, "InvocationStatus"] = {}
         self.invocation_status: dict[str, "InvocationStatus"] = {}
         self.invocations_to_purge: deque[tuple[float, str]] = deque()
+        self.locks: dict[str, threading.Lock] = {}
 
     def get_invocations(
         self,
@@ -300,12 +302,19 @@ class TaskInvocationCache(Generic[Result]):
     def set_pending_status(
         self, invocation: "DistributedInvocation[Params, Result]"
     ) -> None:
-        self.pending_timer[invocation.invocation_id] = time()
-        if self.invocation_status[invocation.invocation_id] != InvocationStatus.PENDING:
-            self.pre_pending_status[invocation.invocation_id] = self.invocation_status[
-                invocation.invocation_id
-            ]
-        self.set_status(invocation, InvocationStatus.PENDING)
+        invocation_id = invocation.invocation_id
+        lock = self.locks.setdefault(invocation_id, threading.Lock())
+        if not lock.acquire(False):
+            raise PendingInvocationLockError(invocation_id)
+        try:
+            self.pending_timer[invocation_id] = time()
+            previous_status = self.invocation_status[invocation.invocation_id]
+            if previous_status == InvocationStatus.PENDING:
+                raise PendingInvocationLockError(invocation_id)
+            self.pre_pending_status[invocation_id] = previous_status
+            self.set_status(invocation, InvocationStatus.PENDING)
+        finally:
+            lock.release()
 
     def get_status(
         self, invocation: "DistributedInvocation[Params, Result]"

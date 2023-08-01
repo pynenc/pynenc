@@ -2,7 +2,10 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Optional, Iterator, Any
 
 from ..invocation import InvocationStatus, ReusedInvocation
-from ..exceptions import SingleInvocationWithDifferentArgumentsError
+from ..exceptions import (
+    SingleInvocationWithDifferentArgumentsError,
+    PendingInvocationLockError,
+)
 
 if TYPE_CHECKING:
     from ..app import Pynenc
@@ -224,8 +227,11 @@ class BaseOrchestrator(ABC):
         blocking_invocation_ids: set[str] = set()
         for blocking_invocation in self.get_blocking_invocations(max_num_invocations):
             blocking_invocation_ids.add(blocking_invocation.invocation_id)
-            self._set_invocation_pending_status(blocking_invocation)
-            yield blocking_invocation
+            try:
+                self._set_invocation_pending_status(blocking_invocation)
+                yield blocking_invocation
+            except PendingInvocationLockError:
+                continue
         missing_invocations = max_num_invocations - len(blocking_invocation_ids)
         # then get the rest from the broker
         while missing_invocations > 0:
@@ -233,8 +239,11 @@ class BaseOrchestrator(ABC):
                 if invocation.invocation_id not in blocking_invocation_ids:
                     if self.get_invocation_status(invocation).is_available_for_run():
                         missing_invocations -= 1
-                        self._set_invocation_pending_status(invocation)
-                        yield invocation
+                        try:
+                            self._set_invocation_pending_status(invocation)
+                            yield invocation
+                        except PendingInvocationLockError:
+                            continue
             else:
                 break
 

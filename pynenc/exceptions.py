@@ -37,6 +37,13 @@ class PynencError(Exception):
         raise ValueError(f"Unknown error type: {error_name}")
 
 
+class PendingInvocationLockError(PynencError):
+    """Error raised when two processes try to set the same invocation as pending concurrently"""
+
+    def __init__(self, invocation_id: str) -> None:
+        self.invocation_id = invocation_id
+
+
 class TaskError(PynencError):
     """Base class for all Task related errors."""
 

@@ -221,9 +221,3 @@ def test_config_blocking_control(test_vars: Vars) -> None:
     test_vars.app.conf.blocking_control = False
     inv_to_run = list(test_vars.app.orchestrator.get_blocking_invocations(3))
     assert inv_to_run == []
-
-
-def test_atomic_pending() -> None:
-    raise NotImplementedError(
-        "test that getting task to run and set up pending is atomic"
-    )

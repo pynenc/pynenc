@@ -1,3 +1,4 @@
+import concurrent.futures
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -6,7 +7,7 @@ import pytest
 from pynenc.arguments import Arguments
 from pynenc.call import Call
 from pynenc.invocation import DistributedInvocation, InvocationStatus
-from tests.conftest import MockPynenc
+from pynenc.exceptions import PendingInvocationLockError
 
 
 if TYPE_CHECKING:
@@ -114,3 +115,71 @@ def test_get_mix(test_vars: Vars) -> None:
     )
     assert len(invocations) == 1
     assert invocations[0].invocation_id == test_vars.inv3.invocation_id
+
+
+def test_set_invocation_pending_status(test_vars: Vars) -> None:
+    """test that set pending cannot be called in an already pending invocation"""
+    app = test_vars.app
+    test_vars.app.orchestrator.set_invocation_status(
+        test_vars.inv1, InvocationStatus.REGISTERED
+    )
+    app.conf.max_pending_seconds = 10
+    app.orchestrator._set_invocation_pending_status(test_vars.inv1)
+    with pytest.raises(PendingInvocationLockError):
+        app.orchestrator._set_invocation_pending_status(test_vars.inv1)
+
+
+def test_set_invocation_pending_status_atomicity(test_vars: Vars) -> None:
+    """Check that on multiple set_pending calls only one can succeed"""
+    app = test_vars.app
+    test_vars.app.orchestrator.set_invocation_status(
+        test_vars.inv1, InvocationStatus.REGISTERED
+    )
+    app.conf.max_pending_seconds = 10
+
+    # Define a function to run in a separate thread
+    def run_set_invocation_pending_status(app: "Pynenc") -> None:
+        app.orchestrator._set_invocation_pending_status(test_vars.inv1)
+
+    # Run set_invocation_pending_status concurrently in two threads
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        future1 = executor.submit(run_set_invocation_pending_status, app)
+        future2 = executor.submit(run_set_invocation_pending_status, app)
+        with pytest.raises(Exception):
+            future1.result()
+            future2.result()
+
+
+def test_get_invocations_to_run_atomicity(test_vars: Vars) -> None:
+    """test that getting task to run and set up pending is atomic
+    otherwise workers could get several times the same invocation
+    """
+
+    # Define a function to run in a separate thread
+    def run_get_invocations_to_run(_app: "Pynenc") -> list[DistributedInvocation]:
+        return list(_app.orchestrator.get_invocations_to_run(1))
+
+    app = test_vars.app
+    # max pending seconds to a value that will not affect the tests
+    test_vars.inv3.app.conf.max_pending_seconds = 10
+    attempts = 5
+    for _ in range(attempts):
+        # broker should not return the same invocation twice
+        # but we may get a blocking invocatio and immediately after the same
+        # invocation from the broker
+        app.broker.retrieve_invocation.side_effect = [  # type: ignore
+            test_vars.inv1,
+            test_vars.inv1,
+            test_vars.inv1,
+            None,  # broker will stop returning invocations
+        ]
+        # Reset inv1 status
+        test_vars.app.orchestrator.set_invocation_status(
+            test_vars.inv1, InvocationStatus.REGISTERED
+        )
+        # Run get_invocations_to_run concurrently in two threads
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            future1 = executor.submit(run_get_invocations_to_run, app)
+            future2 = executor.submit(run_get_invocations_to_run, app)
+        # Check that never returns the same invocation
+        assert future1.result() != future2.result()
