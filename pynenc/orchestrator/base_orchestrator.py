@@ -12,6 +12,48 @@ if TYPE_CHECKING:
     from ..types import Params, Result, Args
 
 
+class BaseCycleControl(ABC):
+    """Sub component of the orchestrator to implement cycle control functionalities"""
+
+    @abstractmethod
+    def add_call_and_check_cycles(
+        self,
+        caller_invocation: "DistributedInvocation[Params, Result]",
+        callee_invocation: "DistributedInvocation[Params, Result]",
+    ) -> None:
+        """Adds a new call between invocations and raise an exception to prevent the formation of a call cycle"""
+        # TODO async store of call dependencies in state backend
+
+    @abstractmethod
+    def clean_up_invocation_cycles(self, invocation: "DistributedInvocation") -> None:
+        """Called when an invocation is finished and therefore cannot be part of a cycle anymore"""
+
+
+class BaseBlockingControl(ABC):
+    """Sub component of the orchestrator to implement blocking control functionalities"""
+
+    @abstractmethod
+    def release_waiters(self, waited: "DistributedInvocation") -> None:
+        """Called when an invocation is finished and therefore cannot block other invocations anymore"""
+
+    @abstractmethod
+    def waiting_for_result(
+        self,
+        caller_invocation: "DistributedInvocation[Params, Result]",
+        result_invocation: "DistributedInvocation[Params, Result]",
+    ) -> None:
+        """Called when an Optional[invocation] is waiting in the result result of another invocation."""
+
+    @abstractmethod
+    def get_blocking_invocations(
+        self, max_num_invocations: int
+    ) -> Iterator["DistributedInvocation"]:
+        """Returns an iterator of invocations that are blocking other invocations
+        but are not getting blocked by any invocation.
+        order by age, the oldest invocation first.
+        """
+
+
 class BaseOrchestrator(ABC):
     def __init__(self, app: "Pynenc") -> None:
         self.app = app
@@ -41,20 +83,6 @@ class BaseOrchestrator(ABC):
         """Pending can only be set by the orchestrator"""
         ...
 
-    def set_invocation_status(
-        self,
-        invocation: "DistributedInvocation[Params, Result]",
-        status: "InvocationStatus",
-    ) -> None:
-        if status == InvocationStatus.PENDING:
-            self._set_invocation_pending_status(invocation)
-        else:
-            if status.is_final():
-                self.clean_up_waiters(invocation)
-                self.clean_up_invocation_cycles(invocation)
-                self.set_up_invocation_auto_purge(invocation)
-            self._set_invocation_status(invocation, status)
-
     @abstractmethod
     def set_up_invocation_auto_purge(
         self,
@@ -66,45 +94,65 @@ class BaseOrchestrator(ABC):
     def auto_purge(self) -> None:
         """Purge all invocations in final state that are older than app.conf.orchestrator_auto_final_invocation_purge_hours"""
 
-    def set_invocations_status(
-        self,
-        invocations: list["DistributedInvocation[Params, Result]"],
-        status: "InvocationStatus",
-    ) -> None:
-        for invocation in invocations:
-            self.set_invocation_status(invocation, status)
-
     @abstractmethod
     def get_invocation_status(
         self, invocation: "DistributedInvocation[Params, Result]"
     ) -> "InvocationStatus":
         ...
+        # TODO if invocation does not exists try in state backend (and cache it up)
+        #      before raising an exception!!!
 
     @abstractmethod
+    def purge(self) -> None:
+        ...
+
+    #############################################
+    # cycle sub functionalities
+    @property
+    @abstractmethod
+    def cycle_control(self) -> BaseCycleControl:
+        ...
+
     def add_call_and_check_cycles(
         self,
         caller_invocation: "DistributedInvocation[Params, Result]",
         callee_invocation: "DistributedInvocation[Params, Result]",
     ) -> None:
         """Adds a new call between invocations and raise an exception to prevent the formation of a call cycle"""
+        if self.app.conf.cycle_control:
+            self.cycle_control.add_call_and_check_cycles(
+                caller_invocation, callee_invocation
+            )
+        # TODO async store of call dependencies in state backend
 
-    @abstractmethod
     def clean_up_invocation_cycles(self, invocation: "DistributedInvocation") -> None:
         """Called when an invocation is finished and therefore cannot be part of a cycle anymore"""
+        if self.app.conf.cycle_control:
+            self.cycle_control.clean_up_invocation_cycles(invocation)
 
+    #############################################
+    # blocking sub functionalities
+    @property
     @abstractmethod
-    def clean_up_waiters(self, waited: "DistributedInvocation") -> None:
+    def blocking_control(self) -> BaseBlockingControl:
+        ...
+
+    def release_waiters(self, waited: "DistributedInvocation") -> None:
         """Called when an invocation is finished and therefore cannot block other invocations anymore"""
+        if self.app.conf.blocking_control:
+            self.blocking_control.release_waiters(waited)
 
-    @abstractmethod
     def waiting_for_result(
         self,
         caller_invocation: Optional["DistributedInvocation[Params, Result]"],
         result_invocation: "DistributedInvocation[Params, Result]",
     ) -> None:
         """Called when an Optional[invocation] is waiting in the result result of another invocation."""
+        if self.app.conf.blocking_control and caller_invocation:
+            self.blocking_control.waiting_for_result(
+                caller_invocation, result_invocation
+            )
 
-    @abstractmethod
     def get_blocking_invocations(
         self, max_num_invocations: int
     ) -> Iterator["DistributedInvocation"]:
@@ -112,10 +160,35 @@ class BaseOrchestrator(ABC):
         but are not getting blocked by any invocation.
         order by age, the oldest invocation first.
         """
+        if self.app.conf.blocking_control:
+            yield from self.blocking_control.get_blocking_invocations(
+                max_num_invocations
+            )
 
-    @abstractmethod
-    def purge(self) -> None:
-        ...
+    #############################################
+
+    def set_invocation_status(
+        self,
+        invocation: "DistributedInvocation[Params, Result]",
+        status: "InvocationStatus",
+    ) -> None:
+        if status == InvocationStatus.PENDING:
+            self._set_invocation_pending_status(invocation)
+        else:
+            # TODO async store of status in state backend
+            if status.is_final():
+                self.release_waiters(invocation)
+                self.clean_up_invocation_cycles(invocation)
+                self.set_up_invocation_auto_purge(invocation)
+            self._set_invocation_status(invocation, status)
+
+    def set_invocations_status(
+        self,
+        invocations: list["DistributedInvocation[Params, Result]"],
+        status: "InvocationStatus",
+    ) -> None:
+        for invocation in invocations:
+            self.set_invocation_status(invocation, status)
 
     def set_invocation_run(
         self,

@@ -5,7 +5,7 @@ import redis
 
 from pynenc.invocation import DistributedInvocation
 
-from .base_orchestrator import BaseOrchestrator
+from .base_orchestrator import BaseOrchestrator, BaseCycleControl, BaseBlockingControl
 from ..call import Call
 from ..types import Params, Result
 from ..exceptions import CycleDetectedError
@@ -17,18 +17,18 @@ if TYPE_CHECKING:
     from ..task import Task
 
 
-class CallGraph:
+class RedisCycleControl(BaseCycleControl):
     """A directed acyclic graph representing the call dependencies"""
 
     def __init__(self, app: "Pynenc", client: redis.Redis) -> None:
         self.app = app
-        self.key = Key("call_graph")
+        self.key = Key("cycle_control")
         self.client = client
 
     def purge(self) -> None:
         self.key.purge(self.client)
 
-    def add_invocation_call(
+    def add_call_and_check_cycles(
         self, caller: "DistributedInvocation", callee: "DistributedInvocation"
     ) -> None:
         """
@@ -65,7 +65,7 @@ class CallGraph:
         for callee_call_id in callee_calls:
             self.remove_edges(callee_call_id)
 
-    def remove_invocation(self, invocation: "DistributedInvocation") -> None:
+    def clean_up_invocation_cycles(self, invocation: "DistributedInvocation") -> None:
         """
         Remove an invocation from the graph. Also removes any edges to or from the invocation.
         """
@@ -81,7 +81,80 @@ class CallGraph:
             self.client.delete(self.key.call_to_invocation(invocation.call_id))
             self.remove_edges(invocation.call_id)
 
-    def add_waiting_for(
+    def find_cycle_caused_by_new_invocation(
+        self, caller: "DistributedInvocation", callee: "DistributedInvocation"
+    ) -> list["Call"]:
+        """
+        Determines if adding an edge from the caller to the callee would create a cycle.
+
+        Parameters
+        ----------
+        caller : DistributedInvocation
+            The invocation making the call.
+        callee : DistributedInvocation
+            The invocation being called.
+
+        Returns
+        -------
+        list
+            List of invocations that would form the cycle after adding the new invocation, else an empty list.
+        """
+        # Temporarily add the edge to check if it would cause a cycle
+        self.client.sadd(self.key.edge(caller.call_id), callee.call_id)
+
+        # Set for tracking visited nodes
+        visited: set[str] = set()
+
+        # List for tracking the nodes on the path from caller to callee
+        path: list[str] = []
+
+        cycle = self._is_cyclic_util(caller.call_id, visited, path)
+
+        # Remove the temporarily added edge
+        self.client.srem(self.key.edge(caller.call_id), callee.call_id)
+
+        return cycle
+
+    def _is_cyclic_util(
+        self,
+        current_call_id: str,
+        visited: set[str],
+        path: list[str],
+    ) -> list["Call"]:
+        visited.add(current_call_id)
+        path.append(current_call_id)
+
+        for _neighbour_call_id in self.client.smembers(self.key.edge(current_call_id)):
+            neighbour_call_id = _neighbour_call_id.decode()
+            if neighbour_call_id not in visited:
+                cycle = self._is_cyclic_util(neighbour_call_id, visited, path)
+                if cycle:
+                    return cycle
+            elif neighbour_call_id in path:
+                cycle_start_index = path.index(neighbour_call_id)
+                return [
+                    Call.from_json(
+                        self.app, self.client.get(self.key.call(_id)).decode()
+                    )
+                    for _id in path[cycle_start_index:]
+                ]
+
+        path.pop()
+        return []
+
+
+class RedisBlockingControl(BaseBlockingControl):
+    """A directed acyclic graph representing the call dependencies"""
+
+    def __init__(self, app: "Pynenc", client: redis.Redis) -> None:
+        self.app = app
+        self.key = Key("blocking_control")
+        self.client = client
+
+    def purge(self) -> None:
+        self.key.purge(self.client)
+
+    def waiting_for_result(
         self, waiter: "DistributedInvocation", waited: "DistributedInvocation"
     ) -> None:
         """
@@ -101,7 +174,7 @@ class CallGraph:
         if self.client.zscore(self.key.not_waiting(), waiter.invocation_id) is not None:
             self.client.zrem(self.key.not_waiting(), waiter.invocation_id)
 
-    def remove_blocking_invocation(self, invocation: "DistributedInvocation") -> None:
+    def release_waiters(self, invocation: "DistributedInvocation") -> None:
         """
         Remove an invocation from the graph. Also removes any edges to or from the invocation.
         """
@@ -356,10 +429,23 @@ class TaskRedisCache:
 
 class RedisOrchestrator(BaseOrchestrator):
     def __init__(self, app: "Pynenc") -> None:
-        client = redis.Redis(host="localhost", port=6379, db=0)
-        self.redis_cache = TaskRedisCache(app, client)
-        self.call_graph = CallGraph(app, client)
+        self.client = redis.Redis(host="localhost", port=6379, db=0)
+        self.redis_cache = TaskRedisCache(app, self.client)
+        self._cycle_control: Optional[RedisCycleControl] = None
+        self._blocking_control: Optional[RedisBlockingControl] = None
         super().__init__(app)
+
+    @property
+    def cycle_control(self) -> "RedisCycleControl":
+        if not self._cycle_control:
+            self._cycle_control = RedisCycleControl(self.app, self.client)
+        return self._cycle_control
+
+    @property
+    def blocking_control(self) -> "RedisBlockingControl":
+        if not self._blocking_control:
+            self._blocking_control = RedisBlockingControl(self.app, self.client)
+        return self._blocking_control
 
     def get_existing_invocations(
         self,
@@ -383,13 +469,6 @@ class RedisOrchestrator(BaseOrchestrator):
     ) -> None:
         self.redis_cache.set_pending_status(invocation)
 
-    def add_call_and_check_cycles(
-        self,
-        caller_invocation: DistributedInvocation[Params, Result],
-        callee_invocation: DistributedInvocation[Params, Result],
-    ) -> None:
-        self.call_graph.add_invocation_call(caller_invocation, callee_invocation)
-
     def set_up_invocation_auto_purge(
         self, invocation: DistributedInvocation[Params, Result]
     ) -> None:
@@ -397,27 +476,6 @@ class RedisOrchestrator(BaseOrchestrator):
 
     def auto_purge(self) -> None:
         self.redis_cache.auto_purge()
-
-    def clean_up_invocation_cycles(
-        self, invocation: DistributedInvocation[Params, Result]
-    ) -> None:
-        self.call_graph.remove_invocation(invocation)
-
-    def waiting_for_result(
-        self,
-        caller_invocation: Optional[DistributedInvocation[Params, Result]],
-        result_invocation: DistributedInvocation[Params, Result],
-    ) -> None:
-        if caller_invocation:
-            self.call_graph.add_waiting_for(caller_invocation, result_invocation)
-
-    def clean_up_waiters(self, waited: "DistributedInvocation[Params, Result]") -> None:
-        self.call_graph.remove_blocking_invocation(waited)
-
-    def get_blocking_invocations(
-        self, max_num_invocations: int
-    ) -> Iterator["DistributedInvocation[Params, Result]"]:
-        return self.call_graph.get_blocking_invocations(max_num_invocations)
 
     def get_invocation_status(
         self, invocation: "DistributedInvocation[Params, Result]"
@@ -427,4 +485,5 @@ class RedisOrchestrator(BaseOrchestrator):
     def purge(self) -> None:
         """Remove all invocations from the orchestrator"""
         self.redis_cache.purge()
-        self.call_graph.purge()
+        self.cycle_control.purge()
+        self.blocking_control.purge()

@@ -36,12 +36,9 @@ class MockBaseOrchestrator(BaseOrchestrator):
     _set_invocation_pending_status = MagicMock()
     get_invocation_status = MagicMock()
     set_up_invocation_auto_purge = MagicMock()
+    cycle_control = MagicMock()
+    blocking_control = MagicMock()
     auto_purge = MagicMock()
-    add_call_and_check_cycles = MagicMock()
-    clean_up_invocation_cycles = MagicMock()
-    waiting_for_result = MagicMock()
-    clean_up_waiters = MagicMock()
-    get_blocking_invocations = MagicMock()
     purge = MagicMock()
 
     def __init__(self, app: "Pynenc") -> None:
@@ -51,12 +48,9 @@ class MockBaseOrchestrator(BaseOrchestrator):
         self._set_invocation_pending_status.reset_mock()
         self.get_invocation_status.reset_mock()
         self.set_up_invocation_auto_purge.reset_mock()
+        self.cycle_control.reset_mock()
+        self.blocking_control.reset_mock()
         self.auto_purge.reset_mock()
-        self.add_call_and_check_cycles.reset_mock()
-        self.clean_up_invocation_cycles.reset_mock()
-        self.waiting_for_result.reset_mock()
-        self.clean_up_waiters.reset_mock()
-        self.get_blocking_invocations.reset_mock()
         self.purge.reset_mock()
 
 

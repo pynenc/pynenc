@@ -72,7 +72,7 @@ def test_clean_up_cycles(test_vars: Vars) -> None:
     test_vars.app.orchestrator.set_invocation_run(test_vars.inv1, test_vars.inv2)
     test_vars.app.orchestrator.set_invocation_run(test_vars.inv2, test_vars.inv3)
     # it should avoid the cycle between inv1 -> inv2 -> inv3 -> inv1
-    with pytest.raises(CycleDetectedError) as exc_info:
+    with pytest.raises(CycleDetectedError):
         test_vars.app.orchestrator.add_call_and_check_cycles(
             test_vars.inv3, test_vars.inv1
         )
@@ -148,12 +148,12 @@ def test_clean_up_blocker(test_vars: Vars) -> None:
     inv_to_run = list(test_vars.app.orchestrator.get_blocking_invocations(3))
     assert inv_to_run == [test_vars.inv3]
     # now, after inv3 succeed, we remove it from the blockers
-    test_vars.app.orchestrator.clean_up_waiters(test_vars.inv3)
+    test_vars.app.orchestrator.release_waiters(test_vars.inv3)
     # it should return inv2
     inv_to_run = list(test_vars.app.orchestrator.get_blocking_invocations(3))
     assert inv_to_run == [test_vars.inv2]
     # if inv2 succeed, and it is removed from the blockers
-    test_vars.app.orchestrator.clean_up_waiters(test_vars.inv2)
+    test_vars.app.orchestrator.release_waiters(test_vars.inv2)
     # nothing should remove, as inv1 is not blocking anybody
     # the runner will get invocations from the broker
     inv_to_run = list(test_vars.app.orchestrator.get_blocking_invocations(3))
@@ -186,3 +186,44 @@ def test_auto_purge(test_vars: Vars) -> None:
     # auto_purge should purge it
     test_vars.app.orchestrator.auto_purge()
     assert get_invocations() == []
+
+
+def test_config_cycle_control(test_vars: Vars) -> None:
+    test_vars.app.orchestrator.set_invocation_run(test_vars.inv1, test_vars.inv2)
+    test_vars.app.orchestrator.set_invocation_run(test_vars.inv2, test_vars.inv3)
+    # it should avoid the cycle between inv1 -> inv2 -> inv3 -> inv1
+    test_vars.app.conf.cycle_control = True
+    with pytest.raises(CycleDetectedError):
+        test_vars.app.orchestrator.add_call_and_check_cycles(
+            test_vars.inv3, test_vars.inv1
+        )
+    # test it will not check for cycles when cycle_control is disabled
+    test_vars.app.conf.cycle_control = False
+    test_vars.app.orchestrator.add_call_and_check_cycles(test_vars.inv3, test_vars.inv1)
+
+
+def test_config_blocking_control(test_vars: Vars) -> None:
+    test_vars.app.orchestrator.set_invocation_status(
+        test_vars.inv1, InvocationStatus.REGISTERED
+    )
+    test_vars.app.orchestrator.set_invocation_status(
+        test_vars.inv2, InvocationStatus.REGISTERED
+    )
+    # add waiting for result
+    test_vars.app.orchestrator.waiting_for_result(test_vars.inv1, test_vars.inv2)
+    # test_vars.app.orchestrator.waiting_for_result(test_vars.inv2, test_vars.inv3)
+    # get invocations to run
+    test_vars.app.conf.blocking_control = True
+    inv_to_run = list(test_vars.app.orchestrator.get_blocking_invocations(3))
+    same_inv = list(test_vars.app.orchestrator.get_blocking_invocations(3))
+    assert inv_to_run == same_inv == [test_vars.inv2]
+    # test it will not check for blocking invocations when blocking_control is disabled
+    test_vars.app.conf.blocking_control = False
+    inv_to_run = list(test_vars.app.orchestrator.get_blocking_invocations(3))
+    assert inv_to_run == []
+
+
+def test_atomic_pending() -> None:
+    raise NotImplementedError(
+        "test that getting task to run and set up pending is atomic"
+    )
