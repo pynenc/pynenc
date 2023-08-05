@@ -129,13 +129,13 @@ def mock_base_app() -> MockPynenc:
     return MockPynenc()
 
 
+def dummy() -> None:
+    ...
+
+
 @pytest.fixture
 def dummy_task(mock_base_app: MockPynenc) -> "Task":
-    @mock_base_app.task
-    def dummy() -> None:
-        ...
-
-    return dummy
+    return mock_base_app.task(dummy)
 
 
 @pytest.fixture

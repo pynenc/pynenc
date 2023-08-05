@@ -3,15 +3,50 @@ from typing import Any
 
 import pytest
 
-from pynenc import Pynenc
+from tests.conftest import MockPynenc
+from pynenc import Pynenc, Task
 from pynenc.exceptions import CycleDetectedError
 from pynenc.runner import MemRunner
+
+
+mock_all = MockPynenc()
+
+
+@mock_all.task
+def sum_task(a: int, b: int) -> int:
+    return a + b
+
+
+@mock_all.task
+def raise_exception() -> Any:
+    raise Exception("test")
+
+
+@mock_all.task
+def get_text() -> str:
+    return "example"
+
+
+@mock_all.task
+def get_upper() -> str:
+    return get_text().result.upper()
+
+
+@mock_all.task
+def get_upper_cycle() -> str:
+    invocation = get_upper_cycle()
+    return invocation.result.upper()
 
 
 @pytest.fixture
 def app() -> Pynenc:
     app = Pynenc()
     app.runner = MemRunner(app)
+    sum_task.app = app
+    raise_exception.app = app
+    get_text.app = app
+    get_upper.app = app
+    get_upper_cycle.app = app
     return app
 
 
@@ -20,10 +55,6 @@ def test_mem_execution(app: Pynenc) -> None:
 
     def run_in_thread() -> None:
         app.runner.run()
-
-    @app.task
-    def sum_task(a: int, b: int) -> int:
-        return a + b
 
     invocation = sum_task(1, 2)
     thread = threading.Thread(target=run_in_thread, daemon=True)
@@ -38,10 +69,6 @@ def test_raise_exception(app: Pynenc) -> None:
 
     def run_in_thread() -> None:
         app.runner.run()
-
-    @app.task
-    def raise_exception() -> Any:
-        raise Exception("test")
 
     invocation = raise_exception()
     thread = threading.Thread(target=run_in_thread, daemon=True)
@@ -58,14 +85,6 @@ def test_mem_sub_invocation_dependency(app: Pynenc) -> None:
     def run_in_thread() -> None:
         app.runner.run()
 
-    @app.task
-    def get_text() -> str:
-        return "example"
-
-    @app.task
-    def get_upper() -> str:
-        return get_text().result.upper()
-
     thread = threading.Thread(target=run_in_thread, daemon=True)
     thread.start()
     assert get_upper().result == "EXAMPLE"
@@ -81,16 +100,11 @@ def test_avoid_cycles(app: Pynenc) -> None:
     def run_in_thread() -> None:
         app.runner.run()
 
-    @app.task
-    def get_upper() -> str:
-        invocation = get_upper()
-        return invocation.result.upper()
-
     thread = threading.Thread(target=run_in_thread, daemon=True)
     thread.start()
     # the request of invocation should work without problem,
     # as the cycle wasn't executed yet
-    invocation = get_upper()
+    invocation = get_upper_cycle()
     with pytest.raises(CycleDetectedError) as exc_info:
         # however, when retrieving the result, an exception should be raised
         # because the function is calling itself
@@ -98,8 +112,8 @@ def test_avoid_cycles(app: Pynenc) -> None:
 
     expected_error = (
         "A cycle was detected: Cycle detected:\n"
-        "- test_mem_app.get_upper()\n"
-        "- back to test_mem_app.get_upper()"
+        "- test_mem_app.get_upper_cycle()\n"
+        "- back to test_mem_app.get_upper_cycle()"
     )
 
     assert str(exc_info.value) == expected_error

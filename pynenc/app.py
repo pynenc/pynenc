@@ -8,6 +8,7 @@ from .state_backend import BaseStateBackend, MemStateBackend
 from .serializer import BaseSerializer, JsonSerializer
 from .runner import BaseRunner, DummyRunner
 from .conf import Config
+from .util.subclasses import get_subclass
 
 if TYPE_CHECKING:
     from .types import Func, Params, Result
@@ -53,8 +54,35 @@ class Pynenc:
         self.conf = Config()
         self.reporting = None
         self._runner_instance: Optional[BaseRunner] = None
-        self.running_invocation: Optional["DistributedInvocation"] = None
         self.invocation_context: Optional["DistributedInvocation"] = None
+
+    def __getstate__(self) -> dict:
+        # Return state as a dictionary and a secondary value as a tuple
+        return {
+            "orchestrator_cls": self._orchestrator_cls.__name__,
+            "broker_cls": self._broker_cls.__name__,
+            "state_backend_cls": self._state_backend_cls.__name__,
+            "serializer_cls": self._serializer_cls.__name__,
+            "runner_cls": self._runner_cls.__name__,
+            "conf": self.conf,
+            "reporting": self.reporting,
+            "invocation_context": self.invocation_context,
+        }
+
+    def __setstate__(self, state: dict) -> None:
+        # Restore instance attributes
+        self._orchestrator_cls = get_subclass(
+            BaseOrchestrator, state["orchestrator_cls"]
+        )
+        self._broker_cls = get_subclass(BaseBroker, state["broker_cls"])
+        self._state_backend_cls = get_subclass(
+            BaseStateBackend, state["state_backend_cls"]
+        )
+        self._serializer_cls = get_subclass(BaseSerializer, state["serializer_cls"])
+        self._runner_cls = get_subclass(BaseRunner, state["runner_cls"])
+        self.conf = state["conf"]
+        self.reporting = state["reporting"]
+        self.invocation_context = state["invocation_context"]
 
     def is_initialized(self, property_name: str) -> bool:
         """Returns True if the given cached_property has been initialized"""
@@ -107,7 +135,7 @@ class Pynenc:
             )
         self._state_backend_cls = state_backend_cls
 
-    def set_serializer(self, serializer_cls: Type[BaseSerializer]) -> None:
+    def set_serializer_cls(self, serializer_cls: Type[BaseSerializer]) -> None:
         if self.is_initialized(prop := "serializer"):
             raise Exception(
                 f"Not possible to set serializer, already initialized {self._serializer_cls}"
@@ -154,6 +182,10 @@ class Pynenc:
         """
 
         def init_task(_func: "Func") -> Task["Params", "Result"]:
+            if _func.__qualname__ != _func.__name__:
+                raise ValueError(
+                    "Decorated function must be defined at the module level."
+                )
             return Task(self, _func, options)
 
         if func is None:

@@ -2,7 +2,7 @@ from collections import defaultdict
 import multiprocessing
 import threading
 import time
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, NamedTuple
 
 from pynenc.invocation import DistributedInvocation, InvocationStatus
 
@@ -14,10 +14,15 @@ if TYPE_CHECKING:
     from ..types import Params, Result
 
 
+class ThreadInfo(NamedTuple):
+    thread: threading.Thread
+    invocation: DistributedInvocation
+
+
 class MemRunner(BaseRunner):
     wait_conditions: dict["DistributedInvocation", threading.Condition]
     wait_invocation: dict["DistributedInvocation", set["DistributedInvocation"]]
-    threads: list[threading.Thread]
+    threads: dict[str, ThreadInfo]
     max_threads: int
     waiting_threads: int
 
@@ -25,17 +30,22 @@ class MemRunner(BaseRunner):
         # Initialize thread list and condition dictionary
         self.wait_conditions = defaultdict(threading.Condition)
         self.wait_invocation = defaultdict(set)
-        self.threads = []
+        self.threads = {}
         self.max_threads = multiprocessing.cpu_count()
         self.waiting_threads = 0
 
     def _on_stop(self) -> None:
-        pass
+        """kill all the running threads and change invocation status to retry"""
+        for thread_info in self.threads.values():
+            thread_info.thread.join()
+            self.app.orchestrator.set_invocation_status(
+                thread_info.invocation, InvocationStatus.RETRY
+            )
 
     @property
     def available_threads(self) -> int:
         """Return the number of available threads"""
-        self.threads = [t for t in self.threads if t.is_alive()]
+        self.threads = {k: v for k, v in self.threads.items() if v.thread.is_alive()}
         return self.max_threads - len(self.threads) - self.waiting_threads
 
     def runner_loop_iteration(self) -> None:
@@ -44,7 +54,7 @@ class MemRunner(BaseRunner):
         ):
             thread = threading.Thread(target=invocation.run, daemon=True)
             thread.start()
-            self.threads.append(thread)
+            self.threads[invocation.invocation_id] = ThreadInfo(thread, invocation)
         for invocation in list(self.wait_conditions):
             if invocation.status.is_final():
                 # Notify all waiting threads to continue

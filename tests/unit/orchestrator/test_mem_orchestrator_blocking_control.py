@@ -7,22 +7,23 @@ from pynenc.exceptions import CycleDetectedError
 from pynenc.orchestrator.mem_orchestrator import MemBlockingControl
 from pynenc.invocation import DistributedInvocation
 
-if TYPE_CHECKING:
-    from tests.conftest import MockPynenc
+from tests.conftest import MockPynenc
+
+_mock_base_app = MockPynenc()
+
+
+@_mock_base_app.task
+def task0() -> None:
+    ...
+
+
+@_mock_base_app.task
+def task1() -> None:
+    ...
 
 
 @pytest.fixture
-def invocations(
-    mock_base_app: "MockPynenc",
-) -> tuple[DistributedInvocation, DistributedInvocation]:
-    @mock_base_app.task
-    def task0() -> None:
-        ...
-
-    @mock_base_app.task
-    def task1() -> None:
-        ...
-
+def invocations() -> tuple[DistributedInvocation, DistributedInvocation]:
     return (
         DistributedInvocation(Call(task0), None),
         DistributedInvocation(Call(task1), None),

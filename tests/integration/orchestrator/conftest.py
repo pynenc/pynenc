@@ -21,6 +21,14 @@ def pytest_generate_tests(metafunc: "Metafunc") -> None:
         metafunc.parametrize("app", subclasses, indirect=True)
 
 
+@pytest.fixture
+def app(request: "FixtureRequest") -> MockPynenc:
+    app = MockPynenc()
+    app.orchestrator = request.param(app)
+    app.orchestrator.purge()
+    return app
+
+
 mock_app = MockPynenc()
 
 
@@ -47,14 +55,6 @@ def dummy_mirror(arg: str) -> str:
 @mock_app.task
 def dummy_key_arg(key: str, arg: str) -> str:
     return f"{key}:{arg}"
-
-
-@pytest.fixture
-def app(request: "FixtureRequest") -> MockPynenc:
-    app = MockPynenc()
-    app.orchestrator = request.param(app)
-    app.orchestrator.purge()
-    return app
 
 
 @pytest.fixture

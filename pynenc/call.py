@@ -37,11 +37,29 @@ class Call(Generic[Params, Result]):
             for k, v in self.arguments.kwargs.items()
         }
 
+    def deserialize_arguments(self, serialized_arguments: dict[str, str]) -> Arguments:
+        """Returns an Arguments instance with the deserialized arguments"""
+        return Arguments(
+            {
+                k: self.app.serializer.deserialize(v)
+                for k, v in serialized_arguments.items()
+            }
+        )
+
     def to_json(self) -> str:
         """Returns a string with the serialized call"""
         return json.dumps(
             {"task": self.task.to_json(), "arguments": self.serialized_arguments}
         )
+
+    def __getstate__(self) -> dict:
+        # Return state as a dictionary and a secondary value as a tuple
+        return {"task": self.task, "arguments": self.serialized_arguments}
+
+    def __setstate__(self, state: dict) -> None:
+        object.__setattr__(self, "task", state["task"])
+        arguments = self.deserialize_arguments(state["arguments"])
+        object.__setattr__(self, "arguments", arguments)
 
     @classmethod
     def from_json(cls, app: "Pynenc", serialized: str) -> "Call":

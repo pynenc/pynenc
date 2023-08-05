@@ -1,5 +1,4 @@
 from __future__ import annotations
-from contextvars import ContextVar
 from dataclasses import dataclass
 import json
 from typing import Iterator, Optional, TYPE_CHECKING
@@ -16,9 +15,6 @@ if TYPE_CHECKING:
 
 
 # Create a context variable to store current invocation
-running_invocation: ContextVar[DistributedInvocation] = ContextVar("context_invocation")
-
-
 @dataclass(frozen=True, eq=False)
 class DistributedInvocation(BaseInvocation[Params, Result]):
     """"""
@@ -39,6 +35,17 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         if self.parent_invocation:
             inv_dict["parent_invocation_id"] = self.parent_invocation.invocation_id
         return json.dumps(inv_dict)
+
+    def __getstate__(self) -> dict:
+        # Return state as a dictionary and a secondary value as a tuple
+        state = self.__dict__.copy()
+        state["invocation_id"] = self.invocation_id
+        return state
+
+    def __setstate__(self, state: dict) -> None:
+        # Restore instance attributes
+        for key, value in state.items():
+            object.__setattr__(self, key, value)
 
     @classmethod
     def from_json(cls, app: "Pynenc", serialized: str) -> "DistributedInvocation":

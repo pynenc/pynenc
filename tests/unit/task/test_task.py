@@ -8,46 +8,40 @@ from pynenc import Pynenc, Task, TaskOptions
 from pynenc.invocation import SynchronousInvocation, DistributedInvocation
 
 
-@pytest.fixture
-def app() -> Pynenc:
-    return Pynenc()
+app = Pynenc()
 
 
-def test_instanciate_task(app: Pynenc) -> None:
+@app.task
+def add(x: int, y: int) -> int:
+    return x + y
+
+
+def test_instanciate_task() -> None:
     """
     Test that the task decorator will transform the function in a Task instance
     """
-
-    @app.task
-    def add(x: int, y: int) -> int:
-        return x + y
-
     assert isinstance(add, Task)
 
 
-def test_instanciate_task_with_args(app: Pynenc) -> None:
+@app.task(profiling="any")
+def add_profiled(x: int, y: int) -> int:
+    return x + y
+
+
+def test_instanciate_task_with_args() -> None:
     """
     Test that the decorator arguments exists in the Task instance
     """
-
-    @app.task(profiling="any")
-    def add(x: int, y: int) -> int:
-        return x + y
-
     # I expect that function to become an instance of Task
-    assert isinstance(add.options, TaskOptions)
-    assert add.options.profiling == "any"
+    assert isinstance(add_profiled.options, TaskOptions)
+    assert add_profiled.options.profiling == "any"
 
 
-def test_sync_run_with_dev_mode_force_sync_invocation(app: Pynenc) -> None:
+def test_sync_run_with_dev_mode_force_sync_invocation() -> None:
     """
     Test that the Task will return a SyncResult if DEV_MODE_FORCE_SYNC_TASK=True
     """
-
-    @app.task
-    def add(x: int, y: int) -> int:
-        return x + y
-
+    add.app = Pynenc()  # re-instantiate the app, config os.environ is cached
     with patch.dict(os.environ, {"DEV_MODE_FORCE_SYNC_TASK": "True"}):
         invocation = add(1, 2)
 
@@ -55,34 +49,32 @@ def test_sync_run_with_dev_mode_force_sync_invocation(app: Pynenc) -> None:
     assert invocation.result == 3
 
 
-def test_async_invocation(app: Pynenc) -> None:
+def test_async_invocation() -> None:
     """Test that the task will return an Async result"""
-
-    @app.task
-    def add(x: int, y: int) -> int:
-        return x + y
-
-    assert isinstance(add(1, 2), DistributedInvocation)
+    add.app = Pynenc()  # re-instantiate the app, config os.environ is cached
+    with patch.dict(os.environ, {"DEV_MODE_FORCE_SYNC_TASK": ""}):
+        invocation = add(1, 2)
+    assert isinstance(invocation, DistributedInvocation)
 
 
-def test_extract_arguments_unpacking(app: Pynenc) -> None:
+@app.task
+def f_unpacking(*args: Any, **kwargs: Any) -> None:
+    """Does nothing"""
+
+
+def test_extract_arguments_unpacking() -> None:
     """Test it will get args, kwargs from an unpacked function"""
-
-    @app.task
-    def f_unpacking(*args: Any, **kwargs: Any) -> None:
-        """Does nothing"""
-
     invocation = f_unpacking("x", "y", z="z")
     assert invocation.arguments.kwargs == {"args": ("x", "y"), "kwargs": {"z": "z"}}
 
 
-def test_extract_arguments_named_regardless_call(app: Pynenc) -> None:
+@app.task
+def dummy(arg0: Any, arg1: Any, arg2: Any, arg3: Any) -> None:
+    """Does nothing"""
+
+
+def test_extract_arguments_named_regardless_call() -> None:
     """Test it will get args, kwargs from an unpacked function"""
-
-    @app.task
-    def dummy(arg0: Any, arg1: Any, arg2: Any, arg3: Any) -> None:
-        """Does nothing"""
-
     expected = {"arg0": 0, "arg1": 1, "arg2": 2, "arg3": 3}
     invocation = dummy(0, 1, 2, 3)
     assert invocation.arguments.kwargs == expected

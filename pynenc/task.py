@@ -14,7 +14,6 @@ from .invocation import (
     BaseInvocationGroup,
     SynchronousInvocation,
     SynchronousInvocationGroup,
-    DistributedInvocation,
     DistributedInvocationGroup,
 )
 from .types import Params, Result, Func, Args
@@ -121,16 +120,37 @@ class Task(Generic[Params, Result]):
         """Returns a string with the serialized task"""
         return json.dumps({"task_id": self.task_id, "options": self.options.to_json()})
 
-    @classmethod
-    def from_json(cls, app: Pynenc, serialized: str) -> "Task":
-        """Returns a new task from a serialized task"""
+    def __getstate__(self) -> dict:
+        # Return state as a dictionary and a secondary value as a tuple
+        return {"app": self.app, "task_json": self.to_json()}
+
+    def __setstate__(self, state: dict) -> None:
+        # Restore instance attributes
+        self.app = state["app"]
+        serialized = state["task_json"]
+        task_id, func, options = Task._from_json(self.app, serialized)
+        # Restore the cached property
+        self.task_id = task_id
+        self.app = self.app
+        self.func = func
+        self.options = TaskOptions.from_dict(options)
+
+    @staticmethod
+    def _from_json(app: Pynenc, serialized: str) -> tuple[str, Func, dict[str, Any]]:
+        """Returns a function and options from a serialized task"""
         task_dict = json.loads(serialized)
         task_id = task_dict["task_id"]
         module_name, function_name = task_id.rsplit(".", 1)
         module = importlib.import_module(module_name)
         function = getattr(module, function_name)
         options_dict = TaskOptions.from_json(task_dict["options"]).to_dict()
-        return cls(app, function.func, options_dict)
+        return task_id, function.func, options_dict
+
+    @classmethod
+    def from_json(cls, app: Pynenc, serialized: str) -> "Task":
+        """Returns a new task from a serialized task"""
+        _, func, options = cls._from_json(app, serialized)
+        return cls(app, func, options)
 
     @cached_property
     def task_id(self) -> str:
