@@ -79,10 +79,10 @@ class BaseRunner(ABC):
         self.running = False
 
     @abstractmethod
-    def waiting_for_result(
+    def waiting_for_results(
         self,
         running_invocation: Optional["DistributedInvocation"],
-        result_invocation: "DistributedInvocation",
+        result_invocation: list["DistributedInvocation"],
     ) -> None:
         """This method is called from the result method of an invocation
         It signals the runner that the running invocation is waiting for the result of the result invocation
@@ -130,10 +130,10 @@ class DummyRunner(BaseRunner):
             "This runner is a placeholder for the Pynenc app"
         )
 
-    def waiting_for_result(
+    def waiting_for_results(
         self,
         running_invocation: Optional["DistributedInvocation"],
-        result_invocation: "DistributedInvocation",
+        result_invocation: list["DistributedInvocation"],
     ) -> None:
         del running_invocation, result_invocation
         # invocation.result() was called from outside a runner

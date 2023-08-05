@@ -130,21 +130,21 @@ class MemBlockingControl(BaseBlockingControl):
         self.waiting_for: dict[str, set[str]] = defaultdict(set)
         self.waited_by: dict[str, set[str]] = OrderedDict()
 
-    def waiting_for_result(
+    def waiting_for_results(
         self,
         caller_invocation: "DistributedInvocation[Params, Result]",
-        result_invocation: "DistributedInvocation[Params, Result]",
+        result_invocations: list["DistributedInvocation[Params, Result]"],
     ) -> None:
         """
         Register that an invocation (waiter) is waiting for the results of another invocation (waited).
         """
         waiter = caller_invocation
-        waited = result_invocation
-        self.invocations[waited.invocation_id] = waited
-        self.waiting_for[waiter.invocation_id].add(waited.invocation_id)
-        if waited.invocation_id not in self.waited_by:
-            self.waited_by[waited.invocation_id] = set()
-        self.waited_by[waited.invocation_id].add(waiter.invocation_id)
+        for waited in result_invocations:
+            self.invocations[waited.invocation_id] = waited
+            self.waiting_for[waiter.invocation_id].add(waited.invocation_id)
+            if waited.invocation_id not in self.waited_by:
+                self.waited_by[waited.invocation_id] = set()
+            self.waited_by[waited.invocation_id].add(waiter.invocation_id)
 
     def release_waiters(self, invocation: "DistributedInvocation") -> None:
         """

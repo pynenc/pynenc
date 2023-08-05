@@ -86,14 +86,14 @@ class MockRunner(BaseRunner):
     _on_start = MagicMock()
     _on_stop = MagicMock()
     runner_loop_iteration = MagicMock()
-    waiting_for_result = MagicMock()
+    waiting_for_results = MagicMock()
 
     def __init__(self, app: "Pynenc") -> None:
         super().__init__(app)
         self._on_start.reset_mock()
         self._on_stop.reset_mock()
         self.runner_loop_iteration.reset_mock()
-        self.waiting_for_result.reset_mock()
+        self.waiting_for_results.reset_mock()
 
 
 class MockPynenc(Pynenc):

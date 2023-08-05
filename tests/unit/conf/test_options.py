@@ -14,3 +14,8 @@ def test_batch():
 def test_profiling():
     raise NotImplementedError("TODO")
     # test that the profiling option works as expected
+
+
+def test_logging():
+    raise NotImplementedError("TODO")
+    # test the logging module

@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from functools import cached_property
 import json
-from typing import TYPE_CHECKING, Generic, Any, Optional, TypeVar
+from typing import TYPE_CHECKING, Generic, Any, Optional, TypeVar, Iterator
 import uuid
 
 from ..types import Params, Result
@@ -91,3 +91,23 @@ class BaseInvocation(ABC, Generic[Params, Result]):
         if not isinstance(other, BaseInvocation):
             return False
         return self.invocation_id == other.invocation_id
+
+
+@dataclass(frozen=True)
+class BaseInvocationGroup(ABC, Generic[Params, Result, T]):
+    task: "Task"
+    invocations: list[T]
+
+    @property
+    def app(self) -> "Pynenc":
+        return self.task.app
+
+    @property
+    def __iter__(self) -> Iterator[T]:
+        for invocation in self.invocations:
+            yield invocation
+
+    @property
+    @abstractmethod
+    def results(self) -> Iterator["Result"]:
+        """"""

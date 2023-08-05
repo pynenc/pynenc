@@ -124,6 +124,7 @@ class RedisCycleControl(BaseCycleControl):
         visited.add(current_call_id)
         path.append(current_call_id)
 
+        call_cycle = []
         for _neighbour_call_id in self.client.smembers(self.key.edge(current_call_id)):
             neighbour_call_id = _neighbour_call_id.decode()
             if neighbour_call_id not in visited:
@@ -132,15 +133,11 @@ class RedisCycleControl(BaseCycleControl):
                     return cycle
             elif neighbour_call_id in path:
                 cycle_start_index = path.index(neighbour_call_id)
-                return [
-                    Call.from_json(
-                        self.app, self.client.get(self.key.call(_id)).decode()
-                    )
-                    for _id in path[cycle_start_index:]
-                ]
-
+                for _id in path[cycle_start_index:]:
+                    if call_json := self.client.get(self.key.call(_id)):
+                        call_cycle.append(Call.from_json(self.app, call_json.decode()))
         path.pop()
-        return []
+        return call_cycle
 
 
 class RedisBlockingControl(BaseBlockingControl):
@@ -154,25 +151,30 @@ class RedisBlockingControl(BaseBlockingControl):
     def purge(self) -> None:
         self.key.purge(self.client)
 
-    def waiting_for_result(
-        self, waiter: "DistributedInvocation", waited: "DistributedInvocation"
+    def waiting_for_results(
+        self, waiter: "DistributedInvocation", waiteds: list["DistributedInvocation"]
     ) -> None:
         """
         Register that an invocation (waiter) is waiting for the results of another invocation (waited).
         """
-        self.client.set(self.key.invocation(waited.invocation_id), waited.to_json())
-        self.client.sadd(
-            self.key.waiting_for(waiter.invocation_id), waited.invocation_id
-        )
-        self.client.sadd(self.key.waited_by(waited.invocation_id), waiter.invocation_id)
-        # Add the waited invocation to the 'all_waited' sorted set with the current time as the score
-        self.client.zadd(self.key.all_waited(), {waited.invocation_id: time()})
-        # If the waited invocation is not waiting for anything else, add it to the 'not_waiting' sorted set
-        if not self.client.exists(self.key.waiting_for(waited.invocation_id)):
-            self.client.zadd(self.key.not_waiting(), {waited.invocation_id: time()})
+        waited_invocation_ids = []
+        for waited in waiteds:
+            waited_invocation_ids.append(waited.invocation_id)
+            self.client.set(self.key.invocation(waited.invocation_id), waited.to_json())
+            self.client.sadd(
+                self.key.waited_by(waited.invocation_id), waiter.invocation_id
+            )
+            # Add the waited invocation to the 'all_waited' sorted set with the current time as the score
+            self.client.zadd(self.key.all_waited(), {waited.invocation_id: time()})
+            # If the waited invocation is not waiting for anything else, add it to the 'not_waiting' sorted set
+            if not self.client.exists(self.key.waiting_for(waited.invocation_id)):
+                self.client.zadd(self.key.not_waiting(), {waited.invocation_id: time()})
         # If the waiter is in the 'not_waiting' sorted set, remove it
         if self.client.zscore(self.key.not_waiting(), waiter.invocation_id) is not None:
             self.client.zrem(self.key.not_waiting(), waiter.invocation_id)
+        self.client.sadd(
+            self.key.waiting_for(waiter.invocation_id), *waited_invocation_ids
+        )
 
     def release_waiters(self, invocation: "DistributedInvocation") -> None:
         """

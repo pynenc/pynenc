@@ -3,14 +3,21 @@ from dataclasses import dataclass
 from functools import cached_property
 import importlib
 import json
-from typing import TYPE_CHECKING, Generic, Any, Optional
+from typing import TYPE_CHECKING, Generic, Any, Optional, Iterable, overload
 
 from .arguments import Arguments
 from .call import Call
 from .conf.base_config_option import BaseConfigOption
 from .conf.single_invocation_pending import SingleInvocation
-from .invocation import BaseInvocation, SynchronousInvocation
-from .types import Params, Result, Func
+from .invocation import (
+    BaseInvocation,
+    BaseInvocationGroup,
+    SynchronousInvocation,
+    SynchronousInvocationGroup,
+    DistributedInvocation,
+    DistributedInvocationGroup,
+)
+from .types import Params, Result, Func, Args
 
 if TYPE_CHECKING:
     from .app import Pynenc
@@ -136,14 +143,49 @@ class Task(Generic[Params, Result]):
     def __repr__(self) -> str:
         return self.__str__()
 
+    def args(self, *args: Params.args, **kwargs: Params.kwargs) -> Arguments:
+        """Returns an Arguments instance from the given args and kwargs"""
+        return Arguments.from_call(self.func, *args, **kwargs)
+
     def __call__(
         self, *args: Params.args, **kwargs: Params.kwargs
     ) -> "BaseInvocation[Params, Result]":
         """"""
         arguments = Arguments.from_call(self.func, *args, **kwargs)
+        return self._call(arguments)
+
+    def _call(self, arguments: Arguments) -> "BaseInvocation[Params, Result]":
         if self.app.conf.dev_mode_force_sync_tasks:
             return SynchronousInvocation(
                 call=Call(self, arguments),
-                result=self.func(*args, **kwargs),
+                result=self.func(**arguments.kwargs),
             )
         return self.app.orchestrator.route_call(Call(self, arguments))
+
+    def parallelize(
+        self, param_iter: Iterable[tuple | dict | Arguments]
+    ) -> "BaseInvocationGroup":
+        """
+        iterable of calls to the task,
+        will accept a tuple positional arguments,
+        a dict of keyword arguments,
+        or an Arguments instance, eg: task.args(*args, **kwargs))
+        """
+        group_cls: type[BaseInvocationGroup]
+        if self.app.conf.dev_mode_force_sync_tasks:
+            group_cls = SynchronousInvocationGroup
+        else:
+            group_cls = DistributedInvocationGroup
+
+        def get_args(params: tuple | dict | Arguments) -> Arguments:
+            if isinstance(params, tuple):
+                return self.args(*params)
+            if isinstance(params, dict):
+                return self.args(**params)
+            return params
+
+        invocations = []
+        for params in param_iter:
+            if invocation := self._call(get_args(params)):
+                invocations.append(invocation)
+        return group_cls(self, invocations)

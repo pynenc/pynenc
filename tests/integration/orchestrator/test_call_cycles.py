@@ -82,7 +82,7 @@ def test_clean_up_cycles(test_vars: Vars) -> None:
     test_vars.app.orchestrator.add_call_and_check_cycles(test_vars.inv3, test_vars.inv1)
 
 
-def test_get_waiting_for_result(test_vars: Vars) -> None:
+def test_get_waiting_for_results(test_vars: Vars) -> None:
     """Test that it will return the invocation waiting for the result"""
     # test_vars.app.broker = MemBroker(test_vars.app)
     test_vars.app.orchestrator.set_invocation_status(
@@ -95,9 +95,9 @@ def test_get_waiting_for_result(test_vars: Vars) -> None:
         test_vars.inv3, InvocationStatus.REGISTERED
     )
     # add waiting for result
-    test_vars.app.orchestrator.waiting_for_result(test_vars.inv1, test_vars.inv2)
-    test_vars.app.orchestrator.waiting_for_result(test_vars.inv2, test_vars.inv3)
-    test_vars.app.orchestrator.waiting_for_result(test_vars.inv1, test_vars.inv3)
+    test_vars.app.orchestrator.waiting_for_results(test_vars.inv1, [test_vars.inv2])
+    test_vars.app.orchestrator.waiting_for_results(test_vars.inv2, [test_vars.inv3])
+    test_vars.app.orchestrator.waiting_for_results(test_vars.inv1, [test_vars.inv3])
     # get invocations to run
     inv_to_run = list(test_vars.app.orchestrator.get_blocking_invocations(3))
     # should get invocations that are not waiting in anybody
@@ -113,7 +113,7 @@ def test_avoid_getting_always_same_invocations(test_vars: Vars) -> None:
     test_vars.app.orchestrator.set_invocation_status(
         test_vars.inv3, InvocationStatus.REGISTERED
     )
-    test_vars.app.orchestrator.waiting_for_result(test_vars.inv1, test_vars.inv3)
+    test_vars.app.orchestrator.waiting_for_results(test_vars.inv1, [test_vars.inv3])
     test_vars.inv3.app.conf.max_pending_seconds = 10
     # when we call get_blocking_invocations it will get inv3 as its blocking inv3
     # this call does not change the status of inv3
@@ -141,8 +141,8 @@ def test_clean_up_blocker(test_vars: Vars) -> None:
         test_vars.inv3, InvocationStatus.REGISTERED
     )
     # add waiting for result (inv1 -> inv2 -> inv3)
-    test_vars.app.orchestrator.waiting_for_result(test_vars.inv1, test_vars.inv2)
-    test_vars.app.orchestrator.waiting_for_result(test_vars.inv2, test_vars.inv3)
+    test_vars.app.orchestrator.waiting_for_results(test_vars.inv1, [test_vars.inv2])
+    test_vars.app.orchestrator.waiting_for_results(test_vars.inv2, [test_vars.inv3])
     # get invocations to run
     # we try to get 3, but only inv3 is not waiting in anybody else
     inv_to_run = list(test_vars.app.orchestrator.get_blocking_invocations(3))
@@ -210,8 +210,8 @@ def test_config_blocking_control(test_vars: Vars) -> None:
         test_vars.inv2, InvocationStatus.REGISTERED
     )
     # add waiting for result
-    test_vars.app.orchestrator.waiting_for_result(test_vars.inv1, test_vars.inv2)
-    # test_vars.app.orchestrator.waiting_for_result(test_vars.inv2, test_vars.inv3)
+    test_vars.app.orchestrator.waiting_for_results(test_vars.inv1, [test_vars.inv2])
+    # test_vars.app.orchestrator.waiting_for_results(test_vars.inv2, [test_vars.inv3])
     # get invocations to run
     test_vars.app.conf.blocking_control = True
     inv_to_run = list(test_vars.app.orchestrator.get_blocking_invocations(3))

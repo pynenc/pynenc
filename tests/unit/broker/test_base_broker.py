@@ -23,22 +23,3 @@ def test_route_task(mock_base_app: "MockPynenc") -> None:
     )
     assert isinstance(invocation, DistributedInvocation)
     mock_base_app.broker.route_invocation.assert_called_once()
-
-
-def test_retrieve_invocation(mock_base_app: "MockPynenc") -> None:
-    """Test that will retrieve an invocation and update status to PENDING"""
-
-    @mock_base_app.task
-    def dummy_task(x: int, y: int) -> int:
-        return x + y
-
-    # mock the abstract methods with a fake invocation
-    invocation: DistributedInvocation = DistributedInvocation(
-        Call(dummy_task, Arguments({"x": 0, "y": 0})), None
-    )
-    mock_base_app.broker.retrieve_invocation.return_value = invocation
-
-    retrieved_invocation = mock_base_app.broker.retrieve_invocation()
-
-    mock_base_app.broker.retrieve_invocation.assert_called_once()
-    assert invocation == retrieved_invocation

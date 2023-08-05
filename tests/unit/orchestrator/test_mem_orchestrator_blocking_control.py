@@ -35,7 +35,7 @@ def test_get_blocking_invocations(invocations: tuple) -> None:
 
     # graph.add_invocation_call(invocation0, invocation1)
     # graph.add_invocation_call(invocation1, invocation2)
-    graph.waiting_for_result(invocation0, invocation1)
+    graph.waiting_for_results(invocation0, [invocation1])
 
     blocking: list[DistributedInvocation] = list(graph.get_blocking_invocations(2))
     assert len(blocking) == 1

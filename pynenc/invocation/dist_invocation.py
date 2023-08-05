@@ -2,12 +2,13 @@ from __future__ import annotations
 from contextvars import ContextVar
 from dataclasses import dataclass
 import json
-from typing import Optional, TYPE_CHECKING
+from typing import Iterator, Optional, TYPE_CHECKING
 
 from ..arguments import Arguments
 from ..call import Call
+from ..exceptions import InvocationError
 from .status import InvocationStatus
-from .base_invocation import BaseInvocation
+from .base_invocation import BaseInvocation, BaseInvocationGroup
 from ..types import Params, Result
 
 if TYPE_CHECKING:
@@ -71,13 +72,40 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
     @property
     def result(self) -> "Result":
         if not self.status.is_final():
-            self.app.orchestrator.waiting_for_result(self.parent_invocation, self)
+            self.app.orchestrator.waiting_for_results(self.parent_invocation, [self])
 
         while not self.status.is_final():
-            self.app.runner.waiting_for_result(self.parent_invocation, self)
+            self.app.runner.waiting_for_results(self.parent_invocation, [self])
+        return self.get_final_result()
+
+    def get_final_result(self) -> "Result":
+        if not self.status.is_final():
+            raise InvocationError(self.invocation_id, "Invocation is not final")
         if self.status == InvocationStatus.FAILED:
             raise self.app.state_backend.get_exception(self)
         return self.app.state_backend.get_result(self)
+
+
+class DistributedInvocationGroup(
+    BaseInvocationGroup[Params, Result, DistributedInvocation]
+):
+    @property
+    def results(self) -> Iterator[Result]:
+        waiting_invocations = self.invocations.copy()
+        if not waiting_invocations:
+            return
+        parent_invocation = waiting_invocations[0].parent_invocation
+        notified_orchestrator = False
+        while waiting_invocations:
+            for invocation in waiting_invocations:
+                if invocation.status.is_final():
+                    waiting_invocations.remove(invocation)
+                    yield invocation.result
+            if not notified_orchestrator:
+                self.app.orchestrator.waiting_for_results(
+                    parent_invocation, waiting_invocations
+                )
+            self.app.runner.waiting_for_results(parent_invocation, waiting_invocations)
 
 
 @dataclass(frozen=True)

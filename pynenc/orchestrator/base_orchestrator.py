@@ -40,10 +40,10 @@ class BaseBlockingControl(ABC):
         """Called when an invocation is finished and therefore cannot block other invocations anymore"""
 
     @abstractmethod
-    def waiting_for_result(
+    def waiting_for_results(
         self,
         caller_invocation: "DistributedInvocation[Params, Result]",
-        result_invocation: "DistributedInvocation[Params, Result]",
+        result_invocations: list["DistributedInvocation[Params, Result]"],
     ) -> None:
         """Called when an Optional[invocation] is waiting in the result result of another invocation."""
 
@@ -145,15 +145,15 @@ class BaseOrchestrator(ABC):
         if self.app.conf.blocking_control:
             self.blocking_control.release_waiters(waited)
 
-    def waiting_for_result(
+    def waiting_for_results(
         self,
         caller_invocation: Optional["DistributedInvocation[Params, Result]"],
-        result_invocation: "DistributedInvocation[Params, Result]",
+        result_invocations: list["DistributedInvocation[Params, Result]"],
     ) -> None:
         """Called when an Optional[invocation] is waiting in the result result of another invocation."""
         if self.app.conf.blocking_control and caller_invocation:
-            self.blocking_control.waiting_for_result(
-                caller_invocation, result_invocation
+            self.blocking_control.waiting_for_results(
+                caller_invocation, result_invocations
             )
 
     def get_blocking_invocations(

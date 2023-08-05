@@ -59,10 +59,10 @@ class MemRunner(BaseRunner):
                 self.waiting_threads -= len(waiting_invocations)
         time.sleep(1)
 
-    def waiting_for_result(
+    def waiting_for_results(
         self,
         running_invocation: Optional["DistributedInvocation"],
-        result_invocation: "DistributedInvocation",
+        result_invocations: list["DistributedInvocation"],
     ) -> None:
         """In this case we let the current thread waiting in a condition based in the result invocation
         So we ignore the running_invocation parameter
@@ -75,7 +75,8 @@ class MemRunner(BaseRunner):
         self.app.orchestrator.set_invocation_status(
             running_invocation, InvocationStatus.PAUSED
         )
-        self.wait_invocation[result_invocation].add(running_invocation)
-        self.waiting_threads += 1
-        with self.wait_conditions[result_invocation]:
-            self.wait_conditions[result_invocation].wait()
+        for result_invocation in result_invocations:
+            self.wait_invocation[result_invocation].add(running_invocation)
+            self.waiting_threads += 1
+            with self.wait_conditions[result_invocation]:
+                self.wait_conditions[result_invocation].wait()
