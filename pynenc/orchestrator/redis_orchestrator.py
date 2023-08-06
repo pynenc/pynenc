@@ -22,7 +22,7 @@ class RedisCycleControl(BaseCycleControl):
 
     def __init__(self, app: "Pynenc", client: redis.Redis) -> None:
         self.app = app
-        self.key = Key("cycle_control")
+        self.key = Key(app.app_id, "cycle_control")
         self.client = client
 
     def purge(self) -> None:
@@ -145,7 +145,7 @@ class RedisBlockingControl(BaseBlockingControl):
 
     def __init__(self, app: "Pynenc", client: redis.Redis) -> None:
         self.app = app
-        self.key = Key("blocking_control")
+        self.key = Key(app.app_id, "blocking_control")
         self.client = client
 
     def purge(self) -> None:
@@ -240,7 +240,7 @@ class TaskRedisCache:
     def __init__(self, app: "Pynenc", client: redis.Redis) -> None:
         self.app = app
         self.client = client
-        self.key = Key("orchestrator")
+        self.key = Key(app.app_id, "orchestrator")
 
     def purge(self) -> None:
         self.key.purge(self.client)

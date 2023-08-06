@@ -32,7 +32,7 @@ class PynencError(Exception):
     def from_json(cls, error_name: str, serialized: str) -> "PynencError":
         """Returns the child class from a serialized error"""
         for subcls in get_all_subclasses(cls):
-            if cls.__name__ == error_name:
+            if subcls.__name__ == error_name:
                 return subcls._from_json_dict(json_dict=json.loads(serialized))
         raise ValueError(f"Unknown error type: {error_name}")
 

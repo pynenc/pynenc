@@ -1,6 +1,7 @@
 def test_todo():
     raise NotImplementedError("TODO")
     # check that all the options can be serialized and deserialized
+    # add redis config options
 
 
 def test_batch():
@@ -14,6 +15,7 @@ def test_batch():
 def test_profiling():
     raise NotImplementedError("TODO")
     # test that the profiling option works as expected
+    # not necessary for MVP
 
 
 def test_logging():

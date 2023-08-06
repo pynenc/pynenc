@@ -1,3 +1,4 @@
+from collections import Counter
 import threading
 from typing import Any
 
@@ -10,6 +11,7 @@ from pynenc.exceptions import CycleDetectedError
 def test_task_execution(task_sum: Task) -> None:
     """Test the whole lifecycle of a task execution"""
     app = task_sum.app
+    # app.app_id = app.app_id + "-test_task_execution"
 
     def run_in_thread() -> None:
         app.runner.run()
@@ -18,6 +20,50 @@ def test_task_execution(task_sum: Task) -> None:
     thread = threading.Thread(target=run_in_thread, daemon=True)
     thread.start()
     assert invocation.result == 3
+    app.runner.stop_runner_loop()
+    thread.join()
+
+
+def test_parallel_execution(task_sum: Task) -> None:
+    """Test the parallel execution functionalicity"""
+    app = task_sum.app
+    # app.app_id = app.app_id + "-test_parallel_execution"
+
+    def run_in_thread() -> None:
+        app.runner.run()
+
+    invocation_group = task_sum.parallelize(
+        ((1, 2), {"x": 3, "y": 4}, task_sum.args(5, y=6))
+    )
+    thread = threading.Thread(target=run_in_thread, daemon=True)
+    thread.start()
+    assert Counter([3, 7, 11]) == Counter(invocation_group.results)
+    app.runner.stop_runner_loop()
+    thread.join()
+
+
+def test_cycle_detection(task_cycle: Task) -> None:
+    """Test that the execution will detect the cycle raising an exception"""
+    app = task_cycle.app
+    # app.app_id = app.app_id + "-test_cycle_detection"
+
+    def run_in_thread() -> None:
+        app.runner.run()
+
+    invocation = task_cycle()
+    thread = threading.Thread(target=run_in_thread, daemon=True)
+    thread.start()
+    with pytest.raises(CycleDetectedError) as exc_info:
+        invocation.result
+
+    expected_error = (
+        "A cycle was detected: Cycle detected:\n"
+        "- conftest.cycle_end()\n"
+        "- conftest.cycle_start()\n"
+        "- back to conftest.cycle_end()"
+    )
+
+    assert str(exc_info.value) == expected_error
     app.runner.stop_runner_loop()
     thread.join()
 

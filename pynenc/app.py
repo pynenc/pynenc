@@ -50,15 +50,21 @@ class Pynenc:
     _serializer_cls: Type[BaseSerializer] = JsonSerializer
     _runner_cls: Type[BaseRunner] = DummyRunner
 
-    def __init__(self) -> None:
+    def __init__(self, app_id: str = "pynenc") -> None:
+        self._app_id = app_id
         self.conf = Config()
         self.reporting = None
         self._runner_instance: Optional[BaseRunner] = None
         self.invocation_context: Optional["DistributedInvocation"] = None
 
+    @cached_property
+    def app_id(self) -> str:
+        return self._app_id
+
     def __getstate__(self) -> dict:
         # Return state as a dictionary and a secondary value as a tuple
         return {
+            "app_id": self.app_id,
             "orchestrator_cls": self._orchestrator_cls.__name__,
             "broker_cls": self._broker_cls.__name__,
             "state_backend_cls": self._state_backend_cls.__name__,
@@ -71,6 +77,8 @@ class Pynenc:
 
     def __setstate__(self, state: dict) -> None:
         # Restore instance attributes
+        self._app_id = state["app_id"]
+        object.__setattr__(self, "_app_id", self._app_id)
         self._orchestrator_cls = get_subclass(
             BaseOrchestrator, state["orchestrator_cls"]
         )
@@ -141,6 +149,12 @@ class Pynenc:
                 f"Not possible to set serializer, already initialized {self._serializer_cls}"
             )
         self._serializer_cls = serializer_cls
+
+    def purge(self) -> None:
+        """Purge all data from the broker and state backend"""
+        self.broker.purge()
+        self.orchestrator.purge()
+        self.state_backend.purge()
 
     @overload
     def task(self, func: "Func", **options: Any) -> "Task":

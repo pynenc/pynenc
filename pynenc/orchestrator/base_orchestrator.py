@@ -183,6 +183,7 @@ class BaseOrchestrator(ABC):
                 self.release_waiters(invocation)
                 self.clean_up_invocation_cycles(invocation)
                 self.set_up_invocation_auto_purge(invocation)
+            # TODO! on previous fail, this should still change status to running
             self._set_invocation_status(invocation, status)
 
     def set_invocations_status(
@@ -201,6 +202,7 @@ class BaseOrchestrator(ABC):
         """Called when an invocation is started"""
         if caller:
             self.add_call_and_check_cycles(caller, callee)
+        # TODO! on previous fail, this should still change status
         self.set_invocation_status(callee, InvocationStatus.RUNNING)
 
     def set_invocation_result(
@@ -208,6 +210,7 @@ class BaseOrchestrator(ABC):
     ) -> None:
         """Called when an invocation is finished successfully"""
         self.app.state_backend.set_result(invocation, result)
+        # TODO! on previous fail, this should still change status
         self.app.orchestrator.set_invocation_status(
             invocation, InvocationStatus.SUCCESS
         )
@@ -217,6 +220,7 @@ class BaseOrchestrator(ABC):
     ) -> None:
         """Called when an invocation is finished with an exception"""
         self.app.state_backend.set_exception(invocation, exception)
+        # TODO! on previous fail, this should still change status
         self.app.orchestrator.set_invocation_status(invocation, InvocationStatus.FAILED)
 
     def get_invocations_to_run(

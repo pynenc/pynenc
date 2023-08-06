@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 class RedisStateBackend(BaseStateBackend):
     def __init__(self, app: "Pynenc") -> None:
         self.client = redis.Redis(host="localhost", port=6379, db=0)
-        self.key = Key("state_backend")
+        self.key = Key(app.app_id, "state_backend")
         # self._cache: dict[str, "DistributedInvocation"] = {}
         # self._history: dict[str, list] = defaultdict(list)
         # self._results: dict[str, Any] = {}

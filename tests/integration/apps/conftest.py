@@ -1,6 +1,8 @@
 from collections import namedtuple
+import hashlib
 from itertools import product
 from typing import TYPE_CHECKING, Optional
+import uuid
 
 import pytest
 
@@ -32,6 +34,16 @@ AppComponents = namedtuple(
 )
 
 
+def get_combination_id(combination: AppComponents) -> str:
+    return (
+        f"run.{combination.runner.__name__.replace('Runner', '')}-"
+        f"brk.{combination.broker.__name__.replace('Broker', '')}-"
+        f"orc.{combination.orchestrator.__name__.replace('Orchestrator', '')}-"
+        f"sbk.{combination.state_backend.__name__.replace('StateBackend', '')}-"
+        f"ser.{combination.serializer.__name__.replace('Serializer', '')}"
+    )
+
+
 def pytest_generate_tests(metafunc: "Metafunc") -> None:
     def get_subclasses(cls: type, mem_cls: Optional[bool] = None) -> list[type]:
         subclasses = []
@@ -42,15 +54,6 @@ def pytest_generate_tests(metafunc: "Metafunc") -> None:
                 continue
             subclasses.append(c)
         return subclasses
-
-    def get_combination_id(combination: AppComponents) -> str:
-        return (
-            f"run:{combination.runner.__name__.replace('Runner', '')},"
-            f"brk:{combination.broker.__name__.replace('Broker', '')},"
-            f"orc:{combination.orchestrator.__name__.replace('Orchestrator', '')},"
-            f"sbk:{combination.state_backend.__name__.replace('StateBackend', '')},"
-            f"ser:{combination.serializer.__name__.replace('Serializer', '')}"
-        )
 
     if "app" in metafunc.fixturenames:
         # mem runners can run with any combination of components (including memory components)
@@ -80,18 +83,23 @@ def pytest_generate_tests(metafunc: "Metafunc") -> None:
         metafunc.parametrize("app", combinations, ids=ids, indirect=True)
 
 
+def get_unique_id() -> str:
+    _id = uuid.uuid4()
+    return hashlib.sha256(_id.bytes).hexdigest()[:8]
+
+
 @pytest.fixture
 def app(request: "FixtureRequest") -> Pynenc:
-    app = Pynenc()
     components: AppComponents = request.param
+    app = Pynenc(app_id=get_combination_id(components) + "-" + get_unique_id())
     app.set_broker_cls(components.broker)
     app.set_orchestrator_cls(components.orchestrator)
     app.set_serializer_cls(components.serializer)
     app.set_state_backend_cls(components.state_backend)
     app.runner = components.runner(app)
-    app.broker.purge()
-    app.orchestrator.purge()
-    app.state_backend.purge()
+    # purge before and after each test
+    app.purge()
+    request.addfinalizer(app.purge)
     return app
 
 
@@ -99,60 +107,28 @@ mock_app = MockPynenc()
 
 
 @mock_app.task
-def dummy_task() -> None:
-    ...
-
-
-@mock_app.task
-def dummy_sum(x: int, y: int) -> int:
+def sum(x: int, y: int) -> int:
     return x + y
 
 
-@mock_app.task
-def dummy_concat(arg0: str, arg1: str) -> str:
-    return f"{arg0}:{arg1}"
-
-
-@mock_app.task
-def dummy_mirror(arg: str) -> str:
-    return arg
-
-
-@mock_app.task
-def dummy_key_arg(key: str, arg: str) -> str:
-    return f"{key}:{arg}"
-
-
-@pytest.fixture
-def task_dummy(app: Pynenc) -> "Task":
-    dummy_task.app = app
-    return dummy_task
-
-
-@pytest.fixture
+@pytest.fixture(scope="function")
 def task_sum(app: Pynenc) -> "Task":
-    dummy_sum.app = app
-    return dummy_sum
+    sum.app = app
+    return sum
 
 
-@pytest.fixture
-def task_concat(app: Pynenc) -> "Task":
-    dummy_concat.app = app
-    return dummy_concat
+@mock_app.task
+def cycle_start() -> None:
+    cycle_end().result
 
 
-@pytest.fixture
-def task_mirror(app: Pynenc) -> "Task":
-    dummy_mirror.app = app
-    return dummy_mirror
+@mock_app.task
+def cycle_end() -> None:
+    cycle_start().result
 
 
-@pytest.fixture
-def task_key_arg(app: Pynenc) -> "Task":
-    dummy_key_arg.app = app
-    return dummy_key_arg
-
-
-@pytest.fixture
-def dummy_invocation(task_dummy: "Task") -> "DistributedInvocation":
-    return DistributedInvocation(Call(task_dummy), None)
+@pytest.fixture(scope="function")
+def task_cycle(app: Pynenc) -> "Task":
+    cycle_start.app = app
+    cycle_end.app = app
+    return cycle_start

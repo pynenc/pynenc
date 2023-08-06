@@ -56,3 +56,10 @@ def test_single_invocation(mock_base_app: "MockPynenc") -> None:
     mock_base_app.orchestrator.get_existing_invocations.return_value = iter([])
     third_invocation = add_single_inv(1, 3)
     assert third_invocation.invocation_id != next_invocation.invocation_id
+
+
+def set_invocation_exception() -> None:
+    raise NotImplementedError()
+    # if failed in self.app.state_backend.set_exception(invocation, exception)
+    # then the status did not change and the code gets waiting forever
+    # check that it will

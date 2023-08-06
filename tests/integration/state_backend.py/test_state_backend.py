@@ -91,3 +91,12 @@ def test_store_result(
     app.state_backend.upsert_invocation(invocation)
     app.state_backend.set_result(invocation, result="res_x")
     assert "res_x" == app.state_backend.get_result(invocation)
+
+
+def test_set_exception() -> None:
+    """Test that can store different types of exceptions"""
+    raise NotImplementedError()
+    # it crashes because in redis
+    # tries to serialize
+    # serialized_exception["error_data"] = self.app.serializer.serialize
+    # a simple ValueError but the default json serializer cannot handle it

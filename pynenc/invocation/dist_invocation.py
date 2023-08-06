@@ -1,5 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
+from functools import cached_property
 import json
 from typing import Iterator, Optional, TYPE_CHECKING
 
@@ -20,9 +21,15 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
     """"""
 
     parent_invocation: Optional[DistributedInvocation]
+    _invocation_id: Optional[str] = None
 
     def __post_init__(self) -> None:
         self.app.state_backend.upsert_invocation(self)
+
+    @cached_property
+    def invocation_id(self) -> str:
+        """on deserialization allows to set the invocation_id"""
+        return self._invocation_id or super().invocation_id
 
     @property
     def status(self) -> "InvocationStatus":
@@ -57,11 +64,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             parent_invocation = app.state_backend.get_invocation(
                 inv_dict["parent_invocation_id"]
             )
-        invocation = cls(call, parent_invocation)
-        cls._set_frozen_attr(
-            invocation=invocation, invocation_id=inv_dict["invocation_id"]
-        )
-        return invocation
+        return cls(call, parent_invocation, inv_dict["invocation_id"])
 
     def run(self) -> None:
         # Set current invocation

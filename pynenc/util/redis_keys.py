@@ -7,12 +7,14 @@ if TYPE_CHECKING:
 
 
 class Key:
-    def __init__(self, prefix: str) -> None:
+    def __init__(self, app_id: str, prefix: str) -> None:
         if not prefix:
             raise ValueError("Prefix cannot be an empty string or None")
         if prefix and not prefix.endswith(":"):
             prefix += ":"
-        self.prefix = prefix
+        if app_id:
+            prefix = f"{app_id}:{prefix}"
+        self.prefix = f"__pynenc__:{prefix}"
 
     def invocation(self, invocation_id: str) -> str:
         return f"{self.prefix}invocation:{invocation_id}"
@@ -67,6 +69,9 @@ class Key:
 
     def invocation_auto_purge(self) -> str:
         return f"{self.prefix}invocation_auto_purge"
+
+    def default_queue(self) -> str:
+        return f"{self.prefix}default_queue"
 
     def purge(self, client: redis.Redis) -> None:
         """Purge all keys with the given prefix"""
