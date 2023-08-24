@@ -3,9 +3,9 @@ from typing import TYPE_CHECKING, Optional
 
 import redis
 
-from .base_broker import BaseBroker
 from ..invocation import DistributedInvocation
 from ..util.redis_keys import Key
+from .base_broker import BaseBroker
 
 if TYPE_CHECKING:
     from ..app import Pynenc

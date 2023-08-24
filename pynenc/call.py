@@ -1,10 +1,10 @@
+import json
 from dataclasses import dataclass, field
 from functools import cached_property
-import json
-from typing import TYPE_CHECKING, Generic, Any
+from typing import TYPE_CHECKING, Any, Generic
 
-from .types import Params, Result
 from .arguments import Arguments
+from .types import Params, Result
 
 if TYPE_CHECKING:
     from .app import Pynenc

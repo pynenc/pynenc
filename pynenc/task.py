@@ -1,22 +1,19 @@
 from __future__ import annotations
-from dataclasses import dataclass
-from functools import cached_property
+
 import importlib
 import json
-from typing import TYPE_CHECKING, Generic, Any, Optional, Iterable, overload
+from dataclasses import dataclass
+from functools import cached_property
+from typing import TYPE_CHECKING, Any, Generic, Iterable, Optional, overload
 
 from .arguments import Arguments
 from .call import Call
 from .conf.base_config_option import BaseConfigOption
 from .conf.single_invocation_pending import SingleInvocation
-from .invocation import (
-    BaseInvocation,
-    BaseInvocationGroup,
-    SynchronousInvocation,
-    SynchronousInvocationGroup,
-    DistributedInvocationGroup,
-)
-from .types import Params, Result, Func, Args
+from .invocation import (BaseInvocation, BaseInvocationGroup,
+                         DistributedInvocationGroup, SynchronousInvocation,
+                         SynchronousInvocationGroup)
+from .types import Args, Func, Params, Result
 
 if TYPE_CHECKING:
     from .app import Pynenc

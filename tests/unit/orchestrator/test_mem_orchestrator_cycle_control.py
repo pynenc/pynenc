@@ -1,12 +1,12 @@
-import pytest
 from typing import TYPE_CHECKING
+
+import pytest
 
 from pynenc.arguments import Arguments
 from pynenc.call import Call
 from pynenc.exceptions import CycleDetectedError
-from pynenc.orchestrator.mem_orchestrator import MemCycleControl
 from pynenc.invocation import DistributedInvocation
-
+from pynenc.orchestrator.mem_orchestrator import MemCycleControl
 from tests.conftest import MockPynenc
 
 mock_base_app = MockPynenc()

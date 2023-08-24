@@ -1,21 +1,22 @@
-from collections import defaultdict, OrderedDict, deque
 import pickle
 import threading
+from collections import OrderedDict, defaultdict, deque
 from time import time
-from typing import Any, Iterator, Optional, TYPE_CHECKING, Generic
+from typing import TYPE_CHECKING, Any, Generic, Iterator, Optional
 
 from pynenc.invocation import DistributedInvocation
 
-from .base_orchestrator import BaseOrchestrator, BaseCycleControl, BaseBlockingControl
+from ..exceptions import CycleDetectedError, PendingInvocationLockError
 from ..invocation import InvocationStatus
 from ..types import Params, Result
-from ..exceptions import CycleDetectedError, PendingInvocationLockError
+from .base_orchestrator import (BaseBlockingControl, BaseCycleControl,
+                                BaseOrchestrator)
 
 if TYPE_CHECKING:
     from ..app import Pynenc
     from ..call import Call
-    from ..task import Task
     from ..invocation import DistributedInvocation
+    from ..task import Task
 
 
 class MemCycleControl(BaseCycleControl):

@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Optional
 
 from ..call import Call
-from ..invocation import InvocationStatus, DistributedInvocation
+from ..invocation import DistributedInvocation, InvocationStatus
 from ..types import Params, Result
 
 if TYPE_CHECKING:

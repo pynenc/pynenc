@@ -2,17 +2,17 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from pynenc.arguments import Arguments
-from pynenc.orchestrator.base_orchestrator import BaseOrchestrator
-from pynenc.invocation import DistributedInvocation, ReusedInvocation
-from pynenc import exceptions as exc
 from pynenc import conf
+from pynenc import exceptions as exc
+from pynenc.arguments import Arguments
+from pynenc.invocation import DistributedInvocation, ReusedInvocation
+from pynenc.orchestrator.base_orchestrator import BaseOrchestrator
 from tests.conftest import MockPynenc
 
-
 if TYPE_CHECKING:
-    from _pytest.python import Metafunc
     from _pytest.fixtures import FixtureRequest
+    from _pytest.python import Metafunc
+
     from pynenc.task import Task
 
 

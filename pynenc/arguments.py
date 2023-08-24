@@ -1,10 +1,10 @@
-from functools import cached_property
 import hashlib
 import inspect
-from typing import Any, Optional, TYPE_CHECKING
+from functools import cached_property
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
-    from .types import Func, Args
+    from .types import Args, Func
 
 
 class Arguments:

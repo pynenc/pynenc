@@ -1,13 +1,14 @@
 from __future__ import annotations
+
+import json
+import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from functools import cached_property
-import json
-from typing import TYPE_CHECKING, Generic, Any, Optional, TypeVar, Iterator
-import uuid
+from typing import TYPE_CHECKING, Any, Generic, Iterator, Optional, TypeVar
 
-from ..types import Params, Result
 from ..call import Call
+from ..types import Params, Result
 
 if TYPE_CHECKING:
     from ..app import Pynenc

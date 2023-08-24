@@ -1,8 +1,8 @@
-from collections import defaultdict
 import multiprocessing
 import threading
 import time
-from typing import TYPE_CHECKING, Optional, NamedTuple
+from collections import defaultdict
+from typing import TYPE_CHECKING, NamedTuple, Optional
 
 from pynenc.invocation import DistributedInvocation, InvocationStatus
 

@@ -1,8 +1,7 @@
-from multiprocessing import Process, cpu_count, Condition, Manager, managers
 import time
-from typing import TYPE_CHECKING, Optional, NamedTuple
+from multiprocessing import Condition, Manager, Process, cpu_count, managers
+from typing import TYPE_CHECKING, NamedTuple, Optional
 
-from .base_runner import BaseRunner
 from pynenc.invocation import DistributedInvocation, InvocationStatus
 
 from .base_runner import BaseRunner
@@ -15,6 +14,7 @@ class ProcessInfo(NamedTuple):
 
 if TYPE_CHECKING:
     from multiprocessing.synchronize import Condition as ConditionBase
+
     from ..invocation import DistributedInvocation
 
 

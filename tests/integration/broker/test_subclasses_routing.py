@@ -3,15 +3,15 @@ from typing import TYPE_CHECKING
 import pytest
 
 from pynenc.arguments import Arguments
-from pynenc.call import Call
 from pynenc.broker import BaseBroker
+from pynenc.call import Call
 from pynenc.invocation import DistributedInvocation
 from tests.conftest import MockPynenc
 
-
 if TYPE_CHECKING:
-    from _pytest.python import Metafunc
     from _pytest.fixtures import FixtureRequest
+    from _pytest.python import Metafunc
+
     from pynenc.task import Task
 
 

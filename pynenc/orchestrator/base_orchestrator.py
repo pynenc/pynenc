@@ -1,18 +1,16 @@
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Optional, Iterator, Any
+from typing import TYPE_CHECKING, Any, Iterator, Optional
 
+from ..exceptions import (PendingInvocationLockError,
+                          SingleInvocationWithDifferentArgumentsError)
 from ..invocation import InvocationStatus, ReusedInvocation
-from ..exceptions import (
-    SingleInvocationWithDifferentArgumentsError,
-    PendingInvocationLockError,
-)
 
 if TYPE_CHECKING:
     from ..app import Pynenc
     from ..call import Call
-    from ..task import Task
     from ..invocation import DistributedInvocation
-    from ..types import Params, Result, Args
+    from ..task import Task
+    from ..types import Args, Params, Result
 
 
 class BaseCycleControl(ABC):

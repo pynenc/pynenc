@@ -1,16 +1,18 @@
 import time
-import pytest
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
-from pynenc.state_backend.base_state_backend import BaseStateBackend, InvocationHistory
-from pynenc.invocation import DistributedInvocation, InvocationStatus
+import pytest
+
 from pynenc.exceptions import InvocationNotFoundError
+from pynenc.invocation import DistributedInvocation, InvocationStatus
+from pynenc.state_backend.base_state_backend import (BaseStateBackend,
+                                                     InvocationHistory)
 
 if TYPE_CHECKING:
-    from tests.conftest import MockPynenc
     from pynenc.task import Task
     from pynenc.types import Params, Result
+    from tests.conftest import MockPynenc
 
 
 def test_upsert_invocation_non_blocking(

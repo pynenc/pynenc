@@ -1,16 +1,17 @@
 from time import time
-from typing import Any, Iterator, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Iterator, Optional
 
 import redis
 
 from pynenc.invocation import DistributedInvocation
 
-from .base_orchestrator import BaseOrchestrator, BaseCycleControl, BaseBlockingControl
 from ..call import Call
-from ..types import Params, Result
 from ..exceptions import CycleDetectedError, PendingInvocationLockError
 from ..invocation import DistributedInvocation, InvocationStatus
+from ..types import Params, Result
 from ..util.redis_keys import Key
+from .base_orchestrator import (BaseBlockingControl, BaseCycleControl,
+                                BaseOrchestrator)
 
 if TYPE_CHECKING:
     from ..app import Pynenc

@@ -1,11 +1,11 @@
-from unittest.mock import MagicMock
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
 from pynenc import Pynenc
-from pynenc.orchestrator.mem_orchestrator import MemOrchestrator
 from pynenc.broker.mem_broker import MemBroker
+from pynenc.orchestrator.mem_orchestrator import MemOrchestrator
 from pynenc.state_backend.mem_state_backend import MemStateBackend
 
 

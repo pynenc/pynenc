@@ -1,8 +1,5 @@
 from .base_invocation import BaseInvocation, BaseInvocationGroup
-from .sync_invocation import SynchronousInvocation, SynchronousInvocationGroup
-from .dist_invocation import (
-    DistributedInvocation,
-    ReusedInvocation,
-    DistributedInvocationGroup,
-)
+from .dist_invocation import (DistributedInvocation,
+                              DistributedInvocationGroup, ReusedInvocation)
 from .status import InvocationStatus
+from .sync_invocation import SynchronousInvocation, SynchronousInvocationGroup

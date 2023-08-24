@@ -3,11 +3,10 @@ from typing import Any
 
 import pytest
 
-from tests.conftest import MockPynenc
 from pynenc import Pynenc, Task
 from pynenc.exceptions import CycleDetectedError
 from pynenc.runner import MemRunner
-
+from tests.conftest import MockPynenc
 
 mock_all = MockPynenc()
 

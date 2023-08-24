@@ -1,24 +1,25 @@
-from collections import namedtuple
 import hashlib
+import uuid
+from collections import namedtuple
 from itertools import product
 from typing import TYPE_CHECKING, Optional
-import uuid
 
 import pytest
 
 from pynenc import Pynenc
 from pynenc.broker.base_broker import BaseBroker
+from pynenc.call import Call
+from pynenc.invocation import DistributedInvocation
 from pynenc.orchestrator.base_orchestrator import BaseOrchestrator
 from pynenc.runner.base_runner import BaseRunner
 from pynenc.serializer.base_serializer import BaseSerializer
 from pynenc.state_backend.base_state_backend import BaseStateBackend
 from tests.conftest import MockPynenc
-from pynenc.call import Call
-from pynenc.invocation import DistributedInvocation
 
 if TYPE_CHECKING:
-    from _pytest.python import Metafunc
     from _pytest.fixtures import FixtureRequest
+    from _pytest.python import Metafunc
+
     from pynenc.task import Task
 
 

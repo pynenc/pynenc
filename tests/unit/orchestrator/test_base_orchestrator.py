@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 
-from pynenc.invocation import DistributedInvocation, InvocationStatus
 from pynenc.conf import SingleInvocation
+from pynenc.invocation import DistributedInvocation, InvocationStatus
 from tests.conftest import MockPynenc
 
 if TYPE_CHECKING:

@@ -1,12 +1,12 @@
-from unittest.mock import patch
-from typing import Any
 import os
+from typing import Any
+from unittest.mock import patch
 
 import pytest
 
 from pynenc import Pynenc, Task, TaskOptions
-from pynenc.invocation import SynchronousInvocationGroup, DistributedInvocationGroup
-
+from pynenc.invocation import (DistributedInvocationGroup,
+                               SynchronousInvocationGroup)
 
 _app = Pynenc()
 

@@ -10,10 +10,9 @@ from pynenc.exceptions import CycleDetectedError
 from pynenc.invocation import DistributedInvocation, InvocationStatus
 from tests.conftest import MockPynenc
 
-
 if TYPE_CHECKING:
-    from pynenc.task import Task
     from pynenc import Pynenc
+    from pynenc.task import Task
 
 
 def test_pending_status_expiration(dummy_invocation: "DistributedInvocation") -> None:

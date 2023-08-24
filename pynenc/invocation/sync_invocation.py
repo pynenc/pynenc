@@ -1,15 +1,15 @@
 from __future__ import annotations
+
 from functools import cached_property
 from typing import TYPE_CHECKING, Iterator
 
-from .base_invocation import BaseInvocation, BaseInvocationGroup
-from ..types import Params, Result
 from ..exceptions import PynencError
-
+from ..types import Params, Result
+from .base_invocation import BaseInvocation, BaseInvocationGroup
 
 if TYPE_CHECKING:
-    from ..call import Call
     from ..app import Pynenc
+    from ..call import Call
 
 
 class SynchronousInvocation(BaseInvocation[Params, Result]):

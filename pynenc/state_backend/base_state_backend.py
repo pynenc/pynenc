@@ -1,9 +1,9 @@
+import json
+import threading
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
-import json
-import threading
 from typing import TYPE_CHECKING, Any, Optional
 
 from ..exceptions import InvocationNotFoundError
@@ -13,7 +13,6 @@ if TYPE_CHECKING:
     from ..app import Pynenc
     from ..invocation import DistributedInvocation
     from ..types import Params, Result
-    from ..invocation import DistributedInvocation
 
 
 @dataclass

@@ -1,5 +1,5 @@
-from collections import Counter
 import threading
+from collections import Counter
 from typing import Any
 
 import pytest

@@ -5,14 +5,14 @@ import pytest
 
 from pynenc.arguments import Arguments
 from pynenc.call import Call
-from pynenc.state_backend import BaseStateBackend, InvocationHistory
 from pynenc.invocation import DistributedInvocation, InvocationStatus
+from pynenc.state_backend import BaseStateBackend, InvocationHistory
 from tests.conftest import MockPynenc
 
-
 if TYPE_CHECKING:
-    from _pytest.python import Metafunc
     from _pytest.fixtures import FixtureRequest
+    from _pytest.python import Metafunc
+
     from pynenc.task import Task
     from pynenc.types import Params, Result
 

@@ -1,9 +1,9 @@
 """
 Global Pynenc exception and warning classes.
 """
-from abc import abstractmethod
 import json
-from typing import Optional, TYPE_CHECKING, Any
+from abc import abstractmethod
+from typing import TYPE_CHECKING, Any, Optional
 
 from .util.subclasses import get_all_subclasses
 

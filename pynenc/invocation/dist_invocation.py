@@ -1,15 +1,16 @@
 from __future__ import annotations
+
+import json
 from dataclasses import dataclass
 from functools import cached_property
-import json
-from typing import Iterator, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Iterator, Optional
 
 from ..arguments import Arguments
 from ..call import Call
 from ..exceptions import InvocationError
-from .status import InvocationStatus
-from .base_invocation import BaseInvocation, BaseInvocationGroup
 from ..types import Params, Result
+from .base_invocation import BaseInvocation, BaseInvocationGroup
+from .status import InvocationStatus
 
 if TYPE_CHECKING:
     from ..app import Pynenc

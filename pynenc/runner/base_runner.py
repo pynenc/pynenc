@@ -1,18 +1,18 @@
-from abc import ABC, abstractmethod
 import signal
 import threading
 import time
-from typing import TYPE_CHECKING, Optional
 import warnings
-
+from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING, Optional
 
 from pynenc.exceptions import RunnerNotExecutableError
 
 if TYPE_CHECKING:
+    from types import FrameType
+
     from ..app import Pynenc
     from ..invocation import DistributedInvocation
     from ..types import Params, Result
-    from types import FrameType
 
 
 class BaseRunner(ABC):

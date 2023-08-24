@@ -6,13 +6,12 @@ import pytest
 
 from pynenc.arguments import Arguments
 from pynenc.call import Call
-from pynenc.invocation import DistributedInvocation, InvocationStatus
 from pynenc.exceptions import PendingInvocationLockError
-
+from pynenc.invocation import DistributedInvocation, InvocationStatus
 
 if TYPE_CHECKING:
-    from pynenc.task import Task
     from pynenc import Pynenc
+    from pynenc.task import Task
 
 
 @dataclass
