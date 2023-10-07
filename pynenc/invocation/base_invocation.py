@@ -2,7 +2,6 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from functools import cached_property
-import json
 from typing import TYPE_CHECKING, Generic, Any, Optional, TypeVar, Iterator
 import uuid
 
@@ -54,15 +53,6 @@ class BaseInvocation(ABC, Generic[Params, Result]):
     @property
     def call_id(self) -> str:
         return self.call.call_id
-
-    @staticmethod
-    def _set_frozen_attr(
-        invocation: BaseInvocation, invocation_id: str, app: Optional["Pynenc"] = None
-    ) -> None:
-        """Method used to deserialize or initialize a new invocation from existing data"""
-        if app:
-            object.__setattr__(invocation.call, "app", app)
-        object.__setattr__(invocation, "invocation_id", invocation_id)
 
     @cached_property
     def invocation_id(self) -> str:

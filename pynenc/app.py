@@ -9,6 +9,8 @@ from .serializer import BaseSerializer, JsonSerializer
 from .runner import BaseRunner, DummyRunner
 from .conf import Config
 from .util.subclasses import get_subclass
+from .util.log import create_logger
+from logging import Logger
 
 if TYPE_CHECKING:
     from .types import Func, Params, Result
@@ -55,9 +57,8 @@ class Pynenc:
         self.conf = Config()
         self.reporting = None
         self._runner_instance: Optional[BaseRunner] = None
-        self.invocation_context: Optional["DistributedInvocation"] = None
 
-    @cached_property
+    @property
     def app_id(self) -> str:
         return self._app_id
 
@@ -72,7 +73,6 @@ class Pynenc:
             "runner_cls": self._runner_cls.__name__,
             "conf": self.conf,
             "reporting": self.reporting,
-            "invocation_context": self.invocation_context,
         }
 
     def __setstate__(self, state: dict) -> None:
@@ -90,11 +90,15 @@ class Pynenc:
         self._runner_cls = get_subclass(BaseRunner, state["runner_cls"])
         self.conf = state["conf"]
         self.reporting = state["reporting"]
-        self.invocation_context = state["invocation_context"]
+        self._runner_instance = None
 
     def is_initialized(self, property_name: str) -> bool:
         """Returns True if the given cached_property has been initialized"""
         return property_name in self.__dict__
+
+    @cached_property
+    def logger(self) -> Logger:
+        return create_logger(self)
 
     @cached_property
     def orchestrator(self) -> BaseOrchestrator:

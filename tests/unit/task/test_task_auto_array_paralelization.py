@@ -48,9 +48,9 @@ def test_task_only_module_level(app: Pynenc) -> None:
 
 def test_sync_invocation_group(app: Pynenc) -> None:
     """
-    Test that the Task will return a SyncResult if DEV_MODE_FORCE_SYNC_TASK=True
+    Test that the Task will return a SyncResult if PYNENC_DEV_MODE_FORCE_SYNC_TASK=True
     """
-    with patch.dict(os.environ, {"DEV_MODE_FORCE_SYNC_TASK": "True"}):
+    with patch.dict(os.environ, {"PYNENC_DEV_MODE_FORCE_SYNC_TASK": "True"}):
         invocation_group = add.parallelize([(1, 1), add.args(1, 2), {"x": 2, "y": 3}])
     assert isinstance(invocation_group, SynchronousInvocationGroup)
     assert list(invocation_group.results) == [2, 3, 5]

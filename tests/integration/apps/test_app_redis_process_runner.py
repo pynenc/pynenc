@@ -1,74 +1,109 @@
 from collections import Counter
 import threading
-from typing import Any
+from typing import TYPE_CHECKING, Iterator
 
 import pytest
 
-from pynenc import Task
+from pynenc import Pynenc
+from pynenc.broker import RedisBroker
+from pynenc.orchestrator import RedisOrchestrator
+from pynenc.serializer import JsonSerializer
+from pynenc.state_backend import RedisStateBackend
+from pynenc.runner import ProcessRunner
 from pynenc.exceptions import CycleDetectedError
 
+if TYPE_CHECKING:
+    from types import ModuleType
 
-def test_task_execution(task_sum: Task) -> None:
+mp_app = Pynenc(app_id="test-process-runner")
+mp_app.set_broker_cls(RedisBroker)
+mp_app.set_orchestrator_cls(RedisOrchestrator)
+mp_app.set_serializer_cls(JsonSerializer)
+mp_app.set_state_backend_cls(RedisStateBackend)
+mp_app.runner = ProcessRunner(mp_app)
+
+
+def setup_module(module: "ModuleType") -> None:
+    del module
+    mp_app.purge()
+
+
+def teardown_module(module: "ModuleType") -> None:
+    del module
+    mp_app.purge()
+
+
+@mp_app.task
+def sum(x: int, y: int) -> int:
+    return x + y
+
+
+@mp_app.task
+def cycle_start() -> None:
+    cycle_end().result
+
+
+@mp_app.task
+def cycle_end() -> None:
+    cycle_start().result
+
+
+def test_task_execution() -> None:
     """Test the whole lifecycle of a task execution"""
-    app = task_sum.app
-    # app.app_id = app.app_id + "-test_task_execution"
 
     def run_in_thread() -> None:
-        app.runner.run()
+        mp_app.runner.run()
 
-    invocation = task_sum(1, 2)
+    invocation = sum(1, 2)
     thread = threading.Thread(target=run_in_thread, daemon=True)
     thread.start()
     assert invocation.result == 3
-    app.runner.stop_runner_loop()
+    mp_app.runner.stop_runner_loop()
     thread.join()
 
 
-def test_parallel_execution(task_sum: Task) -> None:
+@pytest.mark.test_id(name="parallel_exec")
+def test_parallel_execution() -> None:
     """Test the parallel execution functionalicity"""
-    app = task_sum.app
-    # app.app_id = app.app_id + "-test_parallel_execution"
 
     def run_in_thread() -> None:
-        app.runner.run()
+        mp_app.runner.run()
 
-    invocation_group = task_sum.parallelize(
-        ((1, 2), {"x": 3, "y": 4}, task_sum.args(5, y=6))
-    )
+    invocation_group = sum.parallelize(((1, 2), {"x": 3, "y": 4}, sum.args(5, y=6)))
     thread = threading.Thread(target=run_in_thread, daemon=True)
     thread.start()
     assert Counter([3, 7, 11]) == Counter(invocation_group.results)
-    app.runner.stop_runner_loop()
+    mp_app.runner.stop_runner_loop()
     thread.join()
 
 
-def test_cycle_detection(task_cycle: Task) -> None:
+@pytest.mark.test_id(name="cycle_detect")
+def test_cycle_detection() -> None:
     """Test that the execution will detect the cycle raising an exception"""
-    app = task_cycle.app
-    # app.app_id = app.app_id + "-test_cycle_detection"
 
     def run_in_thread() -> None:
-        app.runner.run()
+        mp_app.runner.run()
 
-    invocation = task_cycle()
+    invocation = cycle_start()
     thread = threading.Thread(target=run_in_thread, daemon=True)
     thread.start()
     # TODO:
     # - if finish but does not go trough the cycle
     # - next check task cycle_start/cycle_end
     # - does keeping invocation_context in app root work? does it require a tree or references?
+    # with pytest.raises(CycleDetectedError) as exc_info:
     with pytest.raises(CycleDetectedError) as exc_info:
         invocation.result
 
     expected_error = (
         "A cycle was detected: Cycle detected:\n"
-        "- conftest.cycle_end()\n"
-        "- conftest.cycle_start()\n"
-        "- back to conftest.cycle_end()"
+        "- test_app_redis_process_runner.cycle_end()\n"
+        "- test_app_redis_process_runner.cycle_start()\n"
+        "- back to test_app_redis_process_runner.cycle_end()"
     )
 
     assert str(exc_info.value) == expected_error
-    app.runner.stop_runner_loop()
+    mp_app.runner.stop_runner_loop()
     thread.join()
 
 

@@ -252,3 +252,7 @@ class CycleDetectedError(PynencError):
     @classmethod
     def _from_json_dict(cls, json_dict: dict[str, Any]) -> "CycleDetectedError":
         return cls(json_dict["call_ids"], json_dict["message"])
+
+
+class RunnerError(PynencError):
+    """Base class for all Runner related errors."""

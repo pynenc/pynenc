@@ -2,7 +2,7 @@ from collections import defaultdict
 import multiprocessing
 import threading
 import time
-from typing import TYPE_CHECKING, Optional, NamedTuple
+from typing import TYPE_CHECKING, Optional, NamedTuple, Any
 
 from pynenc.invocation import DistributedInvocation, InvocationStatus
 
@@ -73,10 +73,12 @@ class MemRunner(BaseRunner):
         self,
         running_invocation: Optional["DistributedInvocation"],
         result_invocations: list["DistributedInvocation"],
+        runner_args: Optional[dict[str, Any]] = None,
     ) -> None:
         """In this case we let the current thread waiting in a condition based in the result invocation
         So we ignore the running_invocation parameter
         """
+        del runner_args
         if not running_invocation:
             # running from outside this runner (user instantiate an app with this runner class,
             # but ask for an invocation result outside of the runner processes)

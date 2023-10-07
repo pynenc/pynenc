@@ -2,7 +2,8 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Optional
 
 from ..call import Call
-from ..invocation import InvocationStatus, DistributedInvocation
+from ..context import invocation_context
+from ..invocation import DistributedInvocation
 from ..types import Params, Result
 
 if TYPE_CHECKING:
@@ -40,7 +41,7 @@ class BaseBroker(ABC):
         """Creates a new invocation and routes it"""
         self.route_invocation(
             invocation := DistributedInvocation(
-                call, parent_invocation=self.app.invocation_context
+                call, parent_invocation=invocation_context.get(self.app.app_id)
             )
         )
         return invocation

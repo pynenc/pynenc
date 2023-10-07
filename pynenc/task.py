@@ -94,7 +94,7 @@ class Task(Generic[Params, Result]):
     The `BaseTask` can be called normally and will return an instance of `BaseResult`.
     The result will be an `AsyncResult` when running normally but can be `SyncResult`
     when running eagerly in development with the `pynenc` app's `dev_mode_force_sync_tasks`
-    option set to `True` (or the 'DEV_MODE_FORCE_SYNC_TASK' environment variable set).
+    option set to `True` (or the 'PYNENC_DEV_MODE_FORCE_SYNC_TASK' environment variable set).
     The option `dev_mode_force_sync_tasks` should only be used in development.
 
     Although it is possible to create a `BaseTask` instance directly, it is recommended to
@@ -170,11 +170,12 @@ class Task(Generic[Params, Result]):
     def __call__(
         self, *args: Params.args, **kwargs: Params.kwargs
     ) -> "BaseInvocation[Params, Result]":
-        """"""
+        """Handles a call to the task"""
         arguments = Arguments.from_call(self.func, *args, **kwargs)
         return self._call(arguments)
 
     def _call(self, arguments: Arguments) -> "BaseInvocation[Params, Result]":
+        """Route the call to the orchestrator if not in dev mode, otherwise run synchronously"""
         if self.app.conf.dev_mode_force_sync_tasks:
             return SynchronousInvocation(
                 call=Call(self, arguments),

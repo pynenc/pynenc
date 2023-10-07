@@ -2,10 +2,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import cached_property
 import json
-from typing import Iterator, Optional, TYPE_CHECKING
+from typing import Iterator, Optional, TYPE_CHECKING, Any
 
 from ..arguments import Arguments
 from ..call import Call
+from .. import context
 from ..exceptions import InvocationError
 from .status import InvocationStatus
 from .base_invocation import BaseInvocation, BaseInvocationGroup
@@ -66,18 +67,19 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             )
         return cls(call, parent_invocation, inv_dict["invocation_id"])
 
-    def run(self) -> None:
+    def run(self, runner_args: Optional[dict[str, Any]] = None) -> None:
+        context.runner_args = runner_args
         # Set current invocation
-        previous_invocation_context = self.app.invocation_context
+        previous_invocation_context = context.invocation_context.get(self.app.app_id)
         try:
-            self.app.invocation_context = self
+            context.invocation_context[self.app.app_id] = self
             self.app.orchestrator.set_invocation_run(self.parent_invocation, self)
             result = self.task.func(**self.arguments.kwargs)
             self.app.orchestrator.set_invocation_result(self, result)
         except Exception as ex:
             self.app.orchestrator.set_invocation_exception(self, ex)
         finally:
-            self.app.invocation_context = previous_invocation_context
+            context.invocation_context[self.app.app_id] = previous_invocation_context
 
     @property
     def result(self) -> "Result":
@@ -85,7 +87,9 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             self.app.orchestrator.waiting_for_results(self.parent_invocation, [self])
 
         while not self.status.is_final():
-            self.app.runner.waiting_for_results(self.parent_invocation, [self])
+            self.app.runner.waiting_for_results(
+                self.parent_invocation, [self], context.runner_args
+            )
         return self.get_final_result()
 
     def get_final_result(self) -> "Result":
@@ -132,15 +136,10 @@ class ReusedInvocation(DistributedInvocation):
     ) -> "ReusedInvocation":
         # Create a new instance with the same fields as the existing invocation, but with the added field
         new_invc = cls(
-            Call(invocation.task, invocation.arguments),
-            invocation.parent_invocation,
-            diff_arg,
-        )
-        # Because the class is frozen, we can't ordinarily set attributes
-        # So, we use object.__setattr__() to bypass this
-        cls._set_frozen_attr(
-            invocation=new_invc,
-            app=invocation.app,
-            invocation_id=invocation.invocation_id,
+            call=Call(invocation.task, invocation.arguments),
+            parent_invocation=invocation.parent_invocation,
+            # we reuse invocation_id from original invocation
+            _invocation_id=invocation.invocation_id,
+            diff_arg=diff_arg,
         )
         return new_invc

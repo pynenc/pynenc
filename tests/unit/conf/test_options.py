@@ -21,3 +21,13 @@ def test_profiling():
 def test_logging():
     raise NotImplementedError("TODO")
     # test the logging module
+
+
+def test_retry():
+    raise NotImplementedError("TODO")
+    # retry of task option needs to be implemented
+
+
+def test_concurrency():
+    raise NotImplementedError("TODO")
+    # max concurrency for tasks needs to be implemented

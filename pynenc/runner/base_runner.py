@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 import signal
 import threading
 import time
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Any
 import warnings
 
 
@@ -11,7 +11,6 @@ from pynenc.exceptions import RunnerNotExecutableError
 if TYPE_CHECKING:
     from ..app import Pynenc
     from ..invocation import DistributedInvocation
-    from ..types import Params, Result
     from types import FrameType
 
 
@@ -83,6 +82,7 @@ class BaseRunner(ABC):
         self,
         running_invocation: Optional["DistributedInvocation"],
         result_invocation: list["DistributedInvocation"],
+        runner_args: Optional[dict[str, Any]] = None,
     ) -> None:
         """This method is called from the result method of an invocation
         It signals the runner that the running invocation is waiting for the result of the result invocation
@@ -134,8 +134,9 @@ class DummyRunner(BaseRunner):
         self,
         running_invocation: Optional["DistributedInvocation"],
         result_invocation: list["DistributedInvocation"],
+        runner_args: Optional[dict[str, Any]] = None,
     ) -> None:
-        del running_invocation, result_invocation
+        del running_invocation, result_invocation, runner_args
         # invocation.result() was called from outside a runner
         # it will block and loop indefinetely until result is available
         time.sleep(1)

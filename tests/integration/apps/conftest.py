@@ -13,8 +13,6 @@ from pynenc.runner.base_runner import BaseRunner
 from pynenc.serializer.base_serializer import BaseSerializer
 from pynenc.state_backend.base_state_backend import BaseStateBackend
 from tests.conftest import MockPynenc
-from pynenc.call import Call
-from pynenc.invocation import DistributedInvocation
 
 if TYPE_CHECKING:
     from _pytest.python import Metafunc
@@ -51,6 +49,8 @@ def pytest_generate_tests(metafunc: "Metafunc") -> None:
             if "mock" in c.__name__.lower() or c.__name__.startswith("Dummy"):
                 continue
             if mem_cls is not None and mem_cls != c.__name__.startswith("Mem"):
+                continue
+            if c.__name__.startswith("Process"):
                 continue
             subclasses.append(c)
         return subclasses
@@ -129,6 +129,11 @@ def cycle_end() -> None:
 
 @pytest.fixture(scope="function")
 def task_cycle(app: Pynenc) -> "Task":
+    # this replacing the app of the task works in multithreading
+
+    # but not in multi processing runner,
+    # the process start from scratch and reference the function
+    # with the mocked decorator
     cycle_start.app = app
     cycle_end.app = app
     return cycle_start

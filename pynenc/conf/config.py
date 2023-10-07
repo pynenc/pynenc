@@ -9,25 +9,29 @@ class Config:
 
     @cached_property
     def dev_mode_force_sync_tasks(self) -> bool:
-        return bool(os.environ.get("DEV_MODE_FORCE_SYNC_TASK", False))
+        return bool(os.environ.get("PYNENC_DEV_MODE_FORCE_SYNC_TASK", False))
 
     @cached_property
     def cycle_control(self) -> bool:
-        return bool(os.environ.get("CYCLE_CONTROL", True))
+        return bool(os.environ.get("PYNENC_CYCLE_CONTROL", True))
 
     @cached_property
     def blocking_control(self) -> bool:
-        return bool(os.environ.get("BLOCKING_CONTROL", True))
+        return bool(os.environ.get("PYNENC_BLOCKING_CONTROL", True))
 
     @cached_property
     def max_pending_seconds(self) -> float:
         """max pending time that a task can be in pending state before reverting to registered state"""
-        return float(os.environ.get("MAX_PENDING_SECONDS", 5.0))
+        return float(os.environ.get("PYNENC_MAX_PENDING_SECONDS", 5.0))
 
     @cached_property
     def orchestrator_auto_final_invocation_purge_hours(self) -> float:
         """after how many hours should the orchestrator automatically purge invocations in final state"""
-        return float(os.environ.get("ORC_AUTO_INV_FINAL_PURGE", 24.0))
+        return float(os.environ.get("PYNENC_ORC_AUTO_INV_FINAL_PURGE", 24.0))
+
+    @cached_property
+    def logging_level(self) -> str:
+        return os.environ.get("PYNENC_LOGGING_LEVEL", "info")
 
 
 # TODO

@@ -236,6 +236,10 @@ class RedisBlockingControl(BaseBlockingControl):
                         yield invocation
 
 
+class StatusNotFound(Exception):
+    """Raised when a status is not found in Redis"""
+
+
 class TaskRedisCache:
     def __init__(self, app: "Pynenc", client: redis.Redis) -> None:
         self.app = app
@@ -252,10 +256,16 @@ class TaskRedisCache:
     ) -> None:
         task_id = invocation.task.task_id
         invocation_id = invocation.invocation_id
-        for arg, val in invocation.serialized_arguments.items():
-            self.client.sadd(self.key.args(task_id, arg, val), invocation_id)
-        self.client.set(self.key.invocation(invocation_id), invocation.to_json())
-        self.client.sadd(self.key.task(task_id), invocation_id)
+        try:
+            previous_status = self._get_invocation_status(invocation.invocation_id)
+            # already exists in Redis, remove from previous status
+            self.client.srem(self.key.status(task_id, previous_status), invocation_id)
+        except StatusNotFound:
+            # new invocation, init invocation in Redis
+            for arg, val in invocation.serialized_arguments.items():
+                self.client.sadd(self.key.args(task_id, arg, val), invocation_id)
+            self.client.set(self.key.invocation(invocation_id), invocation.to_json())
+            self.client.sadd(self.key.task(task_id), invocation_id)
         self.client.sadd(self.key.status(task_id, status), invocation_id)
         self.client.set(self.key.invocation_status(invocation_id), status.value)
         if status != InvocationStatus.PENDING:
@@ -326,29 +336,30 @@ class TaskRedisCache:
         self.client.delete(self.key.pending_timer(invocation.invocation_id))
         self.client.delete(self.key.previous_status(invocation.invocation_id))
 
+    def _get_invocation_status(self, invocation_id: str) -> "InvocationStatus":
+        if encoded_status := self.client.get(self.key.invocation_status(invocation_id)):
+            return InvocationStatus(encoded_status.decode())
+        raise StatusNotFound(f"Invocation status {invocation_id} not found in Redis")
+
     def get_invocation_status(
         self, invocation: "DistributedInvocation"
     ) -> "InvocationStatus":
-        if encoded_status := self.client.get(
-            self.key.invocation_status(invocation.invocation_id)
-        ):
-            status = InvocationStatus(encoded_status.decode())
-            if status == InvocationStatus.PENDING:
-                if encoded_pending_timer := self.client.get(
-                    self.key.pending_timer(invocation.invocation_id)
-                ):
-                    elapsed = time() - float(encoded_pending_timer.decode())
-                    if elapsed > self.app.conf.max_pending_seconds:
-                        if encoded_previous_status := self.client.get(
-                            self.key.previous_status(invocation.invocation_id)
-                        ):
-                            previous_status = InvocationStatus(
-                                encoded_previous_status.decode()
-                            )
-                            self.set_status(invocation, previous_status)
-                            return previous_status
-            return status
-        raise ValueError(f"Invocation status {invocation} not found in Redis")
+        status = self._get_invocation_status(invocation.invocation_id)
+        if status == InvocationStatus.PENDING:
+            if encoded_pending_timer := self.client.get(
+                self.key.pending_timer(invocation.invocation_id)
+            ):
+                elapsed = time() - float(encoded_pending_timer.decode())
+                if elapsed > self.app.conf.max_pending_seconds:
+                    if encoded_previous_status := self.client.get(
+                        self.key.previous_status(invocation.invocation_id)
+                    ):
+                        previous_status = InvocationStatus(
+                            encoded_previous_status.decode()
+                        )
+                        self.set_status(invocation, previous_status)
+                        return previous_status
+        return status
 
     def get_invocations(
         self,
