@@ -6,8 +6,23 @@ if TYPE_CHECKING:
     from ..invocation.status import InvocationStatus
 
 
+def sanitize_for_redis(s: str) -> str:
+    replacements = {
+        "[": "__OPEN_BRACKET__",
+        "]": "__CLOSE_BRACKET__",
+        "*": "__ASTERISK__",
+    }
+
+    for k, v in replacements.items():
+        s = s.replace(k, v)
+
+    return s
+
+
 class Key:
     def __init__(self, app_id: str, prefix: str) -> None:
+        app_id = sanitize_for_redis(app_id)
+        prefix = sanitize_for_redis(prefix)
         if not prefix:
             raise ValueError("Prefix cannot be an empty string or None")
         if prefix and not prefix.endswith(":"):

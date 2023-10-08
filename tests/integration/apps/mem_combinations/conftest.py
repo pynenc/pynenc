@@ -91,7 +91,9 @@ def get_unique_id() -> str:
 @pytest.fixture
 def app(request: "FixtureRequest") -> Pynenc:
     components: AppComponents = request.param
-    app = Pynenc(app_id=get_combination_id(components) + "-" + get_unique_id())
+    test_name = request.node.name.replace("[", "(").replace("]", ")")
+    test_module = request.node.module.__name__
+    app = Pynenc(app_id=f"{test_module}.{test_name}")
     app.set_broker_cls(components.broker)
     app.set_orchestrator_cls(components.orchestrator)
     app.set_serializer_cls(components.serializer)

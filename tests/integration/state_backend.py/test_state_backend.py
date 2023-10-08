@@ -1,12 +1,14 @@
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional, Callable, Any
 
 import pytest
 
 from pynenc.arguments import Arguments
 from pynenc.call import Call
-from pynenc.state_backend import BaseStateBackend, InvocationHistory
+from pynenc.exceptions import PynencError
+from pynenc.state_backend import BaseStateBackend
 from pynenc.invocation import DistributedInvocation, InvocationStatus
+from pynenc.util.subclasses import get_all_subclasses
 from tests.conftest import MockPynenc
 
 
@@ -93,10 +95,68 @@ def test_store_result(
     assert "res_x" == app.state_backend.get_result(invocation)
 
 
-def test_set_exception() -> None:
-    """Test that can store different types of exceptions"""
-    raise NotImplementedError()
-    # it crashes because in redis
-    # tries to serialize
-    # serialized_exception["error_data"] = self.app.serializer.serialize
-    # a simple ValueError but the default json serializer cannot handle it
+def test_set_exception(
+    app: MockPynenc, invocation: "DistributedInvocation[Params, Result]"
+) -> None:
+    """Test that can store and retrieve different types of exceptions"""
+    test_exception = ValueError("Test exception message")
+
+    # Store the exception using set_exception
+    app.state_backend.set_exception(invocation, test_exception)
+
+    # Retrieve the stored exception using get_exception
+    retrieved_exception = app.state_backend.get_exception(invocation)
+
+    # Validate that the retrieved exception is the same as the stored one
+    assert isinstance(retrieved_exception, ValueError)
+    assert str(retrieved_exception) == "Test exception message"
+
+
+def test_set_pynenc_exceptions(
+    app: MockPynenc, invocation: "DistributedInvocation[Params, Result]"
+) -> None:
+    """Test that can store and retrieve different types of exceptions"""
+
+    def get_init_var_names(cls: type) -> Optional[set[str]]:
+        for base in cls.mro():
+            if "__init__" in base.__dict__:
+                init_method = base.__init__  # type: ignore
+                if hasattr(init_method, "__code__"):
+                    return set(init_method.__code__.co_varnames)
+        return None
+
+    for exception_cls in get_all_subclasses(PynencError):
+        # Generate fake data for the exception
+        fake_data = {
+            "invocation_id": "fake_invocation_id",
+            "task_id": "fake_task_id",
+            "message": "fake_message",
+            "existing_invocation_id": "fake_existing_invocation_id",
+            "new_call_id": "fake_new_call_id",
+            "diff": "fake_diff",
+            "call_ids": ["fake_call_id_1", "fake_call_id_2"],
+            # Add more fake data for other fields if needed
+        }
+        # Filter out the keys that are not in the __init__ of the exception class
+        if init_params := get_init_var_names(exception_cls):
+            filtered_fake_data = {
+                k: v for k, v in fake_data.items() if k in init_params
+            }
+        else:
+            # not necessary to test an Empty exception subclass
+            # (we will call the parent class instead)
+            continue
+
+        # Create an instance of the exception
+        exception_instance = exception_cls(**filtered_fake_data)
+
+        # Store the exception using set_exception
+        app.state_backend.set_exception(invocation, exception_instance)
+
+        # Retrieve the stored exception using get_exception
+        retrieved_exception = app.state_backend.get_exception(invocation)
+
+        # Validate that the retrieved exception is the same as the stored one
+        assert isinstance(retrieved_exception, exception_cls)
+        for key, value in filtered_fake_data.items():
+            assert getattr(retrieved_exception, key) == value
