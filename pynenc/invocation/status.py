@@ -1,7 +1,7 @@
-from enum import Enum
+from enum import StrEnum, auto
 
 
-class InvocationStatus(Enum):
+class InvocationStatus(StrEnum):
     """
     An enumeration representing the status of a task invocation.
 
@@ -31,14 +31,14 @@ class InvocationStatus(Enum):
     FAILED, RETRY, and SUCCESS are the same category and can be considered as subtypes of a hypothetical TERMINATED status.
     """
 
-    REGISTERED = "Registered"
-    PENDING = "Pending"
-    RUNNING = "Running"
-    SUCCESS = "Success"
-    PAUSED = "Paused"
-    SCHEDULED = "Scheduled"
-    FAILED = "Failed"
-    RETRY = "Retry"
+    REGISTERED = auto()
+    PENDING = auto()
+    RUNNING = auto()
+    SUCCESS = auto()
+    PAUSED = auto()
+    SCHEDULED = auto()
+    FAILED = auto()
+    RETRY = auto()
 
     def is_available_for_run(self) -> bool:
         """

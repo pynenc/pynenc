@@ -1,12 +1,12 @@
 import builtins
-from enum import Enum
+from enum import StrEnum
 import json
 from typing import Any
 
 from .base_serializer import BaseSerializer
 
 
-class ReservedKeys(Enum):
+class ReservedKeys(StrEnum):
     """Keys that are reserved for internal use"""
 
     ERROR = "__pynenc__std_py_exc__"
