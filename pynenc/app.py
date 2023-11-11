@@ -1,13 +1,13 @@
 from functools import cached_property
 from typing import TYPE_CHECKING, Callable, overload, Optional, Any, Type
 
+from .conf.config_pynenc import ConfigPynenc
 from .task import Task
 from .broker import BaseBroker, MemBroker
 from .orchestrator import BaseOrchestrator, MemOrchestrator
 from .state_backend import BaseStateBackend, MemStateBackend
 from .serializer import BaseSerializer, JsonSerializer
 from .runner import BaseRunner, DummyRunner
-from .conf import Config
 from .util.subclasses import get_subclass
 from .util.log import create_logger
 from logging import Logger
@@ -52,11 +52,18 @@ class Pynenc:
     _serializer_cls: Type[BaseSerializer] = JsonSerializer
     _runner_cls: Type[BaseRunner] = DummyRunner
 
-    def __init__(self, app_id: str = "pynenc") -> None:
+    def __init__(
+        self,
+        app_id: str = "pynenc",
+        config_values: Optional[dict[str, Any]] = None,
+        config_filepath: Optional[str] = None,
+    ) -> None:
         self._app_id = app_id
-        self.conf = Config()
+        self.config_values = config_values
+        self.config_filepath = config_filepath
         self.reporting = None
         self._runner_instance: Optional[BaseRunner] = None
+        self.logger.info(f"Initialized Pynenc app with id {self.app_id}")
 
     @property
     def app_id(self) -> str:
@@ -71,7 +78,8 @@ class Pynenc:
             "state_backend_cls": self._state_backend_cls.__name__,
             "serializer_cls": self._serializer_cls.__name__,
             "runner_cls": self._runner_cls.__name__,
-            "conf": self.conf,
+            "config_values": self.config_values,
+            "config_filepath": self.config_filepath,
             "reporting": self.reporting,
         }
 
@@ -88,13 +96,20 @@ class Pynenc:
         )
         self._serializer_cls = get_subclass(BaseSerializer, state["serializer_cls"])
         self._runner_cls = get_subclass(BaseRunner, state["runner_cls"])
-        self.conf = state["conf"]
+        self.config_values = state["config_values"]
+        self.config_filepath = state["config_filepath"]
         self.reporting = state["reporting"]
         self._runner_instance = None
 
     def is_initialized(self, property_name: str) -> bool:
         """Returns True if the given cached_property has been initialized"""
         return property_name in self.__dict__
+
+    @cached_property
+    def conf(self) -> ConfigPynenc:
+        return ConfigPynenc(
+            config_values=self.config_values, config_filepath=self.config_filepath
+        )
 
     @cached_property
     def logger(self) -> Logger:

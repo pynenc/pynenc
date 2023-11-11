@@ -97,8 +97,8 @@ class MockRunner(BaseRunner):
 
 
 class MockPynenc(Pynenc):
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, app_id: str = "mock_pynenc") -> None:
+        super().__init__(app_id=app_id)
         self._runner_instance: MockRunner = MockRunner(self)
 
     @cached_property

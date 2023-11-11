@@ -1,4 +1,4 @@
-from collections import defaultdict
+from functools import cached_property
 import json
 from typing import TYPE_CHECKING
 
@@ -7,6 +7,7 @@ import redis
 from ..invocation import DistributedInvocation
 from .base_state_backend import InvocationHistory
 from .base_state_backend import BaseStateBackend
+from ..conf.config_state_backend import ConfigStateBackendRedis
 from ..invocation import DistributedInvocation
 from ..util.redis_keys import Key
 from .. import exceptions
@@ -18,13 +19,22 @@ if TYPE_CHECKING:
 
 class RedisStateBackend(BaseStateBackend):
     def __init__(self, app: "Pynenc") -> None:
-        self.client = redis.Redis(host="localhost", port=6379, db=0)
+        super().__init__(app)
+        self.client = redis.Redis(
+            host=self.conf.redis_host, port=self.conf.redis_port, db=self.conf.redis_db
+        )
         self.key = Key(app.app_id, "state_backend")
         # self._cache: dict[str, "DistributedInvocation"] = {}
         # self._history: dict[str, list] = defaultdict(list)
         # self._results: dict[str, Any] = {}
         # self._exceptions: dict[str, Exception] = {}
-        super().__init__(app)
+
+    @cached_property
+    def conf(self) -> ConfigStateBackendRedis:
+        return ConfigStateBackendRedis(
+            config_values=self.app.config_values,
+            config_filepath=self.app.config_filepath,
+        )
 
     def purge(self) -> None:
         self.key.purge(self.client)

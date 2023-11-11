@@ -1,8 +1,7 @@
 from collections import namedtuple
-import hashlib
 from itertools import product
-from typing import TYPE_CHECKING, Optional
-import uuid
+from typing import TYPE_CHECKING, Optional, Any
+
 
 import pytest
 
@@ -13,6 +12,7 @@ from pynenc.runner.base_runner import BaseRunner
 from pynenc.serializer.base_serializer import BaseSerializer
 from pynenc.state_backend.base_state_backend import BaseStateBackend
 from tests.conftest import MockPynenc
+from tests import util
 
 if TYPE_CHECKING:
     from _pytest.python import Metafunc
@@ -83,17 +83,13 @@ def pytest_generate_tests(metafunc: "Metafunc") -> None:
         metafunc.parametrize("app", combinations, ids=ids, indirect=True)
 
 
-def get_unique_id() -> str:
-    _id = uuid.uuid4()
-    return hashlib.sha256(_id.bytes).hexdigest()[:8]
-
-
 @pytest.fixture
 def app(request: "FixtureRequest") -> Pynenc:
     components: AppComponents = request.param
-    test_name = request.node.name.replace("[", "(").replace("]", ")")
-    test_module = request.node.module.__name__
-    app = Pynenc(app_id=f"{test_module}.{test_name}")
+    test_module, test_name = util.get_module_name(request)
+    app = Pynenc(
+        app_id=f"{test_module}.{test_name}", config_values={"logging_level": "debug"}
+    )
     app.set_broker_cls(components.broker)
     app.set_orchestrator_cls(components.orchestrator)
     app.set_serializer_cls(components.serializer)
@@ -139,3 +135,49 @@ def task_cycle(app: Pynenc) -> "Task":
     cycle_start.app = app
     cycle_end.app = app
     return cycle_start
+
+
+@mock_app.task
+def raise_exception() -> Any:
+    raise Exception("test")
+
+
+@pytest.fixture(scope="function")
+def task_raise_exception(app: Pynenc) -> "Task":
+    raise_exception.app = app
+    return raise_exception
+
+
+@mock_app.task
+def get_text() -> str:
+    return "example"
+
+
+@mock_app.task
+def get_upper() -> str:
+    return get_text().result.upper()
+
+
+@pytest.fixture(scope="function")
+def task_get_text(app: Pynenc) -> "Task":
+    get_text.app = app
+    return get_text
+
+
+@pytest.fixture(scope="function")
+def task_get_upper(app: Pynenc) -> "Task":
+    get_text.app = app
+    get_upper.app = app
+    return get_upper
+
+
+@mock_app.task
+def direct_cycle() -> str:
+    invocation = direct_cycle()
+    return invocation.result.upper()
+
+
+@pytest.fixture(scope="function")
+def task_direct_cycle(app: Pynenc) -> "Task":
+    direct_cycle.app = app
+    return direct_cycle

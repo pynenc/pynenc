@@ -28,10 +28,11 @@ line-length = 88
 target-version = ['py311']
 required-version = '23.3.0'
 exclude = '''
-(
-  | \.mypy_cache
-  | \venv
-)
+/(
+  \.mypy_cache
+  | env
+  | venv
+)/
 '''
 
 [tool.ruff]
@@ -43,6 +44,7 @@ unfixable = []
 exclude = [
   ".eggs/*.py",
   ".venv",
+  ".env",
 ]
 
 [tool.mypy]
@@ -51,7 +53,7 @@ warn_unused_configs = true
 ignore_missing_imports = true
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
-exclude = 'venv'
+exclude = 'venv,env'
 show_error_codes = true
 pretty = true
 allow_redefinition = true
@@ -76,7 +78,7 @@ disable = [
 ]
 
 [tool.pylint.master]
-ignore = "venv"
+ignore = "venv,env"
 
 
 [project.optional-dependencies]
@@ -88,3 +90,6 @@ test = [
     "black == 23.3.0",
     "types-redis == 4.6.0.2",
 ]
+
+[pytest]
+log_cli = true

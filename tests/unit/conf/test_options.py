@@ -1,15 +1,6 @@
-def test_todo() -> None:
+def test_config() -> None:
     raise NotImplementedError("TODO")
-    # check that all the options can be serialized and deserialized
-    # add redis config options
-
-
-def test_batch() -> None:
-    raise NotImplementedError("TODO")
-    # test that the batch option works as expected
-    # test auto parallelization
-    # test that on yield of results it will block until any row is available
-    # test that on list it will block until all rows are available
+    # tests for yaml, toml and json config files
 
 
 def test_profiling() -> None:
@@ -21,6 +12,7 @@ def test_profiling() -> None:
 def test_logging() -> None:
     raise NotImplementedError("TODO")
     # test the logging module
+    # test adding invocation_id from logging
 
 
 def test_retry() -> None:

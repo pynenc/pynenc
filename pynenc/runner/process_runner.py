@@ -82,7 +82,7 @@ class ProcessRunner(BaseRunner):
                 self.app.orchestrator.set_invocations_status(
                     list(waiting_invocations), InvocationStatus.RUNNING
                 )
-        time.sleep(1)
+        time.sleep(self.conf.runner_loop_sleep_time_sec)
 
     def waiting_for_results(
         self,
@@ -92,7 +92,7 @@ class ProcessRunner(BaseRunner):
     ) -> None:
         # called from subprocess memory space
         if not running_invocation:
-            time.sleep(1)
+            time.sleep(self.conf.invocation_wait_results_sleep_time_sec)
             return
 
         self.app.orchestrator.set_invocation_status(

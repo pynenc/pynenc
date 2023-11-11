@@ -1,4 +1,5 @@
 from collections import defaultdict
+from functools import cached_property
 import multiprocessing
 import threading
 import time
@@ -7,6 +8,7 @@ from typing import TYPE_CHECKING, Optional, NamedTuple, Any
 from pynenc.invocation import DistributedInvocation, InvocationStatus
 
 from .base_runner import BaseRunner
+from ..conf.config_runner import ConfigMemRunner
 
 if TYPE_CHECKING:
     from ..app import Pynenc
@@ -25,6 +27,13 @@ class MemRunner(BaseRunner):
     threads: dict[str, ThreadInfo]
     max_threads: int
     waiting_threads: int
+
+    @cached_property
+    def conf(self) -> ConfigMemRunner:
+        return ConfigMemRunner(
+            config_values=self.app.config_values,
+            config_filepath=self.app.config_filepath,
+        )
 
     def _on_start(self) -> None:
         # Initialize thread list and condition dictionary
@@ -55,6 +64,7 @@ class MemRunner(BaseRunner):
             thread = threading.Thread(target=invocation.run, daemon=True)
             thread.start()
             self.threads[invocation.invocation_id] = ThreadInfo(thread, invocation)
+            self.app.logger.debug(f"Running invocation {invocation.invocation_id}")
         for invocation in list(self.wait_conditions):
             if invocation.status.is_final():
                 # Notify all waiting threads to continue
@@ -67,7 +77,10 @@ class MemRunner(BaseRunner):
                     list(waiting_invocations), InvocationStatus.RUNNING
                 )
                 self.waiting_threads -= len(waiting_invocations)
-        time.sleep(1)
+                self.app.logger.debug(
+                    f"Invocation {invocation.invocation_id} on final {invocation.status=} resuming {waiting_invocations=}"
+                )
+        time.sleep(self.conf.runner_loop_sleep_time_sec)
 
     def waiting_for_results(
         self,
@@ -82,13 +95,22 @@ class MemRunner(BaseRunner):
         if not running_invocation:
             # running from outside this runner (user instantiate an app with this runner class,
             # but ask for an invocation result outside of the runner processes)
-            time.sleep(1)
+            self.app.logger.debug(
+                f"Waiting for {result_invocations=} from outside this runner"
+            )
+            time.sleep(self.conf.invocation_wait_results_sleep_time_sec)
             return
         self.app.orchestrator.set_invocation_status(
             running_invocation, InvocationStatus.PAUSED
+        )
+        self.app.logger.debug(
+            f"Pausing invocation {running_invocation.invocation_id} is waiting for others to finish"
         )
         for result_invocation in result_invocations:
             self.wait_invocation[result_invocation].add(running_invocation)
             self.waiting_threads += 1
             with self.wait_conditions[result_invocation]:
+                self.app.logger.debug(
+                    f"Invocation {running_invocation.invocation_id} is waiting for invocation {result_invocation.invocation_id} to finish"
+                )
                 self.wait_conditions[result_invocation].wait()

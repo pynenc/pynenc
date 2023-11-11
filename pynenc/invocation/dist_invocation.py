@@ -78,6 +78,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             self.app.orchestrator.set_invocation_result(self, result)
         except Exception as ex:
             self.app.orchestrator.set_invocation_exception(self, ex)
+            raise ex
         finally:
             context.invocation_context[self.app.app_id] = previous_invocation_context
 

@@ -256,3 +256,11 @@ class CycleDetectedError(PynencError):
 
 class RunnerError(PynencError):
     """Base class for all Runner related errors."""
+
+
+class ConfigError(PynencError):
+    """Base class for all the config related errors"""
+
+
+class ConfigMultiInheritanceError(ConfigError):
+    """Error related with multiinheritance of config fields"""

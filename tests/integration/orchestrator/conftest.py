@@ -4,6 +4,7 @@ import pytest
 
 from pynenc.orchestrator.base_orchestrator import BaseOrchestrator
 from tests.conftest import MockPynenc
+from tests import util
 from pynenc.call import Call
 from pynenc.invocation import DistributedInvocation
 
@@ -23,9 +24,11 @@ def pytest_generate_tests(metafunc: "Metafunc") -> None:
 
 @pytest.fixture
 def app(request: "FixtureRequest") -> MockPynenc:
-    app = MockPynenc()
+    test_module, test_name = util.get_module_name(request)
+    app = MockPynenc(app_id=f"{test_module}.{test_name}")
     app.orchestrator = request.param(app)
-    app.orchestrator.purge()
+    app.purge()
+    request.addfinalizer(app.purge)
     return app
 
 

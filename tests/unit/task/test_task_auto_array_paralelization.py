@@ -1,10 +1,8 @@
-from unittest.mock import patch
 from typing import Any
-import os
 
 import pytest
 
-from pynenc import Pynenc, Task, TaskOptions
+from pynenc import Pynenc
 from pynenc.invocation import SynchronousInvocationGroup, DistributedInvocationGroup
 
 
@@ -48,16 +46,20 @@ def test_task_only_module_level(app: Pynenc) -> None:
 
 def test_sync_invocation_group(app: Pynenc) -> None:
     """
-    Test that the Task will return a SyncResult if PYNENC_DEV_MODE_FORCE_SYNC_TASK=True
+    Test that the Task will return a SyncResult if dev_mode_force_sync_tasks=True
     """
-    with patch.dict(os.environ, {"PYNENC_DEV_MODE_FORCE_SYNC_TASK": "True"}):
-        invocation_group = add.parallelize([(1, 1), add.args(1, 2), {"x": 2, "y": 3}])
+    add.app = Pynenc(
+        config_values={"dev_mode_force_sync_tasks": True}
+    )  # re-instantiate the app, config os.environ is cached
+    # app.conf.dev_mode_force_sync_tasks = True
+    invocation_group = add.parallelize([(1, 1), add.args(1, 2), {"x": 2, "y": 3}])
     assert isinstance(invocation_group, SynchronousInvocationGroup)
     assert list(invocation_group.results) == [2, 3, 5]
 
 
 def test_async_invocation(app: Pynenc) -> None:
     """Test that the task will return an Async result"""
+    app.conf.dev_mode_force_sync_tasks = False
     invocation_group = add.parallelize([(1, 1), add.args(1, 2), {"x": 2, "y": 3}])
     assert isinstance(invocation_group, DistributedInvocationGroup)
 

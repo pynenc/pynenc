@@ -1,3 +1,4 @@
+from functools import cached_property
 from time import time
 from typing import Any, Iterator, Optional, TYPE_CHECKING
 
@@ -5,6 +6,7 @@ import redis
 
 from pynenc.invocation import DistributedInvocation
 
+from ..conf.config_orchestrator import ConfigOrchestratorRedis
 from .base_orchestrator import BaseOrchestrator, BaseCycleControl, BaseBlockingControl
 from ..call import Call
 from ..types import Params, Result
@@ -303,7 +305,7 @@ class TaskRedisCache:
 
     def auto_purge(self) -> None:
         end_time = (
-            time() - self.app.conf.orchestrator_auto_final_invocation_purge_hours * 3600
+            time() - self.app.orchestrator.conf.auto_final_invocation_purge_hours * 3600
         )
         for _invocation_id in self.client.zrangebyscore(
             self.key.invocation_auto_purge(), 0, end_time
@@ -390,11 +392,20 @@ class TaskRedisCache:
 
 class RedisOrchestrator(BaseOrchestrator):
     def __init__(self, app: "Pynenc") -> None:
-        self.client = redis.Redis(host="localhost", port=6379, db=0)
+        super().__init__(app)
+        self.client = redis.Redis(
+            host=self.conf.redis_host, port=self.conf.redis_port, db=self.conf.redis_db
+        )
         self.redis_cache = TaskRedisCache(app, self.client)
         self._cycle_control: Optional[RedisCycleControl] = None
         self._blocking_control: Optional[RedisBlockingControl] = None
-        super().__init__(app)
+
+    @cached_property
+    def conf(self) -> ConfigOrchestratorRedis:
+        return ConfigOrchestratorRedis(
+            config_values=self.app.config_values,
+            config_filepath=self.app.config_filepath,
+        )
 
     @property
     def cycle_control(self) -> "RedisCycleControl":
@@ -424,11 +435,13 @@ class RedisOrchestrator(BaseOrchestrator):
         status: "InvocationStatus",
     ) -> None:
         self.redis_cache.set_status(invocation, status)
+        self.app.logger.debug(f"Set status of invocation {invocation} to {status}")
 
     def _set_invocation_pending_status(
         self, invocation: "DistributedInvocation"
     ) -> None:
         self.redis_cache.set_pending_status(invocation)
+        self.app.logger.debug(f"Set status of invocation {invocation} to pending")
 
     def set_up_invocation_auto_purge(
         self, invocation: DistributedInvocation[Params, Result]

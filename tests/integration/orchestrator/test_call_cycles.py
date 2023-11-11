@@ -176,33 +176,36 @@ def test_auto_purge(test_vars: Vars) -> None:
     assert get_invocations() == [test_vars.inv1]
     # we mark the inv1 to auto_purge it
     # but the auto_purge is set to 24 hours
-    test_vars.app.conf.orchestrator_auto_final_invocation_purge_hours = 24.0
+    test_vars.app.orchestrator.conf.auto_final_invocation_purge_hours = 24.0
     test_vars.app.orchestrator.set_up_invocation_auto_purge(test_vars.inv1)
     # auto_purge should not purge it
     test_vars.app.orchestrator.auto_purge()
     assert get_invocations() == [test_vars.inv1]
     # if we change auto_purge to 0
-    test_vars.app.conf.orchestrator_auto_final_invocation_purge_hours = 0.0
+    test_vars.app.orchestrator.conf.auto_final_invocation_purge_hours = 0.0
     # auto_purge should purge it
     test_vars.app.orchestrator.auto_purge()
     assert get_invocations() == []
 
 
 def test_config_cycle_control(test_vars: Vars) -> None:
+    test_vars.app.orchestrator.conf.cycle_control = True
     test_vars.app.orchestrator.set_invocation_run(test_vars.inv1, test_vars.inv2)
     test_vars.app.orchestrator.set_invocation_run(test_vars.inv2, test_vars.inv3)
     # it should avoid the cycle between inv1 -> inv2 -> inv3 -> inv1
-    test_vars.app.conf.cycle_control = True
+
     with pytest.raises(CycleDetectedError):
         test_vars.app.orchestrator.add_call_and_check_cycles(
             test_vars.inv3, test_vars.inv1
         )
+        print(test_vars.app)
     # test it will not check for cycles when cycle_control is disabled
-    test_vars.app.conf.cycle_control = False
+    test_vars.app.orchestrator.conf.cycle_control = False
     test_vars.app.orchestrator.add_call_and_check_cycles(test_vars.inv3, test_vars.inv1)
 
 
 def test_config_blocking_control(test_vars: Vars) -> None:
+    test_vars.app.orchestrator.conf.blocking_control = True
     test_vars.app.orchestrator.set_invocation_status(
         test_vars.inv1, InvocationStatus.REGISTERED
     )
@@ -213,11 +216,11 @@ def test_config_blocking_control(test_vars: Vars) -> None:
     test_vars.app.orchestrator.waiting_for_results(test_vars.inv1, [test_vars.inv2])
     # test_vars.app.orchestrator.waiting_for_results(test_vars.inv2, [test_vars.inv3])
     # get invocations to run
-    test_vars.app.conf.blocking_control = True
+
     inv_to_run = list(test_vars.app.orchestrator.get_blocking_invocations(3))
     same_inv = list(test_vars.app.orchestrator.get_blocking_invocations(3))
     assert inv_to_run == same_inv == [test_vars.inv2]
     # test it will not check for blocking invocations when blocking_control is disabled
-    test_vars.app.conf.blocking_control = False
+    test_vars.app.orchestrator.conf.blocking_control = False
     inv_to_run = list(test_vars.app.orchestrator.get_blocking_invocations(3))
     assert inv_to_run == []

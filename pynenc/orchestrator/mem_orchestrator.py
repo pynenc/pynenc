@@ -257,7 +257,7 @@ class TaskInvocationCache(Generic[Result]):
 
     def auto_purge(self) -> None:
         end_time = (
-            time() - self.app.conf.orchestrator_auto_final_invocation_purge_hours * 3600
+            time() - self.app.orchestrator.conf.auto_final_invocation_purge_hours * 3600
         )
         while self.invocations_to_purge and self.invocations_to_purge[0][0] <= end_time:
             _, elem = self.invocations_to_purge.popleft()

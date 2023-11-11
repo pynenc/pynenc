@@ -1,7 +1,10 @@
 from abc import ABC, abstractmethod
+from functools import cached_property
 from typing import TYPE_CHECKING, Optional, Iterator, Any
 
-from ..invocation import InvocationStatus, ReusedInvocation
+from ..conf.config_orchestrator import ConfigOrchestrator
+from ..context import invocation_context
+from ..invocation import InvocationStatus, ReusedInvocation, DistributedInvocation
 from ..exceptions import (
     SingleInvocationWithDifferentArgumentsError,
     PendingInvocationLockError,
@@ -11,7 +14,6 @@ if TYPE_CHECKING:
     from ..app import Pynenc
     from ..call import Call
     from ..task import Task
-    from ..invocation import DistributedInvocation
     from ..types import Params, Result, Args
 
 
@@ -60,6 +62,13 @@ class BaseBlockingControl(ABC):
 class BaseOrchestrator(ABC):
     def __init__(self, app: "Pynenc") -> None:
         self.app = app
+
+    @cached_property
+    def conf(self) -> ConfigOrchestrator:
+        return ConfigOrchestrator(
+            config_values=self.app.config_values,
+            config_filepath=self.app.config_filepath,
+        )
 
     @abstractmethod
     def get_existing_invocations(
@@ -122,7 +131,7 @@ class BaseOrchestrator(ABC):
         callee_invocation: "DistributedInvocation[Params, Result]",
     ) -> None:
         """Adds a new call between invocations and raise an exception to prevent the formation of a call cycle"""
-        if self.app.conf.cycle_control:
+        if self.conf.cycle_control:
             self.cycle_control.add_call_and_check_cycles(
                 caller_invocation, callee_invocation
             )
@@ -130,7 +139,7 @@ class BaseOrchestrator(ABC):
 
     def clean_up_invocation_cycles(self, invocation: "DistributedInvocation") -> None:
         """Called when an invocation is finished and therefore cannot be part of a cycle anymore"""
-        if self.app.conf.cycle_control:
+        if self.conf.cycle_control:
             self.cycle_control.clean_up_invocation_cycles(invocation)
 
     #############################################
@@ -142,7 +151,7 @@ class BaseOrchestrator(ABC):
 
     def release_waiters(self, waited: "DistributedInvocation") -> None:
         """Called when an invocation is finished and therefore cannot block other invocations anymore"""
-        if self.app.conf.blocking_control:
+        if self.app.orchestrator.conf.blocking_control:
             self.blocking_control.release_waiters(waited)
 
     def waiting_for_results(
@@ -151,7 +160,7 @@ class BaseOrchestrator(ABC):
         result_invocations: list["DistributedInvocation[Params, Result]"],
     ) -> None:
         """Called when an Optional[invocation] is waiting in the result result of another invocation."""
-        if self.app.conf.blocking_control and caller_invocation:
+        if self.app.orchestrator.conf.blocking_control and caller_invocation:
             self.blocking_control.waiting_for_results(
                 caller_invocation, result_invocations
             )
@@ -163,7 +172,7 @@ class BaseOrchestrator(ABC):
         but are not getting blocked by any invocation.
         order by age, the oldest invocation first.
         """
-        if self.app.conf.blocking_control:
+        if self.app.orchestrator.conf.blocking_control:
             yield from self.blocking_control.get_blocking_invocations(
                 max_num_invocations
             )
@@ -254,8 +263,11 @@ class BaseOrchestrator(ABC):
     def _route_new_call_invocation(
         self, call: "Call[Params, Result]"
     ) -> "DistributedInvocation[Params, Result]":
-        new_invocation = self.app.broker.route_call(call)
+        new_invocation = DistributedInvocation(
+            call, parent_invocation=invocation_context.get(self.app.app_id)
+        )
         self.set_invocation_status(new_invocation, InvocationStatus.REGISTERED)
+        self.app.broker.route_invocation(new_invocation)
         return new_invocation
 
     def route_call(self, call: "Call") -> "DistributedInvocation[Params, Result]":

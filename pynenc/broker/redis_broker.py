@@ -1,8 +1,9 @@
-from collections import deque
+from functools import cached_property
 from typing import TYPE_CHECKING, Optional
 
 import redis
 
+from ..conf.config_broker import ConfigBrokerRedis
 from .base_broker import BaseBroker
 from ..invocation import DistributedInvocation
 from ..util.redis_keys import Key
@@ -33,9 +34,18 @@ class RedisQueue:
 
 class RedisBroker(BaseBroker):
     def __init__(self, app: "Pynenc") -> None:
-        client = redis.Redis(host="localhost", port=6379, db=0)
-        self.queue = RedisQueue(app, client, "default")
         super().__init__(app)
+        client = redis.Redis(
+            host=self.conf.redis_host, port=self.conf.redis_port, db=self.conf.redis_db
+        )
+        self.queue = RedisQueue(app, client, "default")
+
+    @cached_property
+    def conf(self) -> ConfigBrokerRedis:
+        return ConfigBrokerRedis(
+            config_values=self.app.config_values,
+            config_filepath=self.app.config_filepath,
+        )
 
     def route_invocation(self, invocation: "DistributedInvocation") -> None:
         self.queue.send_message(invocation.to_json())

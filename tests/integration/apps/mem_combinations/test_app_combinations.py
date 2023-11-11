@@ -72,76 +72,61 @@ def test_cycle_detection(task_cycle: Task) -> None:
     thread.join()
 
 
-# def test_raise_exception(app: Pynenc) -> None:
-#     """Test that an exception is raised if the task raises an exception"""
+def test_raise_exception(task_raise_exception: Task) -> None:
+    """Test that an exception is raised if the task raises an exception"""
 
-#     def run_in_thread() -> None:
-#         app.runner.run()
+    app = task_raise_exception.app
 
-#     @app.task
-#     def raise_exception() -> Any:
-#         raise Exception("test")
+    def run_in_thread() -> None:
+        app.runner.run()
 
-#     invocation = raise_exception()
-#     thread = threading.Thread(target=run_in_thread, daemon=True)
-#     thread.start()
-#     with pytest.raises(Exception):
-#         invocation.result
-#     app.runner.stop_runner_loop()
-#     thread.join()
+    invocation = task_raise_exception()
+    thread = threading.Thread(target=run_in_thread, daemon=True)
+    thread.start()
+    with pytest.raises(Exception):
+        invocation.result
+    app.runner.stop_runner_loop()
+    thread.join()
 
 
-# def test_mem_sub_invocation_dependency(app: Pynenc) -> None:
-#     """Test when an invocation requires the result of another invocation"""
+def test_sub_invocation_dependency(task_get_upper: Task) -> None:
+    """Test when an invocation requires the result of another invocation"""
 
-#     def run_in_thread() -> None:
-#         app.runner.run()
+    app = task_get_upper.app
 
-#     @app.task
-#     def get_text() -> str:
-#         return "example"
+    def run_in_thread() -> None:
+        app.runner.run()
 
-#     @app.task
-#     def get_upper() -> str:
-#         return get_text().result.upper()
-
-#     thread = threading.Thread(target=run_in_thread, daemon=True)
-#     thread.start()
-#     assert get_upper().result == "EXAMPLE"
-#     app.runner.stop_runner_loop()
-#     thread.join()
+    thread = threading.Thread(target=run_in_thread, daemon=True)
+    thread.start()
+    assert task_get_upper().result == "EXAMPLE"
+    app.runner.stop_runner_loop()
+    thread.join()
 
 
-# def test_avoid_cycles(app: Pynenc) -> None:
-#     """Test that a cycle in the dependency graph is detected"""
+def test_avoid_direct_self_cycles(task_direct_cycle: Task) -> None:
+    """Test that a cycle in the dependency graph is detected"""
 
-#     # raise NotImplementedError()
+    app = task_direct_cycle.app
 
-#     def run_in_thread() -> None:
-#         app.runner.run()
+    def run_in_thread() -> None:
+        app.runner.run()
 
-#     @app.task
-#     def get_upper() -> str:
-#         invocation = get_upper()
-#         return invocation.result.upper()
+    thread = threading.Thread(target=run_in_thread, daemon=True)
+    thread.start()
+    # the request of invocation should work without problem,
+    # as the cycle wasn't executed yet
+    invocation = task_direct_cycle()
+    with pytest.raises(CycleDetectedError) as exc_info:
+        # however, when retrieving the result, an exception should be raised
+        # because the function is calling itself
+        invocation.result
 
-#     thread = threading.Thread(target=run_in_thread, daemon=True)
-#     thread.start()
-#     # the request of invocation should work without problem,
-#     # as the cycle wasn't executed yet
-#     invocation = get_upper()
-#     with pytest.raises(CycleDetectedError) as exc_info:
-#         # however, when retrieving the result, an exception should be raised
-#         # because the function is calling itself
-#         invocation.result
-
-#     expected_error = (
-#         "A cycle was detected: Cycle detected:\n"
-#         "- test_mem_app.get_upper()\n"
-#         "- back to test_mem_app.get_upper()"
-#     )
-
-#     assert str(exc_info.value) == expected_error
-
-#     app.runner.stop_runner_loop()
-#     thread.join()
+    expected_error = (
+        "A cycle was detected: Cycle detected:\n"
+        "- conftest.direct_cycle()\n"
+        "- back to conftest.direct_cycle()"
+    )
+    assert str(exc_info.value) == expected_error
+    app.runner.stop_runner_loop()
+    thread.join()

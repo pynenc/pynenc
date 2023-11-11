@@ -10,6 +10,7 @@ from pynenc.state_backend import BaseStateBackend
 from pynenc.invocation import DistributedInvocation, InvocationStatus
 from pynenc.util.subclasses import get_all_subclasses
 from tests.conftest import MockPynenc
+from tests import util
 
 
 if TYPE_CHECKING:
@@ -37,9 +38,10 @@ def dummy() -> None:
 
 @pytest.fixture
 def app(request: "FixtureRequest") -> MockPynenc:
-    app = MockPynenc()
+    app = MockPynenc(app_id="int-state_backend" + util.get_unique_id())
     app.state_backend = request.param(app)
-    app.state_backend.purge()
+    app.purge()
+    request.addfinalizer(app.purge)
     return app
 
 

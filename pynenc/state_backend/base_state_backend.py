@@ -2,10 +2,12 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
+from functools import cached_property
 import json
 import threading
 from typing import TYPE_CHECKING, Any, Optional
 
+from ..conf.config_state_backend import ConfigStateBackend
 from ..exceptions import InvocationNotFoundError
 from ..invocation import InvocationStatus
 
@@ -51,6 +53,13 @@ class BaseStateBackend(ABC):
     def __init__(self, app: "Pynenc") -> None:
         self.app = app
         self.invocation_threads: dict[str, list[threading.Thread]] = defaultdict(list)
+
+    @cached_property
+    def conf(self) -> ConfigStateBackend:
+        return ConfigStateBackend(
+            config_values=self.app.config_values,
+            config_filepath=self.app.config_filepath,
+        )
 
     def wait_for_all_async_operations(self) -> None:
         """Blocks until all asynchronous status operations are finished."""

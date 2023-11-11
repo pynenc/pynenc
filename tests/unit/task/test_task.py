@@ -39,10 +39,10 @@ def test_instanciate_task_with_args() -> None:
 
 def test_sync_run_with_dev_mode_force_sync_invocation() -> None:
     """
-    Test that the Task will return a SyncResult if PYNENC_DEV_MODE_FORCE_SYNC_TASK=True
+    Test that the Task will return a SyncResult if PYNENC_DEV_MODE_FORCE_SYNC_TASKS=True
     """
-    add.app = Pynenc()  # re-instantiate the app, config os.environ is cached
-    with patch.dict(os.environ, {"PYNENC_DEV_MODE_FORCE_SYNC_TASK": "True"}):
+    with patch.dict(os.environ, {"PYNENC__DEV_MODE_FORCE_SYNC_TASKS": "True"}):
+        add.app = Pynenc()  # re-instantiate the app, config os.environ is cached
         invocation = add(1, 2)
 
     assert isinstance(invocation, SynchronousInvocation)
@@ -51,8 +51,8 @@ def test_sync_run_with_dev_mode_force_sync_invocation() -> None:
 
 def test_async_invocation() -> None:
     """Test that the task will return an Async result"""
-    add.app = Pynenc()  # re-instantiate the app, config os.environ is cached
-    with patch.dict(os.environ, {"PYNENC_DEV_MODE_FORCE_SYNC_TASK": ""}):
+    with patch.dict(os.environ, {"PYNENC__DEV_MODE_FORCE_SYNC_TASKS": ""}):
+        add.app = Pynenc()  # re-instantiate the app, config os.environ is cached
         invocation = add(1, 2)
     assert isinstance(invocation, DistributedInvocation)
 

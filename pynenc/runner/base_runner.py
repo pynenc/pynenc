@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from functools import cached_property
 import signal
 import threading
 import time
@@ -7,6 +8,7 @@ import warnings
 
 
 from pynenc.exceptions import RunnerNotExecutableError
+from ..conf.config_runner import ConfigRunner
 
 if TYPE_CHECKING:
     from ..app import Pynenc
@@ -38,6 +40,13 @@ class BaseRunner(ABC):
         self.app.runner = self
         self.running = False
 
+    @cached_property
+    def conf(self) -> ConfigRunner:
+        return ConfigRunner(
+            config_values=self.app.config_values,
+            config_filepath=self.app.config_filepath,
+        )
+
     @abstractmethod
     def _on_start(self) -> None:
         """This method is called when the runner starts"""
@@ -52,6 +61,7 @@ class BaseRunner(ABC):
                 "Running in a secondary thread. Signal handling will be skipped."
             )
         self.running = True
+        self.app.logger.info(f"Starting runner {self.__class__.__name__}...")
         self._on_start()
 
     @abstractmethod
@@ -61,6 +71,7 @@ class BaseRunner(ABC):
     def on_stop(self) -> None:
         """This method is called when the runner stops"""
         self.running = False
+        self.app.logger.info(f"Stopping runner {self.__class__.__name__}...")
         self._on_stop()
 
     @abstractmethod
@@ -74,7 +85,9 @@ class BaseRunner(ABC):
         self, signum: Optional[int] = None, frame: Optional["FrameType"] = None
     ) -> None:
         """Stops the runner loop"""
-        del signum, frame
+        self.app.logger.info(
+            f"Received signal {signum=} {frame=} Stopping runner loop..."
+        )
         self.running = False
 
     @abstractmethod
@@ -101,7 +114,10 @@ class BaseRunner(ABC):
             while self.running:
                 self.runner_loop_iteration()
         except KeyboardInterrupt:
-            print("Shutting down gracefully...")
+            self.app.logger.warning("KeyboardInterrupt received. Stopping runner...")
+        except Exception as e:
+            self.app.logger.exception(f"Exception in runner loop: {e}")
+            raise e
         finally:
             self.on_stop()
 
