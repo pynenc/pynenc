@@ -29,5 +29,5 @@ python:
    install:
      - method: pip
        path: .
-       # poetry export -f requirements.txt --output requirements.txt
-     - requirements: requirements.txt
+       # poetry export -f requirements.txt --output docs/requirements.txt --dev
+     - requirements: docs/requirements.txt
