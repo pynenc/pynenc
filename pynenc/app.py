@@ -197,7 +197,7 @@ class Pynenc:
         ----------
         func : Callable, optional
             The function to be converted into a BaseTask instance.
-        **options : dict
+        ``**options`` : dict
             The options to be passed to the BaseTask instance.
 
         Returns

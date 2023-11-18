@@ -190,7 +190,7 @@ class Task(Generic[Params, Result]):
         iterable of calls to the task,
         will accept a tuple positional arguments,
         a dict of keyword arguments,
-        or an Arguments instance, eg: task.args(*args, **kwargs))
+        or an Arguments instance, eg: task.args(``*args``, ``**kwargs``))
         """
         group_cls: type[BaseInvocationGroup]
         if self.app.conf.dev_mode_force_sync_tasks:
