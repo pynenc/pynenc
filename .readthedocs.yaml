@@ -28,6 +28,6 @@ sphinx:
 python:
    install:
      - method: pip
-       path: ./pynenc
+       path: .
        # poetry export -f requirements.txt --output requirements.txt
      - requirements: requirements.txt
