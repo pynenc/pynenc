@@ -2,15 +2,16 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from pynenc.orchestrator.base_orchestrator import BaseOrchestrator
-from tests.conftest import MockPynenc
-from tests import util
 from pynenc.call import Call
 from pynenc.invocation import DistributedInvocation
+from pynenc.orchestrator.base_orchestrator import BaseOrchestrator
+from tests import util
+from tests.conftest import MockPynenc
 
 if TYPE_CHECKING:
-    from _pytest.python import Metafunc
     from _pytest.fixtures import FixtureRequest
+    from _pytest.python import Metafunc
+
     from pynenc.task import Task
 
 

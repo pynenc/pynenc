@@ -18,10 +18,10 @@ To contribute to Pynenc once it's open for contributions, follow these typical s
 1. **Fork the Repository**: Start by forking the Pynenc repository (https://github.com/pynenc/pynenc) on GitHub to your own account.
 
 2. **Clone the Fork**: Clone your fork to your local machine.
-   
+
    .. code-block:: bash
 
-       git clone https://github.com/your-username/pynenc.git
+       git clone https://github.com/pynenc/pynenc.git
        cd pynenc
 
 3. **Install Docker**: Make sure you have Docker installed on your system as it may be used for running services such as databases or other dependencies.
@@ -30,20 +30,33 @@ To contribute to Pynenc once it's open for contributions, follow these typical s
 
 4. **Install Poetry**: Pynenc uses Poetry for dependency management. Install Poetry using the recommended method from the official documentation at https://python-poetry.org/docs/#installation.
 
-5. **Set Up the Project**: Inside the project directory, set up your local development environment using Poetry.
+5. **Set Up the Project**: Inside the project directory, set up your local development environment using Poetry. This will install all dependencies, including those needed for development.
 
    .. code-block:: bash
 
        poetry install
 
-6. **Activate the Virtual Environment**: Use Poetry to activate the virtual environment.
+6. **Install Pre-commit Hooks**: After installing all dependencies, set up pre-commit hooks in your local repository. This ensures that code quality checks are automatically performed before each commit.
+
+   .. code-block:: bash
+
+       poetry run pre-commit install
+
+7. **Activate the Virtual Environment**: Use Poetry to activate the virtual environment.
 
    .. code-block:: bash
 
        poetry shell
 
-7. **Start Development**: You are now ready to start development. Make changes, commit them, and push them to your fork.
+8. **Start Development**: You are now ready to start development. Make changes, commit them, and push them to your fork.
 
-8. **Creating Pull Requests**: Once the project is open for contributions, you will be able to create pull requests from your fork to the main Pynenc repository.
+9. **Creating Pull Requests**: Once the project is open for contributions, you will be able to create pull requests from your fork to the main Pynenc repository.
+
+10. **Set Up Pre-commit Hooks**: To ensure code quality and consistency, set up pre-commit hooks in your local environment. These hooks will automatically check your commits for issues like formatting errors.
+
+   .. code-block:: bash
+
+       poetry run pre-commit install
+
 
 Remember, these steps will become applicable once the project is open for contributions. Until then, feel free to familiarize yourself with the codebase and the project's goals.

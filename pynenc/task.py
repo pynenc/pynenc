@@ -1,9 +1,10 @@
 from __future__ import annotations
-from dataclasses import dataclass
-from functools import cached_property
+
 import importlib
 import json
-from typing import TYPE_CHECKING, Generic, Any, Optional, Iterable, overload
+from dataclasses import dataclass
+from functools import cached_property
+from typing import TYPE_CHECKING, Any, Generic, Iterable
 
 from .arguments import Arguments
 from .call import Call
@@ -12,11 +13,11 @@ from .conf.single_invocation_pending import SingleInvocation
 from .invocation import (
     BaseInvocation,
     BaseInvocationGroup,
+    DistributedInvocationGroup,
     SynchronousInvocation,
     SynchronousInvocationGroup,
-    DistributedInvocationGroup,
 )
-from .types import Params, Result, Func, Args
+from .types import Func, Params, Result
 
 if TYPE_CHECKING:
     from .app import Pynenc
@@ -28,7 +29,7 @@ class TaskOptions:
 
     #: If True, only one request will be routed by the broker.
     #: Use this option for tasks that make no sense to execute multiple times in parallel or to avoid generating too much unnecessary tasks in the system.
-    single_invocation: Optional[SingleInvocation] = None
+    single_invocation: SingleInvocation | None = None
 
     #: If 0 auto parallelization will be disabled.
     #: If > 0, the iterable will be automatically split in chunks of this size and each chunk will be sent to a different worker.
@@ -36,7 +37,7 @@ class TaskOptions:
     auto_parallel_batch_size: int = 0
 
     #: Profiling will take care of storing profiling information for the task (this is a todo, will require further options).
-    profiling: Optional[str] = None
+    profiling: str | None = None
 
     def __post_init__(self) -> None:
         for attr, value in self.__dict__.items():
@@ -66,7 +67,7 @@ class TaskOptions:
         return json.dumps(self.to_dict())
 
     @classmethod
-    def from_dict(cls, options_dict: dict[str, Any]) -> "TaskOptions":
+    def from_dict(cls, options_dict: dict[str, Any]) -> TaskOptions:
         """Returns a new options from a dictionary"""
         for attr, value in options_dict.items():
             if isinstance(value, dict):
@@ -74,7 +75,7 @@ class TaskOptions:
         return cls(**options_dict)
 
     @classmethod
-    def from_json(cls, serialized: str) -> "TaskOptions":
+    def from_json(cls, serialized: str) -> TaskOptions:
         return cls.from_dict(json.loads(serialized))
 
 
@@ -147,7 +148,7 @@ class Task(Generic[Params, Result]):
         return task_id, function.func, options_dict
 
     @classmethod
-    def from_json(cls, app: Pynenc, serialized: str) -> "Task":
+    def from_json(cls, app: Pynenc, serialized: str) -> Task:
         """Returns a new task from a serialized task"""
         _, func, options = cls._from_json(app, serialized)
         return cls(app, func, options)
@@ -169,12 +170,12 @@ class Task(Generic[Params, Result]):
 
     def __call__(
         self, *args: Params.args, **kwargs: Params.kwargs
-    ) -> "BaseInvocation[Params, Result]":
+    ) -> BaseInvocation[Params, Result]:
         """Handles a call to the task"""
         arguments = Arguments.from_call(self.func, *args, **kwargs)
         return self._call(arguments)
 
-    def _call(self, arguments: Arguments) -> "BaseInvocation[Params, Result]":
+    def _call(self, arguments: Arguments) -> BaseInvocation[Params, Result]:
         """Route the call to the orchestrator if not in dev mode, otherwise run synchronously"""
         if self.app.conf.dev_mode_force_sync_tasks:
             return SynchronousInvocation(
@@ -185,7 +186,7 @@ class Task(Generic[Params, Result]):
 
     def parallelize(
         self, param_iter: Iterable[tuple | dict | Arguments]
-    ) -> "BaseInvocationGroup":
+    ) -> BaseInvocationGroup:
         """
         iterable of calls to the task,
         will accept a tuple positional arguments,

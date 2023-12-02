@@ -1,8 +1,6 @@
 from collections import deque
 from typing import TYPE_CHECKING, Optional
 
-from pynenc.invocation import DistributedInvocation
-
 from .base_broker import BaseBroker
 
 if TYPE_CHECKING:

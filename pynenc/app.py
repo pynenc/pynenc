@@ -1,20 +1,20 @@
 from functools import cached_property
-from typing import TYPE_CHECKING, Callable, overload, Optional, Any, Type
-
-from .conf.config_pynenc import ConfigPynenc
-from .task import Task
-from .broker import BaseBroker, MemBroker
-from .orchestrator import BaseOrchestrator, MemOrchestrator
-from .state_backend import BaseStateBackend, MemStateBackend
-from .serializer import BaseSerializer, JsonSerializer
-from .runner import BaseRunner, DummyRunner
-from .util.subclasses import get_subclass
-from .util.log import create_logger
 from logging import Logger
+from typing import TYPE_CHECKING, Any, Callable, Optional, Type, overload
+
+from .broker import BaseBroker, MemBroker
+from .conf.config_pynenc import ConfigPynenc
+from .exceptions import AlreadyInitializedError
+from .orchestrator import BaseOrchestrator, MemOrchestrator
+from .runner import BaseRunner, DummyRunner
+from .serializer import BaseSerializer, JsonSerializer
+from .state_backend import BaseStateBackend, MemStateBackend
+from .task import Task
+from .util.log import create_logger
+from .util.subclasses import get_subclass
 
 if TYPE_CHECKING:
     from .types import Func, Params, Result
-    from .invocation import DistributedInvocation
 
 
 class Pynenc:
@@ -88,14 +88,25 @@ class Pynenc:
         self._app_id = state["app_id"]
         object.__setattr__(self, "_app_id", self._app_id)
         self._orchestrator_cls = get_subclass(
-            BaseOrchestrator, state["orchestrator_cls"]
+            BaseOrchestrator,  # type: ignore # mypy issue #4717
+            state["orchestrator_cls"],
         )
-        self._broker_cls = get_subclass(BaseBroker, state["broker_cls"])
+        self._broker_cls = get_subclass(
+            BaseBroker,  # type: ignore # mypy issue #4717
+            state["broker_cls"],
+        )
         self._state_backend_cls = get_subclass(
-            BaseStateBackend, state["state_backend_cls"]
+            BaseStateBackend,  # type: ignore # mypy issue #4717
+            state["state_backend_cls"],
         )
-        self._serializer_cls = get_subclass(BaseSerializer, state["serializer_cls"])
-        self._runner_cls = get_subclass(BaseRunner, state["runner_cls"])
+        self._serializer_cls = get_subclass(
+            BaseSerializer,  # type: ignore # mypy issue #4717
+            state["serializer_cls"],
+        )
+        self._runner_cls = get_subclass(
+            BaseRunner,  # type: ignore # mypy issue #4717
+            state["runner_cls"],
+        )
         self.config_values = state["config_values"]
         self.config_filepath = state["config_filepath"]
         self.reporting = state["reporting"]
@@ -142,29 +153,29 @@ class Pynenc:
         self._runner_instance = runner_instance
 
     def set_orchestrator_cls(self, orchestrator_cls: Type[BaseOrchestrator]) -> None:
-        if self.is_initialized(prop := "orchestrator"):
-            raise Exception(
+        if self.is_initialized(property_name="orchestrator"):
+            raise AlreadyInitializedError(
                 f"Not possible to set orchestrator instance, already initialized {self._orchestrator_cls}"
             )
         self._orchestrator_cls = orchestrator_cls
 
     def set_broker_cls(self, broker_cls: Type[BaseBroker]) -> None:
-        if self.is_initialized(prop := "broker"):
-            raise Exception(
+        if self.is_initialized(property_name="broker"):
+            raise AlreadyInitializedError(
                 f"Not possible to set broker, already initialized {self._broker_cls}"
             )
         self._broker_cls = broker_cls
 
     def set_state_backend_cls(self, state_backend_cls: Type[BaseStateBackend]) -> None:
-        if self.is_initialized(prop := "state_backend"):
-            raise Exception(
+        if self.is_initialized(property_name="state_backend"):
+            raise AlreadyInitializedError(
                 f"Not possible to set state backend, already initialized {self._state_backend_cls}"
             )
         self._state_backend_cls = state_backend_cls
 
     def set_serializer_cls(self, serializer_cls: Type[BaseSerializer]) -> None:
-        if self.is_initialized(prop := "serializer"):
-            raise Exception(
+        if self.is_initialized(property_name="serializer"):
+            raise AlreadyInitializedError(
                 f"Not possible to set serializer, already initialized {self._serializer_cls}"
             )
         self._serializer_cls = serializer_cls

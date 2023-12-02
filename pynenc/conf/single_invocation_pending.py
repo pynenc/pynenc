@@ -1,4 +1,4 @@
-from typing import Optional, Any
+from typing import Any, Optional
 
 from .base_config_option import BaseConfigOption
 

@@ -2,15 +2,14 @@ from abc import ABC, abstractmethod
 from functools import cached_property
 from typing import TYPE_CHECKING, Optional
 
-from ..conf.config_broker import ConfigBroker
 from ..call import Call
+from ..conf.config_broker import ConfigBroker
 from ..context import invocation_context
 from ..invocation import DistributedInvocation
 from ..types import Params, Result
 
 if TYPE_CHECKING:
     from ..app import Pynenc
-    from ..task import Task
 
 
 class BaseBroker(ABC):

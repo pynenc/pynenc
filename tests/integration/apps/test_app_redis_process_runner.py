@@ -1,16 +1,16 @@
-from collections import Counter
 import threading
+from collections import Counter
 from typing import TYPE_CHECKING, Any
 
 import pytest
 
 from pynenc import Pynenc
 from pynenc.broker import RedisBroker
+from pynenc.exceptions import CycleDetectedError
 from pynenc.orchestrator import RedisOrchestrator
+from pynenc.runner import ProcessRunner
 from pynenc.serializer import JsonSerializer
 from pynenc.state_backend import RedisStateBackend
-from pynenc.runner import ProcessRunner
-from pynenc.exceptions import CycleDetectedError
 
 if TYPE_CHECKING:
     from types import ModuleType
@@ -40,17 +40,17 @@ def sum(x: int, y: int) -> int:
 
 @mp_app.task
 def cycle_start() -> None:
-    cycle_end().result
+    _ = cycle_end().result
 
 
 @mp_app.task
 def cycle_end() -> None:
-    cycle_start().result
+    _ = cycle_start().result
 
 
 @mp_app.task
 def raise_exception() -> Any:
-    raise Exception("test")
+    raise ValueError("test")
 
 
 @mp_app.task
@@ -113,7 +113,7 @@ def test_cycle_detection() -> None:
     # - next check task cycle_start/cycle_end
     # - does keeping invocation_context in app root work? does it require a tree or references?
     with pytest.raises(CycleDetectedError) as exc_info:
-        invocation.result
+        _ = invocation.result
 
     expected_error = (
         "A cycle was detected: Cycle detected:\n"
@@ -137,8 +137,8 @@ def test_raise_exception() -> None:
     invocation = raise_exception()
     thread = threading.Thread(target=run_in_thread, daemon=True)
     thread.start()
-    with pytest.raises(Exception):
-        invocation.result
+    with pytest.raises(ValueError):
+        _ = invocation.result
     mp_app.runner.stop_runner_loop()
     thread.join()
 
@@ -174,7 +174,7 @@ def test_avoid_direct_self_cycles() -> None:
     with pytest.raises(CycleDetectedError) as exc_info:
         # however, when retrieving the result, an exception should be raised
         # because the function is calling itself
-        invocation.result
+        _ = invocation.result
 
     expected_error = (
         "A cycle was detected: Cycle detected:\n"

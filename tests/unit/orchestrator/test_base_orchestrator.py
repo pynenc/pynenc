@@ -1,12 +1,6 @@
-from typing import TYPE_CHECKING
-
-from pynenc.invocation import DistributedInvocation, InvocationStatus
 from pynenc.conf import SingleInvocation
+from pynenc.invocation import DistributedInvocation, InvocationStatus
 from tests.conftest import MockPynenc
-
-if TYPE_CHECKING:
-    from tests.conftest import MockPynenc
-
 
 mock_base_app = MockPynenc()
 
@@ -39,7 +33,7 @@ def add_single_inv(x: int, y: int) -> int:
     return x + y
 
 
-def test_single_invocation(mock_base_app: "MockPynenc") -> None:
+def test_single_invocation(mock_base_app: MockPynenc) -> None:
     """Test that the when `task.options.single_invocation` is set the orchestrator
     will only route the task if do not exists a Pending instance
     """

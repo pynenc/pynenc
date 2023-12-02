@@ -1,18 +1,13 @@
 import threading
-import time
-import signal
-import os
-import pytest
 from typing import TYPE_CHECKING
-from unittest.mock import MagicMock
 
-from pynenc.runner.base_runner import DummyRunner
+import pytest
+
 from pynenc.exceptions import RunnerNotExecutableError
+from pynenc.runner.base_runner import DummyRunner
 
 if TYPE_CHECKING:
     from tests.conftest import MockPynenc
-    from pynenc.task import Task
-    from pynenc.types import Params, Result
 
 
 def test_run(mock_base_app: "MockPynenc") -> None:

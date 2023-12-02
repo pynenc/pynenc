@@ -1,19 +1,10 @@
-from dataclasses import dataclass
 from time import sleep
 from typing import TYPE_CHECKING
 
-import pytest
-
-from pynenc.arguments import Arguments
-from pynenc.call import Call
-from pynenc.exceptions import CycleDetectedError
 from pynenc.invocation import DistributedInvocation, InvocationStatus
-from tests.conftest import MockPynenc
-
 
 if TYPE_CHECKING:
-    from pynenc.task import Task
-    from pynenc import Pynenc
+    pass
 
 
 def test_pending_status_expiration(dummy_invocation: "DistributedInvocation") -> None:

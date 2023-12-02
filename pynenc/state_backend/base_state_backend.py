@@ -1,10 +1,10 @@
+import json
+import threading
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
 from functools import cached_property
-import json
-import threading
 from typing import TYPE_CHECKING, Any, Optional
 
 from ..conf.config_state_backend import ConfigStateBackend
@@ -15,7 +15,6 @@ if TYPE_CHECKING:
     from ..app import Pynenc
     from ..invocation import DistributedInvocation
     from ..types import Params, Result
-    from ..invocation import DistributedInvocation
 
 
 @dataclass

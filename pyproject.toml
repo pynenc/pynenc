@@ -5,6 +5,9 @@ description = "A simple task management system for complex distributed orchestra
 authors = ["Jose Diaz"]
 license = "MIT License"
 readme = "README.md"
+homepage = "https://pynenc.org"
+documentation = "https://docs.pynenc.org"
+repository = "https://github.com/pynenc/pynenc"
 classifiers = [
     "Development Status :: 1 - Planning",
     "Intended Audience :: Developers",
@@ -14,55 +17,69 @@ classifiers = [
     "Topic :: System :: Distributed Computing",
 ]
 
+
 [tool.poetry.dependencies]
-python = "^3.11"
+python = "~3.11"
 redis = "4.6.0"
 pyyaml = "^6.0.1"
 
 
 [tool.poetry.group.dev.dependencies]
-pytest = ">=7.3.1,<8.0.0"
-coverage = {version = ">=7.2.6,<8.0", extras = ["toml"]}
-mypy = "1.7.0"
-ruff = "0.0.47"
 black = "23.11.0"
+pytest = ">=7.3.1,<8.0.0"
+coverage = { version = ">=7.2.6,<8.0", extras = ["toml"] }
+mypy = "1.7.0"
 types-redis = "4.6.0.2"
+types-PyYAML = "6.0.12.12"
 sphinx = "^7.0"
 myst-parser = "^2"
 furo = "^2023"
+pre-commit = "^3.5.0"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
-[project.urls]
-homepage = 'https://pynenc.org'
-documentation = 'https://pynenc.org/docs/'
-repository = 'https://github.com/pynenc/pynenc'
 
+[tool.isort]
+profile = "black"
 
 [tool.black]
 line-length = 88
 target-version = ['py311']
-required-version = '23.3.0'
+required-version = '23.11.0'
 exclude = '''
 /(
-  \.mypy_cache
-  | env
-  | venv
+    \.mypy_cache
+    | \.env
+    | \.venv
 )/
 '''
 
+
+# [tool.flake8]
+# max-line-length = 88
+# exclude = [".venv", ".env", ".eggs"]
+# ignore = [
+#     "E203",  # Whitespace before ':' (conflicts with black)
+#     "W503",  # Line break before binary operator (conflicts with black)
+# ]
+
 [tool.ruff]
-line-length = 88
-update-check = false
-target-version = "py311"
-fix = true
-unfixable = []
-exclude = [
-  ".eggs/*.py",
-  ".venv",
-  ".env",
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "C",  # flake8-comprehensions
+    "B",  # flake8-bugbear
+    "UP", # pyupgrade
+]
+ignore = [
+    "E501", # line too long, handled by black
+    # "B008",  # do not perform function calls in argument defaults
+    # "C901",  # too complex
+    # "W191", # indentation contains tabs
 ]
 
 [tool.mypy]
@@ -78,25 +95,11 @@ allow_redefinition = true
 no_implicit_optional = true
 strict_equality = true
 
-[tool.pylint.messages_control]
-max-line-length = 88
-disable = [
-  "line-too-long",
-  "too-many-ancestors",
-  "too-many-arguments",
-  "too-many-boolean-expressions",
-  "too-many-branches",
-  "too-many-function-args",
-  "too-many-instance-attributes",
-  "too-many-locals",
-  "too-many-nested-blocks",
-  "too-many-public-methods",
-  "too-many-return-statements",
-  "too-many-statements",
-]
-
-[tool.pylint.master]
-ignore = "venv,env"
-
-[pytest]
+[tool.pytest]
 log_cli = true
+
+[tool.pytest.ini_options]
+markers = [
+    "mem: Memory classes tests",
+    "redis: Redis tests"
+]

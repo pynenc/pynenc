@@ -7,12 +7,10 @@ from pynenc.arguments import Arguments
 from pynenc.call import Call
 from pynenc.exceptions import CycleDetectedError
 from pynenc.invocation import DistributedInvocation, InvocationStatus
-from tests.conftest import MockPynenc
-
 
 if TYPE_CHECKING:
-    from pynenc.task import Task
     from pynenc import Pynenc
+    from pynenc.task import Task
 
 
 @dataclass

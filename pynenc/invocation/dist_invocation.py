@@ -1,16 +1,17 @@
 from __future__ import annotations
+
+import json
 from dataclasses import dataclass
 from functools import cached_property
-import json
-from typing import Iterator, Optional, TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Iterator
 
+from .. import context
 from ..arguments import Arguments
 from ..call import Call
-from .. import context
 from ..exceptions import InvocationError
-from .status import InvocationStatus
-from .base_invocation import BaseInvocation, BaseInvocationGroup
 from ..types import Params, Result
+from .base_invocation import BaseInvocation, BaseInvocationGroup
+from .status import InvocationStatus
 
 if TYPE_CHECKING:
     from ..app import Pynenc
@@ -21,8 +22,8 @@ if TYPE_CHECKING:
 class DistributedInvocation(BaseInvocation[Params, Result]):
     """"""
 
-    parent_invocation: Optional[DistributedInvocation]
-    _invocation_id: Optional[str] = None
+    parent_invocation: DistributedInvocation | None
+    _invocation_id: str | None = None
 
     def __post_init__(self) -> None:
         self.app.state_backend.upsert_invocation(self)
@@ -33,7 +34,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         return self._invocation_id or super().invocation_id
 
     @property
-    def status(self) -> "InvocationStatus":
+    def status(self) -> InvocationStatus:
         """Get the status of the invocation"""
         return self.app.orchestrator.get_invocation_status(self)
 
@@ -56,7 +57,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             object.__setattr__(self, key, value)
 
     @classmethod
-    def from_json(cls, app: "Pynenc", serialized: str) -> "DistributedInvocation":
+    def from_json(cls, app: Pynenc, serialized: str) -> DistributedInvocation:
         """Returns a new invocation from a serialized invocation"""
         inv_dict = json.loads(serialized)
         call = Call.from_json(app, inv_dict["call"])
@@ -67,7 +68,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             )
         return cls(call, parent_invocation, inv_dict["invocation_id"])
 
-    def run(self, runner_args: Optional[dict[str, Any]] = None) -> None:
+    def run(self, runner_args: dict[str, Any] | None = None) -> None:
         context.runner_args = runner_args
         # Set current invocation
         previous_invocation_context = context.invocation_context.get(self.app.app_id)
@@ -83,7 +84,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             context.invocation_context[self.app.app_id] = previous_invocation_context
 
     @property
-    def result(self) -> "Result":
+    def result(self) -> Result:
         if not self.status.is_final():
             self.app.orchestrator.waiting_for_results(self.parent_invocation, [self])
 
@@ -93,7 +94,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             )
         return self.get_final_result()
 
-    def get_final_result(self) -> "Result":
+    def get_final_result(self) -> Result:
         if not self.status.is_final():
             raise InvocationError(self.invocation_id, "Invocation is not final")
         if self.status == InvocationStatus.FAILED:
@@ -129,12 +130,12 @@ class ReusedInvocation(DistributedInvocation):
 
     # Due to single invocation functionality
     # keeps existing invocation + new argument if any change
-    diff_arg: Optional["Arguments"] = None
+    diff_arg: Arguments | None = None
 
     @classmethod
     def from_existing(
-        cls, invocation: DistributedInvocation, diff_arg: Optional["Arguments"] = None
-    ) -> "ReusedInvocation":
+        cls, invocation: DistributedInvocation, diff_arg: Arguments | None = None
+    ) -> ReusedInvocation:
         # Create a new instance with the same fields as the existing invocation, but with the added field
         new_invc = cls(
             call=Call(invocation.task, invocation.arguments),

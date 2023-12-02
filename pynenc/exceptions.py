@@ -1,9 +1,8 @@
 """
 Global Pynenc exception and warning classes.
 """
-from abc import abstractmethod
 import json
-from typing import Optional, TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
 from .util.subclasses import get_all_subclasses
 
@@ -264,3 +263,7 @@ class ConfigError(PynencError):
 
 class ConfigMultiInheritanceError(ConfigError):
     """Error related with multiinheritance of config fields"""
+
+
+class AlreadyInitializedError(PynencError):
+    """Error raised when trying to change the class of a component after it was initialized"""

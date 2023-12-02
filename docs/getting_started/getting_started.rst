@@ -6,11 +6,11 @@ This section covers the basics of getting Pynenc installed and running in your e
 Installation
 ------------
 
-.. note:: 
+.. note::
    [Instructions on how to install Pynenc will be provided here.]
 
 Quick Start
 -----------
 
-.. note:: 
+.. note::
    [A basic usage example or steps to get started quickly will be provided here.]

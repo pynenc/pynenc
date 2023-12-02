@@ -1,16 +1,14 @@
-from functools import cached_property
 import json
+from functools import cached_property
 from typing import TYPE_CHECKING
 
 import redis
 
-from ..invocation import DistributedInvocation
-from .base_state_backend import InvocationHistory
-from .base_state_backend import BaseStateBackend
+from .. import exceptions
 from ..conf.config_state_backend import ConfigStateBackendRedis
 from ..invocation import DistributedInvocation
 from ..util.redis_keys import Key
-from .. import exceptions
+from .base_state_backend import BaseStateBackend, InvocationHistory
 
 if TYPE_CHECKING:
     from ..app import Pynenc

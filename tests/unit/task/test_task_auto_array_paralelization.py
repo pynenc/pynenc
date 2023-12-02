@@ -3,8 +3,7 @@ from typing import Any
 import pytest
 
 from pynenc import Pynenc
-from pynenc.invocation import SynchronousInvocationGroup, DistributedInvocationGroup
-
+from pynenc.invocation import DistributedInvocationGroup, SynchronousInvocationGroup
 
 _app = Pynenc()
 
@@ -80,7 +79,7 @@ def test_extract_arguments_unpacking(app: Pynenc) -> None:
     }
     # call with dict of keyword arguments:
     assert invocation_group.invocations[1].arguments.kwargs == {
-        "args": tuple(),
+        "args": (),
         "kwargs": {"arg_3": "z"},
     }
     # call with Arguments instance:

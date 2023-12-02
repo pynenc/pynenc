@@ -1,22 +1,20 @@
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional, Callable, Any
+from typing import TYPE_CHECKING, Optional
 
 import pytest
 
-from pynenc.arguments import Arguments
 from pynenc.call import Call
 from pynenc.exceptions import PynencError
-from pynenc.state_backend import BaseStateBackend
 from pynenc.invocation import DistributedInvocation, InvocationStatus
+from pynenc.state_backend import BaseStateBackend
 from pynenc.util.subclasses import get_all_subclasses
-from tests.conftest import MockPynenc
 from tests import util
-
+from tests.conftest import MockPynenc
 
 if TYPE_CHECKING:
-    from _pytest.python import Metafunc
     from _pytest.fixtures import FixtureRequest
-    from pynenc.task import Task
+    from _pytest.python import Metafunc
+
     from pynenc.types import Params, Result
 
 

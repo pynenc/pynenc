@@ -2,17 +2,14 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from pynenc.arguments import Arguments
-from pynenc.call import Call
 from pynenc.broker import BaseBroker
+from pynenc.call import Call
 from pynenc.invocation import DistributedInvocation
 from tests.conftest import MockPynenc
 
-
 if TYPE_CHECKING:
-    from _pytest.python import Metafunc
     from _pytest.fixtures import FixtureRequest
-    from pynenc.task import Task
+    from _pytest.python import Metafunc
 
 
 base_app = MockPynenc()
@@ -27,6 +24,7 @@ def pytest_generate_tests(metafunc: "Metafunc") -> None:
     subclasses = [
         c for c in BaseBroker.__subclasses__() if "mock" not in c.__name__.lower()
     ]
+
     if "app" in metafunc.fixturenames:
         metafunc.parametrize("app", subclasses, indirect=True)
 

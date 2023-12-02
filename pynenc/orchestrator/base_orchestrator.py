@@ -1,20 +1,20 @@
 from abc import ABC, abstractmethod
 from functools import cached_property
-from typing import TYPE_CHECKING, Optional, Iterator, Any
+from typing import TYPE_CHECKING, Any, Iterator, Optional
 
 from ..conf.config_orchestrator import ConfigOrchestrator
 from ..context import invocation_context
-from ..invocation import InvocationStatus, ReusedInvocation, DistributedInvocation
 from ..exceptions import (
-    SingleInvocationWithDifferentArgumentsError,
     PendingInvocationLockError,
+    SingleInvocationWithDifferentArgumentsError,
 )
+from ..invocation import DistributedInvocation, InvocationStatus, ReusedInvocation
 
 if TYPE_CHECKING:
     from ..app import Pynenc
     from ..call import Call
     from ..task import Task
-    from ..types import Params, Result, Args
+    from ..types import Params, Result
 
 
 class BaseCycleControl(ABC):

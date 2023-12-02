@@ -1,19 +1,14 @@
-from collections import defaultdict
-from functools import cached_property
 import multiprocessing
 import threading
 import time
-from typing import TYPE_CHECKING, Optional, NamedTuple, Any
+from collections import defaultdict
+from functools import cached_property
+from typing import Any, NamedTuple, Optional
 
 from pynenc.invocation import DistributedInvocation, InvocationStatus
 
-from .base_runner import BaseRunner
 from ..conf.config_runner import ConfigMemRunner
-
-if TYPE_CHECKING:
-    from ..app import Pynenc
-    from ..invocation import DistributedInvocation
-    from ..types import Params, Result
+from .base_runner import BaseRunner
 
 
 class ThreadInfo(NamedTuple):

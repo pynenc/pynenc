@@ -1,11 +1,13 @@
 from typing import TypeVar
 
-T = TypeVar("T")  # Declare type variable
+T = TypeVar("T", bound=object)  # Declare type variable
 
 
 def get_all_subclasses(cls: type[T]) -> list[type[T]]:
     all_subclasses = []
-
+    # remove all related type:ignores when mypy fix the issue
+    # https://github.com/python/mypy/issues/4717
+    # type: ignore # mypy issue #4717
     for subclass in cls.__subclasses__():
         all_subclasses.append(subclass)
         all_subclasses.extend(get_all_subclasses(subclass))

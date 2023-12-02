@@ -1,6 +1,6 @@
 import builtins
-from enum import StrEnum
 import json
+from enum import StrEnum
 from typing import Any
 
 from .base_serializer import BaseSerializer

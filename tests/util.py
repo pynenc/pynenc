@@ -1,9 +1,8 @@
-import uuid
 import hashlib
+import uuid
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from _pytest.python import Metafunc
     from _pytest.fixtures import FixtureRequest
 
 

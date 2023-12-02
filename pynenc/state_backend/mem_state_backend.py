@@ -1,8 +1,8 @@
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any
-from pynenc.invocation import DistributedInvocation
 
 from pynenc.state_backend.base_state_backend import InvocationHistory
+
 from .base_state_backend import BaseStateBackend
 
 if TYPE_CHECKING:

@@ -1,19 +1,20 @@
-from abc import ABC, abstractmethod
-from functools import cached_property
 import signal
 import threading
 import time
-from typing import TYPE_CHECKING, Optional, Any
 import warnings
-
+from abc import ABC, abstractmethod
+from functools import cached_property
+from typing import TYPE_CHECKING, Any, Optional
 
 from pynenc.exceptions import RunnerNotExecutableError
+
 from ..conf.config_runner import ConfigRunner
 
 if TYPE_CHECKING:
+    from types import FrameType
+
     from ..app import Pynenc
     from ..invocation import DistributedInvocation
-    from types import FrameType
 
 
 class BaseRunner(ABC):
@@ -28,7 +29,6 @@ class BaseRunner(ABC):
       * In a multiprocessing environment in a Kubernetes pod with capabilities to create new pods, it may have different behaviors.
       * For an asyncio worker, it runs several tasks in one processor, and the value should wait with async.
     """
-
 
     def __init__(self, app: "Pynenc") -> None:
         self.app = app
@@ -53,7 +53,8 @@ class BaseRunner(ABC):
             signal.signal(signal.SIGTERM, self.stop_runner_loop)
         else:
             warnings.warn(
-                "Running in a secondary thread. Signal handling will be skipped."
+                "Running in a secondary thread. Signal handling will be skipped.",
+                stacklevel=2,
             )
         self.running = True
         self.app.logger.info(f"Starting runner {self.__class__.__name__}...")
@@ -125,7 +126,6 @@ class DummyRunner(BaseRunner):
     Examples include:
       - A script that defines the app, decorates some tasks, routes them, and then finishes. Such a script does not plan to run anything itself but triggers tasks that will later run in actual runners.
     """
-
 
     def _on_start(self) -> None:
         raise RunnerNotExecutableError(

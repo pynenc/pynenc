@@ -1,7 +1,6 @@
 from collections import namedtuple
 from itertools import product
-from typing import TYPE_CHECKING, Optional, Any
-
+from typing import TYPE_CHECKING, Any, Optional
 
 import pytest
 
@@ -11,12 +10,13 @@ from pynenc.orchestrator.base_orchestrator import BaseOrchestrator
 from pynenc.runner.base_runner import BaseRunner
 from pynenc.serializer.base_serializer import BaseSerializer
 from pynenc.state_backend.base_state_backend import BaseStateBackend
-from tests.conftest import MockPynenc
 from tests import util
+from tests.conftest import MockPynenc
 
 if TYPE_CHECKING:
-    from _pytest.python import Metafunc
     from _pytest.fixtures import FixtureRequest
+    from _pytest.python import Metafunc
+
     from pynenc.task import Task
 
 
@@ -57,26 +57,27 @@ def pytest_generate_tests(metafunc: "Metafunc") -> None:
 
     if "app" in metafunc.fixturenames:
         # mem runners can run with any combination of components (including memory components)
-        mem_combinations = map(
-            lambda x: AppComponents(*x),
-            product(
+        mem_combinations = (
+            AppComponents(*x)
+            for x in product(
                 get_subclasses(BaseBroker),
                 get_subclasses(BaseOrchestrator),
                 get_subclasses(BaseRunner, mem_cls=True),
                 get_subclasses(BaseSerializer),
                 get_subclasses(BaseStateBackend),
-            ),
+            )
         )
+
         # If the runner is not a memory runner, it cannot be used with memory components
-        not_mem_combinations = map(
-            lambda x: AppComponents(*x),
-            product(
+        not_mem_combinations = (
+            AppComponents(*x)
+            for x in product(
                 get_subclasses(BaseBroker, mem_cls=False),
                 get_subclasses(BaseOrchestrator, mem_cls=False),
                 get_subclasses(BaseRunner, mem_cls=False),
                 get_subclasses(BaseSerializer, mem_cls=False),
                 get_subclasses(BaseStateBackend, mem_cls=False),
-            ),
+            )
         )
         combinations = list(mem_combinations) + list(not_mem_combinations)
         ids = list(map(get_combination_id, combinations))
@@ -117,12 +118,12 @@ def task_sum(app: Pynenc) -> "Task":
 
 @mock_app.task
 def cycle_start() -> None:
-    cycle_end().result
+    _ = cycle_end().result
 
 
 @mock_app.task
 def cycle_end() -> None:
-    cycle_start().result
+    _ = cycle_start().result
 
 
 @pytest.fixture(scope="function")
@@ -139,7 +140,7 @@ def task_cycle(app: Pynenc) -> "Task":
 
 @mock_app.task
 def raise_exception() -> Any:
-    raise Exception("test")
+    raise ValueError("test")
 
 
 @pytest.fixture(scope="function")

@@ -6,13 +6,12 @@ import pytest
 
 from pynenc.arguments import Arguments
 from pynenc.call import Call
-from pynenc.invocation import DistributedInvocation, InvocationStatus
 from pynenc.exceptions import PendingInvocationLockError
-
+from pynenc.invocation import DistributedInvocation, InvocationStatus
 
 if TYPE_CHECKING:
-    from pynenc.task import Task
     from pynenc import Pynenc
+    from pynenc.task import Task
 
 
 @dataclass
@@ -52,7 +51,7 @@ def test_get_all_invocations(test_vars: Vars) -> None:
 
     app = test_vars.task.app
     invocations = list(app.orchestrator.get_existing_invocations(test_vars.task))
-    invocations_ids = set(i.invocation_id for i in invocations)
+    invocations_ids = {i.invocation_id for i in invocations}
     assert invocations_ids == test_vars.expected_ids
 
 
@@ -63,7 +62,7 @@ def test_get_by_arguments(test_vars: Vars) -> None:
     invocations = list(
         app.orchestrator.get_existing_invocations(test_vars.task, {"arg0": '"a"'})
     )
-    invocations_ids = set(i.invocation_id for i in invocations)
+    invocations_ids = {i.invocation_id for i in invocations}
     assert invocations_ids == test_vars.expected_ids
     # argument arg1:a is only valid for inv1
     invocations = list(
@@ -94,7 +93,7 @@ def test_get_by_status(test_vars: Vars) -> None:
         )
     )
     assert len(invocations) == 2
-    invocations_ids = set(i.invocation_id for i in invocations)
+    invocations_ids = {i.invocation_id for i in invocations}
     assert invocations_ids == {
         test_vars.inv2.invocation_id,
         test_vars.inv3.invocation_id,
@@ -145,7 +144,7 @@ def test_set_invocation_pending_status_atomicity(test_vars: Vars) -> None:
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
         future1 = executor.submit(run_set_invocation_pending_status, app)
         future2 = executor.submit(run_set_invocation_pending_status, app)
-        with pytest.raises(Exception):
+        with pytest.raises(PendingInvocationLockError):
             future1.result()
             future2.result()
 

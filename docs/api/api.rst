@@ -315,5 +315,3 @@ Subclasses
    :members:
    :undoc-members:
    :show-inheritance:
-
-

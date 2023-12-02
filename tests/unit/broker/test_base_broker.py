@@ -1,9 +1,6 @@
-from typing import TYPE_CHECKING
-
 from pynenc.arguments import Arguments
 from pynenc.call import Call
-from pynenc.invocation import DistributedInvocation, InvocationStatus
-
+from pynenc.invocation import DistributedInvocation
 from tests.conftest import MockPynenc
 
 mock_base_app = MockPynenc()

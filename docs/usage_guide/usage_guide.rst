@@ -16,13 +16,13 @@ Each use case in this guide represents a typical scenario where Pynenc can signi
 Use Case 1: Basic Task Execution
 --------------------------------
 
-.. note:: 
+.. note::
    [In this section, a detailed description and steps for a basic task execution use case will be provided.]
 
 Use Case 2: Advanced Distributed Orchestration
 -----------------------------------------------
 
-.. note:: 
+.. note::
    [Here, you'll find a comprehensive guide on leveraging Pynenc for advanced distributed orchestration, complete with step-by-step instructions.]
 
 ... (Additional use cases will be added here)

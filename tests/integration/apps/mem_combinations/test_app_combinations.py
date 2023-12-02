@@ -1,6 +1,5 @@
-from collections import Counter
 import threading
-from typing import Any
+from collections import Counter
 
 import pytest
 
@@ -58,7 +57,7 @@ def test_cycle_detection(task_cycle: Task) -> None:
     # - next check task cycle_start/cycle_end
     # - does keeping invocation_context in app root work? does it require a tree or references?
     with pytest.raises(CycleDetectedError) as exc_info:
-        invocation.result
+        _ = invocation.result
 
     expected_error = (
         "A cycle was detected: Cycle detected:\n"
@@ -83,8 +82,8 @@ def test_raise_exception(task_raise_exception: Task) -> None:
     invocation = task_raise_exception()
     thread = threading.Thread(target=run_in_thread, daemon=True)
     thread.start()
-    with pytest.raises(Exception):
-        invocation.result
+    with pytest.raises(ValueError):
+        _ = invocation.result
     app.runner.stop_runner_loop()
     thread.join()
 
@@ -120,7 +119,7 @@ def test_avoid_direct_self_cycles(task_direct_cycle: Task) -> None:
     with pytest.raises(CycleDetectedError) as exc_info:
         # however, when retrieving the result, an exception should be raised
         # because the function is calling itself
-        invocation.result
+        _ = invocation.result
 
     expected_error = (
         "A cycle was detected: Cycle detected:\n"

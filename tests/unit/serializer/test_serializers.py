@@ -1,4 +1,4 @@
-from typing import Type, TYPE_CHECKING
+from typing import TYPE_CHECKING, Type
 
 import pytest
 
@@ -6,12 +6,12 @@ from pynenc.serializer.base_serializer import BaseSerializer
 from pynenc.util.subclasses import get_all_subclasses
 
 if TYPE_CHECKING:
-    from _pytest.python import Metafunc
     from _pytest.fixtures import FixtureRequest
+    from _pytest.python import Metafunc
 
 
 def pytest_generate_tests(metafunc: "Metafunc") -> None:
-    subclasses = get_all_subclasses(BaseSerializer)
+    subclasses = get_all_subclasses(BaseSerializer)  # type: ignore # mypy issue #4717
     if "serializer_class" in metafunc.fixturenames:
         metafunc.parametrize("serializer_class", subclasses, indirect=True)
 

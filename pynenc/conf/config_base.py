@@ -1,6 +1,5 @@
-from abc import ABC
 import os
-from typing import Optional, Callable, Generic, TypeVar, Type, Any, cast, Iterator
+from typing import Any, Callable, Generic, Iterator, Optional, Type, TypeVar, cast
 
 from ..exceptions import ConfigMultiInheritanceError
 from ..util import files
@@ -18,8 +17,8 @@ def default_config_field_mapper(value: Any, expected_type: Type[T]) -> T:
         try:
             callable_type = cast(Callable[[Any], T], expected_type)
             return callable_type(value)  # type conversion
-        except (ValueError, TypeError):
-            raise TypeError(f"Invalid type. Expected {expected_type}.")
+        except (ValueError, TypeError) as ex:
+            raise TypeError(f"Invalid type. Expected {expected_type}.") from ex
     else:
         raise TypeError(f"Cannot convert to {expected_type}")
 
@@ -54,7 +53,7 @@ def get_env_key(field: str, config: Optional["ConfigBase"] = None) -> str:
     return f"{ENV_PREFIX}{ENV_SEP}{field.upper()}"
 
 
-class ConfigBase(ABC):
+class ConfigBase:
     """
     Ways of determining the config field value:
     (0 for max priority)
@@ -76,6 +75,10 @@ class ConfigBase(ABC):
         self.config_id = (
             config_id or self.__class__.__name__.replace("Config", "").lower()
         )
+        if not get_config_fields(self.__class__):
+            raise TypeError(
+                "Cannot instantiate a ConfigBase without any ConfigField attribute"
+            )
         # 4.- User specifies the config by values (dict[str: Any])
         if config_values:
             self.init_config_value_from_mapping(config_values)

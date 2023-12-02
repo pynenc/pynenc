@@ -1,12 +1,13 @@
 from __future__ import annotations
+
+import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from functools import cached_property
-from typing import TYPE_CHECKING, Generic, Any, Optional, TypeVar, Iterator
-import uuid
+from typing import TYPE_CHECKING, Any, Generic, Iterator, TypeVar
 
-from ..types import Params, Result
 from ..call import Call
+from ..types import Params, Result
 
 if TYPE_CHECKING:
     from ..app import Pynenc
@@ -23,18 +24,18 @@ class BaseInvocation(ABC, Generic[Params, Result]):
 
     A call can have several invocations in the system"""
 
-    call: "Call[Params, Result]"
+    call: Call[Params, Result]
 
     @property
-    def app(self) -> "Pynenc":
+    def app(self) -> Pynenc:
         return self.call.app
 
     @property
-    def task(self) -> "Task[Params, Result]":
+    def task(self) -> Task[Params, Result]:
         return self.call.task
 
     @property
-    def arguments(self) -> "Arguments":
+    def arguments(self) -> Arguments:
         return self.call.arguments
 
     @property
@@ -47,7 +48,7 @@ class BaseInvocation(ABC, Generic[Params, Result]):
 
     @classmethod
     @abstractmethod
-    def from_json(cls: type[T], app: "Pynenc", serialized: str) -> T:
+    def from_json(cls: type[T], app: Pynenc, serialized: str) -> T:
         """Returns a new invocation from a serialized invocation"""
 
     @property
@@ -64,7 +65,7 @@ class BaseInvocation(ABC, Generic[Params, Result]):
 
     @property
     @abstractmethod
-    def result(self) -> "Result":
+    def result(self) -> Result:
         """"""
 
     def __str__(self) -> str:
@@ -85,19 +86,18 @@ class BaseInvocation(ABC, Generic[Params, Result]):
 
 @dataclass(frozen=True)
 class BaseInvocationGroup(ABC, Generic[Params, Result, T]):
-    task: "Task"
+    task: Task
     invocations: list[T]
 
     @property
-    def app(self) -> "Pynenc":
+    def app(self) -> Pynenc:
         return self.task.app
 
     @property
     def __iter__(self) -> Iterator[T]:
-        for invocation in self.invocations:
-            yield invocation
+        yield from self.invocations
 
     @property
     @abstractmethod
-    def results(self) -> Iterator["Result"]:
+    def results(self) -> Iterator[Result]:
         """"""

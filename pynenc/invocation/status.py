@@ -5,7 +5,7 @@ class InvocationStatus(StrEnum):
     """
     An enumeration representing the status of a task invocation.
 
-    The PENDING status will expire after the time specified in 
+    The PENDING status will expire after the time specified in
     :attr:`~pynenc.conf.config_pynenc.ConfigPynenc.max_pending_seconds`.
 
     Notes

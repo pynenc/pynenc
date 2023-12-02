@@ -3,11 +3,10 @@ from typing import Any
 
 import pytest
 
-from tests.conftest import MockPynenc
-from pynenc import Pynenc, Task
+from pynenc import Pynenc
 from pynenc.exceptions import CycleDetectedError
 from pynenc.runner import MemRunner
-
+from tests.conftest import MockPynenc
 
 mock_all = MockPynenc()
 
@@ -19,7 +18,7 @@ def sum_task(a: int, b: int) -> int:
 
 @mock_all.task
 def raise_exception() -> Any:
-    raise Exception("test")
+    raise ValueError("test")
 
 
 @mock_all.task
@@ -73,8 +72,8 @@ def test_raise_exception(app: Pynenc) -> None:
     invocation = raise_exception()
     thread = threading.Thread(target=run_in_thread, daemon=True)
     thread.start()
-    with pytest.raises(Exception):
-        invocation.result
+    with pytest.raises(ValueError):
+        _ = invocation.result
     app.runner.stop_runner_loop()
     thread.join()
 
@@ -108,7 +107,7 @@ def test_avoid_cycles(app: Pynenc) -> None:
     with pytest.raises(CycleDetectedError) as exc_info:
         # however, when retrieving the result, an exception should be raised
         # because the function is calling itself
-        invocation.result
+        _ = invocation.result
 
     expected_error = (
         "A cycle was detected: Cycle detected:\n"
