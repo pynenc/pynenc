@@ -97,9 +97,3 @@ strict_equality = true
 
 [tool.pytest]
 log_cli = true
-
-[tool.pytest.ini_options]
-markers = [
-    "mem: Memory classes tests",
-    "redis: Redis tests"
-]
