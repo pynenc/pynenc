@@ -97,3 +97,9 @@ strict_equality = true
 
 [tool.pytest]
 log_cli = true
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore:Running in a secondary thread. Signal handling will be skipped.:UserWarning",
+    "ignore::pytest.PytestUnhandledThreadExceptionWarning",
+]

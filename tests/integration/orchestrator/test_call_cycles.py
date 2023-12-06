@@ -56,10 +56,10 @@ def test_causes_cycles(test_vars: Vars) -> None:
 
     expected_error = (
         "A cycle was detected: Cycle detected:\n"
-        "- conftest.dummy_mirror(arg:c)\n"
-        "- conftest.dummy_mirror(arg:a)\n"
-        "- conftest.dummy_mirror(arg:b)\n"
-        "- back to conftest.dummy_mirror(arg:c)"
+        "- tests.integration.orchestrator.orchestrator_tasks.dummy_mirror(arg:c)\n"
+        "- tests.integration.orchestrator.orchestrator_tasks.dummy_mirror(arg:a)\n"
+        "- tests.integration.orchestrator.orchestrator_tasks.dummy_mirror(arg:b)\n"
+        "- back to tests.integration.orchestrator.orchestrator_tasks.dummy_mirror(arg:c)"
     )
 
     assert str(exc_info.value) == expected_error

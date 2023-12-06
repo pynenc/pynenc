@@ -1,6 +1,6 @@
 from collections import namedtuple
 from itertools import product
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Optional
 
 import pytest
 
@@ -11,7 +11,7 @@ from pynenc.runner.base_runner import BaseRunner
 from pynenc.serializer.base_serializer import BaseSerializer
 from pynenc.state_backend.base_state_backend import BaseStateBackend
 from tests import util
-from tests.conftest import MockPynenc
+from tests.integration.apps.mem_combinations import mem_combinations_tasks as tasks
 
 if TYPE_CHECKING:
     from _pytest.fixtures import FixtureRequest
@@ -102,30 +102,6 @@ def app(request: "FixtureRequest") -> Pynenc:
     return app
 
 
-mock_app = MockPynenc()
-
-
-@mock_app.task
-def sum(x: int, y: int) -> int:
-    return x + y
-
-
-@pytest.fixture(scope="function")
-def task_sum(app: Pynenc) -> "Task":
-    sum.app = app
-    return sum
-
-
-@mock_app.task
-def cycle_start() -> None:
-    _ = cycle_end().result
-
-
-@mock_app.task
-def cycle_end() -> None:
-    _ = cycle_start().result
-
-
 @pytest.fixture(scope="function")
 def task_cycle(app: Pynenc) -> "Task":
     # this replacing the app of the task works in multithreading
@@ -133,52 +109,37 @@ def task_cycle(app: Pynenc) -> "Task":
     # but not in multi processing runner,
     # the process start from scratch and reference the function
     # with the mocked decorator
-    cycle_start.app = app
-    cycle_end.app = app
-    return cycle_start
-
-
-@mock_app.task
-def raise_exception() -> Any:
-    raise ValueError("test")
+    tasks.cycle_start.app = app
+    tasks.cycle_end.app = app
+    return tasks.cycle_start
 
 
 @pytest.fixture(scope="function")
 def task_raise_exception(app: Pynenc) -> "Task":
-    raise_exception.app = app
-    return raise_exception
+    tasks.raise_exception.app = app
+    return tasks.raise_exception
 
 
-@mock_app.task
-def get_text() -> str:
-    return "example"
-
-
-@mock_app.task
-def get_upper() -> str:
-    return get_text().result.upper()
+@pytest.fixture(scope="function")
+def task_sum(app: Pynenc) -> "Task":
+    tasks.sum.app = app
+    return tasks.sum
 
 
 @pytest.fixture(scope="function")
 def task_get_text(app: Pynenc) -> "Task":
-    get_text.app = app
-    return get_text
+    tasks.get_text.app = app
+    return tasks.get_text
 
 
 @pytest.fixture(scope="function")
 def task_get_upper(app: Pynenc) -> "Task":
-    get_text.app = app
-    get_upper.app = app
-    return get_upper
-
-
-@mock_app.task
-def direct_cycle() -> str:
-    invocation = direct_cycle()
-    return invocation.result.upper()
+    tasks.get_text.app = app
+    tasks.get_upper.app = app
+    return tasks.get_upper
 
 
 @pytest.fixture(scope="function")
 def task_direct_cycle(app: Pynenc) -> "Task":
-    direct_cycle.app = app
-    return direct_cycle
+    tasks.direct_cycle.app = app
+    return tasks.direct_cycle

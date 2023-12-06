@@ -38,4 +38,4 @@ jobs:
         if: steps.cache-deps.outputs.cache-hit != 'true'
       - run: poetry install --no-interaction
       - name: run integration tests
-        run: poetry run pytest tests/integration
+        run: poetry run pytest tests/integration -vv

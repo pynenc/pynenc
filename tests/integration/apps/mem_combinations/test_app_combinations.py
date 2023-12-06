@@ -44,6 +44,7 @@ def test_parallel_execution(task_sum: Task) -> None:
 def test_cycle_detection(task_cycle: Task) -> None:
     """Test that the execution will detect the cycle raising an exception"""
     app = task_cycle.app
+    app.orchestrator.conf.cycle_control = True
     # app.app_id = app.app_id + "-test_cycle_detection"
 
     def run_in_thread() -> None:
@@ -61,9 +62,9 @@ def test_cycle_detection(task_cycle: Task) -> None:
 
     expected_error = (
         "A cycle was detected: Cycle detected:\n"
-        "- conftest.cycle_end()\n"
-        "- conftest.cycle_start()\n"
-        "- back to conftest.cycle_end()"
+        "- tests.integration.apps.mem_combinations.mem_combinations_tasks.cycle_end()\n"
+        "- tests.integration.apps.mem_combinations.mem_combinations_tasks.cycle_start()\n"
+        "- back to tests.integration.apps.mem_combinations.mem_combinations_tasks.cycle_end()"
     )
 
     assert str(exc_info.value) == expected_error
@@ -123,8 +124,8 @@ def test_avoid_direct_self_cycles(task_direct_cycle: Task) -> None:
 
     expected_error = (
         "A cycle was detected: Cycle detected:\n"
-        "- conftest.direct_cycle()\n"
-        "- back to conftest.direct_cycle()"
+        "- tests.integration.apps.mem_combinations.mem_combinations_tasks.direct_cycle()\n"
+        "- back to tests.integration.apps.mem_combinations.mem_combinations_tasks.direct_cycle()"
     )
     assert str(exc_info.value) == expected_error
     app.runner.stop_runner_loop()
