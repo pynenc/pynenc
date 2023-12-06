@@ -1,8 +1,3 @@
-def test_config() -> None:
-    raise NotImplementedError("TODO")
-    # tests for yaml, toml and json config files
-
-
 def test_profiling() -> None:
     raise NotImplementedError("TODO")
     # test that the profiling option works as expected
