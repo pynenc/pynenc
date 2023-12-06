@@ -57,7 +57,7 @@ class ConfigBase:
     """
     Ways of determining the config field value:
     (0 for max priority)
-    0.- User sets the config field directly (not recommended)
+    0.- User sets the config field directly in the config instance (not recommended)
     1.- User specifies environment variables
     2.- User specifies the location of the config file by env vars
     3.- User specifies the config filepath(ref to a yml, toml or json…)
@@ -69,7 +69,6 @@ class ConfigBase:
 
     def __init__(
         self,
-        # config_id: Optional[str] = None,
         config_values: Optional[dict[str, Any]] = None,
         config_filepath: Optional[str] = None,
     ) -> None:
