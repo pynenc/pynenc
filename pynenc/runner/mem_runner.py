@@ -59,7 +59,7 @@ class MemRunner(BaseRunner):
             thread = threading.Thread(target=invocation.run, daemon=True)
             thread.start()
             self.threads[invocation.invocation_id] = ThreadInfo(thread, invocation)
-            self.app.logger.debug(f"Running invocation {invocation.invocation_id}")
+            self.logger.info(f"Running {invocation=} on {thread=}")
         for invocation in list(self.wait_conditions):
             if invocation.status.is_final():
                 # Notify all waiting threads to continue
@@ -72,8 +72,8 @@ class MemRunner(BaseRunner):
                     list(waiting_invocations), InvocationStatus.RUNNING
                 )
                 self.waiting_threads -= len(waiting_invocations)
-                self.app.logger.debug(
-                    f"Invocation {invocation.invocation_id} on final {invocation.status=} resuming {waiting_invocations=}"
+                self.logger.debug(
+                    f"{invocation=} on final {invocation.status=}, resuming {waiting_invocations=}"
                 )
         time.sleep(self.conf.runner_loop_sleep_time_sec)
 
@@ -90,7 +90,7 @@ class MemRunner(BaseRunner):
         if not running_invocation:
             # running from outside this runner (user instantiate an app with this runner class,
             # but ask for an invocation result outside of the runner processes)
-            self.app.logger.debug(
+            self.logger.debug(
                 f"Waiting for {result_invocations=} from outside this runner"
             )
             time.sleep(self.conf.invocation_wait_results_sleep_time_sec)
@@ -98,14 +98,14 @@ class MemRunner(BaseRunner):
         self.app.orchestrator.set_invocation_status(
             running_invocation, InvocationStatus.PAUSED
         )
-        self.app.logger.debug(
+        self.logger.debug(
             f"Pausing invocation {running_invocation.invocation_id} is waiting for others to finish"
         )
         for result_invocation in result_invocations:
             self.wait_invocation[result_invocation].add(running_invocation)
             self.waiting_threads += 1
             with self.wait_conditions[result_invocation]:
-                self.app.logger.debug(
+                self.logger.debug(
                     f"Invocation {running_invocation.invocation_id} is waiting for invocation {result_invocation.invocation_id} to finish"
                 )
                 self.wait_conditions[result_invocation].wait()

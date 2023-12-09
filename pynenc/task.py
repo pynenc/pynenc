@@ -18,6 +18,7 @@ from .invocation import (
     SynchronousInvocationGroup,
 )
 from .types import Func, Params, Result
+from .util.log import TaskLoggerAdapter
 
 if TYPE_CHECKING:
     from .app import Pynenc
@@ -114,6 +115,7 @@ class Task(Generic[Params, Result]):
     def __init__(self, app: Pynenc, func: Func, options: dict[str, Any]) -> None:
         self.task_id = f"{func.__module__}.{func.__name__}"
         self.app = app
+        self.logger = TaskLoggerAdapter(self.app.logger, self.task_id)
         self.func = func
         self.options: TaskOptions = TaskOptions(**options)
 

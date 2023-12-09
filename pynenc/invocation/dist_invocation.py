@@ -26,6 +26,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
     _invocation_id: str | None = None
 
     def __post_init__(self) -> None:
+        super().__post_init__()
         self.app.state_backend.upsert_invocation(self)
 
     @cached_property
