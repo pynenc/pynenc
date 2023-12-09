@@ -89,7 +89,8 @@ def app(request: "FixtureRequest") -> Pynenc:
     components: AppComponents = request.param
     test_module, test_name = util.get_module_name(request)
     app = Pynenc(
-        app_id=f"{test_module}.{test_name}", config_values={"logging_level": "debug"}
+        app_id=f"{test_module}.{test_name}",
+        config_values={"logging_level": "debug", "cycle_control": True},
     )
     app.set_broker_cls(components.broker)
     app.set_orchestrator_cls(components.orchestrator)

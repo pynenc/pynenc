@@ -21,15 +21,21 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Upgrade pip
-        run: |
-          pip install --constraint=.github/workflows/constraints.txt pip
-          pip --version
-
       - name: Install Poetry
-        run: |
-          pip install --constraint=.github/workflows/constraints.txt poetry
-          poetry --version
+        uses: snok/install-poetry@v1
+        with:
+          version: 1.7.0
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Cache Poetry dependencies
+        uses: actions/cache@v3
+        with:
+          path: .venv
+          key: pydeps-${{ hashFiles('**/poetry.lock') }}
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
 
       - name: Check if there is a parent commit
         id: check-parent-commit
@@ -45,7 +51,7 @@ jobs:
             bash -o pipefail -c "poetry version | awk '{ print \$2 }'"
 
       - name: Bump version for developmental release
-        if: "! steps.check-version.outputs.tag"
+        if: ${{ ! steps.check-version.outputs.tag }}
         run: |
           poetry version patch &&
           version=$(poetry version | awk '{ print $2 }') &&
@@ -63,12 +69,12 @@ jobs:
           password: ${{ secrets.PYPI_TOKEN }}
 
       - name: Publish package on TestPyPI
-        if: "! steps.check-version.outputs.tag"
+        if: ${{! steps.check-version.outputs.tag }}
         uses: pypa/gh-action-pypi-publish@v1.8.6
         with:
           user: __token__
           password: ${{ secrets.TEST_PYPI_TOKEN }}
-          repository_url: https://test.pypi.org/legacy/
+          repository-url: https://test.pypi.org/legacy/
 
       - name: Publish the release notes
         uses: release-drafter/release-drafter@v5.23.0

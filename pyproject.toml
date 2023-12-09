@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pynenc"
-version = "0.0.0"
+version = "0.0.1"
 description = "A simple task management system for complex distributed orchestration"
 authors = ["Jose Diaz"]
 license = "MIT License"
@@ -35,6 +35,7 @@ sphinx = "^7.0"
 myst-parser = "^2"
 furo = "^2023"
 pre-commit = "^3.5.0"
+pytest-timeout = "^2.2.0"
 
 [build-system]
 requires = ["poetry-core"]
@@ -103,3 +104,4 @@ filterwarnings = [
     "ignore:Running in a secondary thread. Signal handling will be skipped.:UserWarning",
     "ignore::pytest.PytestUnhandledThreadExceptionWarning",
 ]
+timeout = 10

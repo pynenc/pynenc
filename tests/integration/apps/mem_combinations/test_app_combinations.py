@@ -45,9 +45,9 @@ def test_cycle_detection(task_cycle: Task) -> None:
     """Test that the execution will detect the cycle raising an exception"""
     app = task_cycle.app
     app.orchestrator.conf.cycle_control = True
-    # app.app_id = app.app_id + "-test_cycle_detection"
 
     def run_in_thread() -> None:
+        app.orchestrator.conf.cycle_control = True
         app.runner.run()
 
     invocation = task_cycle()

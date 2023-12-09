@@ -34,7 +34,6 @@ jobs:
       - run: poetry install --no-interaction
       - name: run coverage of unit tests
         run: poetry run coverage run -m pytest tests/unit
-      - run: poetry run coverage combine coverage
       - run: poetry run coverage report
       - run: poetry run coverage html --show-contexts --title "Coverage for ${{ github.sha }}"
       - name: Store coverage HTML
