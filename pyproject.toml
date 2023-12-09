@@ -70,7 +70,7 @@ select = [
     "E",  # pycodestyle errors
     "W",  # pycodestyle warnings
     "F",  # pyflakes
-    "I",  # isort
+    # "I",  # isort # using isort for now
     "C",  # flake8-comprehensions
     "B",  # flake8-bugbear
     "UP", # pyupgrade
@@ -99,7 +99,7 @@ strict_equality = true
 log_cli = true
 
 [tool.pytest.ini_options]
-markers = [
-    "mem: Memory classes tests",
-    "redis: Redis tests"
+filterwarnings = [
+    "ignore:Running in a secondary thread. Signal handling will be skipped.:UserWarning",
+    "ignore::pytest.PytestUnhandledThreadExceptionWarning",
 ]

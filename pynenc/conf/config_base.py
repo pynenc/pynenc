@@ -57,56 +57,91 @@ class ConfigBase:
     """
     Ways of determining the config field value:
     (0 for max priority)
-    0.- User sets the config field directly (not recommended)
+    0.- User sets the config field directly in the config instance (not recommended)
     1.- User specifies environment variables
     2.- User specifies the location of the config file by env vars
     3.- User specifies the config filepath(ref to a yml, toml or json…)
-    4.- User specifies the config by values (dict[str: Any])
-    5.- User do not specify anything [default values]
+    4.- User specifies config values in pyproject.toml
+    5.- User specifies the config by values (dict[str: Any])
+    6.- Previous steps for any Parent config class
+    7.- User do not specify anything [default values]
     """
 
     def __init__(
         self,
-        config_id: Optional[str] = None,
         config_values: Optional[dict[str, Any]] = None,
         config_filepath: Optional[str] = None,
     ) -> None:
         _ = avoid_multi_inheritance_field_conflict(self.__class__)
-        self.config_id = (
-            config_id or self.__class__.__name__.replace("Config", "").lower()
-        )
+        # on the first run, we load defaults values specified in the mapping
+        # afterwards, that values will be modified by the ancestors
+        # the childs will have higher priority
+        self._first_run = True
+        self.init_config_values(self.__class__, config_values, config_filepath)
+
+    @staticmethod
+    def get_config_id(config_cls: Type["ConfigBase"]) -> str:
+        return config_cls.__name__.replace("Config", "").lower()
+
+    def init_parent_values(
+        self,
+        config_cls: Type["ConfigBase"],
+        config_values: Optional[dict[str, Any]],
+        config_filepath: Optional[str],
+    ) -> None:
+        # Initialize parent classes that are subclasses of ConfigBase
+        for parent in config_cls.__bases__:
+            if issubclass(parent, ConfigBase) and parent is not ConfigBase:
+                self.init_config_values(parent, config_values, config_filepath)
+
+    def init_config_values(
+        self,
+        config_cls: Type["ConfigBase"],
+        config_values: Optional[dict[str, Any]],
+        config_filepath: Optional[str],
+    ) -> None:
+        config_id = self.get_config_id(config_cls)
+        self.init_parent_values(config_cls, config_values, config_filepath)
         if not get_config_fields(self.__class__):
             raise TypeError(
                 "Cannot instantiate a ConfigBase without any ConfigField attribute"
             )
-        # 4.- User specifies the config by values (dict[str: Any])
+        # 5.- User specifies the config by values (dict[str: Any])
         if config_values:
-            self.init_config_value_from_mapping(config_values)
+            self.init_config_value_from_mapping(config_id, config_values)
+        # 4.- User specifies config values in pyproject.toml
+        if os.path.isfile("pyproject.toml"):
+            self.init_config_value_from_mapping(
+                config_id, files.load_file("pyproject.toml")
+            )
         # 3.- User specifies the config filepath(ref to a yml, toml or json…)
         if config_filepath:
-            self.init_config_value_from_mapping(files.load_file(config_filepath))
+            self.init_config_value_from_mapping(
+                config_id, files.load_file(config_filepath)
+            )
         # 2.- User specifies the location of the config file by env vars
         # 2.1 Global config filepath specify by env var
         if filepath := os.environ.get(get_env_key(ENV_FILEPATH)):
-            self.init_config_value_from_mapping(files.load_file(filepath))
+            self.init_config_value_from_mapping(config_id, files.load_file(filepath))
         # 2.2 Specific class config filepath specify by env var
         if filepath := os.environ.get(get_env_key(ENV_FILEPATH, self)):
-            self.init_config_value_from_mapping(files.load_file(filepath))
+            self.init_config_value_from_mapping(config_id, files.load_file(filepath))
         # 1.- User specifies environment variables
         self.init_config_value_from_env_vars()
+        # after the first run, we do not consider default values anymore
+        # because they are the same for each relative class and could overwrite values
+        self._first_run = False
 
-    @property
-    def map_key(self) -> str:
-        return self.config_id or self.__class__.__name__
-
-    def init_config_value_from_mapping(self, mapping: dict[str, Any]) -> None:
-        conf_mapping = mapping.get(self.map_key, {})
+    def init_config_value_from_mapping(
+        self, config_id: str, mapping: dict[str, Any]
+    ) -> None:
+        conf_mapping = mapping.get(config_id, {})
         conf_mapping = conf_mapping if isinstance(conf_mapping, dict) else {}
         for key in get_config_fields(self.__class__):
             if key in conf_mapping:
                 # todo logging
                 setattr(self, key, conf_mapping[key])
-            elif key in mapping:
+            elif self._first_run and key in mapping:
                 # todo logging
                 setattr(self, key, mapping[key])
 
@@ -125,17 +160,49 @@ def get_config_fields(cls: Type) -> Iterator[str]:
 
 
 def avoid_multi_inheritance_field_conflict(config_cls: Type) -> dict[str, str]:
-    """"""
-    config_fields: dict[str, str] = {}
+    """
+    Ensures that the same configuration field is not defined in multiple parent classes of a given configuration class.
+
+    This function checks all parent classes of the provided configuration class that are subclasses of `ConfigBase`.
+    It ensures that each configuration field is defined only once among all parent classes. If a field is found in
+    multiple parent classes, a `ConfigMultiInheritanceError` is raised. This check ensures deterministic behavior
+    in the configuration inheritance hierarchy.
+
+    Parameters:
+        config_cls (Type): The configuration class to check for field conflicts.
+
+    Returns:
+        dict[str, str]: A dictionary mapping each configuration field to the name of the parent class where it is defined.
+
+    Raises:
+        ConfigMultiInheritanceError: If a configuration field is found in multiple parent classes.
+
+    Example:
+        >>> class ParentConfig1(ConfigBase):
+        ...     field1 = ConfigField(default_value=1)
+        ...
+        >>> class ParentConfig2(ConfigBase):
+        ...     field2 = ConfigField(default_value=2)
+        ...
+        >>> class ChildConfig(ParentConfig1, ParentConfig2):
+        ...     pass
+        ...
+        >>> avoid_multi_inheritance_field_conflict(ChildConfig)
+        {'field1': 'ParentConfig1', 'field2': 'ParentConfig2'}
+    """
+    map_field_to_config_cls: dict[str, str] = {}
     for parent in config_cls.__bases__:
-        config_fields.update(avoid_multi_inheritance_field_conflict(parent))
+        if not issubclass(parent, ConfigBase) or parent is ConfigBase:
+            continue
         for key in get_config_fields(parent):
-            if key in config_fields:
+            if key in map_field_to_config_cls:
                 raise ConfigMultiInheritanceError(
-                    f"ConfigField {key} found in parent classes {parent.__name__} and {config_fields[key]}"
+                    f"ConfigField {key} found in parent classes {parent.__name__} and {map_field_to_config_cls[key]}"
                 )
-            config_fields[key] = parent.__name__
-    return config_fields
+            map_field_to_config_cls[key] = parent.__name__
+        # add current parent ancestor's fields that may not be specified in the current class
+        map_field_to_config_cls.update(avoid_multi_inheritance_field_conflict(parent))
+    return map_field_to_config_cls
 
 
 def get_config_family_fields(config_cls: Type) -> dict[str, str]:

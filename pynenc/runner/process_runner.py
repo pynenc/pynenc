@@ -63,6 +63,9 @@ class ProcessRunner(BaseRunner):
                 daemon=True,
             )
             process.start()
+            self.logger.debug(
+                f"Running invocation {invocation.invocation_id} on {process.pid=}"
+            )
             if process.pid:
                 self.processes[invocation] = process
             else:
@@ -79,6 +82,9 @@ class ProcessRunner(BaseRunner):
                         os.kill(pid, signal.SIGSTOP)
             if is_final:
                 waiting_invocations = self.wait_invocation.pop(invocation)
+                self.logger.debug(
+                    f"{invocation=} on final {invocation.status=}, resuming {waiting_invocations=}"
+                )
                 self.app.orchestrator.set_invocations_status(
                     list(waiting_invocations), InvocationStatus.RUNNING
                 )

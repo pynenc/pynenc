@@ -7,6 +7,13 @@ from pynenc.invocation import DistributedInvocation
 from pynenc.orchestrator.base_orchestrator import BaseOrchestrator
 from tests import util
 from tests.conftest import MockPynenc
+from tests.integration.orchestrator.orchestrator_tasks import (
+    dummy_concat,
+    dummy_key_arg,
+    dummy_mirror,
+    dummy_sum,
+    dummy_task,
+)
 
 if TYPE_CHECKING:
     from _pytest.fixtures import FixtureRequest
@@ -31,34 +38,6 @@ def app(request: "FixtureRequest") -> MockPynenc:
     app.purge()
     request.addfinalizer(app.purge)
     return app
-
-
-mock_app = MockPynenc()
-
-
-@mock_app.task
-def dummy_task() -> None:
-    ...
-
-
-@mock_app.task
-def dummy_sum(x: int, y: int) -> int:
-    return x + y
-
-
-@mock_app.task
-def dummy_concat(arg0: str, arg1: str) -> str:
-    return f"{arg0}:{arg1}"
-
-
-@mock_app.task
-def dummy_mirror(arg: str) -> str:
-    return arg
-
-
-@mock_app.task
-def dummy_key_arg(key: str, arg: str) -> str:
-    return f"{key}:{arg}"
 
 
 @pytest.fixture

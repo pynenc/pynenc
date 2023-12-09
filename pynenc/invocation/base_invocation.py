@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Generic, Iterator, TypeVar
 
 from ..call import Call
 from ..types import Params, Result
+from ..util.log import TaskLoggerAdapter
 
 if TYPE_CHECKING:
     from ..app import Pynenc
@@ -25,6 +26,11 @@ class BaseInvocation(ABC, Generic[Params, Result]):
     A call can have several invocations in the system"""
 
     call: Call[Params, Result]
+
+    def __post_init__(self) -> None:
+        self.task.logger = TaskLoggerAdapter(
+            self.app.logger, self.task.task_id, self.invocation_id
+        )
 
     @property
     def app(self) -> Pynenc:

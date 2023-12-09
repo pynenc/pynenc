@@ -58,7 +58,7 @@ def test_single_invocation_raising(app: MockPynenc, task_mirror: "Task") -> None
     assert excinfo.value.existing_invocation_id == first_invocation.invocation_id
     assert excinfo.value.diff == (
         "==============================\n"
-        "Differences for conftest.dummy_mirror:\n"
+        "Differences for tests.integration.orchestrator.orchestrator_tasks.dummy_mirror:\n"
         "==============================\n"
         "  * Original: {'arg': '0'}\n"
         "  * Updated: {'arg': '1'}\n"
@@ -140,7 +140,7 @@ def test_single_invocation_keys_raising(app: MockPynenc, task_key_arg: "Task") -
     assert excinfo.value.existing_invocation_id == inv_k0.invocation_id
     assert excinfo.value.diff == (
         "==============================\n"
-        "Differences for conftest.dummy_key_arg:\n"
+        "Differences for tests.integration.orchestrator.orchestrator_tasks.dummy_key_arg:\n"
         "==============================\n"
         "  * Original: {'key': 'key0', 'arg': 'a'}\n"
         "  * Updated: {'key': 'key0', 'arg': 'b'}\n"

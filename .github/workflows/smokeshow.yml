@@ -1,0 +1,35 @@
+name: Smokeshow
+
+on:
+  workflow_run:
+    workflows: [TestUnit]
+    types: [completed]
+
+permissions:
+  statuses: write
+
+jobs:
+  smokeshow:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - run: pip install smokeshow
+
+      - uses: dawidd6/action-download-artifact@v2.28.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: tests_unit.yml
+          commit: ${{ github.event.workflow_run.head_sha }}
+
+      - run: smokeshow upload cli/htmlcov
+        env:
+          SMOKESHOW_GITHUB_STATUS_DESCRIPTION: Coverage {coverage-percentage}
+          SMOKESHOW_GITHUB_COVERAGE_THRESHOLD: 100
+          SMOKESHOW_GITHUB_CONTEXT: coverage
+          SMOKESHOW_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SMOKESHOW_GITHUB_PR_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}

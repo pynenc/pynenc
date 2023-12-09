@@ -1,4 +1,6 @@
+import os
 import signal
+import socket
 import threading
 import time
 import warnings
@@ -9,6 +11,7 @@ from typing import TYPE_CHECKING, Any, Optional
 from pynenc.exceptions import RunnerNotExecutableError
 
 from ..conf.config_runner import ConfigRunner
+from ..util.log import RunnerLogAdapter
 
 if TYPE_CHECKING:
     from types import FrameType
@@ -34,6 +37,13 @@ class BaseRunner(ABC):
         self.app = app
         self.app.runner = self
         self.running = False
+        self.logger = RunnerLogAdapter(self.app.logger, self.runner_id)
+
+    @cached_property
+    def runner_id(self) -> str:
+        hostname = socket.gethostname()
+        pid = os.getpid()
+        return f"{self.__class__.__name__}({hostname}-{pid})"
 
     @cached_property
     def conf(self) -> ConfigRunner:
@@ -57,7 +67,7 @@ class BaseRunner(ABC):
                 stacklevel=2,
             )
         self.running = True
-        self.app.logger.info(f"Starting runner {self.__class__.__name__}...")
+        self.logger.info("Starting runner...")
         self._on_start()
 
     @abstractmethod
@@ -67,7 +77,7 @@ class BaseRunner(ABC):
     def on_stop(self) -> None:
         """This method is called when the runner stops"""
         self.running = False
-        self.app.logger.info(f"Stopping runner {self.__class__.__name__}...")
+        self.logger.info("Stopping runner...")
         self._on_stop()
 
     @abstractmethod
@@ -110,9 +120,9 @@ class BaseRunner(ABC):
             while self.running:
                 self.runner_loop_iteration()
         except KeyboardInterrupt:
-            self.app.logger.warning("KeyboardInterrupt received. Stopping runner...")
+            self.logger.warning("KeyboardInterrupt received. Stopping runner...")
         except Exception as e:
-            self.app.logger.exception(f"Exception in runner loop: {e}")
+            self.logger.exception(f"Exception in runner loop: {e}")
             raise e
         finally:
             self.on_stop()

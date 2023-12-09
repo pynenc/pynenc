@@ -12,6 +12,7 @@ Pynenc: A simple task management system for complex distributed orchestration.
    overview/overview
    getting_started/getting_started
    usage_guide/usage_guide
+   configuration/configuration
    api/api
    contributing/contributing
    faq/faq

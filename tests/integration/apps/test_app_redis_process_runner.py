@@ -83,7 +83,6 @@ def test_task_execution() -> None:
     thread.join()
 
 
-@pytest.mark.test_id(name="parallel_exec")
 def test_parallel_execution() -> None:
     """Test the parallel execution functionalicity"""
 
@@ -98,7 +97,6 @@ def test_parallel_execution() -> None:
     thread.join()
 
 
-@pytest.mark.test_id(name="cycle_detect")
 def test_cycle_detection() -> None:
     """Test that the execution will detect the cycle raising an exception"""
 
@@ -127,7 +125,6 @@ def test_cycle_detection() -> None:
     thread.join()
 
 
-@pytest.mark.test_id(name="raise_exception")
 def test_raise_exception() -> None:
     """Test that an exception is raised if the task raises an exception"""
 
@@ -143,7 +140,6 @@ def test_raise_exception() -> None:
     thread.join()
 
 
-@pytest.mark.test_id(name="sub_invocation_dependency")
 def test_sub_invocation_dependency() -> None:
     """Test when an invocation requires the result of another invocation"""
 
@@ -157,7 +153,6 @@ def test_sub_invocation_dependency() -> None:
     thread.join()
 
 
-@pytest.mark.test_id(name="avoid_cycles")
 def test_avoid_direct_self_cycles() -> None:
     """Test that a cycle in the dependency graph is detected"""
 
