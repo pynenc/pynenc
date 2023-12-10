@@ -1,4 +1,5 @@
 import os
+from collections import defaultdict
 from typing import Any, Callable, Generic, Iterator, Optional, Type, TypeVar, cast
 
 from ..exceptions import ConfigMultiInheritanceError
@@ -18,27 +19,49 @@ def default_config_field_mapper(value: Any, expected_type: Type[T]) -> T:
             callable_type = cast(Callable[[Any], T], expected_type)
             return callable_type(value)  # type conversion
         except (ValueError, TypeError) as ex:
-            raise TypeError(f"Invalid type. Expected {expected_type}.") from ex
+            raise TypeError(
+                f"Invalid type. Expected {expected_type} instead {type(value)}."
+            ) from ex
     else:
         raise TypeError(f"Cannot convert to {expected_type}")
 
 
 class ConfigField(Generic[T]):
-    """define each field from a config option"""
+    """
+    Define each typed field from a ConfigBase instance.
+
+    This class is used to define typed configuration fields within a ConfigBase
+    subclass. It ensures type consistency and supports value validation and casting.
+
+    Parameters
+    ----------
+    default_value : T
+        The default value for the configuration field.
+    mapper : Optional[ConfigFieldMapper]
+        An optional function to map or transform the value.
+
+    Attributes
+    ----------
+    _default_value : T
+        Stores the default value of the configuration field.
+    _mapper : ConfigFieldMapper
+        The function used for mapping or transforming the value.
+    """
 
     def __init__(
         self, default_value: T, mapper: Optional[ConfigFieldMapper] = None
     ) -> None:
-        self._value: T = default_value
+        self._default_value: T = default_value
         self._mapper = mapper or default_config_field_mapper
 
-    def __get__(self, instance: object, owner: Type[object]) -> T:
-        del instance, owner
-        return self._value
+    def __get__(self, instance: Optional["ConfigBase"], owner: Type[object]) -> T:
+        del owner
+        if instance is None:
+            return self._default_value
+        return instance._config_values.get(self, self._default_value)
 
-    def __set__(self, instance: object, value: Any) -> None:
-        del instance
-        self._value = self._mapper(value, type(self._value))
+    def __set__(self, instance: "ConfigBase", value: Any) -> None:
+        instance._config_values[self] = self._mapper(value, type(self._default_value))
 
 
 ENV_PREFIX = "PYNENC"
@@ -46,25 +69,60 @@ ENV_SEP = "__"
 ENV_FILEPATH = "FILEPATH"
 
 
-def get_env_key(field: str, config: Optional["ConfigBase"] = None) -> str:
+def get_env_key(field: str, config: Optional[Type["ConfigBase"]] = None) -> str:
     """gets the key used in the environment variables"""
     if config:
-        return f"{ENV_PREFIX}{ENV_SEP}{config.__class__.__name__.upper()}{ENV_SEP}{field.upper()}"
+        return f"{ENV_PREFIX}{ENV_SEP}{config.__name__.upper()}{ENV_SEP}{field.upper()}"
     return f"{ENV_PREFIX}{ENV_SEP}{field.upper()}"
 
 
 class ConfigBase:
     """
-    Ways of determining the config field value:
-    (0 for max priority)
-    0.- User sets the config field directly in the config instance (not recommended)
-    1.- User specifies environment variables
-    2.- User specifies the location of the config file by env vars
-    3.- User specifies the config filepath(ref to a yml, toml or json…)
-    4.- User specifies config values in pyproject.toml
-    5.- User specifies the config by values (dict[str: Any])
-    6.- Previous steps for any Parent config class
-    7.- User do not specify anything [default values]
+    Base class for defining configuration settings.
+
+    This class serves as the base for creating configuration classes. It supports
+    hierarchical and flexible configuration from various sources, including
+    environment variables, configuration files, and default values.
+
+    Configuration values are determined based on the following priority (highest to lowest):
+    1. Direct assignment in the config instance (not recommended)
+    2. Environment variables
+    3. Configuration file path specified by environment variables
+    4. Configuration file path (YAML, TOML, JSON) by config_filepath parameter
+    5. `pyproject.toml`
+    6. Default values specified in the `ConfigField`
+    7. Previous steps for any Parent config class
+    8. User does not specify anything (default values)
+
+    Examples
+    --------
+    Define a configuration class for a Redis client:
+
+    .. code-block:: python
+
+        class ConfigRedis(ConfigBase):
+            redis_host = ConfigField("localhost")
+            redis_port = ConfigField(6379)
+            redis_db = ConfigField(0)
+
+    Define a main configuration class for orchestrator components:
+
+    .. code-block:: python
+
+        class ConfigOrchestrator(ConfigBase):
+            cycle_control = ConfigField(True)
+            blocking_control = ConfigField(True)
+            auto_final_invocation_purge_hours = ConfigField(24.0)
+
+    Combine configurations using multiple inheritance:
+
+    .. code-block:: python
+
+        class ConfigOrchestratorRedis(ConfigOrchestrator, ConfigRedis):
+            pass
+
+    The `ConfigOrchestratorRedis` class now includes settings from both `ConfigOrchestrator`
+    and `ConfigRedis`.
     """
 
     def __init__(
@@ -72,11 +130,17 @@ class ConfigBase:
         config_values: Optional[dict[str, Any]] = None,
         config_filepath: Optional[str] = None,
     ) -> None:
-        _ = avoid_multi_inheritance_field_conflict(self.__class__)
+        self.config_cls_to_fields: dict[str, set[str]] = defaultdict(set)
+        _ = avoid_multi_inheritance_field_conflict(
+            self.__class__, self.config_cls_to_fields
+        )
+        self._config_values: dict[ConfigField, Any] = {}
+
         # on the first run, we load defaults values specified in the mapping
         # afterwards, that values will be modified by the ancestors
         # the childs will have higher priority
-        self._first_run = True
+        self._mapped_keys: set[str] = set()
+        self._mapped_environ_keys: set[str] = set()
         self.init_config_values(self.__class__, config_values, config_filepath)
 
     @staticmethod
@@ -108,47 +172,52 @@ class ConfigBase:
             )
         # 5.- User specifies the config by values (dict[str: Any])
         if config_values:
-            self.init_config_value_from_mapping(config_id, config_values)
+            self.init_config_value_from_mapping(
+                "config_values", config_id, config_values
+            )
         # 4.- User specifies config values in pyproject.toml
         if os.path.isfile("pyproject.toml"):
             self.init_config_value_from_mapping(
-                config_id, files.load_file("pyproject.toml")
+                "pyproject.toml", config_id, files.load_file("pyproject.toml")
             )
         # 3.- User specifies the config filepath(ref to a yml, toml or json…)
         if config_filepath:
             self.init_config_value_from_mapping(
-                config_id, files.load_file(config_filepath)
+                "config_filepath", config_id, files.load_file(config_filepath)
             )
         # 2.- User specifies the location of the config file by env vars
         # 2.1 Global config filepath specify by env var
         if filepath := os.environ.get(get_env_key(ENV_FILEPATH)):
-            self.init_config_value_from_mapping(config_id, files.load_file(filepath))
+            self.init_config_value_from_mapping(
+                "ENV_FILEPATH", config_id, files.load_file(filepath)
+            )
         # 2.2 Specific class config filepath specify by env var
-        if filepath := os.environ.get(get_env_key(ENV_FILEPATH, self)):
-            self.init_config_value_from_mapping(config_id, files.load_file(filepath))
+        if filepath := os.environ.get(get_env_key(ENV_FILEPATH, config_cls)):
+            self.init_config_value_from_mapping(
+                "ENV_CLASS_FILEPATH", config_id, files.load_file(filepath)
+            )
         # 1.- User specifies environment variables
-        self.init_config_value_from_env_vars()
-        # after the first run, we do not consider default values anymore
-        # because they are the same for each relative class and could overwrite values
-        self._first_run = False
+        self.init_config_value_from_env_vars(config_cls)
 
     def init_config_value_from_mapping(
-        self, config_id: str, mapping: dict[str, Any]
+        self, source: str, config_id: str, mapping: dict[str, Any]
     ) -> None:
         conf_mapping = mapping.get(config_id, {})
         conf_mapping = conf_mapping if isinstance(conf_mapping, dict) else {}
-        for key in get_config_fields(self.__class__):
-            if key in conf_mapping:
-                # todo logging
-                setattr(self, key, conf_mapping[key])
-            elif self._first_run and key in mapping:
-                # todo logging
+        for key in self.config_cls_to_fields.get(self.__class__.__name__, []):
+            general_key = f"{source}##{key}"
+            class_key = f"{source}##{config_id}##{key}"
+            if general_key not in self._mapped_keys and key in mapping:
                 setattr(self, key, mapping[key])
+                self._mapped_keys.add(general_key)
+            if class_key not in self._mapped_keys and key in conf_mapping:
+                setattr(self, key, conf_mapping[key])
+                self._mapped_keys.add(class_key)
 
-    def init_config_value_from_env_vars(self) -> None:
-        for key in get_config_fields(self.__class__):
-            if get_env_key(key, self) in os.environ:
-                setattr(self, key, os.environ[get_env_key(key, self)])
+    def init_config_value_from_env_vars(self, config_cls: Type["ConfigBase"]) -> None:
+        for key in self.config_cls_to_fields.get(config_cls.__name__, []):
+            if get_env_key(key, config_cls) in os.environ:
+                setattr(self, key, os.environ[get_env_key(key, config_cls)])
             elif get_env_key(key) in os.environ:
                 setattr(self, key, os.environ[get_env_key(key)])
 
@@ -159,7 +228,9 @@ def get_config_fields(cls: Type) -> Iterator[str]:
             yield key
 
 
-def avoid_multi_inheritance_field_conflict(config_cls: Type) -> dict[str, str]:
+def avoid_multi_inheritance_field_conflict(
+    config_cls: Type, config_cls_to_fields: dict[str, set[str]]
+) -> dict[str, str]:
     """
     Ensures that the same configuration field is not defined in multiple parent classes of a given configuration class.
 
@@ -191,6 +262,7 @@ def avoid_multi_inheritance_field_conflict(config_cls: Type) -> dict[str, str]:
         {'field1': 'ParentConfig1', 'field2': 'ParentConfig2'}
     """
     map_field_to_config_cls: dict[str, str] = {}
+    cls_fields: set[str] = set()
     for parent in config_cls.__bases__:
         if not issubclass(parent, ConfigBase) or parent is ConfigBase:
             continue
@@ -200,8 +272,15 @@ def avoid_multi_inheritance_field_conflict(config_cls: Type) -> dict[str, str]:
                     f"ConfigField {key} found in parent classes {parent.__name__} and {map_field_to_config_cls[key]}"
                 )
             map_field_to_config_cls[key] = parent.__name__
+            config_cls_to_fields[parent.__name__].add(key)
         # add current parent ancestor's fields that may not be specified in the current class
-        map_field_to_config_cls.update(avoid_multi_inheritance_field_conflict(parent))
+        map_field_to_config_cls.update(
+            avoid_multi_inheritance_field_conflict(parent, config_cls_to_fields)
+        )
+        cls_fields = cls_fields.union(config_cls_to_fields[parent.__name__])
+    config_cls_to_fields[config_cls.__name__] = cls_fields.union(
+        set(get_config_fields(config_cls))
+    )
     return map_field_to_config_cls
 
 
@@ -216,38 +295,3 @@ def get_config_family_fields(config_cls: Type) -> dict[str, str]:
                 )
             config_fields[key] = config_cls.__name__
     return config_fields
-
-
-# Config requirements
-
-# It should accept:- yaml files
-# - Toml files
-# - Yaml files
-# - Json files
-# - Environment variables
-
-# Collisions
-# - Value priority (max to min): Env variables, file, config_values, defaults
-
-# ENV VARS Naming conventions
-# - ENV_VARS all start by “PYNENC_“ followed by config class name or config_id
-
-# Flexibility
-# - The user can create it’s own component (subclass of BaseOrchestrator, BaseBroker, etc…)
-# - Then he just have to specify his class in the Pynenc app
-# - But, how can he extend the config as easily?
-#     - One config class per component? Sounds cumbersome
-
-# Ex of flexible config, on the yaml file:
-# 	# root level pynenc
-# 	test_mode: true
-# 	# config for Base Orchestrator, common to all classes
-# 	# (or used in the base code, non abstract methods)
-# 	BaseOrchestrator:
-# 		host: localhost            -> auto env: PYNENC__BASE-ORCHESTRATOR__host
-# 	# specific configs for each subclass of Orchestrator, it can modify the parent
-# 	RedisOrchestrator:
-# 		host: redis                -> auto env: PYNENC__REDIS-ORCHESTRATOR__host
-# 	# subclasses can have specific values
-# 	MemOrchestrator:
-# 		mock_host: true        -> auto env: PYNENC__MEM-ORCHESTRATOR__mock_host
