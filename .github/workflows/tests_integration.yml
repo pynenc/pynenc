@@ -45,5 +45,4 @@ jobs:
         env:
           PYNENC__REDIS_HOST: "redis"
           PYNENC__CYCLE_CONTROL: "True"
-        #run: poetry run pytest tests/integration -vv
-        run: poetry run pytest tests/integration/apps/mem_combinations/test_app_combinations.py -k test_cycle_detection
+        run: poetry run pytest tests/integration

@@ -1,0 +1,22 @@
+# docker-compose.yml
+# emulates the docker-compose.yml file used by the CI/CD pipeline
+# run with:
+# docker-compose --project-directory . -f docker/integration/docker-compose.yml up
+version: "3.8"
+
+services:
+  app:
+    environment:
+      - PYNENC__CONFIGREDIS__REDIS_HOST=redis
+    build:
+      context: .
+      dockerfile: docker/integration/Dockerfile
+    working_dir: /app
+    # command: bash -c "poetry run pytest tests/integration/apps/mem_combinations/test_app_combinations.py"
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7.2.3
+    ports:
+      - "6379:6379"
