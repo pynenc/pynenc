@@ -44,5 +44,4 @@ jobs:
       - name: run integration tests
         env:
           PYNENC__REDIS_HOST: "redis"
-          PYNENC__CYCLE_CONTROL: "True"
         run: poetry run pytest tests/integration
