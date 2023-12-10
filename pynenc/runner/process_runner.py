@@ -50,7 +50,11 @@ class ProcessRunner(BaseRunner):
         for invocation in list(self.processes.keys()):
             if not self.processes[invocation].is_alive():
                 del self.processes[invocation]
-        return self.max_processes - len(self.processes) - self.waiting_processes
+        # discount waiting processes, they should do nothing
+        # until the blocking invocation is finished
+        # otherwise, running one worker with one process
+        # will be lock indefintely until the blocking invocation runs
+        return self.max_processes - len(self.processes)  # - self.waiting_processes
 
     def runner_loop_iteration(self) -> None:
         # called from parent process memory space
@@ -112,4 +116,7 @@ class ProcessRunner(BaseRunner):
         for result_invocation in result_invocations:
             if result_invocation not in self.wait_invocation:
                 self.wait_invocation[result_invocation] = set()
+            self.logger.debug(
+                f"Invocation {running_invocation.invocation_id} is waiting for invocation {result_invocation.invocation_id} to finish"
+            )
             self.wait_invocation[result_invocation].add(running_invocation)

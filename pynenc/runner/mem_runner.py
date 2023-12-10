@@ -50,7 +50,11 @@ class MemRunner(BaseRunner):
     def available_threads(self) -> int:
         """Return the number of available threads"""
         self.threads = {k: v for k, v in self.threads.items() if v.thread.is_alive()}
-        return self.max_threads - len(self.threads) - self.waiting_threads
+        # do not consider waiting threads
+        # in testing with only one thread available and only one worker
+        # the waiting threads will prevent to run the invocation that will unlock
+        # the invocations waiting in these threads
+        return self.max_threads - len(self.threads)  # - self.waiting_threads
 
     def runner_loop_iteration(self) -> None:
         for invocation in self.app.orchestrator.get_invocations_to_run(
