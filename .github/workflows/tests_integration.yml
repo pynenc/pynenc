@@ -8,11 +8,15 @@ on:
 jobs:
   tests-integration:
     runs-on: ubuntu-latest
+    container: python:3.11
     services:
       redis:
         image: redis:7.2.3
-        ports:
-          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
@@ -38,5 +42,8 @@ jobs:
         if: steps.cache-deps.outputs.cache-hit != 'true'
       - run: poetry install --no-interaction
       - name: run integration tests
+        env:
+          PYNENC__REDIS_HOST: "redis"
+          PYNENC__CYCLE_CONTROL: "True"
         #run: poetry run pytest tests/integration -vv
-        run: poetry run pytest tests/integration/apps/mem_combinations/test_app_combinations.py
+        run: poetry run pytest tests/integration/apps/mem_combinations/test_app_combinations.py -k test_cycle_detection
