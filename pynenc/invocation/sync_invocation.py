@@ -19,7 +19,7 @@ class SynchronousInvocation(BaseInvocation[Params, Result]):
 
     @cached_property
     def result(self) -> Result:
-        return self._result
+        return self.task.func(**self.arguments.kwargs)
 
     def to_json(self) -> str:
         raise PynencError("SynchronousInvocation cannot be serialized")

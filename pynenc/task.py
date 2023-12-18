@@ -182,6 +182,7 @@ class Task(Generic[Params, Result]):
         if self.app.conf.dev_mode_force_sync_tasks:
             return SynchronousInvocation(
                 call=Call(self, arguments),
+                # TODO REMOVE! # result not needed anymore
                 result=self.func(**arguments.kwargs),
             )
         return self.app.orchestrator.route_call(Call(self, arguments))
