@@ -2,9 +2,9 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from pynenc import conf
 from pynenc import exceptions as exc
 from pynenc.arguments import Arguments
+from pynenc.conf import config_task
 from pynenc.invocation import DistributedInvocation, ReusedInvocation
 from tests.conftest import MockPynenc
 
@@ -20,10 +20,6 @@ def test_route_default(app: MockPynenc, task_sum: "Task") -> None:
      - The broker should return a new Invocation and report the change of status to the orchestrator
     """
 
-    # @app.task
-    # def dummy(x: int, y: int) -> int:
-    #     return x + y
-
     actual_invocations = []
     for i in range(2):
         actual_invocations.append(task_sum(i, i))
@@ -34,16 +30,15 @@ def test_route_default(app: MockPynenc, task_sum: "Task") -> None:
     assert set(actual_invocations) == set(stored_invocations)
 
 
-def test_single_invocation_raising(app: MockPynenc, task_mirror: "Task") -> None:
-    """Test the option `task.options.single_invocation=SingleInvocation`
+def test_task_concurrency_control_raising(app: MockPynenc, task_mirror: "Task") -> None:
+    """Test the option `task.conf.registration_concurrency=ConcurrencyControlType.task`
     In that case will only route the task if do not exists a Registered instance
     It can only exists one pending instance for the task
 
     With on_diff_args_raise=True will raise an exception if the task arguments differ
     """
-    task_mirror.options.single_invocation = conf.SingleInvocation(
-        on_diff_args_raise=True
-    )
+    task_mirror.conf.registration_concurrency = config_task.ConcurrencyControlType.TASK
+    task_mirror.conf.on_diff_non_key_args_raise = True
 
     # Get existing invocation doesn't find any pending match
     first_invocation = task_mirror("0")
@@ -52,7 +47,7 @@ def test_single_invocation_raising(app: MockPynenc, task_mirror: "Task") -> None
     # But we cannot return the first_invocation because the arguments doesn't match
     # So it will return an exception with the different arguments
     # The user of the library should handle this (or add ignore option in Pynenc)
-    with pytest.raises(exc.SingleInvocationWithDifferentArgumentsError) as excinfo:
+    with pytest.raises(exc.InvocationConcurrencyWithDifferentArgumentsError) as excinfo:
         _ = task_mirror("1")
     assert excinfo.value.task_id == task_mirror.task_id
     assert excinfo.value.existing_invocation_id == first_invocation.invocation_id
@@ -77,16 +72,17 @@ def test_single_invocation_raising(app: MockPynenc, task_mirror: "Task") -> None
     assert next_invocation.diff_arg is None
 
 
-def test_single_invocation_not_raising(app: MockPynenc, task_mirror: "Task") -> None:
-    """Test the option `task.options.single_invocation=SingleInvocation`
+def test_registration_concurrency_not_raising(
+    app: MockPynenc, task_mirror: "Task"
+) -> None:
+    """Test the option `task.options.registration_concurrency=InvocationConcurrency`
     In that case will only route the task if do not exists a Registered instance
     It can only exists one pending instance for the task
 
     With on_diff_args_raise=False will return an invocation with the diff_args
     """
-    task_mirror.options.single_invocation = conf.SingleInvocation(
-        on_diff_args_raise=False
-    )
+    task_mirror.conf.registration_concurrency = config_task.ConcurrencyControlType.TASK
+    task_mirror.conf.on_diff_non_key_args_raise = False
 
     # Get existing invocation doesn't find any pending match
     first_invocation = task_mirror("0")
@@ -103,14 +99,18 @@ def test_single_invocation_not_raising(app: MockPynenc, task_mirror: "Task") -> 
     assert next_invocation.diff_arg.kwargs["arg"] == "1"
 
 
-def test_single_invocation_arguments(app: MockPynenc, task_concat: "Task") -> None:
-    """Test the option `task.options.single_invocation=SingleInvocationPerArguments`
+def test_registration_concurrency_arguments(
+    app: MockPynenc, task_concat: "Task"
+) -> None:
+    """Test the option `task.options.registration_concurrency=InvocationConcurrencyPerArguments`
     In that case will only route the task if do not exists a Registered instance with the same arguments
 
     In this case on_diff_args_raise is not necessary
     (raise an exception if is not routing because exists an instance with different arguments)
     """
-    task_concat.options.single_invocation = conf.SingleInvocationPerArguments()
+    task_concat.conf.registration_concurrency = (
+        config_task.ConcurrencyControlType.ARGUMENTS
+    )
     # Get existing invocation doesn't find any pending match
     inv_ab = task_concat("a", "b")
     inv_cd = task_concat("c", "d")
@@ -119,22 +119,24 @@ def test_single_invocation_arguments(app: MockPynenc, task_concat: "Task") -> No
     assert inv_cd.invocation_id == task_concat("c", "d").invocation_id
 
 
-def test_single_invocation_keys_raising(app: MockPynenc, task_key_arg: "Task") -> None:
-    """Test the option `task.options.single_invocation=SingleInvocationPerArguments`
+def test_registration_concurrency_keys_raising(
+    app: MockPynenc, task_key_arg: "Task"
+) -> None:
+    """Test the option `task.options.registration_concurrency=InvocationConcurrencyPerArguments`
     In that case will only route the task if do not exists a Registered instance with the same key arguments
 
     With on_diff_args_raise=True will raise an exception if the task arguments differ
     """
-    task_key_arg.options.single_invocation = conf.SingleInvocationPerKeyArguments(
-        ["key"], on_diff_args_raise=True
-    )
+    task_key_arg.conf.registration_concurrency = config_task.ConcurrencyControlType.KEYS
+    task_key_arg.conf.key_arguments = ("key",)
+    task_key_arg.conf.on_diff_non_key_args_raise = True
     # Get existing invocation doesn't find any pending match
     inv_k0 = task_key_arg("key0", "a")
     inv_k1 = task_key_arg("key1", "a")
     assert inv_k0.invocation_id != inv_k1.invocation_id
     # Finds invocation with same key but different arguments -> Exception
     #
-    with pytest.raises(exc.SingleInvocationWithDifferentArgumentsError) as excinfo:
+    with pytest.raises(exc.InvocationConcurrencyWithDifferentArgumentsError) as excinfo:
         _ = task_key_arg("key0", "b")
     assert excinfo.value.task_id == task_key_arg.task_id
     assert excinfo.value.existing_invocation_id == inv_k0.invocation_id
@@ -157,14 +159,14 @@ def test_single_invocation_keys_raising(app: MockPynenc, task_key_arg: "Task") -
 def test_single_invocation_keys_not_raising(
     app: MockPynenc, task_key_arg: "Task"
 ) -> None:
-    """Test the option `task.options.single_invocation=SingleInvocationPerArguments`
+    """Test the option `task.options.single_invocation=InvocationConcurrencyPerArguments`
     In that case will only route the task if do not exists a Registered instance with the same key arguments
 
     With on_diff_args_raise=False will return an invocation with the diff_args
     """
-    task_key_arg.options.single_invocation = conf.SingleInvocationPerKeyArguments(
-        ["key"], on_diff_args_raise=False
-    )
+    task_key_arg.conf.registration_concurrency = config_task.ConcurrencyControlType.KEYS
+    task_key_arg.conf.key_arguments = ("key",)
+    task_key_arg.conf.on_diff_non_key_args_raise = False
     # Get existing invocation doesn't find any pending match
     inv_k0 = task_key_arg("key0", "a")
     inv_k1 = task_key_arg("key1", "a")

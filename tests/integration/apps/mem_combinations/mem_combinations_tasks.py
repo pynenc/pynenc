@@ -1,5 +1,8 @@
+from time import sleep
 from typing import Any
 
+from pynenc.conf import ConcurrencyControlType
+from pynenc.exceptions import RetryError
 from tests.conftest import MockPynenc
 
 mock_app = MockPynenc()
@@ -39,3 +42,16 @@ def get_upper() -> str:
 def direct_cycle() -> str:
     invocation = direct_cycle()
     return invocation.result.upper()
+
+
+@mock_app.task(max_retries=2)
+def retry_once() -> int:
+    if retry_once.invocation.num_retries == 0:
+        raise RetryError()
+    return retry_once.invocation.num_retries
+
+
+@mock_app.task(running_concurrency=ConcurrencyControlType.TASK)
+def sleep_seconds(seconds: int) -> bool:
+    sleep(seconds)
+    return True

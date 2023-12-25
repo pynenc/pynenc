@@ -52,6 +52,9 @@ class Key:
     def invocation_status(self, invocation_id: str) -> str:
         return f"{self.prefix}invocation_status:{invocation_id}"
 
+    def invocation_retries(self, invocation_id: str) -> str:
+        return f"{self.prefix}invocation_retries:{invocation_id}"
+
     def call(self, call_id: str) -> str:
         return f"{self.prefix}call:{call_id}"
 

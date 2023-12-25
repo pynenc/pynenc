@@ -30,6 +30,10 @@ class MemRunner(BaseRunner):
             config_filepath=self.app.config_filepath,
         )
 
+    @property
+    def max_parallel_slots(self) -> int:
+        return max(self.conf.min_parallel_slots, self.max_threads)
+
     def _on_start(self) -> None:
         # Initialize thread list and condition dictionary
         self.wait_conditions = defaultdict(threading.Condition)
@@ -54,7 +58,7 @@ class MemRunner(BaseRunner):
         # in testing with only one thread available and only one worker
         # the waiting threads will prevent to run the invocation that will unlock
         # the invocations waiting in these threads
-        return self.max_threads - len(self.threads)  # - self.waiting_threads
+        return self.max_parallel_slots - len(self.threads)  # - self.waiting_threads
 
     def runner_loop_iteration(self) -> None:
         for invocation in self.app.orchestrator.get_invocations_to_run(

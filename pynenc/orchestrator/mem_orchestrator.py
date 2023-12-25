@@ -5,13 +5,14 @@ from time import time
 from typing import TYPE_CHECKING, Any, Generic, Iterator
 
 from ..exceptions import CycleDetectedError, PendingInvocationLockError
-from ..invocation import DistributedInvocation, InvocationStatus
+from ..invocation import InvocationStatus
 from ..types import Params, Result
 from .base_orchestrator import BaseBlockingControl, BaseCycleControl, BaseOrchestrator
 
 if TYPE_CHECKING:
     from ..app import Pynenc
     from ..call import Call
+    from ..invocation import DistributedInvocation
     from ..task import Task
 
 
@@ -20,15 +21,15 @@ class MemCycleControl(BaseCycleControl):
 
     def __init__(self, app: "Pynenc") -> None:
         self.app = app
-        self.invocations: dict[str, DistributedInvocation] = {}
+        self.invocations: dict[str, "DistributedInvocation"] = {}
         self.calls: dict[str, "Call"] = {}
         self.call_to_invocation: dict[
-            str, OrderedDict[str, DistributedInvocation]
+            str, OrderedDict[str, "DistributedInvocation"]
         ] = defaultdict(OrderedDict)
         self.edges: dict[str, set[str]] = defaultdict(set)
 
     def add_call_and_check_cycles(
-        self, caller: DistributedInvocation, callee: DistributedInvocation
+        self, caller: "DistributedInvocation", callee: "DistributedInvocation"
     ) -> None:
         """
         Add a new invocation to the graph. This represents a dependency where the caller
@@ -48,7 +49,7 @@ class MemCycleControl(BaseCycleControl):
         self.call_to_invocation[callee.call_id][callee.invocation_id] = callee
         self.edges[caller.call_id].add(callee.call_id)
 
-    def clean_up_invocation_cycles(self, invocation: DistributedInvocation) -> None:
+    def clean_up_invocation_cycles(self, invocation: "DistributedInvocation") -> None:
         """
         Remove an invocation from the graph. Also removes any edges to or from the invocation.
         """
@@ -63,7 +64,7 @@ class MemCycleControl(BaseCycleControl):
                     edges.discard(call_id)
 
     def find_cycle_caused_by_new_invocation(
-        self, caller: DistributedInvocation, callee: DistributedInvocation
+        self, caller: "DistributedInvocation", callee: "DistributedInvocation"
     ) -> list["Call"]:
         """
         Determines if adding an edge from the caller to the callee would create a cycle.
@@ -123,7 +124,7 @@ class MemBlockingControl(BaseBlockingControl):
 
     def __init__(self, app: "Pynenc") -> None:
         self.app = app
-        self.invocations: dict[str, DistributedInvocation] = {}
+        self.invocations: dict[str, "DistributedInvocation"] = {}
         self.waiting_for: dict[str, set[str]] = defaultdict(set)
         self.waited_by: dict[str, set[str]] = OrderedDict()
 
@@ -143,7 +144,7 @@ class MemBlockingControl(BaseBlockingControl):
                 self.waited_by[waited.invocation_id] = set()
             self.waited_by[waited.invocation_id].add(waiter.invocation_id)
 
-    def release_waiters(self, invocation: DistributedInvocation) -> None:
+    def release_waiters(self, invocation: "DistributedInvocation") -> None:
         """
         Remove an invocation from the graph. Also removes any edges to or from the invocation.
         """
@@ -207,12 +208,13 @@ class ArgPair:
 class TaskInvocationCache(Generic[Result]):
     def __init__(self, app: "Pynenc") -> None:
         self.app = app
-        self.invocations: dict[str, DistributedInvocation] = {}
+        self.invocations: dict[str, "DistributedInvocation"] = {}
         self.args_index: dict[ArgPair, set[str]] = defaultdict(set)
         self.status_index: dict[InvocationStatus, set[str]] = defaultdict(set)
         self.pending_timer: dict[str, float] = {}
         self.pre_pending_status: dict[str, InvocationStatus] = {}
         self.invocation_status: dict[str, InvocationStatus] = {}
+        self.invocation_retries: dict[str, int] = {}
         self.invocations_to_purge: deque[tuple[float, str]] = deque()
         self.locks: dict[str, threading.Lock] = {}
 
@@ -220,7 +222,7 @@ class TaskInvocationCache(Generic[Result]):
         self,
         key_arguments: dict[str, str] | None,
         status: InvocationStatus | None,
-    ) -> Iterator[DistributedInvocation]:
+    ) -> Iterator["DistributedInvocation"]:
         # Filtering by key_arguments
         if key_arguments:
             matches: list[set[str]] = []
@@ -268,6 +270,7 @@ class TaskInvocationCache(Generic[Result]):
                 invocation_id
             )
             self.invocation_status.pop(invocation_id, None)
+            self.invocation_retries.pop(invocation_id, None)
             self.pending_timer.pop(invocation_id, None)
             self.pre_pending_status.pop(invocation_id, None)
 
@@ -324,6 +327,16 @@ class TaskInvocationCache(Generic[Result]):
                 return pre_pending_status
         return status
 
+    def increase_retries(
+        self, invocation: "DistributedInvocation[Params, Result]"
+    ) -> None:
+        self.invocation_retries[invocation.invocation_id] = (
+            self.invocation_retries.get(invocation.invocation_id, 0) + 1
+        )
+
+    def get_retries(self, invocation: "DistributedInvocation[Params, Result]") -> int:
+        return self.invocation_retries.get(invocation.invocation_id, 0)
+
 
 class MemOrchestrator(BaseOrchestrator):
     def __init__(self, app: "Pynenc") -> None:
@@ -351,7 +364,7 @@ class MemOrchestrator(BaseOrchestrator):
         task: "Task[Params, Result]",
         key_serialized_arguments: dict[str, str] | None = None,
         status: InvocationStatus | None = None,
-    ) -> Iterator[DistributedInvocation]:
+    ) -> Iterator["DistributedInvocation"]:
         return self.cache[task.task_id].get_invocations(
             key_serialized_arguments, status
         )
@@ -364,12 +377,12 @@ class MemOrchestrator(BaseOrchestrator):
         self.cache[invocation.task.task_id].set_status(invocation, status)
 
     def _set_invocation_pending_status(
-        self, invocation: DistributedInvocation[Params, Result]
+        self, invocation: "DistributedInvocation[Params, Result]"
     ) -> None:
         self.cache[invocation.task.task_id].set_pending_status(invocation)
 
     def set_up_invocation_auto_purge(
-        self, invocation: DistributedInvocation[Params, Result]
+        self, invocation: "DistributedInvocation[Params, Result]"
     ) -> None:
         self.cache[invocation.task.task_id].set_up_invocation_auto_purge(invocation)
 
@@ -381,6 +394,16 @@ class MemOrchestrator(BaseOrchestrator):
         self, invocation: "DistributedInvocation[Params, Result]"
     ) -> InvocationStatus:
         return self.cache[invocation.task.task_id].get_status(invocation)
+
+    def increment_invocation_retries(
+        self, invocation: "DistributedInvocation[Params, Result]"
+    ) -> None:
+        self.cache[invocation.task.task_id].increase_retries(invocation)
+
+    def get_invocation_retries(
+        self, invocation: "DistributedInvocation[Params, Result]"
+    ) -> int:
+        return self.cache[invocation.task.task_id].get_retries(invocation)
 
     def purge(self) -> None:
         self.cache.clear()

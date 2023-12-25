@@ -20,6 +20,10 @@ class ProcessRunner(BaseRunner):
     max_processes: int
 
     @property
+    def max_parallel_slots(self) -> int:
+        return max(self.conf.min_parallel_slots, self.max_processes)
+
+    @property
     def runner_args(self) -> dict[str, Any]:
         return {"wait_invocation": self.wait_invocation}
 
@@ -54,7 +58,7 @@ class ProcessRunner(BaseRunner):
         # until the blocking invocation is finished
         # otherwise, running one worker with one process
         # will be lock indefintely until the blocking invocation runs
-        return self.max_processes - len(self.processes)  # - self.waiting_processes
+        return self.max_parallel_slots - len(self.processes)  # - self.waiting_processes
 
     def runner_loop_iteration(self) -> None:
         # called from parent process memory space

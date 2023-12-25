@@ -4,6 +4,7 @@ from typing import Any, Callable, Generic, Iterator, Optional, Type, TypeVar, ca
 
 from ..exceptions import ConfigMultiInheritanceError
 from ..util import files
+from .constants import ENV_FILEPATH, ENV_PREFIX, ENV_SEP
 
 T = TypeVar("T")
 
@@ -62,11 +63,6 @@ class ConfigField(Generic[T]):
 
     def __set__(self, instance: "ConfigBase", value: Any) -> None:
         instance._config_values[self] = self._mapper(value, type(self._default_value))
-
-
-ENV_PREFIX = "PYNENC"
-ENV_SEP = "__"
-ENV_FILEPATH = "FILEPATH"
 
 
 def get_env_key(field: str, config: Optional[Type["ConfigBase"]] = None) -> str:
@@ -140,8 +136,11 @@ class ConfigBase:
         # afterwards, that values will be modified by the ancestors
         # the childs will have higher priority
         self._mapped_keys: set[str] = set()
-        self._mapped_environ_keys: set[str] = set()
         self.init_config_values(self.__class__, config_values, config_filepath)
+
+    @classmethod
+    def config_fields(cls) -> list[str]:
+        return list(get_config_fields(cls))
 
     @staticmethod
     def get_config_id(config_cls: Type["ConfigBase"]) -> str:
@@ -205,14 +204,21 @@ class ConfigBase:
         conf_mapping = mapping.get(config_id, {})
         conf_mapping = conf_mapping if isinstance(conf_mapping, dict) else {}
         for key in self.config_cls_to_fields.get(self.__class__.__name__, []):
-            general_key = f"{source}##{key}"
-            class_key = f"{source}##{config_id}##{key}"
-            if general_key not in self._mapped_keys and key in mapping:
-                setattr(self, key, mapping[key])
-                self._mapped_keys.add(general_key)
-            if class_key not in self._mapped_keys and key in conf_mapping:
-                setattr(self, key, conf_mapping[key])
-                self._mapped_keys.add(class_key)
+            self.init_config_value_key_from_mapping(
+                source, config_id, key, mapping, conf_mapping
+            )
+
+    def init_config_value_key_from_mapping(
+        self, source: str, config_id: str, key: str, mapping: dict, conf_mapping: dict
+    ) -> None:
+        general_key = f"{source}##{key}"
+        class_key = f"{source}##{config_id}##{key}"
+        if general_key not in self._mapped_keys and key in mapping:
+            setattr(self, key, mapping[key])
+            self._mapped_keys.add(general_key)
+        if class_key not in self._mapped_keys and key in conf_mapping:
+            setattr(self, key, conf_mapping[key])
+            self._mapped_keys.add(class_key)
 
     def init_config_value_from_env_vars(self, config_cls: Type["ConfigBase"]) -> None:
         for key in self.config_cls_to_fields.get(config_cls.__name__, []):

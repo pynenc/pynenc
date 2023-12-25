@@ -1,4 +1,4 @@
 from .app import Pynenc
-from .task import Task, TaskOptions
+from .task import Task
 
-__all__ = ["Pynenc", "Task", "TaskOptions"]
+__all__ = ["Pynenc", "Task"]

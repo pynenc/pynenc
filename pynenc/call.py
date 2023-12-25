@@ -4,6 +4,7 @@ from functools import cached_property
 from typing import TYPE_CHECKING, Any, Generic
 
 from .arguments import Arguments
+from .conf.config_task import ConcurrencyControlType
 from .types import Params, Result
 
 if TYPE_CHECKING:
@@ -36,6 +37,21 @@ class Call(Generic[Params, Result]):
             k: self.app.serializer.serialize(v)
             for k, v in self.arguments.kwargs.items()
         }
+
+    @cached_property
+    def serialized_args_for_concurrency_check(self) -> dict[str, str] | None:
+        """Returns a dictionary with the call arguments required for the task concurrency check"""
+        if self.task.conf.registration_concurrency == ConcurrencyControlType.DISABLED:
+            return None
+        if self.task.conf.registration_concurrency == ConcurrencyControlType.TASK:
+            return None
+        if self.task.conf.registration_concurrency == ConcurrencyControlType.ARGUMENTS:
+            return self.serialized_arguments
+        if self.task.conf.registration_concurrency == ConcurrencyControlType.KEYS:
+            return {
+                key: self.serialized_arguments[key]
+                for key in self.task.conf.key_arguments
+            }
 
     def deserialize_arguments(self, serialized_arguments: dict[str, str]) -> Arguments:
         """Returns an Arguments instance with the deserialized arguments"""

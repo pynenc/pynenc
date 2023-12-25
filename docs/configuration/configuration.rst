@@ -98,6 +98,44 @@ Example:
 
 In this example, `ConfigOrchestratorRedis` combines the default configurations of both `ConfigOrchestrator` and `ConfigRedis`.
 
+
+Task-Specific Configuration
+---------------------------
+
+The `ConfigTask` class provides specialized configurations for tasks within the distributed system. It allows defining configurations globally for all tasks, or on a per-task basis using environment variables, configuration files, or decorators.
+
+1. **Global vs. Task-Specific Settings**: Global settings apply to all tasks, while task-specific settings override the global ones for the specified task.
+
+2. **Setting via Environment Variables**:
+
+   - Global setting: `PYNENC__CONFIGTASK__<FIELD_NAME>`
+   - Task-specific setting: `PYNENC__CONFIGTASK__<TASK_NAME>__<FIELD_NAME>`
+
+   Example:
+   .. code-block:: shell
+
+      export PYNENC__CONFIGTASK__AUTO_PARALLEL_BATCH_SIZE="2"
+      export PYNENC__CONFIGTASK__MY_MODULE__MY_TASK__AUTO_PARALLEL_BATCH_SIZE="3"
+
+3. **Setting via Configuration File**:
+
+   Task configurations can also be set using YAML, JSON, or TOML files. The structure allows for both global and task-specific configurations.
+
+   Example:
+   .. code-block:: yaml
+
+      task:
+          auto_parallel_batch_size: 4
+          max_retries: 10
+          module_name.task_name:
+              max_retries: 5
+
+   .. code-block:: python
+
+      config = ConfigTask(task_id="module_name.my_task", config_filepath="path/to/config.yaml")
+
+
+
 Extending Configuration
 -----------------------
 

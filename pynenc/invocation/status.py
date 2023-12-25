@@ -16,6 +16,12 @@ class InvocationStatus(StrEnum):
     #: The task call has been routed and is registered
     REGISTERED = auto()
 
+    #: The task call has been re-routed and is registered
+    #: This status is used when a registered task cannot be set to pending and then runned
+    #: in case of running concurrency checks (eg. only one instance of the task can run at the same time)
+    # TODO: in case of running concurrency, retry, schedule (run after x seconds) or reuse running invocation
+    REROUTED = auto()
+
     #: The task call was picked by a runner but is not yet executed.
     #: The status pending will expire after Config.max_pending_seconds
     PENDING = auto()
@@ -50,6 +56,7 @@ class InvocationStatus(StrEnum):
         """
         return self in {
             InvocationStatus.REGISTERED,
+            InvocationStatus.REROUTED,
             InvocationStatus.RETRY,
         }
 

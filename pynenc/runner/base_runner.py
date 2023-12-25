@@ -52,6 +52,12 @@ class BaseRunner(ABC):
             config_filepath=self.app.config_filepath,
         )
 
+    @property
+    @abstractmethod
+    def max_parallel_slots(self) -> int:
+        """The maximum number of parallel task that the runner can handle"""
+        ...
+
     @abstractmethod
     def _on_start(self) -> None:
         """This method is called when the runner starts"""
@@ -148,6 +154,12 @@ class DummyRunner(BaseRunner):
         )
 
     def runner_loop_iteration(self) -> None:
+        raise RunnerNotExecutableError(
+            "This runner is a placeholder for the Pynenc app"
+        )
+
+    @property
+    def max_parallel_slots(self) -> int:
         raise RunnerNotExecutableError(
             "This runner is a placeholder for the Pynenc app"
         )

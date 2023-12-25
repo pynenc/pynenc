@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from ..app import Pynenc
     from ..arguments import Arguments
     from ..task import Task
+    from .status import InvocationStatus
 
 
 T = TypeVar("T", bound="BaseInvocation")
@@ -71,7 +72,17 @@ class BaseInvocation(ABC, Generic[Params, Result]):
 
     @property
     @abstractmethod
+    def status(self) -> InvocationStatus:
+        """"""
+
+    @property
+    @abstractmethod
     def result(self) -> Result:
+        """"""
+
+    @property
+    @abstractmethod
+    def num_retries(self) -> int:
         """"""
 
     def __str__(self) -> str:

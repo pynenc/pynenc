@@ -36,6 +36,10 @@ class PynencError(Exception):
         raise ValueError(f"Unknown error type: {error_name}")
 
 
+class RetryError(PynencError):
+    """Error raised when a task should be retried."""
+
+
 class PendingInvocationLockError(PynencError):
     """Error raised when two processes try to set the same invocation as pending concurrently"""
 
@@ -52,9 +56,9 @@ class TaskError(PynencError):
 
     def __str__(self) -> str:
         if self.message:
-            return f"TaskError({self.task_id}): {self.message}"
+            return f"{self.__class__.__name__}({self.task_id}): {self.message}"
         else:
-            return f"TaskError({self.task_id})"
+            return f"{self.__class__.__name__}({self.task_id})"
 
     def _to_json_dict(self) -> dict[str, Any]:
         """Returns a string with the serialized error"""
@@ -66,11 +70,15 @@ class TaskError(PynencError):
         return cls(json_dict["task_id"], json_dict["message"])
 
 
+class InvalidTaskOptionsError(TaskError):
+    """Error raised when the task options are invalid."""
+
+
 class TaskRoutingError(TaskError):
     """Error raised when a task will not be routed."""
 
 
-class SingleInvocationWithDifferentArgumentsError(TaskRoutingError):
+class InvocationConcurrencyWithDifferentArgumentsError(TaskRoutingError):
     """
     Error raised when there is a pending task with different arguments
     than the current task.
@@ -95,7 +103,7 @@ class SingleInvocationWithDifferentArgumentsError(TaskRoutingError):
         existing_invocation: "BaseInvocation",
         new_call: "Call",
         message: Optional[str] = None,
-    ) -> "SingleInvocationWithDifferentArgumentsError":
+    ) -> "InvocationConcurrencyWithDifferentArgumentsError":
         return cls(
             existing_invocation.task.task_id,
             existing_invocation.invocation_id,
@@ -138,10 +146,8 @@ class SingleInvocationWithDifferentArgumentsError(TaskRoutingError):
 
     def __str__(self) -> str:
         if self.message:
-            return f"SingleInvocationWithDifferentArgumentsError({self.task_id}) {self.message}\n{self.diff}"
-        return (
-            f"SingleInvocationWithDifferentArgumentsError({self.task_id})\n{self.diff}"
-        )
+            return f"InvocationConcurrencyWithDifferentArgumentsError({self.task_id}) {self.message}\n{self.diff}"
+        return f"InvocationConcurrencyWithDifferentArgumentsError({self.task_id})\n{self.diff}"
 
     def _to_json_dict(self) -> dict[str, Any]:
         """Returns a string with the serialized error"""
@@ -155,7 +161,7 @@ class SingleInvocationWithDifferentArgumentsError(TaskRoutingError):
     @classmethod
     def _from_json_dict(
         cls, json_dict: dict[str, str]
-    ) -> "SingleInvocationWithDifferentArgumentsError":
+    ) -> "InvocationConcurrencyWithDifferentArgumentsError":
         """Returns a new error from a serialized error"""
         return cls(
             json_dict["task_id"],
