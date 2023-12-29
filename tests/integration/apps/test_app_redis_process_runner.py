@@ -250,7 +250,6 @@ def test_sub_invocation_dependency() -> None:
     thread = threading.Thread(target=run_in_thread, daemon=True)
     thread.start()
     assert get_upper().result == "EXAMPLE"
-    sleep(5)  # TODO remove
     mp_app.runner.stop_runner_loop()
     thread.join()
 

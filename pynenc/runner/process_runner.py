@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 class ProcessRunner(BaseRunner):
     wait_invocation: dict["DistributedInvocation", set["DistributedInvocation"]]
     processes: dict["DistributedInvocation", Process]
+    manager: Manager  # type: ignore
 
     max_processes: int
 
@@ -37,7 +38,8 @@ class ProcessRunner(BaseRunner):
         self.wait_invocation = args["wait_invocation"]
 
     def _on_start(self) -> None:
-        self.wait_invocation = Manager().dict()  # type: ignore
+        self.manager = Manager()
+        self.wait_invocation = self.manager.dict()  # type: ignore
         self.processes = {}
         self.max_processes = cpu_count()
 
@@ -48,6 +50,10 @@ class ProcessRunner(BaseRunner):
             self.app.orchestrator.set_invocation_status(
                 invocation, InvocationStatus.RETRY
             )
+        # Clear the wait_invocation dictionary
+        self.wait_invocation.clear()
+        self.manager.shutdown()  # type: ignore
+        self.wait_invocation = {}
 
     @property
     def available_processes(self) -> int:
