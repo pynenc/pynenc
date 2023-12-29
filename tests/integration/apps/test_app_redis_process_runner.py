@@ -251,6 +251,7 @@ def test_sub_invocation_dependency() -> None:
     thread.start()
     assert get_upper().result == "EXAMPLE"
     mp_app.runner.stop_runner_loop()
+    sleep(5)  # TODO remove
     thread.join()
 
 
