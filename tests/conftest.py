@@ -87,6 +87,7 @@ class MockStateBackend(BaseStateBackend):
 class MockRunner(BaseRunner):
     _on_start = MagicMock()
     _on_stop = MagicMock()
+    _on_stop_runner_loop = MagicMock()
     runner_loop_iteration = MagicMock()
     waiting_for_results = MagicMock()
     max_parallel_slots = 2
@@ -95,6 +96,7 @@ class MockRunner(BaseRunner):
         super().__init__(app)
         self._on_start.reset_mock()
         self._on_stop.reset_mock()
+        self._on_stop_runner_loop.reset_mock()
         self.runner_loop_iteration.reset_mock()
         self.waiting_for_results.reset_mock()
 

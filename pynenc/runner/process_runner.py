@@ -50,9 +50,11 @@ class ProcessRunner(BaseRunner):
             self.app.orchestrator.set_invocation_status(
                 invocation, InvocationStatus.RETRY
             )
+        self.manager.shutdown()  # type: ignore
+
+    def _on_stop_runner_loop(self) -> None:
         # Clear the wait_invocation dictionary
         self.wait_invocation.clear()
-        self.manager.shutdown()  # type: ignore
         self.wait_invocation = {}
 
     @property

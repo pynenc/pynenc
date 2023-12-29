@@ -93,6 +93,10 @@ class BaseRunner(ABC):
         Subclasses should implement this method to process invocations.
         """
 
+    @abstractmethod
+    def _on_stop_runner_loop(self) -> None:
+        """This method is called after the runner loop signal is received"""
+
     def stop_runner_loop(
         self, signum: Optional[int] = None, frame: Optional["FrameType"] = None
     ) -> None:
@@ -149,6 +153,11 @@ class DummyRunner(BaseRunner):
         )
 
     def _on_stop(self) -> None:
+        raise RunnerNotExecutableError(
+            "This runner is a placeholder for the Pynenc app"
+        )
+
+    def _on_stop_runner_loop(self) -> None:
         raise RunnerNotExecutableError(
             "This runner is a placeholder for the Pynenc app"
         )

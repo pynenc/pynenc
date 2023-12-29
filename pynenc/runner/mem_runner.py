@@ -50,6 +50,9 @@ class MemRunner(BaseRunner):
                 thread_info.invocation, InvocationStatus.RETRY
             )
 
+    def _on_stop_runner_loop(self) -> None:
+        pass
+
     @property
     def available_threads(self) -> int:
         """Return the number of available threads"""
