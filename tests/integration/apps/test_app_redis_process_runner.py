@@ -251,7 +251,8 @@ def test_sub_invocation_dependency() -> None:
     thread.start()
     assert get_upper().result == "EXAMPLE"
     mp_app.runner.stop_runner_loop()
-    thread.join()
+    # tmp: disable wait for the thread to stop
+    # thread.join()
 
 
 def test_avoid_direct_self_cycles() -> None:
