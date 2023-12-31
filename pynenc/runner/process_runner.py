@@ -98,7 +98,7 @@ class ProcessRunner(BaseRunner):
             else:
                 ...
                 # TODO if for mypy, the process should have a pid after start, otherwise it should raise an exception
-        self.logger.info(f"waiting for results {self.wait_invocation=}")
+        self.logger.info("runer loop - check waiting invocations pending results")
         for invocation in list(self.wait_invocation.keys()):
             is_final = invocation.status.is_final()
             for waiting_invocation in self.wait_invocation[invocation]:
