@@ -248,7 +248,7 @@ def test_sub_invocation_dependency() -> None:
     def run_in_thread() -> None:
         mp_app.runner.run()
 
-    thread = threading.Thread(target=run_in_thread, daemon=True)
+    thread = threading.Thread(target=run_in_thread, daemon=False)
     thread.start()
     assert get_upper().result == "EXAMPLE"
     mp_app.runner.stop_runner_loop()
