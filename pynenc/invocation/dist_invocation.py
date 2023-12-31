@@ -80,10 +80,12 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         # Set current invocation
         previous_invocation_context = context.dist_inv_context.get(self.app.app_id)
         try:
+            self.app.logger.info(f"Invocation {self.invocation_id} started")
             context.dist_inv_context[self.app.app_id] = self
             self.app.orchestrator.set_invocation_run(self.parent_invocation, self)
             result = self.task.func(**self.arguments.kwargs)
             self.app.orchestrator.set_invocation_result(self, result)
+            self.app.logger.info(f"Invocation {self.invocation_id} finished")
         except self.task.retriable_exceptions as ex:
             if self.num_retries >= self.task.conf.max_retries:
                 self.task.logger.exception("Max retries reached")

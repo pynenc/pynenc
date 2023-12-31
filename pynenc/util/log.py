@@ -13,14 +13,14 @@ def create_logger(app: "Pynenc") -> logging.Logger:
         if not isinstance(numeric_level, int):
             raise ValueError(f"Invalid log level: {level_name}")
         logger.setLevel(numeric_level)
-    # Set the format for the logger
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-    handler = logging.StreamHandler()
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
+    # # Set the format for the logger
+    # formatter = logging.Formatter(
+    #     "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    #     datefmt="%Y-%m-%d %H:%M:%S",
+    # )
+    # handler = logging.StreamHandler()
+    # handler.setFormatter(formatter)
+    # logger.addHandler(handler)
     return logger
 
 
