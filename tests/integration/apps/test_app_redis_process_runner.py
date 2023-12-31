@@ -283,4 +283,4 @@ def test_avoid_direct_self_cycles() -> None:
     )
     assert str(exc_info.value) == expected_error
     mp_app.runner.stop_runner_loop()
-    thread.join()
+    # thread.join()
