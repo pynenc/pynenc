@@ -1,4 +1,5 @@
 from datetime import datetime
+from time import sleep
 from typing import TYPE_CHECKING, Optional
 
 import pytest
@@ -54,6 +55,8 @@ def test_store_invocation(
 ) -> None:
     """Test that it will store and retrieve an invocation"""
     app.state_backend.upsert_invocation(invocation)
+    # upsert invocation is not blocking, so we need to wait for the async operation
+    sleep(0.1)
     retrieved_invocation = app.state_backend.get_invocation(invocation.invocation_id)
     assert invocation == retrieved_invocation
 
