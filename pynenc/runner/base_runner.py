@@ -122,6 +122,9 @@ class BaseRunner(ABC):
 
         The runner has the oportunity to define the waiting behaviour of the running invocation in this method
         Otherwise the running invocation will infinetely loop until the result invocation is ready
+
+        runner_args is a dictionary with the arguments passed to the runner by itself
+        e.g. process runner uses this to syncronize managed dictionaries among sub-process
         """
 
     def run(self) -> None:

@@ -75,6 +75,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         return cls(call, parent_invocation, inv_dict["invocation_id"])
 
     def run(self, runner_args: dict[str, Any] | None = None) -> None:
+        # runner_args are passed from/to the runner (e.g. used to sync subprocesses)
         context.runner_args = runner_args
         # Set current invocation
         previous_invocation_context = context.dist_inv_context.get(self.app.app_id)
