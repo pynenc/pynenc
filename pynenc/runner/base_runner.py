@@ -105,6 +105,7 @@ class BaseRunner(ABC):
             f"Received signal {signum=} {frame=} Stopping runner loop..."
         )
         self.running = False
+        self._on_stop_runner_loop()
 
     @abstractmethod
     def waiting_for_results(
