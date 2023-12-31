@@ -361,6 +361,16 @@ class TaskRedisCache:
                         return previous_status
         return status
 
+    def get_invocation_retries(self, invocation: "DistributedInvocation") -> int:
+        if encoded_retries := self.client.get(
+            self.key.invocation_retries(invocation.invocation_id)
+        ):
+            return int(encoded_retries.decode())
+        return 0
+
+    def increment_invocation_retries(self, invocation: "DistributedInvocation") -> None:
+        self.client.incr(self.key.invocation_retries(invocation.invocation_id))
+
     def get_invocations(
         self,
         task_id: str,
@@ -453,6 +463,21 @@ class RedisOrchestrator(BaseOrchestrator):
         self, invocation: "DistributedInvocation[Params, Result]"
     ) -> "InvocationStatus":
         return self.redis_cache.get_invocation_status(invocation)
+
+    def increase_retries(
+        self, invocation: "DistributedInvocation[Params, Result]"
+    ) -> None:
+        self.redis_cache.increment_invocation_retries(invocation)
+
+    def get_invocation_retries(
+        self, invocation: "DistributedInvocation[Params, Result]"
+    ) -> int:
+        return self.redis_cache.get_invocation_retries(invocation)
+
+    def increment_invocation_retries(
+        self, invocation: "DistributedInvocation[Params, Result]"
+    ) -> None:
+        self.redis_cache.increment_invocation_retries(invocation)
 
     def purge(self) -> None:
         """Remove all invocations from the orchestrator"""

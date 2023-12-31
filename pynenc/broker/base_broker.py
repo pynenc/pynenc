@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Optional
 
 from ..call import Call
 from ..conf.config_broker import ConfigBroker
-from ..context import invocation_context
+from ..context import dist_inv_context
 from ..invocation import DistributedInvocation
 from ..types import Params, Result
 
@@ -49,7 +49,7 @@ class BaseBroker(ABC):
         """Creates a new invocation and routes it"""
         self.route_invocation(
             invocation := DistributedInvocation(
-                call, parent_invocation=invocation_context.get(self.app.app_id)
+                call, parent_invocation=dist_inv_context.get(self.app.app_id)
             )
         )
         self.app.logger.debug(

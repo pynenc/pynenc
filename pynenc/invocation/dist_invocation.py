@@ -35,6 +35,11 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         return self._invocation_id or super().invocation_id
 
     @property
+    def num_retries(self) -> int:
+        """Get the number of times the invocation got retried"""
+        return self.app.orchestrator.get_invocation_retries(self)
+
+    @property
     def status(self) -> InvocationStatus:
         """Get the status of the invocation"""
         return self.app.orchestrator.get_invocation_status(self)
@@ -70,19 +75,29 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         return cls(call, parent_invocation, inv_dict["invocation_id"])
 
     def run(self, runner_args: dict[str, Any] | None = None) -> None:
+        # runner_args are passed from/to the runner (e.g. used to sync subprocesses)
         context.runner_args = runner_args
         # Set current invocation
-        previous_invocation_context = context.invocation_context.get(self.app.app_id)
+        previous_invocation_context = context.dist_inv_context.get(self.app.app_id)
         try:
-            context.invocation_context[self.app.app_id] = self
+            self.app.logger.info(f"Invocation {self.invocation_id} started")
+            context.dist_inv_context[self.app.app_id] = self
             self.app.orchestrator.set_invocation_run(self.parent_invocation, self)
             result = self.task.func(**self.arguments.kwargs)
             self.app.orchestrator.set_invocation_result(self, result)
+            self.app.logger.info(f"Invocation {self.invocation_id} finished")
+        except self.task.retriable_exceptions as ex:
+            if self.num_retries >= self.task.conf.max_retries:
+                self.task.logger.exception("Max retries reached")
+                self.app.orchestrator.set_invocation_exception(self, ex)
+                raise ex
+            self.app.orchestrator.set_invocation_retry(self, ex)
+            self.task.logger.warning("Retrying invocation")
         except Exception as ex:
             self.app.orchestrator.set_invocation_exception(self, ex)
             raise ex
         finally:
-            context.invocation_context[self.app.app_id] = previous_invocation_context
+            context.dist_inv_context[self.app.app_id] = previous_invocation_context
 
     @property
     def result(self) -> Result:

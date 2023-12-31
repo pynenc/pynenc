@@ -2,7 +2,9 @@ import os
 from typing import Any
 from unittest.mock import patch
 
-from pynenc import Pynenc, Task, TaskOptions
+from pynenc import Pynenc, Task
+from pynenc.conf.config_task import ConfigTask
+from pynenc.exceptions import RetryError
 from pynenc.invocation import DistributedInvocation, SynchronousInvocation
 
 app = Pynenc()
@@ -20,8 +22,8 @@ def test_instanciate_task() -> None:
     assert isinstance(add, Task)
 
 
-@app.task(profiling="any")
-def add_profiled(x: int, y: int) -> int:
+@app.task(max_retries=2)
+def add_with_max_retries(x: int, y: int) -> int:
     return x + y
 
 
@@ -30,8 +32,8 @@ def test_instanciate_task_with_args() -> None:
     Test that the decorator arguments exists in the Task instance
     """
     # I expect that function to become an instance of Task
-    assert isinstance(add_profiled.options, TaskOptions)
-    assert add_profiled.options.profiling == "any"
+    assert isinstance(add_with_max_retries.conf, ConfigTask)
+    assert add_with_max_retries.conf.max_retries == 2
 
 
 def test_sync_run_with_dev_mode_force_sync_invocation() -> None:
@@ -79,3 +81,24 @@ def test_extract_arguments_named_regardless_call() -> None:
     assert invocation.arguments.kwargs == expected
     invocation = dummy(arg0=0, arg1=1, arg2=2, arg3=3)
     assert invocation.arguments.kwargs == expected
+
+
+@app.task(max_retries=1)
+def retry_once() -> int:
+    if retry_once.invocation.num_retries == 0:
+        raise RetryError()
+    return retry_once.invocation.num_retries
+
+
+def test_sync_run_retry() -> None:
+    """
+    Test that the Task will retry once for synchronous invocation
+    """
+    with patch.dict(os.environ, {"PYNENC__DEV_MODE_FORCE_SYNC_TASKS": "True"}):
+        retry_once.app = Pynenc()
+        invocation = retry_once()
+
+    assert isinstance(invocation, SynchronousInvocation)
+    assert invocation.num_retries == 0
+    assert invocation.result == 1
+    assert invocation.num_retries == 1

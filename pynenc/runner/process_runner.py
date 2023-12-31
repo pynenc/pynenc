@@ -16,11 +16,20 @@ if TYPE_CHECKING:
 class ProcessRunner(BaseRunner):
     wait_invocation: dict["DistributedInvocation", set["DistributedInvocation"]]
     processes: dict["DistributedInvocation", Process]
+    manager: Manager  # type: ignore
 
     max_processes: int
 
     @property
+    def max_parallel_slots(self) -> int:
+        return max(self.conf.min_parallel_slots, self.max_processes)
+
+    @property
     def runner_args(self) -> dict[str, Any]:
+        # this is necessary for parent-subprocess communication on ProcessRunner
+        # it passes the wait_invocation Managed dictinoary to the subprocesses
+        # so they can notify the main loop when waiting for other invocatinos
+        # the main loop will then pause the subprocesses
         return {"wait_invocation": self.wait_invocation}
 
     @property
@@ -33,17 +42,30 @@ class ProcessRunner(BaseRunner):
         self.wait_invocation = args["wait_invocation"]
 
     def _on_start(self) -> None:
-        self.wait_invocation = Manager().dict()  # type: ignore
+        self.logger.info("Starting ProcessRunner")
+        self.manager = Manager()
+        self.wait_invocation = self.manager.dict()  # type: ignore
         self.processes = {}
         self.max_processes = cpu_count()
 
     def _on_stop(self) -> None:
         """kill all the running processes and change invocation status to retry"""
+        self.logger.info("Stopping ProcessRunner")
         for invocation, process in self.processes.items():
             process.kill()
             self.app.orchestrator.set_invocation_status(
                 invocation, InvocationStatus.RETRY
             )
+            self.logger.info(f"Killing invocation {invocation.invocation_id}")
+        self.manager.shutdown()  # type: ignore
+        self.logger.info("ProcessRunner stopped")
+
+    def _on_stop_runner_loop(self) -> None:
+        # Clear the wait_invocation dictionary
+        self.logger.info("Stopping ProcessRunner loop")
+        self.wait_invocation.clear()
+        self.wait_invocation = {}
+        self.logger.info("ProcessRunner loop stopped")
 
     @property
     def available_processes(self) -> int:
@@ -54,10 +76,11 @@ class ProcessRunner(BaseRunner):
         # until the blocking invocation is finished
         # otherwise, running one worker with one process
         # will be lock indefintely until the blocking invocation runs
-        return self.max_processes - len(self.processes)  # - self.waiting_processes
+        return self.max_parallel_slots - len(self.processes)  # - self.waiting_processes
 
     def runner_loop_iteration(self) -> None:
         # called from parent process memory space
+        self.logger.debug(f"starting runner loop iteration {self.available_processes=}")
         for invocation in self.app.orchestrator.get_invocations_to_run(
             max_num_invocations=self.available_processes
         ):
@@ -75,7 +98,7 @@ class ProcessRunner(BaseRunner):
             else:
                 ...
                 # TODO if for mypy, the process should have a pid after start, otherwise it should raise an exception
-
+        self.logger.debug("runer loop - check waiting invocations pending results")
         for invocation in list(self.wait_invocation.keys()):
             is_final = invocation.status.is_final()
             for waiting_invocation in self.wait_invocation[invocation]:
@@ -86,12 +109,15 @@ class ProcessRunner(BaseRunner):
                         os.kill(pid, signal.SIGSTOP)
             if is_final:
                 waiting_invocations = self.wait_invocation.pop(invocation)
-                self.logger.debug(
+                self.logger.info(
                     f"{invocation=} on final {invocation.status=}, resuming {waiting_invocations=}"
                 )
                 self.app.orchestrator.set_invocations_status(
                     list(waiting_invocations), InvocationStatus.RUNNING
                 )
+        self.logger.debug(
+            f"finishing loop iteration sleeping {self.conf.runner_loop_sleep_time_sec=}"
+        )
         time.sleep(self.conf.runner_loop_sleep_time_sec)
 
     def waiting_for_results(

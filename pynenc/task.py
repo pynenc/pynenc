@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import importlib
 import json
-from dataclasses import dataclass
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, Generic, Iterable
 
+from . import context
 from .arguments import Arguments
 from .call import Call
-from .conf.base_config_option import BaseConfigOption
-from .conf.single_invocation_pending import SingleInvocation
+from .conf.config_task import ConfigTask
+from .exceptions import InvalidTaskOptionsError, RetryError
 from .invocation import (
     BaseInvocation,
     BaseInvocationGroup,
@@ -22,62 +22,6 @@ from .util.log import TaskLoggerAdapter
 
 if TYPE_CHECKING:
     from .app import Pynenc
-
-
-@dataclass
-class TaskOptions:
-    """The options common to any implementation of BaseTask"""
-
-    #: If True, only one request will be routed by the broker.
-    #: Use this option for tasks that make no sense to execute multiple times in parallel or to avoid generating too much unnecessary tasks in the system.
-    single_invocation: SingleInvocation | None = None
-
-    #: If 0 auto parallelization will be disabled.
-    #: If > 0, the iterable will be automatically split in chunks of this size and each chunk will be sent to a different worker.
-    #: if the task arguments is not an iterable, nothing will happen.
-    auto_parallel_batch_size: int = 0
-
-    #: Profiling will take care of storing profiling information for the task (this is a todo, will require further options).
-    profiling: str | None = None
-
-    def __post_init__(self) -> None:
-        for attr, value in self.__dict__.items():
-            if isinstance(value, dict):
-                self.__dict__[attr] = BaseConfigOption.from_dict(value)
-        self.validate()
-
-    def validate(self) -> None:
-        for attr, value in self.__dict__.items():
-            if isinstance(value, (str, int, bool, type(None))):
-                continue
-            if not issubclass(type(value), BaseConfigOption):
-                raise TypeError(
-                    f"Attribute {attr} must be a basic type or a subclass of BaseConfigOption"
-                )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Returns a dictionary with the options"""
-        options_dict = {**self.__dict__}
-        for attr, value in options_dict.items():
-            if isinstance(value, BaseConfigOption):
-                options_dict[attr] = value.to_dict()
-        return options_dict
-
-    def to_json(self) -> str:
-        """Returns a string with the serialized options"""
-        return json.dumps(self.to_dict())
-
-    @classmethod
-    def from_dict(cls, options_dict: dict[str, Any]) -> TaskOptions:
-        """Returns a new options from a dictionary"""
-        for attr, value in options_dict.items():
-            if isinstance(value, dict):
-                options_dict[attr] = BaseConfigOption.from_dict(value)
-        return cls(**options_dict)
-
-    @classmethod
-    def from_json(cls, serialized: str) -> TaskOptions:
-        return cls.from_dict(json.loads(serialized))
 
 
 class Task(Generic[Params, Result]):
@@ -117,11 +61,46 @@ class Task(Generic[Params, Result]):
         self.app = app
         self.logger = TaskLoggerAdapter(self.app.logger, self.task_id)
         self.func = func
-        self.options: TaskOptions = TaskOptions(**options)
+        self.options = options
+        self.validate_options()
+
+    def validate_options(self) -> None:
+        """
+        validate that all the option fields exists in the config_fields
+        it will raise an exception with all the invalid options
+        """
+        invalid_options = []
+        for option in self.options:
+            if option not in ConfigTask.config_fields():
+                invalid_options.append(option)
+        if invalid_options:
+            raise InvalidTaskOptionsError(
+                self.task_id, f"Invalid options: {invalid_options}"
+            )
+
+    @cached_property
+    def conf(self) -> ConfigTask:
+        return ConfigTask(
+            task_id=self.task_id,
+            config_values=self.app.config_values,
+            config_filepath=self.app.config_filepath,
+            task_options=self.options,
+        )
+
+    @property
+    def invocation(self) -> BaseInvocation:
+        """The invocation of the task"""
+        if dist_inv := context.dist_inv_context.get(self.app.app_id):
+            return dist_inv
+        if sync_inv := context.sync_inv_context.get(self.app.app_id):
+            return sync_inv
+        raise RuntimeError("Task has not been invoked yet")
 
     def to_json(self) -> str:
         """Returns a string with the serialized task"""
-        return json.dumps({"task_id": self.task_id, "options": self.options.to_json()})
+        return json.dumps(
+            {"task_id": self.task_id, "options": self.conf.options_to_json()}
+        )
 
     def __getstate__(self) -> dict:
         # Return state as a dictionary and a secondary value as a tuple
@@ -136,7 +115,7 @@ class Task(Generic[Params, Result]):
         self.task_id = task_id
         self.app = self.app
         self.func = func
-        self.options = TaskOptions.from_dict(options)
+        self.options = options
 
     @staticmethod
     def _from_json(app: Pynenc, serialized: str) -> tuple[str, Func, dict[str, Any]]:
@@ -146,14 +125,20 @@ class Task(Generic[Params, Result]):
         module_name, function_name = task_id.rsplit(".", 1)
         module = importlib.import_module(module_name)
         function = getattr(module, function_name)
-        options_dict = TaskOptions.from_json(task_dict["options"]).to_dict()
-        return task_id, function.func, options_dict
+        options = ConfigTask.options_from_json(task_dict["options"])
+        return task_id, function.func, options
 
     @classmethod
     def from_json(cls, app: Pynenc, serialized: str) -> Task:
         """Returns a new task from a serialized task"""
         _, func, options = cls._from_json(app, serialized)
         return cls(app, func, options)
+
+    @cached_property
+    def retriable_exceptions(self) -> tuple[type[Exception], ...]:
+        if self.conf.retry_for is None:
+            return (RetryError,)
+        return self.conf.retry_for + (RetryError,)
 
     @cached_property
     def task_id(self) -> str:
@@ -180,10 +165,7 @@ class Task(Generic[Params, Result]):
     def _call(self, arguments: Arguments) -> BaseInvocation[Params, Result]:
         """Route the call to the orchestrator if not in dev mode, otherwise run synchronously"""
         if self.app.conf.dev_mode_force_sync_tasks:
-            return SynchronousInvocation(
-                call=Call(self, arguments),
-                result=self.func(**arguments.kwargs),
-            )
+            return SynchronousInvocation(call=Call(self, arguments))
         return self.app.orchestrator.route_call(Call(self, arguments))
 
     def parallelize(

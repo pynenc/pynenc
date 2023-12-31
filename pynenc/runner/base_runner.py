@@ -52,6 +52,12 @@ class BaseRunner(ABC):
             config_filepath=self.app.config_filepath,
         )
 
+    @property
+    @abstractmethod
+    def max_parallel_slots(self) -> int:
+        """The maximum number of parallel task that the runner can handle"""
+        ...
+
     @abstractmethod
     def _on_start(self) -> None:
         """This method is called when the runner starts"""
@@ -87,6 +93,10 @@ class BaseRunner(ABC):
         Subclasses should implement this method to process invocations.
         """
 
+    @abstractmethod
+    def _on_stop_runner_loop(self) -> None:
+        """This method is called after the runner loop signal is received"""
+
     def stop_runner_loop(
         self, signum: Optional[int] = None, frame: Optional["FrameType"] = None
     ) -> None:
@@ -95,6 +105,7 @@ class BaseRunner(ABC):
             f"Received signal {signum=} {frame=} Stopping runner loop..."
         )
         self.running = False
+        self._on_stop_runner_loop()
 
     @abstractmethod
     def waiting_for_results(
@@ -111,6 +122,9 @@ class BaseRunner(ABC):
 
         The runner has the oportunity to define the waiting behaviour of the running invocation in this method
         Otherwise the running invocation will infinetely loop until the result invocation is ready
+
+        runner_args is a dictionary with the arguments passed to the runner by itself
+        e.g. process runner uses this to syncronize managed dictionaries among sub-process
         """
 
     def run(self) -> None:
@@ -147,7 +161,18 @@ class DummyRunner(BaseRunner):
             "This runner is a placeholder for the Pynenc app"
         )
 
+    def _on_stop_runner_loop(self) -> None:
+        raise RunnerNotExecutableError(
+            "This runner is a placeholder for the Pynenc app"
+        )
+
     def runner_loop_iteration(self) -> None:
+        raise RunnerNotExecutableError(
+            "This runner is a placeholder for the Pynenc app"
+        )
+
+    @property
+    def max_parallel_slots(self) -> int:
         raise RunnerNotExecutableError(
             "This runner is a placeholder for the Pynenc app"
         )

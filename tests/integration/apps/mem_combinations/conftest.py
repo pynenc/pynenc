@@ -144,3 +144,15 @@ def task_get_upper(app: Pynenc) -> "Task":
 def task_direct_cycle(app: Pynenc) -> "Task":
     tasks.direct_cycle.app = app
     return tasks.direct_cycle
+
+
+@pytest.fixture(scope="function")
+def task_retry_once(app: Pynenc) -> "Task":
+    tasks.retry_once.app = app
+    return tasks.retry_once
+
+
+@pytest.fixture(scope="function")
+def task_sleep(app: Pynenc) -> "Task":
+    tasks.sleep_seconds.app = app
+    return tasks.sleep_seconds

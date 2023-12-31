@@ -201,7 +201,7 @@ class Pynenc:
         The task decorator converts the function into an instance of a BaseTask. It accepts any kind of options,
         however these options will be validated with the options class assigned to the class.
 
-        Check the options reference in self.task_cls.options_cls or the Pynenc documentation for a detailed explanation
+        Check the options reference in conf.config_task or the Pynenc documentation for a detailed explanation
         of the BaseTask instance you are applying.
 
         Parameters

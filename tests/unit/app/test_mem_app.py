@@ -4,7 +4,7 @@ from typing import Any
 import pytest
 
 from pynenc import Pynenc
-from pynenc.exceptions import CycleDetectedError
+from pynenc.exceptions import CycleDetectedError, RetryError
 from pynenc.runner import MemRunner
 from tests.conftest import MockPynenc
 
@@ -37,6 +37,13 @@ def get_upper_cycle() -> str:
     return invocation.result.upper()
 
 
+@mock_all.task(max_retries=1)
+def retry_once() -> int:
+    if retry_once.invocation.num_retries == 0:
+        raise RetryError()
+    return retry_once.invocation.num_retries
+
+
 @pytest.fixture
 def app() -> Pynenc:
     app = Pynenc()
@@ -46,6 +53,7 @@ def app() -> Pynenc:
     get_text.app = app
     get_upper.app = app
     get_upper_cycle.app = app
+    retry_once.app = app
     return app
 
 
@@ -94,8 +102,6 @@ def test_mem_sub_invocation_dependency(app: Pynenc) -> None:
 def test_avoid_cycles(app: Pynenc) -> None:
     """Test that a cycle in the dependency graph is detected"""
 
-    # raise NotImplementedError()
-
     def run_in_thread() -> None:
         app.runner.run()
 
@@ -119,3 +125,21 @@ def test_avoid_cycles(app: Pynenc) -> None:
 
     app.runner.stop_runner_loop()
     thread.join()
+
+
+def test_run_retry(app: Pynenc) -> None:
+    """
+    Test that the Task will retry once for synchronous invocation
+    """
+
+    def run_in_thread() -> None:
+        app.runner.run()
+
+    thread = threading.Thread(target=run_in_thread, daemon=True)
+    thread.start()
+
+    invocation = retry_once()
+
+    assert invocation.num_retries == 0
+    assert invocation.result == 1
+    assert invocation.num_retries == 1
