@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from types import ModuleType
 
 mp_app = Pynenc(app_id="test-process-runner")
+mp_app.conf.logging_level = "debug"
 mp_app.set_broker_cls(RedisBroker)
 mp_app.set_orchestrator_cls(RedisOrchestrator)
 mp_app.set_serializer_cls(JsonSerializer)
