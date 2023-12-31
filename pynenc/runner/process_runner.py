@@ -80,7 +80,7 @@ class ProcessRunner(BaseRunner):
 
     def runner_loop_iteration(self) -> None:
         # called from parent process memory space
-        self.logger.info(f"starting runner loop iteration {self.available_processes=}")
+        self.logger.debug(f"starting runner loop iteration {self.available_processes=}")
         for invocation in self.app.orchestrator.get_invocations_to_run(
             max_num_invocations=self.available_processes
         ):
@@ -90,7 +90,7 @@ class ProcessRunner(BaseRunner):
                 daemon=True,
             )
             process.start()
-            self.logger.info(
+            self.logger.debug(
                 f"Running invocation {invocation.invocation_id} on {process.pid=}"
             )
             if process.pid:
@@ -98,7 +98,7 @@ class ProcessRunner(BaseRunner):
             else:
                 ...
                 # TODO if for mypy, the process should have a pid after start, otherwise it should raise an exception
-        self.logger.info("runer loop - check waiting invocations pending results")
+        self.logger.debug("runer loop - check waiting invocations pending results")
         for invocation in list(self.wait_invocation.keys()):
             is_final = invocation.status.is_final()
             for waiting_invocation in self.wait_invocation[invocation]:
@@ -115,7 +115,7 @@ class ProcessRunner(BaseRunner):
                 self.app.orchestrator.set_invocations_status(
                     list(waiting_invocations), InvocationStatus.RUNNING
                 )
-        self.logger.info(
+        self.logger.debug(
             f"finishing loop iteration sleeping {self.conf.runner_loop_sleep_time_sec=}"
         )
         time.sleep(self.conf.runner_loop_sleep_time_sec)
@@ -142,7 +142,7 @@ class ProcessRunner(BaseRunner):
         for result_invocation in result_invocations:
             if result_invocation not in self.wait_invocation:
                 self.wait_invocation[result_invocation] = set()
-            self.logger.info(
+            self.logger.debug(
                 f"Invocation {running_invocation.invocation_id} is waiting for invocation {result_invocation.invocation_id} to finish"
             )
             self.wait_invocation[result_invocation].add(running_invocation)
