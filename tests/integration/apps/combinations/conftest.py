@@ -1,3 +1,4 @@
+import os
 from collections import namedtuple
 from itertools import product
 from typing import TYPE_CHECKING, Optional
@@ -11,7 +12,7 @@ from pynenc.runner.base_runner import BaseRunner
 from pynenc.serializer.base_serializer import BaseSerializer
 from pynenc.state_backend.base_state_backend import BaseStateBackend
 from tests import util
-from tests.integration.apps.mem_combinations import mem_combinations_tasks as tasks
+from tests.integration.apps.combinations import tasks
 
 if TYPE_CHECKING:
     from _pytest.fixtures import FixtureRequest
@@ -50,8 +51,8 @@ def pytest_generate_tests(metafunc: "Metafunc") -> None:
                 continue
             if mem_cls is not None and mem_cls != c.__name__.startswith("Mem"):
                 continue
-            if c.__name__.startswith("Process"):
-                continue
+            # if c.__name__.startswith("Process"):
+            #     continue
             subclasses.append(c)
         return subclasses
 
@@ -88,15 +89,21 @@ def pytest_generate_tests(metafunc: "Metafunc") -> None:
 def app(request: "FixtureRequest") -> Pynenc:
     components: AppComponents = request.param
     test_module, test_name = util.get_module_name(request)
-    app = Pynenc(
-        app_id=f"{test_module}.{test_name}",
-        config_values={"logging_level": "debug", "cycle_control": True},
-    )
-    app.set_broker_cls(components.broker)
-    app.set_orchestrator_cls(components.orchestrator)
-    app.set_serializer_cls(components.serializer)
-    app.set_state_backend_cls(components.state_backend)
-    app.runner = components.runner(app)
+    os.environ["PYNENC__APP_ID"] = f"{test_module}.{test_name}"
+    os.environ["PYNENC__ORCHESTRATOR_CLS"] = components.orchestrator.__name__
+    os.environ["PYNENC__BROKER_CLS"] = components.broker.__name__
+    os.environ["PYNENC__SERIALIZER_CLS"] = components.serializer.__name__
+    os.environ["PYNENC__STATE_BACKEND_CLS"] = components.state_backend.__name__
+    os.environ["PYNENC__RUNNER_CLS"] = components.runner.__name__
+    os.environ["PYNENC__LOGGING_LEVEL"] = "debug"
+    os.environ["PYNENC__ORCHESTRATOR__CYCLE_CONTROL"] = "True"
+    app = Pynenc()
+    # app.conf.broker_cls = components.broker.__name__
+    # app.conf.orchestrator_cls = components.orchestrator.__name__
+    # app.conf.serializer_cls = components.serializer.__name__
+    # app.conf.state_backend_cls = components.state_backend.__name__
+    # app.conf.runner_cls = components.runner.__name__
+    # app.runner = components.runner(app)
     # purge before and after each test
     app.purge()
     request.addfinalizer(app.purge)

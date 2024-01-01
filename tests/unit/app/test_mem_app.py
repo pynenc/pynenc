@@ -1,5 +1,5 @@
 import threading
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
@@ -7,6 +7,9 @@ from pynenc import Pynenc
 from pynenc.exceptions import CycleDetectedError, RetryError
 from pynenc.runner import MemRunner
 from tests.conftest import MockPynenc
+
+if TYPE_CHECKING:
+    from _pytest.fixtures import FixtureRequest
 
 mock_all = MockPynenc()
 
@@ -45,8 +48,8 @@ def retry_once() -> int:
 
 
 @pytest.fixture
-def app() -> Pynenc:
-    app = Pynenc()
+def app(request: "FixtureRequest") -> Pynenc:
+    app = Pynenc(app_id="unit.test_mem_app")
     app.runner = MemRunner(app)
     sum_task.app = app
     raise_exception.app = app
@@ -54,6 +57,8 @@ def app() -> Pynenc:
     get_upper.app = app
     get_upper_cycle.app = app
     retry_once.app = app
+    app.purge()
+    request.addfinalizer(app.purge)
     return app
 
 
