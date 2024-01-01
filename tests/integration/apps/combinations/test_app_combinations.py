@@ -1,3 +1,4 @@
+import os
 import threading
 from collections import Counter
 from time import sleep, time
@@ -12,7 +13,6 @@ from pynenc.invocation import DistributedInvocation, InvocationStatus
 def test_task_execution(task_sum: Task) -> None:
     """Test the whole lifecycle of a task execution"""
     app = task_sum.app
-    # app.app_id = app.app_id + "-test_task_execution"
 
     def run_in_thread() -> None:
         app.runner.run()
@@ -54,7 +54,10 @@ def test_task_running_concurrency(task_sleep: Task) -> None:
     thread.start()
 
     fast_invocation_sleep_seconds = 0
-    slow_invocation_sleep_seconds = 0.25
+    if app.conf.runner_cls == "MemRunner":
+        slow_invocation_sleep_seconds = 0.25
+    else:
+        slow_invocation_sleep_seconds = 2
     max_fast_running_time = slow_invocation_sleep_seconds / 4
 
     assert slow_invocation_sleep_seconds > max_fast_running_time
@@ -133,10 +136,9 @@ def test_parallel_execution(task_sum: Task) -> None:
 def test_cycle_detection(task_cycle: Task) -> None:
     """Test that the execution will detect the cycle raising an exception"""
     app = task_cycle.app
-    app.orchestrator.conf.cycle_control = True
+    os.environ["PYNENC__ORCHESTRATOR__CYCLE_CONTROL"] = "True"
 
     def run_in_thread() -> None:
-        app.orchestrator.conf.cycle_control = True
         app.runner.run()
 
     invocation = task_cycle()
@@ -151,9 +153,9 @@ def test_cycle_detection(task_cycle: Task) -> None:
 
     expected_error = (
         "A cycle was detected: Cycle detected:\n"
-        "- tests.integration.apps.mem_combinations.mem_combinations_tasks.cycle_end()\n"
-        "- tests.integration.apps.mem_combinations.mem_combinations_tasks.cycle_start()\n"
-        "- back to tests.integration.apps.mem_combinations.mem_combinations_tasks.cycle_end()"
+        "- tests.integration.apps.combinations.tasks.cycle_end()\n"
+        "- tests.integration.apps.combinations.tasks.cycle_start()\n"
+        "- back to tests.integration.apps.combinations.tasks.cycle_end()"
     )
 
     assert str(exc_info.value) == expected_error
@@ -213,8 +215,8 @@ def test_avoid_direct_self_cycles(task_direct_cycle: Task) -> None:
 
     expected_error = (
         "A cycle was detected: Cycle detected:\n"
-        "- tests.integration.apps.mem_combinations.mem_combinations_tasks.direct_cycle()\n"
-        "- back to tests.integration.apps.mem_combinations.mem_combinations_tasks.direct_cycle()"
+        "- tests.integration.apps.combinations.tasks.direct_cycle()\n"
+        "- back to tests.integration.apps.combinations.tasks.direct_cycle()"
     )
     assert str(exc_info.value) == expected_error
     app.runner.stop_runner_loop()

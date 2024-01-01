@@ -1,11 +1,11 @@
 from time import sleep
 from typing import Any
 
+from pynenc import Pynenc
 from pynenc.conf import ConcurrencyControlType
 from pynenc.exceptions import RetryError
-from tests.conftest import MockPynenc
 
-mock_app = MockPynenc()
+mock_app = Pynenc()
 
 
 @mock_app.task

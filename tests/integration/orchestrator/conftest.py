@@ -5,6 +5,7 @@ import pytest
 from pynenc.call import Call
 from pynenc.invocation import DistributedInvocation
 from pynenc.orchestrator.base_orchestrator import BaseOrchestrator
+from pynenc.serializer.json_serializer import JsonSerializer
 from tests import util
 from tests.conftest import MockPynenc
 from tests.integration.orchestrator.orchestrator_tasks import (
@@ -35,6 +36,12 @@ def app(request: "FixtureRequest") -> MockPynenc:
     test_module, test_name = util.get_module_name(request)
     app = MockPynenc(app_id=f"{test_module}.{test_name}")
     app.orchestrator = request.param(app)
+    app.serializer = JsonSerializer()
+    # TODO serializer needs to be fixed to JSON, otherwise it will crash
+    # or get the value from the task arguments direcly, not a hardcoded value!!!!
+
+    # os.environ["PYNENC__APP_ID"] = f"{test_module}.{test_name}"
+    # os.environ["PYNENC__ORCHESTRATOR_CLS"] = app.orchestrator.__class__.__name__
     app.purge()
     request.addfinalizer(app.purge)
     return app

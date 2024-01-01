@@ -1,14 +1,13 @@
 from functools import cached_property
 from logging import Logger
-from typing import TYPE_CHECKING, Any, Callable, Optional, Type, overload
+from typing import TYPE_CHECKING, Any, Callable, Optional, overload
 
-from .broker import BaseBroker, MemBroker
+from .broker import BaseBroker
 from .conf.config_pynenc import ConfigPynenc
-from .exceptions import AlreadyInitializedError
-from .orchestrator import BaseOrchestrator, MemOrchestrator
-from .runner import BaseRunner, DummyRunner
-from .serializer import BaseSerializer, JsonSerializer
-from .state_backend import BaseStateBackend, MemStateBackend
+from .orchestrator import BaseOrchestrator
+from .runner import BaseRunner
+from .serializer import BaseSerializer
+from .state_backend import BaseStateBackend
 from .task import Task
 from .util.log import create_logger
 from .util.subclasses import get_subclass
@@ -46,15 +45,9 @@ class Pynenc:
     >>> app = Pynenc()
     """
 
-    _orchestrator_cls: Type[BaseOrchestrator] = MemOrchestrator
-    _broker_cls: Type[BaseBroker] = MemBroker
-    _state_backend_cls: Type[BaseStateBackend] = MemStateBackend
-    _serializer_cls: Type[BaseSerializer] = JsonSerializer
-    _runner_cls: Type[BaseRunner] = DummyRunner
-
     def __init__(
         self,
-        app_id: str = "pynenc",
+        app_id: str | None = None,
         config_values: Optional[dict[str, Any]] = None,
         config_filepath: Optional[str] = None,
     ) -> None:
@@ -67,17 +60,12 @@ class Pynenc:
 
     @property
     def app_id(self) -> str:
-        return self._app_id
+        return self._app_id or self.conf.app_id
 
     def __getstate__(self) -> dict:
         # Return state as a dictionary and a secondary value as a tuple
         return {
             "app_id": self.app_id,
-            "orchestrator_cls": self._orchestrator_cls.__name__,
-            "broker_cls": self._broker_cls.__name__,
-            "state_backend_cls": self._state_backend_cls.__name__,
-            "serializer_cls": self._serializer_cls.__name__,
-            "runner_cls": self._runner_cls.__name__,
             "config_values": self.config_values,
             "config_filepath": self.config_filepath,
             "reporting": self.reporting,
@@ -87,26 +75,6 @@ class Pynenc:
         # Restore instance attributes
         self._app_id = state["app_id"]
         object.__setattr__(self, "_app_id", self._app_id)
-        self._orchestrator_cls = get_subclass(
-            BaseOrchestrator,  # type: ignore # mypy issue #4717
-            state["orchestrator_cls"],
-        )
-        self._broker_cls = get_subclass(
-            BaseBroker,  # type: ignore # mypy issue #4717
-            state["broker_cls"],
-        )
-        self._state_backend_cls = get_subclass(
-            BaseStateBackend,  # type: ignore # mypy issue #4717
-            state["state_backend_cls"],
-        )
-        self._serializer_cls = get_subclass(
-            BaseSerializer,  # type: ignore # mypy issue #4717
-            state["serializer_cls"],
-        )
-        self._runner_cls = get_subclass(
-            BaseRunner,  # type: ignore # mypy issue #4717
-            state["runner_cls"],
-        )
         self.config_values = state["config_values"]
         self.config_filepath = state["config_filepath"]
         self.reporting = state["reporting"]
@@ -128,57 +96,29 @@ class Pynenc:
 
     @cached_property
     def orchestrator(self) -> BaseOrchestrator:
-        return self._orchestrator_cls(self)
+        return get_subclass(BaseOrchestrator, self.conf.orchestrator_cls)(self)  # type: ignore # mypy issue #4717
 
     @cached_property
     def broker(self) -> BaseBroker:
-        return self._broker_cls(self)
+        return get_subclass(BaseBroker, self.conf.broker_cls)(self)  # type: ignore # mypy issue #4717
 
     @cached_property
     def state_backend(self) -> BaseStateBackend:
-        return self._state_backend_cls(self)
+        return get_subclass(BaseStateBackend, self.conf.state_backend_cls)(self)  # type: ignore # mypy issue #4717
 
     @cached_property
     def serializer(self) -> BaseSerializer:
-        return self._serializer_cls()
+        return get_subclass(BaseSerializer, self.conf.serializer_cls)()  # type: ignore # mypy issue #4717
 
     @property
     def runner(self) -> BaseRunner:
         if self._runner_instance is None:
-            self._runner_instance = self._runner_cls(self)
+            self._runner_instance = get_subclass(BaseRunner, self.conf.runner_cls)(self)  # type: ignore # mypy issue #4717
         return self._runner_instance
 
     @runner.setter
     def runner(self, runner_instance: BaseRunner) -> None:
         self._runner_instance = runner_instance
-
-    def set_orchestrator_cls(self, orchestrator_cls: Type[BaseOrchestrator]) -> None:
-        if self.is_initialized(property_name="orchestrator"):
-            raise AlreadyInitializedError(
-                f"Not possible to set orchestrator instance, already initialized {self._orchestrator_cls}"
-            )
-        self._orchestrator_cls = orchestrator_cls
-
-    def set_broker_cls(self, broker_cls: Type[BaseBroker]) -> None:
-        if self.is_initialized(property_name="broker"):
-            raise AlreadyInitializedError(
-                f"Not possible to set broker, already initialized {self._broker_cls}"
-            )
-        self._broker_cls = broker_cls
-
-    def set_state_backend_cls(self, state_backend_cls: Type[BaseStateBackend]) -> None:
-        if self.is_initialized(property_name="state_backend"):
-            raise AlreadyInitializedError(
-                f"Not possible to set state backend, already initialized {self._state_backend_cls}"
-            )
-        self._state_backend_cls = state_backend_cls
-
-    def set_serializer_cls(self, serializer_cls: Type[BaseSerializer]) -> None:
-        if self.is_initialized(property_name="serializer"):
-            raise AlreadyInitializedError(
-                f"Not possible to set serializer, already initialized {self._serializer_cls}"
-            )
-        self._serializer_cls = serializer_cls
 
     def purge(self) -> None:
         """Purge all data from the broker and state backend"""
