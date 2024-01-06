@@ -3,7 +3,7 @@ import threading
 from _pytest.logging import LogCaptureFixture
 
 from pynenc import Pynenc
-from pynenc.runner.mem_runner import ThreadRunner
+from pynenc.runner.thread_runner import ThreadRunner
 
 app = Pynenc()
 app.runner = ThreadRunner(app)

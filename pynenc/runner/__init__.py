@@ -1,7 +1,7 @@
 from .base_runner import BaseRunner, DummyRunner
 from .context import ApplicationContext
-from .mem_runner import ThreadRunner
 from .process_runner import ProcessRunner
+from .thread_runner import ThreadRunner
 
 __all__ = [
     "BaseRunner",

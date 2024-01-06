@@ -1,6 +1,6 @@
 from collections import namedtuple
 from itertools import product
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Type
 
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
@@ -8,7 +8,7 @@ from _pytest.monkeypatch import MonkeyPatch
 from pynenc import Pynenc
 from pynenc.broker.base_broker import BaseBroker
 from pynenc.orchestrator.base_orchestrator import BaseOrchestrator
-from pynenc.runner import ProcessRunner, ThreadRunner
+from pynenc.runner.base_runner import BaseRunner
 from pynenc.serializer.base_serializer import BaseSerializer
 from pynenc.state_backend.base_state_backend import BaseStateBackend
 from tests import util
@@ -56,6 +56,13 @@ def pytest_generate_tests(metafunc: "Metafunc") -> None:
             subclasses.append(c)
         return subclasses
 
+    def get_runners(mem_compatible: bool) -> list[Type[BaseRunner]]:
+        return [
+            r
+            for r in get_subclasses(BaseRunner)
+            if r.mem_compatible() == mem_compatible  # type: ignore
+        ]
+
     if "app" in metafunc.fixturenames:
         # These runners can run with any combination of components (including memory components)
         mem_compatible_runners_combinations = (
@@ -63,7 +70,7 @@ def pytest_generate_tests(metafunc: "Metafunc") -> None:
             for x in product(
                 get_subclasses(BaseBroker),
                 get_subclasses(BaseOrchestrator),
-                [ThreadRunner],
+                get_runners(mem_compatible=True),
                 get_subclasses(BaseSerializer),
                 get_subclasses(BaseStateBackend),
             )
@@ -76,7 +83,7 @@ def pytest_generate_tests(metafunc: "Metafunc") -> None:
             for x in product(
                 get_subclasses(BaseBroker, mem_cls=False),
                 get_subclasses(BaseOrchestrator, mem_cls=False),
-                [ProcessRunner],
+                get_runners(mem_compatible=False),
                 get_subclasses(BaseSerializer, mem_cls=False),
                 get_subclasses(BaseStateBackend, mem_cls=False),
             )
@@ -101,13 +108,6 @@ def app(request: "FixtureRequest", monkeypatch: MonkeyPatch) -> Pynenc:
     monkeypatch.setenv("PYNENC__LOGGING_LEVEL", "debug")
     monkeypatch.setenv("PYNENC__ORCHESTRATOR__CYCLE_CONTROL", "True")
     app = Pynenc()
-    # app.conf.broker_cls = components.broker.__name__
-    # app.conf.orchestrator_cls = components.orchestrator.__name__
-    # app.conf.serializer_cls = components.serializer.__name__
-    # app.conf.state_backend_cls = components.state_backend.__name__
-    # app.conf.runner_cls = components.runner.__name__
-    # app.runner = components.runner(app)
-    # purge before and after each test
     app.purge()
     request.addfinalizer(app.purge)
     return app

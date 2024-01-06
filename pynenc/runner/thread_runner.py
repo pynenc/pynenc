@@ -30,6 +30,11 @@ class ThreadRunner(BaseRunner):
             config_filepath=self.app.config_filepath,
         )
 
+    @staticmethod
+    def mem_compatible() -> bool:
+        # each task is executed in a different thread with shared memory
+        return True
+
     @property
     def max_parallel_slots(self) -> int:
         return max(self.conf.min_parallel_slots, self.max_threads)

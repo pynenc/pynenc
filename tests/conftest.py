@@ -85,6 +85,7 @@ class MockStateBackend(BaseStateBackend):
 
 
 class MockRunner(BaseRunner):
+    mem_compatible = MagicMock(return_value=True)
     _on_start = MagicMock()
     _on_stop = MagicMock()
     _on_stop_runner_loop = MagicMock()
