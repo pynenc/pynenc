@@ -142,6 +142,10 @@ class ConfigBase:
     def config_fields(cls) -> list[str]:
         return list(get_config_fields(cls))
 
+    @property
+    def all_fields(self) -> list[str]:
+        return list(set().union(*self.config_cls_to_fields.values()))
+
     @staticmethod
     def get_config_id(config_cls: Type["ConfigBase"]) -> str:
         return config_cls.__name__.replace("Config", "").lower()
@@ -288,16 +292,3 @@ def avoid_multi_inheritance_field_conflict(
         set(get_config_fields(config_cls))
     )
     return map_field_to_config_cls
-
-
-def get_config_family_fields(config_cls: Type) -> dict[str, str]:
-    """"""
-    config_fields: dict[str, str] = {}
-    for key, value in config_cls.__dict__.items():
-        if isinstance(value, ConfigField):
-            if key in config_fields:
-                raise ConfigMultiInheritanceError(
-                    f"ConfigField {key} found in parent classes {config_cls.__name__} and {config_fields[key]}"
-                )
-            config_fields[key] = config_cls.__name__
-    return config_fields

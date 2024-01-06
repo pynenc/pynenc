@@ -40,8 +40,6 @@ def app(request: "FixtureRequest") -> MockPynenc:
     # TODO serializer needs to be fixed to JSON, otherwise it will crash
     # or get the value from the task arguments direcly, not a hardcoded value!!!!
 
-    # os.environ["PYNENC__APP_ID"] = f"{test_module}.{test_name}"
-    # os.environ["PYNENC__ORCHESTRATOR_CLS"] = app.orchestrator.__class__.__name__
     app.purge()
     request.addfinalizer(app.purge)
     return app

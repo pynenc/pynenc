@@ -97,36 +97,38 @@ class ConfigTask(ConfigBase):
     specified globally for all tasks, or individually for each task using environment
     variables, configuration files, or the `@task` decorator.
 
-    Attributes:
-        auto_parallel_batch_size: Controls automatic parallelization of tasks. If set to 0,
-                                  auto parallelization is disabled. If greater than 0, tasks
-                                  with iterable arguments are automatically split into chunks,
-                                  with each chunk could be processed by a different worker.
+    Attributes
+    ----------
+    auto_parallel_batch_size : ConfigField[int]
+        If set to 0, auto parallelization is disabled. If greater than 0, tasks with iterable
+        arguments are automatically split into chunks, with each chunk potentially processed
+        by a different worker. If the task arguments are not an iterable, nothing happens.
 
-        retry_for: A tuple of exceptions for which the task should be automatically retried.
+    retry_for : ConfigField[tuple]
+        A tuple of exceptions for which the task should be retried.
 
-        max_retries: Defines the maximum number of retries for a task.
+    max_retries : ConfigField[int]
+        Defines the maximum number of retries for a task. This limit ensures that a task does
+        not retry indefinitely.
 
-        running_concurrency: Controls the concurrency behavior of the task, preventing the
-                             task from being in a running state simultaneously with certain
-                             conditions.
+    running_concurrency : ConfigField[ConcurrencyControlType]
+        Controls the concurrency behavior of the task. This option prevents the task from being
+        in a running state, managing and limiting concurrent execution of the same task.
 
-        registration_concurrency: Manages the registration concurrency for the task, ensuring
-                                  unique task registration based on the configuration.
+    registration_concurrency : ConfigField[ConcurrencyControlType]
+        Manages the registration concurrency for the task, ensuring unique task registration
+        based on the configuration. Useful for tasks that should not execute multiple times in
+        parallel or to avoid generating too much unnecessary tasks in the system.
 
-        key_arguments: Specifies key arguments for concurrency control, relevant when concurrency
-                       control is set to key-based.
+    key_arguments : ConfigField[str]
+        Specifies key arguments for concurrency control, relevant when concurrency control is
+        set to key-based. This option determines which arguments are used to identify unique
+        task invocations.
 
-        on_diff_non_key_args_raise: If set to True, raises an exception when a task invocation
-                                    with matching key arguments but different non-key arguments
-                                    is encountered.
-
-    Task-specific configurations can be set using environment variables prefixed with `PYNENC__CONFIGTASK__`.
-    For example, to set `auto_parallel_batch_size` globally for all tasks, use:
-    `PYNENC__CONFIGTASK__AUTO_PARALLEL_BATCH_SIZE`.
-
-    To set configurations for a specific task, use the task's name in the environment variable,
-    for example, `PYNENC__CONFIGTASK__TASK_NAME__AUTO_PARALLEL_BATCH_SIZE`.
+    on_diff_non_key_args_raise : ConfigField[bool]
+        If set to True, raises an exception when a task invocation with matching key arguments
+        but different non-key arguments is encountered. This option is used to handle
+        concurrency at the key level.
 
     Examples
     --------
@@ -159,32 +161,12 @@ class ConfigTask(ConfigBase):
     offering flexibility and precise control over the behavior of tasks in the system.
     """
 
-    #: If 0 auto parallelization will be disabled.
-    #: If > 0, the iterable will be automatically split in chunks of this size and each chunk will be sent to a different worker.
-    #: if the task arguments is not an iterable, nothing will happen.
     auto_parallel_batch_size = ConfigField(0)
-
-    #: A tuple of exceptions for which the task should be retried.
     retry_for = ConfigField((RetryError,), mapper=exception_config_mapper)
-
     max_retries = ConfigField(0)
-
-    #: Controls the concurrency behavior of the task.
-    #: This option prevents the task from being in a running state, not just in a registered state.
-    #: Use this option to manage and limit concurrent execution of the same task.
     running_concurrency = ConfigField(ConcurrencyControlType.DISABLED)
-
-    #: If True, only one request will be routed by the broker.
-    #: Use this option for tasks that make no sense to execute multiple times in parallel or to avoid generating too much unnecessary tasks in the system.
     registration_concurrency = ConfigField(ConcurrencyControlType.DISABLED)
-
-    #: Specified the key arguments to use for the concurrency control
-    #: This option is only relevant when the concurrency control is set to keys
     key_arguments = DEFAULT_KEY_ARGS
-
-    #: In case of checking concurrency at key level,
-    #: we may find an existing invocation with matching key arguments but different arguments.
-    #: In that case, if this option is set to True, an exception will be raised.
     on_diff_non_key_args_raise = ConfigField(False)
 
     def __init__(

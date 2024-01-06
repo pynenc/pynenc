@@ -16,26 +16,102 @@ Each use case in this guide represents a typical scenario where Pynenc can signi
 Use Case 1: Basic Task Execution
 --------------------------------
 
-.. note::
-   [In this section, a detailed description and steps for a basic task execution use case will be provided.]
+This section will cover the basics of executing tasks using Pynenc. Learn how to define and execute simple tasks, monitor their status, and handle results.
 
-Use Case 2: Advanced Distributed Orchestration
+Use Case 2: Distributed System with Redis and Process Runner
+-------------------------------------------------------------
+
+Explore how to set up a distributed Pynenc system using Redis for message brokering and a process-based runner for task execution. This guide will include installation, configuration, and an example of distributed task processing.
+
+Use Case 3: Emulating a Distributed System Locally
+---------------------------------------------------
+
+Learn how to simulate a distributed environment on your local machine using the `Mem` classes and the `ThreadRunner`. This setup is ideal for development and testing purposes.
+
+Use Case 4: Running Locally with Synchronous Mode
+--------------------------------------------------
+
+Discover how to run Pynenc in synchronous mode for local development. This mode runs tasks sequentially, simplifying debugging and initial development.
+
+Use Case 5: Unit Testing with Synchronous Mode
 -----------------------------------------------
 
-.. note::
-   [Here, you'll find a comprehensive guide on leveraging Pynenc for advanced distributed orchestration, complete with step-by-step instructions.]
+Find out how to write unit tests for your Pynenc tasks using synchronous mode. This mode allows for straightforward testing by running tasks sequentially and simplifying assertions.
 
-... (Additional use cases will be added here)
+Use Case 6: Unit Testing with Mem Mode
+--------------------------------------
 
-Extending Pynenc for Your Needs
--------------------------------
+This section will guide you on how to perform unit testing in `Mem` mode, where all components (broker, orchestrator, etc.) use in-memory implementations. It's a fast way to test without external dependencies.
 
-Pynenc is designed to be highly adaptable and extensible. If you have a unique use case or need to integrate Pynenc with other systems, this section will guide you through the process.
 
-- **Customizing Task Behavior**: Learn how to customize task behavior to fit your specific requirements.
-- **Integrating with External Systems**: Instructions on integrating Pynenc with different databases, message brokers, and more.
+Use Case 7: Extending Pynenc for Your Needs
+-------------------------------------------
 
-Conclusion
-----------
+Pynenc's modular design is aimed at providing a flexible framework that can be easily extended to meet your specific requirements. Whether you have a unique use case or need to integrate Pynenc with other systems, this section will guide you through customizing and extending its capabilities.
 
-As Pynenc continues to evolve, so will this Usage Guide. We aim to provide you with all the necessary information to make the most out of Pynenc in your projects. Stay tuned for more use cases, tips, and tricks!
+Creating Custom Components
+--------------------------
+
+Pynenc is built with extensibility in mind, allowing you to create custom components to suit your specific needs. This can be done by subclassing the base classes provided by Pynenc:
+
+- **Custom Orchestrators**: Create a subclass of `BaseOrchestrator` or `RedisOrchestrator` to implement custom orchestration logic.
+- **Custom State Backends**: Develop a state backend that aligns with your data storage and retrieval needs by subclassing the `BaseStateBackend`.
+- **Custom Brokers**: Design a message broker tailored to your messaging and communication requirements.
+- **Custom Runners**: Build a runner that matches your execution environment and task management style.
+
+Configuring Your Custom Components
+----------------------------------
+
+Integrating your custom components into your Pynenc application is straightforward. While one way to specify these components is through environment variables, it is important to note that this is just one of several methods available.
+
+To configure using environment variables:
+
+.. code-block:: python
+
+    PYNENC__ORCHESTRATOR_CLS="path.to.CustomOrchestrator"
+    PYNENC__STATE_BACKEND_CLS="path.to.CustomStateBackend"
+    PYNENC__BROKER_CLS="path.to.CustomBroker"
+    PYNENC__RUNNER_CLS="path.to.CustomRunner"
+
+Replace `path.to.CustomComponent` with the actual import path of your custom component. This method is particularly useful for deploying applications in different environments without modifying the code.
+
+For a comprehensive guide on all available configuration options, including file-based and code-based configurations, please refer to the :doc:`configuration/configuration`. This document will provide you with detailed information on tailoring Pynenc to meet your specific requirements.
+
+By offering various configuration methods, Pynenc ensures flexibility and ease of adaptation to a wide range of use cases, environments, and integration requirements.
+
+
+Use Case 8: Customizing Data Serialization
+------------------------------------------
+
+Pynenc provides built-in support for common serialization formats like JSON and Pickle through its `JsonSerializer` and `PickleSerializer` classes. However, there might be scenarios where these standard serializers are not suitable for your specific needs, particularly when working with complex objects or requiring a different serialization strategy.
+
+Creating Custom Serializers
+---------------------------
+
+You can create a custom serializer to handle any specific requirements of your tasks. This could be necessary when dealing with complex data types that are not natively supported by JSON or Pickle, or if you need to integrate with external systems that use a different data format.
+
+To create a custom serializer, you need to subclass the `BaseSerializer` and implement the required serialization and deserialization methods. Here's a simplified example:
+
+.. code-block:: python
+
+    from pynenc.serializers import BaseSerializer
+
+    class CustomSerializer(BaseSerializer):
+        def serialize(self, obj):
+            # Implement custom serialization logic
+            return serialized_obj
+
+        def deserialize(self, serialized_obj):
+            # Implement custom deserialization logic
+            return obj
+
+Configuring Your Custom Serializer
+----------------------------------
+
+Once your custom serializer is implemented, you can configure Pynenc to use it just like any other component:
+
+.. code-block:: python
+
+    PYNENC__SERIALIZER_CLS="path.to.CustomSerializer"
+
+This is just one way to set the configuration. Pynenc allows various methods to configure your application, including environment variables, config files, or directly in code. For more details on configuration options, refer to the :doc:`configuration/configuration`.
