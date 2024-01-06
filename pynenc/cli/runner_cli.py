@@ -1,6 +1,7 @@
 import argparse
 
 from ..app import Pynenc
+from ..runner import DummyRunner
 from .config_cli import add_config_subparser
 from .namespace import PynencCLINamespace
 
@@ -20,8 +21,11 @@ def add_runner_subparser(subparsers: argparse._SubParsersAction) -> None:
 
 
 def start_runner_command(args: PynencCLINamespace) -> None:
+    # TODO add specific error for DummyRunner
     print(f"Starting runner for app: {args.app}")
     if not isinstance(args.app_instance, Pynenc):
         raise TypeError("app_instance must be an instance of Pynenc")
     app_instance = args.app_instance
+    if isinstance(app_instance.runner, DummyRunner):
+        raise ValueError("DummyRunner cannot be started, use another runner")
     app_instance.runner.run()
