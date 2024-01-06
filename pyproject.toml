@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pynenc"
-version = "0.0.3"
+version = "0.0.4"
 description = "A simple task management system for complex distributed orchestration"
 authors = ["Jose Diaz"]
 license = "MIT License"
@@ -16,6 +16,10 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: System :: Distributed Computing",
 ]
+
+
+[tool.poetry.scripts]
+pynenc = 'pynenc.__main__:main'
 
 
 [tool.poetry.dependencies]
