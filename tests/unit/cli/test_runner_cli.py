@@ -5,7 +5,7 @@ from pynenc.cli.namespace import PynencCLINamespace
 from pynenc.cli.runner_cli import start_runner_command
 
 app = Pynenc()
-app.conf.runner_cls = "MemRunner"
+app.conf.runner_cls = "ThreadRunner"
 
 
 def test_start_runner() -> None:

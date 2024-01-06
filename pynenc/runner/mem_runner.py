@@ -7,7 +7,7 @@ from typing import Any, NamedTuple, Optional
 
 from pynenc.invocation import DistributedInvocation, InvocationStatus
 
-from ..conf.config_runner import ConfigMemRunner
+from ..conf.config_runner import ConfigThreadRunner
 from .base_runner import BaseRunner
 
 
@@ -16,7 +16,7 @@ class ThreadInfo(NamedTuple):
     invocation: DistributedInvocation
 
 
-class MemRunner(BaseRunner):
+class ThreadRunner(BaseRunner):
     wait_conditions: dict["DistributedInvocation", threading.Condition]
     wait_invocation: dict["DistributedInvocation", set["DistributedInvocation"]]
     threads: dict[str, ThreadInfo]
@@ -24,8 +24,8 @@ class MemRunner(BaseRunner):
     waiting_threads: int
 
     @cached_property
-    def conf(self) -> ConfigMemRunner:
-        return ConfigMemRunner(
+    def conf(self) -> ConfigThreadRunner:
+        return ConfigThreadRunner(
             config_values=self.app.config_values,
             config_filepath=self.app.config_filepath,
         )

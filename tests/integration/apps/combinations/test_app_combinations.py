@@ -55,7 +55,7 @@ def test_task_running_concurrency(task_sleep: Task) -> None:
     thread.start()
 
     fast_invocation_sleep_seconds = 0
-    if app.conf.runner_cls == "MemRunner":
+    if app.conf.runner_cls == "ThreadRunner":
         slow_invocation_sleep_seconds = 0.25
     else:
         slow_invocation_sleep_seconds = 2

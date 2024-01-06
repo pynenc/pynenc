@@ -9,7 +9,7 @@ from pynenc import Pynenc
 from pynenc.cli import config_cli
 from pynenc.cli.main_cli import main
 from pynenc.conf.config_base import ConfigBase
-from pynenc.conf.config_runner import ConfigMemRunner
+from pynenc.conf.config_runner import ConfigThreadRunner
 from pynenc.conf.config_task import ConfigTask
 from pynenc.util.subclasses import get_all_subclasses
 
@@ -141,7 +141,7 @@ def test_cli_show_config_runner() -> None:
 
 def test_cli_show_config_mem_runner() -> None:
     """Check that modifying env var for RUNNER_CLS affects show_config command."""
-    with patch.dict(os.environ, {"PYNENC__RUNNER_CLS": "MemRunner"}):
+    with patch.dict(os.environ, {"PYNENC__RUNNER_CLS": "ThreadRunner"}):
         with patch(
             "sys.argv",
             [
@@ -159,9 +159,9 @@ def test_cli_show_config_mem_runner() -> None:
     assert "Showing configuration for Pynenc instance:" in output
     assert "location: tests.unit.cli.test_config_cli.app" in output
     assert f"id: {app.conf.app_id}" in output
-    # environment variable changed the runner class and MemRunner has different config
-    assert "Config ConfigMemRunner:" in output
-    check_fields_in_output(output, ConfigMemRunner())
+    # environment variable changed the runner class and ThreadRunner has different config
+    assert "Config ConfigThreadRunner:" in output
+    check_fields_in_output(output, ConfigThreadRunner())
 
 
 def check_fields_in_output(output: str, config: ConfigBase) -> None:

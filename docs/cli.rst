@@ -79,9 +79,9 @@ To use a functional runner, ensure that your application's configuration specifi
 
 .. code-block:: bash
 
-    $ PYNENC__RUNNER_CLS="MemRunner" python -m pynenc --app=<app_module> runner start
+    $ PYNENC__RUNNER_CLS="ThreadRunner" python -m pynenc --app=<app_module> runner start
 
-This command will start the `MemRunner`.
+This command will start the `ThreadRunner`.
 
 Stopping the Runner:
 
@@ -90,6 +90,6 @@ To stop the runner, you can interrupt the process (e.g., using `Ctrl+C`). Upon r
 .. code-block:: text
 
     INFO: Received signal signum=2 Stopping runner loop...
-    INFO: [runner: MemRunner] Stopping runner...
+    INFO: [runner: ThreadRunner] Stopping runner...
 
 ... (rest of the document) ...

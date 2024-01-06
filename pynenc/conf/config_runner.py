@@ -28,8 +28,8 @@ class ConfigRunner(ConfigBase):
     min_parallel_slots = ConfigField(1)
 
 
-class ConfigMemRunner(ConfigRunner):
-    """Specific Configuration for the MemRunner"""
+class ConfigThreadRunner(ConfigRunner):
+    """Specific Configuration for the ThreadRunner"""
 
     invocation_wait_results_sleep_time_sec = ConfigField(0.01)
     runner_loop_sleep_time_sec = ConfigField(0.01)

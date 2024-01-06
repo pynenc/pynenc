@@ -8,7 +8,7 @@ from _pytest.monkeypatch import MonkeyPatch
 from pynenc import Pynenc
 from pynenc.broker.base_broker import BaseBroker
 from pynenc.orchestrator.base_orchestrator import BaseOrchestrator
-from pynenc.runner.base_runner import BaseRunner
+from pynenc.runner import ProcessRunner, ThreadRunner
 from pynenc.serializer.base_serializer import BaseSerializer
 from pynenc.state_backend.base_state_backend import BaseStateBackend
 from tests import util
@@ -57,30 +57,33 @@ def pytest_generate_tests(metafunc: "Metafunc") -> None:
         return subclasses
 
     if "app" in metafunc.fixturenames:
-        # mem runners can run with any combination of components (including memory components)
-        mem_combinations = (
+        # These runners can run with any combination of components (including memory components)
+        mem_compatible_runners_combinations = (
             AppComponents(*x)
             for x in product(
                 get_subclasses(BaseBroker),
                 get_subclasses(BaseOrchestrator),
-                get_subclasses(BaseRunner, mem_cls=True),
+                [ThreadRunner],
                 get_subclasses(BaseSerializer),
                 get_subclasses(BaseStateBackend),
             )
         )
 
-        # If the runner is not a memory runner, it cannot be used with memory components
-        not_mem_combinations = (
+        # These runner cannot be used with memory components
+        # eg. ProcessRunner has different memory space for each task
+        not_mem_compatible_runner_combinations = (
             AppComponents(*x)
             for x in product(
                 get_subclasses(BaseBroker, mem_cls=False),
                 get_subclasses(BaseOrchestrator, mem_cls=False),
-                get_subclasses(BaseRunner, mem_cls=False),
+                [ProcessRunner],
                 get_subclasses(BaseSerializer, mem_cls=False),
                 get_subclasses(BaseStateBackend, mem_cls=False),
             )
         )
-        combinations = list(mem_combinations) + list(not_mem_combinations)
+        combinations = list(mem_compatible_runners_combinations) + list(
+            not_mem_compatible_runner_combinations
+        )
         ids = list(map(get_combination_id, combinations))
         metafunc.parametrize("app", combinations, ids=ids, indirect=True)
 
