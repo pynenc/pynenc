@@ -9,22 +9,22 @@ class ConfigPynenc(ConfigBase):
     ----------
     app_id : str
         The id of the application.
-    orchestrator_cls : ConfigField
+    orchestrator_cls : str
         The orchestrator class to use.
-    broker_cls : ConfigField
+    broker_cls : str
         The broker class to use.
-    state_backend_cls : ConfigField
+    state_backend_cls : str
         The state backend class to use.
-    serializer_cls : ConfigField
+    serializer_cls : str
         The serializer class to use.
-    runner_cls : ConfigField
+    runner_cls : str
         The runner class to use.
-    dev_mode_force_sync_tasks : ConfigField
+    dev_mode_force_sync_tasks : bool
         If True, forces tasks to run synchronously, useful for development.
-    max_pending_seconds : ConfigField
+    max_pending_seconds : float
         Maximum time in seconds a task can remain in PENDING state before it expires.
         See :class:`~pynenc.invocation.status.InvocationStatus` for more details.
-    logging_level : ConfigField
+    logging_level : str
         The logging level of the application ('info', 'warning', 'error', etc.).
     """
 

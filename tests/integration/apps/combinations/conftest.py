@@ -1,9 +1,9 @@
-import os
 from collections import namedtuple
 from itertools import product
 from typing import TYPE_CHECKING, Optional
 
 import pytest
+from _pytest.monkeypatch import MonkeyPatch
 
 from pynenc import Pynenc
 from pynenc.broker.base_broker import BaseBroker
@@ -86,17 +86,17 @@ def pytest_generate_tests(metafunc: "Metafunc") -> None:
 
 
 @pytest.fixture
-def app(request: "FixtureRequest") -> Pynenc:
+def app(request: "FixtureRequest", monkeypatch: MonkeyPatch) -> Pynenc:
     components: AppComponents = request.param
     test_module, test_name = util.get_module_name(request)
-    os.environ["PYNENC__APP_ID"] = f"{test_module}.{test_name}"
-    os.environ["PYNENC__ORCHESTRATOR_CLS"] = components.orchestrator.__name__
-    os.environ["PYNENC__BROKER_CLS"] = components.broker.__name__
-    os.environ["PYNENC__SERIALIZER_CLS"] = components.serializer.__name__
-    os.environ["PYNENC__STATE_BACKEND_CLS"] = components.state_backend.__name__
-    os.environ["PYNENC__RUNNER_CLS"] = components.runner.__name__
-    os.environ["PYNENC__LOGGING_LEVEL"] = "debug"
-    os.environ["PYNENC__ORCHESTRATOR__CYCLE_CONTROL"] = "True"
+    monkeypatch.setenv("PYNENC__APP_ID", f"{test_module}.{test_name}")
+    monkeypatch.setenv("PYNENC__ORCHESTRATOR_CLS", components.orchestrator.__name__)
+    monkeypatch.setenv("PYNENC__BROKER_CLS", components.broker.__name__)
+    monkeypatch.setenv("PYNENC__SERIALIZER_CLS", components.serializer.__name__)
+    monkeypatch.setenv("PYNENC__STATE_BACKEND_CLS", components.state_backend.__name__)
+    monkeypatch.setenv("PYNENC__RUNNER_CLS", components.runner.__name__)
+    monkeypatch.setenv("PYNENC__LOGGING_LEVEL", "debug")
+    monkeypatch.setenv("PYNENC__ORCHESTRATOR__CYCLE_CONTROL", "True")
     app = Pynenc()
     # app.conf.broker_cls = components.broker.__name__
     # app.conf.orchestrator_cls = components.orchestrator.__name__

@@ -2,6 +2,7 @@ import os
 import threading
 from collections import Counter
 from time import sleep, time
+from unittest.mock import patch
 
 import pytest
 
@@ -136,31 +137,36 @@ def test_parallel_execution(task_sum: Task) -> None:
 def test_cycle_detection(task_cycle: Task) -> None:
     """Test that the execution will detect the cycle raising an exception"""
     app = task_cycle.app
-    os.environ["PYNENC__ORCHESTRATOR__CYCLE_CONTROL"] = "True"
+    with patch.dict(
+        os.environ,
+        {
+            "PYNENC__ORCHESTRATOR__CYCLE_CONTROL": "True",
+        },
+    ):
 
-    def run_in_thread() -> None:
-        app.runner.run()
+        def run_in_thread() -> None:
+            app.runner.run()
 
-    invocation = task_cycle()
-    thread = threading.Thread(target=run_in_thread, daemon=True)
-    thread.start()
-    # TODO:
-    # - if finish but does not go trough the cycle
-    # - next check task cycle_start/cycle_end
-    # - does keeping invocation_context in app root work? does it require a tree or references?
-    with pytest.raises(CycleDetectedError) as exc_info:
-        _ = invocation.result
+        invocation = task_cycle()
+        thread = threading.Thread(target=run_in_thread, daemon=True)
+        thread.start()
+        # TODO:
+        # - if finish but does not go trough the cycle
+        # - next check task cycle_start/cycle_end
+        # - does keeping invocation_context in app root work? does it require a tree or references?
+        with pytest.raises(CycleDetectedError) as exc_info:
+            _ = invocation.result
 
-    expected_error = (
-        "A cycle was detected: Cycle detected:\n"
-        "- tests.integration.apps.combinations.tasks.cycle_end()\n"
-        "- tests.integration.apps.combinations.tasks.cycle_start()\n"
-        "- back to tests.integration.apps.combinations.tasks.cycle_end()"
-    )
+        expected_error = (
+            "A cycle was detected: Cycle detected:\n"
+            "- tests.integration.apps.combinations.tasks.cycle_end()\n"
+            "- tests.integration.apps.combinations.tasks.cycle_start()\n"
+            "- back to tests.integration.apps.combinations.tasks.cycle_end()"
+        )
 
-    assert str(exc_info.value) == expected_error
-    app.runner.stop_runner_loop()
-    thread.join()
+        assert str(exc_info.value) == expected_error
+        app.runner.stop_runner_loop()
+        thread.join()
 
 
 def test_raise_exception(task_raise_exception: Task) -> None:
