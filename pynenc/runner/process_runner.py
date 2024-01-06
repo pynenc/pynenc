@@ -20,6 +20,11 @@ class ProcessRunner(BaseRunner):
 
     max_processes: int
 
+    @staticmethod
+    def mem_compatible() -> bool:
+        # each task is executed in a different process with independent memory
+        return False
+
     @property
     def max_parallel_slots(self) -> int:
         return max(self.conf.min_parallel_slots, self.max_processes)

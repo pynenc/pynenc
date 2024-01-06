@@ -3,10 +3,10 @@ import threading
 from _pytest.logging import LogCaptureFixture
 
 from pynenc import Pynenc
-from pynenc.runner.mem_runner import MemRunner
+from pynenc.runner.thread_runner import ThreadRunner
 
 app = Pynenc()
-app.runner = MemRunner(app)
+app.runner = ThreadRunner(app)
 app.conf.logging_level = "DEBUG"
 
 

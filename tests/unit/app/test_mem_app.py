@@ -5,7 +5,7 @@ import pytest
 
 from pynenc import Pynenc
 from pynenc.exceptions import CycleDetectedError, RetryError
-from pynenc.runner import MemRunner
+from pynenc.runner import ThreadRunner
 from tests.conftest import MockPynenc
 
 if TYPE_CHECKING:
@@ -50,7 +50,7 @@ def retry_once() -> int:
 @pytest.fixture
 def app(request: "FixtureRequest") -> Pynenc:
     app = Pynenc(app_id="unit.test_mem_app")
-    app.runner = MemRunner(app)
+    app.runner = ThreadRunner(app)
     sum_task.app = app
     raise_exception.app = app
     get_text.app = app

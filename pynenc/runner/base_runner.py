@@ -52,6 +52,12 @@ class BaseRunner(ABC):
             config_filepath=self.app.config_filepath,
         )
 
+    @staticmethod
+    @abstractmethod
+    def mem_compatible() -> bool:
+        """Can this runner run with memory components?"""
+        ...
+
     @property
     @abstractmethod
     def max_parallel_slots(self) -> int:
@@ -150,6 +156,12 @@ class DummyRunner(BaseRunner):
     Examples include:
       - A script that defines the app, decorates some tasks, routes them, and then finishes. Such a script does not plan to run anything itself but triggers tasks that will later run in actual runners.
     """
+
+    @staticmethod
+    def mem_compatible() -> bool:
+        raise RunnerNotExecutableError(
+            "This runner is a placeholder for the Pynenc app"
+        )
 
     def _on_start(self) -> None:
         raise RunnerNotExecutableError(

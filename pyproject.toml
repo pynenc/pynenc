@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pynenc"
-version = "0.0.2"
+version = "0.0.3"
 description = "A simple task management system for complex distributed orchestration"
 authors = ["Jose Diaz"]
 license = "MIT License"
@@ -9,7 +9,7 @@ homepage = "https://pynenc.org"
 documentation = "https://docs.pynenc.org"
 repository = "https://github.com/pynenc/pynenc"
 classifiers = [
-    "Development Status :: 1 - Planning",
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3.11",

@@ -1,6 +1,6 @@
 from collections import namedtuple
 from itertools import product
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Type
 
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
@@ -56,31 +56,41 @@ def pytest_generate_tests(metafunc: "Metafunc") -> None:
             subclasses.append(c)
         return subclasses
 
+    def get_runners(mem_compatible: bool) -> list[Type[BaseRunner]]:
+        return [
+            r
+            for r in get_subclasses(BaseRunner)
+            if r.mem_compatible() == mem_compatible  # type: ignore
+        ]
+
     if "app" in metafunc.fixturenames:
-        # mem runners can run with any combination of components (including memory components)
-        mem_combinations = (
+        # These runners can run with any combination of components (including memory components)
+        mem_compatible_runners_combinations = (
             AppComponents(*x)
             for x in product(
                 get_subclasses(BaseBroker),
                 get_subclasses(BaseOrchestrator),
-                get_subclasses(BaseRunner, mem_cls=True),
+                get_runners(mem_compatible=True),
                 get_subclasses(BaseSerializer),
                 get_subclasses(BaseStateBackend),
             )
         )
 
-        # If the runner is not a memory runner, it cannot be used with memory components
-        not_mem_combinations = (
+        # These runner cannot be used with memory components
+        # eg. ProcessRunner has different memory space for each task
+        not_mem_compatible_runner_combinations = (
             AppComponents(*x)
             for x in product(
                 get_subclasses(BaseBroker, mem_cls=False),
                 get_subclasses(BaseOrchestrator, mem_cls=False),
-                get_subclasses(BaseRunner, mem_cls=False),
+                get_runners(mem_compatible=False),
                 get_subclasses(BaseSerializer, mem_cls=False),
                 get_subclasses(BaseStateBackend, mem_cls=False),
             )
         )
-        combinations = list(mem_combinations) + list(not_mem_combinations)
+        combinations = list(mem_compatible_runners_combinations) + list(
+            not_mem_compatible_runner_combinations
+        )
         ids = list(map(get_combination_id, combinations))
         metafunc.parametrize("app", combinations, ids=ids, indirect=True)
 
@@ -98,13 +108,6 @@ def app(request: "FixtureRequest", monkeypatch: MonkeyPatch) -> Pynenc:
     monkeypatch.setenv("PYNENC__LOGGING_LEVEL", "debug")
     monkeypatch.setenv("PYNENC__ORCHESTRATOR__CYCLE_CONTROL", "True")
     app = Pynenc()
-    # app.conf.broker_cls = components.broker.__name__
-    # app.conf.orchestrator_cls = components.orchestrator.__name__
-    # app.conf.serializer_cls = components.serializer.__name__
-    # app.conf.state_backend_cls = components.state_backend.__name__
-    # app.conf.runner_cls = components.runner.__name__
-    # app.runner = components.runner(app)
-    # purge before and after each test
     app.purge()
     request.addfinalizer(app.purge)
     return app
