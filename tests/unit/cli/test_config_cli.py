@@ -5,10 +5,11 @@ from unittest.mock import patch
 
 import pytest
 
+from pynenc import Pynenc
 from pynenc.cli import config_cli
 from pynenc.cli.main_cli import main
 from pynenc.conf.config_base import ConfigBase
-from pynenc.conf.config_pynenc import ConfigPynenc
+from pynenc.conf.config_runner import ConfigMemRunner
 from pynenc.conf.config_task import ConfigTask
 from pynenc.util.subclasses import get_all_subclasses
 
@@ -26,6 +27,9 @@ def pytest_generate_tests(metafunc: "Metafunc") -> None:
 @pytest.fixture
 def config_cls(request: "FixtureRequest") -> Type[ConfigBase]:
     return request.param
+
+
+app = Pynenc()
 
 
 def test_parse_config_docstring(config_cls: Type["ConfigBase"]) -> None:
@@ -79,16 +83,91 @@ def test_parse_config_docstring(config_cls: Type["ConfigBase"]) -> None:
         assert field_docs[key] != ""
 
 
-def test_cli_help() -> None:
-    """Test CLI Exits normally"""
-    # clear environment variables that could affect ConfigPynenc default values
-    with patch.dict(os.environ, clear=True):
-        with patch("sys.argv", ["pynenc", "--help"]):
+def test_show_config_missing_app_error() -> None:
+    """Test Exits with error due to missing --app"""
+    with patch("sys.argv", ["pynenc", "--app", "tests.unit.cli.test_main_cli.app"]):
+        with patch("sys.stderr", new_callable=StringIO) as mock_stdout:
+            with pytest.raises(SystemExit) as e:
+                main()
+    assert e.value.code != 0
+    output = mock_stdout.getvalue()
+    assert "error: the following arguments are required" in output
+    for line in output.splitlines():
+        if "error: the following arguments are required" in line:
+            assert "--app" not in line
+            assert "command" in line
+
+
+def test_cli_show_config_app() -> None:
+    """Test show_config command for app configuration."""
+    with patch(
+        "sys.argv",
+        ["pynenc", "--app", "tests.unit.cli.test_config_cli.app", "show_config"],
+    ):
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            main()
+
+    output = mock_stdout.getvalue()
+    assert "Showing configuration for Pynenc instance:" in output
+    assert "location: tests.unit.cli.test_config_cli.app" in output
+    assert f"id: {app.conf.app_id}" in output
+    assert "Config ConfigPynenc:" in output
+    check_fields_in_output(output, app.conf)
+
+
+def test_cli_show_config_runner() -> None:
+    """Test show_config command for runner configuration."""
+    with patch(
+        "sys.argv",
+        [
+            "pynenc",
+            "--app",
+            "tests.unit.cli.test_config_cli.app",
+            "runner",
+            "show_config",
+        ],
+    ):
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            main()
+
+    output = mock_stdout.getvalue()
+    assert "Showing configuration for Pynenc instance:" in output
+    assert "location: tests.unit.cli.test_config_cli.app" in output
+    assert f"id: {app.conf.app_id}" in output
+    # standard configuration for all the runners
+    assert "Config ConfigRunner:" in output
+    check_fields_in_output(output, app.runner.conf)
+
+
+def test_cli_show_config_mem_runner() -> None:
+    """Check that modifying env var for RUNNER_CLS affects show_config command."""
+    with patch.dict(os.environ, {"PYNENC__RUNNER_CLS": "MemRunner"}):
+        with patch(
+            "sys.argv",
+            [
+                "pynenc",
+                "--app",
+                "tests.unit.cli.test_config_cli.app",
+                "runner",
+                "show_config",
+            ],
+        ):
             with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
-                with pytest.raises(SystemExit) as e:
-                    main()
-        assert e.value.code == 0  # Exits normally
-        output = mock_stdout.getvalue()
-        for field in ConfigPynenc().all_fields:
-            assert f"--{field}" in output
-            assert f"{field} (default: {getattr(ConfigPynenc(), field)})" in output
+                main()
+
+    output = mock_stdout.getvalue()
+    assert "Showing configuration for Pynenc instance:" in output
+    assert "location: tests.unit.cli.test_config_cli.app" in output
+    assert f"id: {app.conf.app_id}" in output
+    # environment variable changed the runner class and MemRunner has different config
+    assert "Config ConfigMemRunner:" in output
+    check_fields_in_output(output, ConfigMemRunner())
+
+
+def check_fields_in_output(output: str, config: ConfigBase) -> None:
+    """Check that all the fields are present in the output."""
+    field_docs = config_cli.extract_descriptions_from_docstring(config.__class__)
+    for field in config.all_fields:
+        assert f"{field}:" in output
+        assert f"Default: {getattr(config, field)}" in output
+        assert f"Description: {field_docs[field]}" in output

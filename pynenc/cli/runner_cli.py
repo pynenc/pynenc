@@ -1,8 +1,7 @@
 import argparse
 
 from ..app import Pynenc
-from ..conf.config_runner import ConfigRunner
-from .config_cli import add_config_fields_to_parser
+from .config_cli import add_config_subparser
 from .namespace import PynencCLINamespace
 
 
@@ -11,12 +10,13 @@ def add_runner_subparser(subparsers: argparse._SubParsersAction) -> None:
     runner_subparsers = runner_parser.add_subparsers(
         dest="runner_command", required=True
     )
-    # Dynamically add CLI options for ConfigPynenc
-    add_config_fields_to_parser(runner_parser, ConfigRunner)
 
     # Runner start command
     runner_start_parser = runner_subparsers.add_parser("start", help="Start a runner")
     runner_start_parser.set_defaults(func=start_runner_command)
+
+    # Runner show_config command
+    add_config_subparser(runner_subparsers)
 
 
 def start_runner_command(args: PynencCLINamespace) -> None:

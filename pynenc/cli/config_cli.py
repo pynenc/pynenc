@@ -1,9 +1,10 @@
 import argparse
 import re
 from functools import wraps
-from typing import Any, Callable, NamedTuple, Type, TypeVar
+from typing import Callable, Type, TypeVar
 
-from ..conf.config_base import ConfigBase, ConfigField
+from ..app import Pynenc
+from ..conf.config_base import ConfigBase
 
 T = TypeVar("T", bound="ConfigBase")
 
@@ -52,31 +53,37 @@ def extract_descriptions_from_docstring(
     return field_docs
 
 
-class ConfigFieldInfo(NamedTuple):
-    attribute_name: str
-    default_value: Any
-    description: str
+def add_config_subparser(subparsers: argparse._SubParsersAction) -> None:
+    show_config_parser = subparsers.add_parser(
+        "show_config", help="Show app configuration"
+    )
+    show_config_parser.set_defaults(func=show_config_command)
 
 
-def extract_config_fields(config_class: Type["ConfigBase"]) -> list[ConfigFieldInfo]:
-    """Extract configuration fields from a config class."""
-    fields = []
-    field_docs = extract_descriptions_from_docstring(config_class)
-    for key, value in vars(config_class).items():
-        if isinstance(value, ConfigField):
-            # Extract description from docstring if available
-            description = field_docs.get(key, "")
-            fields.append(ConfigFieldInfo(key, value._default_value, description))
-    return fields
+def show_config_command(args: argparse.Namespace) -> None:
+    """Show the configuration for a Pynenc instance."""
+    # if not args.app:
+    #     raise ValueError("app must be specified")
+    if not isinstance(args.app_instance, Pynenc):
+        raise TypeError("app_instance must be an instance of ConfigBase")
 
+    if hasattr(args, "runner_command"):
+        config: ConfigBase = args.app_instance.runner.conf
+    else:
+        config = args.app_instance.conf
 
-def add_config_fields_to_parser(
-    parser: argparse.ArgumentParser, config_class: Type["ConfigBase"]
-) -> None:
-    """Add configuration fields to an argparse parser."""
-    for field_info in extract_config_fields(config_class):
-        parser.add_argument(
-            f"--{field_info.attribute_name}",
-            default=field_info.default_value,
-            help=f"{field_info.attribute_name} (default: {field_info.default_value})",
-        )
+    print("Showing configuration for Pynenc instance:")
+    print(f"  - location: {args.app}")
+    print(f"  - id: {args.app_instance.app_id}")
+    print(f"Config {config.__class__.__name__}:")
+    for field, description in extract_descriptions_from_docstring(
+        config.__class__
+    ).items():
+        # Format and print each field
+        print("-" * 50)
+        print(f"{field}: ")
+        print(f"  Default: {getattr(config, field)}")
+        # Format multiline description
+        formatted_description = "  ".join(description.splitlines())
+        print(f"  Description: {formatted_description}")
+    print("-" * 50)  # Closing separator after the last field

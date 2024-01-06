@@ -1,9 +1,8 @@
 import argparse
 import logging
 
-from ..conf.config_pynenc import ConfigPynenc
 from ..util.import_app import find_app_instance
-from .config_cli import add_config_fields_to_parser
+from .config_cli import add_config_subparser
 from .namespace import PynencCLINamespace
 from .runner_cli import add_runner_subparser
 
@@ -16,13 +15,12 @@ def main() -> None:
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Increase output verbosity"
     )
-    # Dynamically add CLI options for ConfigPynenc
-    add_config_fields_to_parser(parser, ConfigPynenc)
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # Add subparsers for different commands
-    add_runner_subparser(subparsers)  # Add the runner subparser
+    add_runner_subparser(subparsers)
+    add_config_subparser(subparsers)
 
     args = PynencCLINamespace()
     parser.parse_args(namespace=args)
