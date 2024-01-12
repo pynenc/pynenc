@@ -115,7 +115,12 @@ The `ConfigTask` class provides specialized configurations for tasks within the 
    .. code-block:: shell
 
       export PYNENC__CONFIGTASK__AUTO_PARALLEL_BATCH_SIZE="2"
-      export PYNENC__CONFIGTASK__MY_MODULE__MY_TASK__AUTO_PARALLEL_BATCH_SIZE="3"
+      export PYNENC__CONFIGTASK__MY_MODULE#MY_TASK__AUTO_PARALLEL_BATCH_SIZE="3"
+
+   .. note::
+
+      - The separator between the module name and the task name is `#`, not `__`. For instance, use `MY_MODULE#MY_TASK__AUTO_PARALLEL` to specify the task-specific setting.
+
 
 3. **Setting via Configuration File**:
 

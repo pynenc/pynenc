@@ -47,6 +47,21 @@ class Task(Generic[Params, Result]):
     use the decorator provided in the `pynenc` application, i.e., `@app.task(options...)`.
     This is the expected way of instantiating a class and registering it in the app.
 
+    Limitations
+    -----------
+    This implementation does not support the creation of tasks from functions defined
+    in modules intended to run as standalone scripts. This applies to any module
+    executed directly, where its `__name__` attribute becomes `"__main__"`. This is
+    not exclusive to modules with `if __name__ == "__main__"` sections but includes
+    any module run as the main program. In such situations, `func.__module__` being
+    `"__main__"` poses a challenge for task instantiation and serialization. When a
+    task is executed in the initiator script, it is identified as `__main__.task_name`.
+    However, in a Pynenc worker's distributed environment, `__main__` refers to the
+    worker itself. As a result, the task identified as `__main__.task_name` cannot be
+    found, since the worker's `__main__` differs from that of the initiator script.
+    To ensure simplicity and robustness in task management, tasks defined in modules
+    run as the main program are not supported.
+
     Examples
     --------
     >>> @app.task(options)
@@ -54,9 +69,18 @@ class Task(Generic[Params, Result]):
     ...     pass
     ...
     >>> result = func()
+
+    Raises
+    ------
+    RuntimeError
+        If an attempt is made to create a task from a function in the `__main__` module.
     """
 
     def __init__(self, app: Pynenc, func: Func, options: dict[str, Any]) -> None:
+        if "__main__" in func.__module__:
+            raise RuntimeError(
+                "Cannot create a task from a function in the __main__ module"
+            )
         self.task_id = f"{func.__module__}.{func.__name__}"
         self.app = app
         self.logger = TaskLoggerAdapter(self.app.logger, self.task_id)

@@ -22,7 +22,7 @@ def test_task_runner_logs(caplog: LogCaptureFixture) -> None:
     """
 
     def run_in_thread() -> None:
-        add.app.runner.run()
+        app.runner.run()
 
     thread = threading.Thread(target=run_in_thread, daemon=True)
     thread.start()
@@ -31,7 +31,7 @@ def test_task_runner_logs(caplog: LogCaptureFixture) -> None:
 
     with caplog.at_level("DEBUG"):
         assert invocation.result == 3
-        add.app.runner.stop_runner_loop()
+        app.runner.stop_runner_loop()
         thread.join()
         in_task_log, runner_log = None, None
         for record in caplog.records:
@@ -45,4 +45,4 @@ def test_task_runner_logs(caplog: LogCaptureFixture) -> None:
         assert invocation.invocation_id in in_task_log
         # Check that logs in the runner contains the runner id
         assert runner_log is not None
-        assert invocation.app.runner.runner_id in runner_log
+        assert app.runner.runner_id in runner_log

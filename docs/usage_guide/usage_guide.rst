@@ -8,6 +8,16 @@ Getting Started with Pynenc
 
 Before diving into specific use cases, ensure that you have Pynenc installed and configured correctly in your environment. Refer to the *Getting Started* section for installation instructions and initial setup.
 
+Best Practices for Task Definition
+----------------------------------
+
+.. important::
+   When defining tasks in Pynenc, it is crucial to avoid creating tasks in modules that are designed to run
+   as standalone scripts. In Python, if a module is run directly (either as a script or via `python -m module`),
+   its `__name__` attribute is set to `"__main__"`. This can cause issues in a distributed environment like Pynenc,
+   where the `__main__` module refers to the worker process, leading to difficulties in task identification and execution.
+   For more information on this limitation and how to structure your tasks correctly, refer to the [FAQ section](faq.rst).
+
 Use Case Scenarios
 ------------------
 

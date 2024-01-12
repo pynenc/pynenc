@@ -96,7 +96,7 @@ def test_task_config_with_task_specific_env_vars() -> None:
         os.environ,
         {
             "PYNENC__CONFIGTASK__AUTO_PARALLEL_BATCH_SIZE": "2",
-            "PYNENC__CONFIGTASK__TEST_TASK_CONFIG__STORE_WITH_SPECIFIC_ENV__AUTO_PARALLEL_BATCH_SIZE": "3",
+            "PYNENC__CONFIGTASK__TEST_TASK_CONFIG#STORE_WITH_SPECIFIC_ENV__AUTO_PARALLEL_BATCH_SIZE": "3",
         },
     ):
         assert store_with_specific_env.conf.auto_parallel_batch_size == 3
