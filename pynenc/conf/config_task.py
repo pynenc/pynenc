@@ -140,7 +140,7 @@ class ConfigTask(ConfigBase):
         os.environ["PYNENC__CONFIGTASK__AUTO_PARALLEL_BATCH_SIZE"] = "2"
 
         # Set auto parallel batch size specifically for 'my_module.my_task'
-        os.environ["PYNENC__CONFIGTASK__MY_MODULE__MY_TASK__AUTO_PARALLEL_BATCH_SIZE"] = "3"
+        os.environ["PYNENC__CONFIGTASK__MY_MODULE#MY_TASK__AUTO_PARALLEL_BATCH_SIZE"] = "3"
 
     Loading configuration from a YAML file:
 
@@ -156,6 +156,12 @@ class ConfigTask(ConfigBase):
 
         # Create and load a config file for tasks
         config = ConfigTask(task_id="my_module.my_task", config_filepath="path/to/config.yaml")
+
+    .. note::
+
+        - When specifying task-specific settings using environment variables, the separator
+          between the module name and task name is `#`, not `__`. For example, use
+          `MY_MODULE#MY_TASK__AUTO_PARALLEL` to specify the task-specific setting.
 
     The above examples demonstrate how to configure tasks both globally and on a per-task basis,
     offering flexibility and precise control over the behavior of tasks in the system.
@@ -211,7 +217,7 @@ class ConfigTask(ConfigBase):
         super().init_config_value_from_env_vars(config_cls)
         # specific env vars for task options
         config_key = f"{ENV_PREFIX}{ENV_SEP}{self.__class__.__name__.upper()}{ENV_SEP}"
-        task_key = config_key + self.task_id.upper().replace(".", ENV_SEP)
+        task_key = config_key + self.task_id.upper().replace(".", "#")
         for key in self.config_cls_to_fields.get(config_cls.__name__, []):
             env_key = f"{task_key}{ENV_SEP}{key.upper()}"
             if env_key in os.environ:
