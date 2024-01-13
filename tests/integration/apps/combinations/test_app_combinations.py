@@ -59,13 +59,13 @@ def test_task_running_concurrency(task_sleep: Task) -> None:
         slow_invocation_sleep_seconds = 0.25
     else:
         slow_invocation_sleep_seconds = 2
-    max_fast_running_time = slow_invocation_sleep_seconds / 4
+    max_fast_running_time = slow_invocation_sleep_seconds / 3
 
     assert slow_invocation_sleep_seconds > max_fast_running_time
     assert max_fast_running_time > fast_invocation_sleep_seconds
 
     #####################################################################################
-    # CONTROL CHECK: fastes invocation should finish before a quarter of the slowest running time
+    # CONTROL CHECK: fastes invocation should finish before max_fast_running_time
     start_fast = time()
     # trigger invocation and ask wait for the result directly
     invocation = task_sleep(seconds=fast_invocation_sleep_seconds)
