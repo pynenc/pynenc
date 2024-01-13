@@ -114,4 +114,5 @@ timeout = 10
 exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",
+    "^\\s*\\.\\.\\.\\s*$",  # ... ellipsis
 ]
