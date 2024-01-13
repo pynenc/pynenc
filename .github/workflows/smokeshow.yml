@@ -29,7 +29,18 @@ jobs:
           name: coverage-html
           path: coverage-html
 
-      - run: smokeshow upload coverage-html/
+      - name: Download integration test coverage artifact
+        uses: dawidd6/action-download-artifact@v2.28.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: tests_integration.yml
+          commit: ${{ github.event.workflow_run.head_sha }}
+          name: coverage-html-integration
+          path: coverage-html-integration
+
+      - run: coverage combine coverage-html coverage-html-integration
+
+      - run: smokeshow upload combined-coverage/
         env:
           SMOKESHOW_GITHUB_STATUS_DESCRIPTION: Coverage {coverage-percentage}
           SMOKESHOW_GITHUB_COVERAGE_THRESHOLD: 75 # TODO increase it!
