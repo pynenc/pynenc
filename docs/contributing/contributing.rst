@@ -59,4 +59,41 @@ To contribute to Pynenc once it's open for contributions, follow these typical s
        poetry run pre-commit install
 
 
-Remember, these steps will become applicable once the project is open for contributions. Until then, feel free to familiarize yourself with the codebase and the project's goals.
+Running Tests and Checking Coverage
+-----------------------------------
+
+Pynenc aims to maintain a high standard of code quality, which includes thorough testing and maintaining good test coverage. Here’s how you can run tests and check coverage:
+
+1. **Running Tests**: After setting up your development environment, you can run the tests to ensure everything is working as expected.
+
+   .. code-block:: bash
+
+       poetry run pytest
+
+   This command will execute all the tests in the `tests` directory.
+
+2. **Checking Test Coverage**: To check how much of the code is covered by tests, use the `coverage` tool.
+
+   - First, run the tests with coverage tracking:
+
+     .. code-block:: bash
+
+         poetry run coverage run -m pytest
+
+   - Then, generate a coverage report. There are two ways to view the coverage report:
+
+     - For a summary in the console, use:
+
+       .. code-block:: bash
+
+           poetry run coverage report
+
+     - For a more detailed HTML report, use:
+
+       .. code-block:: bash
+
+           poetry run coverage html
+
+       This will generate a report in the `htmlcov` directory. You can open `htmlcov/index.html` in a web browser to view it.
+
+Please aim to maintain or improve the test coverage with your contributions. It’s recommended to add tests for any new code or when fixing bugs.
