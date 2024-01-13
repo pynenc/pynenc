@@ -109,3 +109,9 @@ filterwarnings = [
     "ignore::pytest.PytestUnhandledThreadExceptionWarning",
 ]
 timeout = 10
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+]
