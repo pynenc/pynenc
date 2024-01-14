@@ -110,7 +110,6 @@ class BaseInvocationGroup(ABC, Generic[Params, Result, T]):
     def app(self) -> Pynenc:
         return self.task.app
 
-    @property
     def __iter__(self) -> Iterator[T]:
         yield from self.invocations
 
