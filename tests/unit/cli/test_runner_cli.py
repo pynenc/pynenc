@@ -24,7 +24,7 @@ def test_start_runner_with_invalid_app_instance() -> None:
 def test_start_runner_with_dummy_runner() -> None:
     """Test start_runner_command with DummyRunner"""
     dummy_runner_app = Pynenc()
-    dummy_runner_app.runner = DummyRunner(app=app)
+    dummy_runner_app.runner = DummyRunner(app=MagicMock())
 
     args = PynencCLINamespace()
     args.app = "tests.unit.cli.test_runner_cli.app"

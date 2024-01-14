@@ -15,16 +15,13 @@ ConfigFieldMapper = Callable[[Any, Type[T]], T]
 def default_config_field_mapper(value: Any, expected_type: Type[T]) -> T:
     if isinstance(value, expected_type):
         return value
-    if callable(expected_type):
-        try:
-            callable_type = cast(Callable[[Any], T], expected_type)
-            return callable_type(value)  # type conversion
-        except (ValueError, TypeError) as ex:
-            raise TypeError(
-                f"Invalid type. Expected {expected_type} instead {type(value)}."
-            ) from ex
-    else:
-        raise TypeError(f"Cannot convert to {expected_type}")
+    try:
+        callable_type = cast(Callable[[Any], T], expected_type)
+        return callable_type(value)  # type conversion
+    except (ValueError, TypeError) as ex:
+        raise TypeError(
+            f"Invalid type. Expected {expected_type} instead {type(value)}."
+        ) from ex
 
 
 class ConfigField(Generic[T]):
@@ -169,10 +166,6 @@ class ConfigBase:
     ) -> None:
         config_id = self.get_config_id(config_cls)
         self.init_parent_values(config_cls, config_values, config_filepath)
-        if not get_config_fields(self.__class__):
-            raise TypeError(
-                "Cannot instantiate a ConfigBase without any ConfigField attribute"
-            )
         # 5.- User specifies the config by values (dict[str: Any])
         if config_values:
             self.init_config_value_from_mapping(
