@@ -38,7 +38,7 @@ def test_serialized_arguments(mock_task: MagicMock, mock_arguments: MagicMock) -
     assert call.serialized_arguments == mock_arguments.kwargs
     call: Call = Call(task=mock_task, arguments=mock_arguments)
     call.app.serializer.serialize = lambda obj: "0"  # type: ignore
-    assert call.serialized_arguments == {k: 0 for k in mock_arguments.kwargs}  # type: ignore
+    assert call.serialized_arguments == {k: "0" for k in mock_arguments.kwargs}  # type: ignore
 
 
 def test_equality_and_hash(mock_task: MagicMock, mock_arguments: MagicMock) -> None:
