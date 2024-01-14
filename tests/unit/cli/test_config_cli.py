@@ -1,7 +1,8 @@
+import argparse
 import os
 from io import StringIO
 from typing import TYPE_CHECKING, Type
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -171,3 +172,26 @@ def check_fields_in_output(output: str, config: ConfigBase) -> None:
         assert f"{field}:" in output
         assert f"Default: {getattr(config, field)}" in output
         assert f"Description: {field_docs[field]}" in output
+
+
+def test_extract_descriptions_from_docstring_with_config_base() -> None:
+    """Test extract_descriptions_from_docstring with ConfigBase."""
+    descriptions = config_cli.extract_descriptions_from_docstring(ConfigBase)
+    assert descriptions == {}
+
+
+class ConfigWithoutDoc(ConfigBase):
+    pass
+
+
+def test_extract_descriptions_from_docstring_without_docstring() -> None:
+    """Test extract_descriptions_from_docstring with a class without a docstring."""
+    descriptions = config_cli.extract_descriptions_from_docstring(ConfigWithoutDoc)
+    assert descriptions == {}
+
+
+def test_show_config_command_with_invalid_app_instance() -> None:
+    """Test show_config_command with an invalid app_instance."""
+    args = argparse.Namespace(app_instance=MagicMock(), app="dummy_app")
+    with pytest.raises(TypeError):
+        config_cli.show_config_command(args)
