@@ -115,4 +115,5 @@ exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",
     "^\\s*\\.\\.\\.\\s*$",  # ... ellipsis
+    "if __name__ == .__main__.:",
 ]
