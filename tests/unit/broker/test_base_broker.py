@@ -1,7 +1,8 @@
 from pynenc.arguments import Arguments
 from pynenc.call import Call
+from pynenc.conf.config_broker import ConfigBroker
 from pynenc.invocation import DistributedInvocation
-from tests.conftest import MockPynenc
+from tests.conftest import MockBroker, MockPynenc
 
 mock_base_app = MockPynenc()
 
@@ -22,3 +23,12 @@ def test_route_task() -> None:
     )
     assert isinstance(invocation, DistributedInvocation)
     mock_base_app.broker.route_invocation.assert_called_once()
+
+
+def test_base_broker_conf() -> None:
+    # Create an instance of BaseBroker
+    broker = MockBroker(app=mock_base_app)
+
+    # Test the conf property
+    conf = broker.conf
+    assert isinstance(conf, ConfigBroker)
