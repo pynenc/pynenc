@@ -2,13 +2,8 @@ from typing import Any
 from unittest.mock import Mock
 
 from pynenc.invocation import BaseInvocation, BaseInvocationGroup
-from tests.conftest import MockPynenc
 
-app = MockPynenc()
-
-# Mock dependencies
 mock_call = Mock()
-
 mock_task = Mock()
 
 
