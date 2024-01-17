@@ -1,4 +1,7 @@
+from unittest.mock import Mock, patch
+
 from pynenc.conf import ConcurrencyControlType
+from pynenc.exceptions import PendingInvocationLockError
 from pynenc.invocation import DistributedInvocation, InvocationStatus
 from tests.conftest import MockPynenc
 
@@ -111,3 +114,92 @@ def test_running_concurrency_task_control(mock_base_app: MockPynenc) -> None:
     assert not mock_base_app.orchestrator.is_authorize_to_run_by_concurrency_control(
         to_run_invocation
     )
+
+
+@patch(
+    "pynenc.orchestrator.base_orchestrator.BaseOrchestrator.is_authorize_to_run_by_concurrency_control"
+)
+@patch("pynenc.orchestrator.base_orchestrator.BaseOrchestrator._set_pending")
+def test_get_blocking_invocations_to_run(
+    mock_set_pending: Mock, mock_authorize_run: Mock, mock_base_app: MockPynenc
+) -> None:
+    """Test that get_blocking_invocations_to_run retrieves and processes invocations correctly."""
+    mock_invocation_1 = dummy_run_task_concurrency()
+    mock_invocation_2 = dummy_run_task_concurrency()
+    mock_invocation_3 = dummy_run_task_concurrency()
+
+    # Mock method to return these invocations as blocking invocations
+    mock_base_app.orchestrator.blocking_control.get_blocking_invocations.return_value = iter(
+        [mock_invocation_1, mock_invocation_2, mock_invocation_3]
+    )
+
+    mock_authorize_run.return_value = True
+
+    # Call the method under test
+    blocking_invocations = list(
+        mock_base_app.orchestrator.get_blocking_invocations_to_run(3, set())
+    )
+
+    # Assert that the method returns the expected invocations
+    assert blocking_invocations == [
+        mock_invocation_1,
+        mock_invocation_2,
+        mock_invocation_3,
+    ]
+
+    # Assert that _set_pending was called for each invocation
+    for invocation in [mock_invocation_1, mock_invocation_2, mock_invocation_3]:
+        mock_set_pending.assert_any_call(invocation)
+
+
+@patch(
+    "pynenc.orchestrator.base_orchestrator.BaseOrchestrator.is_authorize_to_run_by_concurrency_control"
+)
+@patch("pynenc.orchestrator.base_orchestrator.BaseOrchestrator._set_pending")
+def test_get_blocking_invocations_to_run_disabled(
+    mock_set_pending: Mock, mock_authorize_run: Mock, mock_base_app: MockPynenc
+) -> None:
+    """Test that get_blocking_invocations_to_run retrieves and processes invocations correctly."""
+    mock_invocation_1 = dummy_run_task_concurrency()
+
+    # Mock method to return these invocations as blocking invocations
+    mock_base_app.orchestrator.blocking_control.get_blocking_invocations.return_value = iter(
+        [mock_invocation_1]
+    )
+
+    mock_authorize_run.return_value = False
+
+    # Call the method under test
+    blocking_invocations = list(
+        mock_base_app.orchestrator.get_blocking_invocations_to_run(3, set())
+    )
+    assert blocking_invocations == []
+    mock_set_pending.assert_not_called()
+
+
+@patch(
+    "pynenc.orchestrator.base_orchestrator.BaseOrchestrator.is_authorize_to_run_by_concurrency_control"
+)
+@patch("pynenc.orchestrator.base_orchestrator.BaseOrchestrator._set_pending")
+def test_get_blocking_invocations_to_run_handles_lock(
+    mock_set_pending: Mock, mock_authorize_run: Mock, mock_base_app: MockPynenc
+) -> None:
+    """Test that get_blocking_invocations_to_run retrieves and processes invocations correctly."""
+    mock_invocation_1 = dummy_run_task_concurrency()
+
+    # Mock method to return these invocations as blocking invocations
+    mock_base_app.orchestrator.blocking_control.get_blocking_invocations.return_value = iter(
+        [mock_invocation_1]
+    )
+
+    # mock_set_pending raises exception PendingInvocationLockError
+    mock_set_pending.side_effect = PendingInvocationLockError("test")
+
+    mock_authorize_run.return_value = True
+
+    # Call the method under test
+    blocking_invocations = list(
+        mock_base_app.orchestrator.get_blocking_invocations_to_run(3, set())
+    )
+    assert blocking_invocations == []
+    mock_set_pending.assert_called_once_with(mock_invocation_1)
