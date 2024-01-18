@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Type
 import pytest
 
 from pynenc.serializer.base_serializer import BaseSerializer
+from pynenc.serializer.json_serializer import JsonSerializer
 from pynenc.util.subclasses import get_all_subclasses
 
 if TYPE_CHECKING:
@@ -53,3 +54,12 @@ def test_serialize_deserialize_exceptions(
     deserialized = serializer_class.deserialize(serialized)
     assert isinstance(deserialized, ValueError)
     assert deserialized.args == obj.args
+
+
+def test_json_serialize_custom_object() -> None:
+    class CustomObject:
+        pass
+
+    obj = CustomObject()
+    with pytest.raises(TypeError):
+        JsonSerializer().serialize(obj)
