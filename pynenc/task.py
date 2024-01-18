@@ -161,14 +161,11 @@ class Task(Generic[Params, Result]):
 
     @cached_property
     def retriable_exceptions(self) -> tuple[type[Exception], ...]:
-        if self.conf.retry_for is None:
+        if not self.conf.retry_for:
             return (RetryError,)
+        if RetryError in self.conf.retry_for:
+            return self.conf.retry_for
         return self.conf.retry_for + (RetryError,)
-
-    @cached_property
-    def task_id(self) -> str:
-        """The id of the task, which is the module and function name."""
-        return f"{self.func.__module__}.{self.func.__name__}"
 
     def __str__(self) -> str:
         return f"Task(func={self.func.__name__})"

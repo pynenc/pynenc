@@ -2,6 +2,8 @@ import os
 from typing import Any
 from unittest.mock import patch
 
+import pytest
+
 from pynenc import Pynenc, Task
 from pynenc.conf.config_task import ConfigTask
 from pynenc.exceptions import RetryError
@@ -102,3 +104,46 @@ def test_sync_run_retry() -> None:
     assert invocation.num_retries == 0
     assert invocation.result == 1
     assert invocation.num_retries == 1
+
+
+@app.task
+def example_task() -> None:
+    pass
+
+
+def test_task_invocation_property_error() -> None:
+    """
+    Test that accessing the invocation property of a task before it has been invoked
+    raises a RuntimeError.
+    """
+    with pytest.raises(RuntimeError) as exc_info:
+        _ = example_task.invocation
+
+    assert "Task has not been invoked yet" in str(exc_info.value)
+
+
+def another_task() -> None:
+    pass
+
+
+def test_retriable_exceptions() -> None:
+    """Test that the task will contain RetryError by default as a retriable exception"""
+    task = app.task(another_task)
+    task.conf.retry_for = ()
+    assert task.retriable_exceptions == (RetryError,)
+
+    task = app.task(another_task)
+    task.conf.retry_for = (RetryError,)
+    assert task.retriable_exceptions == (RetryError,)
+
+    task = app.task(another_task)
+    task.conf.retry_for = (RuntimeError,)
+    assert task.retriable_exceptions == (RuntimeError, RetryError)
+
+
+def test_task_str() -> None:
+    assert str(example_task) == f"Task(func={example_task.func.__name__})"
+
+
+def test_task_repr() -> None:
+    assert repr(example_task) == str(example_task)

@@ -55,11 +55,11 @@ def test_max_retries() -> None:
 
 @app.task
 def raise_exception() -> None:
-    raise Exception("Test exception")
+    raise RuntimeError("Test exception")
 
 
 def test_exception() -> None:
     invocation = raise_exception()
-    with pytest.raises(Exception, match="Test exception"):
+    with pytest.raises(RuntimeError, match="Test exception"):
         _ = invocation.result
     assert invocation.status == InvocationStatus.FAILED
