@@ -57,8 +57,6 @@ class MockBaseOrchestrator(BaseOrchestrator):
 
 
 class MockStateBackend(BaseStateBackend):
-    wait_for_all_async_operations = MagicMock()
-    wait_for_invocation_async_operations = MagicMock()
     purge = MagicMock()
     _upsert_invocation = MagicMock()
     _get_invocation = MagicMock()
@@ -71,8 +69,6 @@ class MockStateBackend(BaseStateBackend):
 
     def __init__(self, app: "Pynenc") -> None:
         super().__init__(app)
-        self.wait_for_all_async_operations.reset_mock()
-        self.wait_for_invocation_async_operations.reset_mock()
         self.purge.reset_mock()
         self._upsert_invocation.reset_mock()
         self._get_invocation.reset_mock()
