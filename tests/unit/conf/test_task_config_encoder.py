@@ -5,7 +5,7 @@ import pytest
 from pynenc.conf.config_task import TaskOptionsJSONEncoder
 
 
-class TestStrEnum(StrEnum):
+class SomeStrEnum(StrEnum):
     OPTION1 = "Value1"
     OPTION2 = "Value2"
 
@@ -22,9 +22,9 @@ def test_json_encoder_with_exception_class() -> None:
 
 
 def test_json_encoder_with_strenum() -> None:
-    """Test JSON encoding of an TestStrEnum instance."""
+    """Test JSON encoding of an SomeStrEnum instance."""
     encoder = TaskOptionsJSONEncoder()
-    result = encoder.default(TestStrEnum.OPTION1)
+    result = encoder.default(SomeStrEnum.OPTION1)
     assert result == "Value1"
 
 

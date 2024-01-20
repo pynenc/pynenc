@@ -7,7 +7,7 @@ from pynenc.conf.config_orchestrator import ConfigOrchestratorRedis
 from pynenc.conf.config_redis import ConfigRedis
 
 
-class TestConfig(config_base.ConfigBase):
+class SomeConfig(config_base.ConfigBase):
     test_value = config_base.ConfigField(0)
 
 
@@ -16,10 +16,10 @@ def test_env_var() -> None:
     with patch.dict(
         os.environ,
         {
-            "PYNENC__TESTCONFIG__TEST_VALUE": "13",
+            "PYNENC__SOMECONFIG__TEST_VALUE": "13",
         },
     ):
-        conf = TestConfig()
+        conf = SomeConfig()
     assert conf.test_value == 13
 
 
