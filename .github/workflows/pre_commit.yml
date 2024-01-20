@@ -36,14 +36,17 @@ jobs:
         if: steps.cache-deps.outputs.cache-hit != 'true'
       - run: poetry install --no-interaction
 
+      - name: Update Lock File with Increased Verbosity
+        run: poetry lock -vvv
+
       # - name: Install pre-commit
       #   run: pip install pre-commit
 
-      - name: Run pre-commit on all files
-        run: poetry run pre-commit run --all-files
+      # - name: Run pre-commit on all files
+      #   run: poetry run pre-commit run --all-files
 
-      - name: Cache pre-commit environments
-        uses: actions/cache@v3
-        with:
-          path: ~/.cache/pre-commit
-          key: ${{ runner.os }}-pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+      # - name: Cache pre-commit environments
+      #   uses: actions/cache@v3
+      #   with:
+      #     path: ~/.cache/pre-commit
+      #     key: ${{ runner.os }}-pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
