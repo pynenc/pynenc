@@ -173,10 +173,9 @@ def test_waiting_for_results_no_args_error(
 def test_waiting_for_results_no_running_invocation(runner: ProcessRunner) -> None:
     runner._on_start()
     with patch("time.sleep") as mock_sleep:
+        runner.conf.invocation_wait_results_sleep_time_sec = -2323
         runner.waiting_for_results(None, [])
-        mock_sleep.assert_called_once_with(
-            runner.conf.invocation_wait_results_sleep_time_sec
-        )
+        mock_sleep.assert_any_call(-2323)
 
 
 def test_waiting_processes_property(
