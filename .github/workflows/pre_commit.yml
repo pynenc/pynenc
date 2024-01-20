@@ -25,9 +25,9 @@ jobs:
 
       - name: Run pre-commit on all files
         run: pre-commit run --all-files
-
-      - name: Cache pre-commit environments
-        uses: actions/cache@v3
-        with:
-          path: ~/.cache/pre-commit
-          key: ${{ runner.os }}-pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+# Temporarily commented out for diagnostic purposes
+# - name: Cache pre-commit environments
+#   uses: actions/cache@v3
+#   with:
+#     path: ~/.cache/pre-commit
+#     key: ${{ runner.os }}-pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
