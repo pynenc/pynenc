@@ -25,13 +25,3 @@ sphinx:
 # formats:
 #    - pdf
 #    - epub
-
-# Optional but recommended, declare the Python requirements required
-# to build your documentation
-# See https://docs.readthedocs.io/en/stable/guides/reproducible-builds.html
-# python:
-#   install:
-#     - method: pip
-#       path: .
-#       # poetry export -f requirements.txt --output docs/requirements.txt --dev
-#     - requirements: docs/requirements.txt
