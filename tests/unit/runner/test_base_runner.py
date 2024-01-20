@@ -65,7 +65,10 @@ def test_dummy_runner(mock_base_app: "MockPynenc") -> None:
 def test_dummy_runner_waiting_for_result(
     mock_sleep: Mock, mock_base_app: "MockPynenc"
 ) -> None:
-    runner = DummyRunner(mock_base_app)  # type: ignore
+    mock_app = Mock(spec=mock_base_app)
+    mock_app.config_values = None
+    mock_app.config_filepath = None
+    runner = DummyRunner(mock_app)
     mock_sleep.reset_mock()
     runner.waiting_for_results(None, None)  # type: ignore
     mock_sleep.assert_called_once_with(
