@@ -11,7 +11,7 @@ on:
 
 jobs:
   pre-commit:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v3
 
@@ -20,41 +20,14 @@ jobs:
         with:
           python-version: "3.11.7"
 
-      # Use Poetry to install dependencies, caching the result.
-      - uses: snok/install-poetry@v1
-        with:
-          version: 1.7.1
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-      - name: cache deps
-        id: cache-deps
+      - name: Install pre-commit
+        run: pip install pre-commit
+
+      - name: Run pre-commit on all files
+        run: pre-commit run --all-files
+
+      - name: Cache pre-commit environments
         uses: actions/cache@v3
         with:
-          path: .venv
-          key: pydeps-${{ hashFiles('**/poetry.lock') }}
-      - run: poetry install --no-interaction --no-root
-        if: steps.cache-deps.outputs.cache-hit != 'true'
-      - run: poetry install --no-interaction
-
-      - name: Generate Temporary Lock File and Compare
-        run: |
-          mkdir temp_directory
-          cp pyproject.toml temp_directory/
-          cp poetry.lock temp_directory/
-          cd temp_directory
-          poetry lock
-          diff -u ../poetry.lock poetry.lock || true
-          cd ..
-          rm -rf temp_directory
-
-      # - name: Install pre-commit
-      #   run: pip install pre-commit
-
-      # - name: Run pre-commit on all files
-      #   run: poetry run pre-commit run --all-files
-
-      # - name: Cache pre-commit environments
-      #   uses: actions/cache@v3
-      #   with:
-      #     path: ~/.cache/pre-commit
-      #     key: ${{ runner.os }}-pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+          path: ~/.cache/pre-commit
+          key: ${{ runner.os }}-pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
