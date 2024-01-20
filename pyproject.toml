@@ -110,10 +110,15 @@ filterwarnings = [
 ]
 timeout = 10
 
+[tool.coverage.run]
+omit = [
+    "tests/*",  # Exclude all files in the tests directory
+]
+
 [tool.coverage.report]
 exclude_lines = [
     "pragma: no cover",
-    "if TYPE_CHECKING:",
+    "if (typing\\.)?TYPE_CHECKING:",
     "^\\s*\\.\\.\\.\\s*$",  # ... ellipsis
     "if __name__ == .__main__.:",
 ]
