@@ -18,7 +18,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: "3.11"
+          python-version: "3.11.7"
 
       # Use Poetry to install dependencies, caching the result.
       - uses: snok/install-poetry@v1
@@ -36,8 +36,16 @@ jobs:
         if: steps.cache-deps.outputs.cache-hit != 'true'
       - run: poetry install --no-interaction
 
-      - name: Update Lock File with Increased Verbosity
-        run: poetry lock -vvv
+      - name: Generate Temporary Lock File and Compare
+        run: |
+          mkdir temp_directory
+          cp pyproject.toml temp_directory/
+          cp poetry.lock temp_directory/
+          cd temp_directory
+          poetry lock
+          diff -u ../poetry.lock poetry.lock || true
+          cd ..
+          rm -rf temp_directory
 
       # - name: Install pre-commit
       #   run: pip install pre-commit
