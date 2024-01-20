@@ -35,12 +35,14 @@ coverage = { version = ">=7.2.6,<8.0", extras = ["toml"] }
 mypy = "1.7.0"
 types-redis = "4.6.0.2"
 types-PyYAML = "6.0.12.12"
+pre-commit = "^3.5.0"
+pytest-timeout = "^2.2.0"
+
+
+[tool.poetry.group.doc.dependencies]
 sphinx = "^7.0"
 myst-parser = "^2"
 furo = "^2023"
-pre-commit = "^3.5.0"
-pytest-timeout = "^2.2.0"
-poetry-plugin-export = "^1.6.0"
 
 [build-system]
 requires = ["poetry-core"]
