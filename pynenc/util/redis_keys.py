@@ -7,6 +7,9 @@ if TYPE_CHECKING:
 
 
 def sanitize_for_redis(s: str) -> str:
+    if s is None:
+        return ""
+
     replacements = {
         "[": "__OPEN_BRACKET__",
         "]": "__CLOSE_BRACKET__",

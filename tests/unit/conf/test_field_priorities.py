@@ -6,26 +6,26 @@ from unittest.mock import patch
 from pynenc.conf import config_base
 
 
-class TestConfig(config_base.ConfigBase):
+class SomeConfig(config_base.ConfigBase):
     field = config_base.ConfigField(0)
 
 
 def test_default() -> None:
     """Test that returns the default"""
-    conf = TestConfig()
+    conf = SomeConfig()
     assert conf.field == 0
 
 
 def test_config_values_map() -> None:
     """Test that specifying the config by value overwrites defaul"""
-    conf = TestConfig(config_values={"field": 1})
+    conf = SomeConfig(config_values={"field": 1})
     assert conf.field == 1
 
 
 def test_config_specific_values_map() -> None:
     """Test that within a value map,
     specific Config class values overwrite general ones"""
-    conf = TestConfig(config_values={"field": 1, "test": {"field": 2}})
+    conf = SomeConfig(config_values={"field": 1, "some": {"field": 2}})
     assert conf.field == 2
 
 
@@ -35,8 +35,8 @@ def test_config_file() -> None:
         filepath = os.path.join(tmpdir, "config.json")
         with open(filepath, mode="w") as _file:
             _file.write(json.dumps({"field": 3}))
-        conf = TestConfig(
-            config_values={"field": 1, "test": {"field": 2}},
+        conf = SomeConfig(
+            config_values={"field": 1, "some": {"field": 2}},
             config_filepath=filepath,
         )
         assert conf.field == 3
@@ -47,9 +47,9 @@ def test_config_file_specific_value() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         filepath = os.path.join(tmpdir, "config.json")
         with open(filepath, mode="w") as _file:
-            _file.write(json.dumps({"field": 3, "test": {"field": 4}}))
-        conf = TestConfig(
-            config_values={"field": 1, "test": {"field": 2}},
+            _file.write(json.dumps({"field": 3, "some": {"field": 4}}))
+        conf = SomeConfig(
+            config_values={"field": 1, "some": {"field": 2}},
             config_filepath=filepath,
         )
         assert conf.field == 4
@@ -60,13 +60,13 @@ def test_config_filepath_environ() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         filepath = os.path.join(tmpdir, "config.json")
         with open(filepath, mode="w") as _file:
-            _file.write(json.dumps({"field": 3, "test": {"field": 4}}))
+            _file.write(json.dumps({"field": 3, "some": {"field": 4}}))
         env_filepath = os.path.join(tmpdir, "config_env.json")
         with open(env_filepath, mode="w") as _file:
             _file.write(json.dumps({"field": 5}))
         with patch.dict(os.environ, {"PYNENC__FILEPATH": env_filepath}):
-            conf = TestConfig(
-                config_values={"field": 1, "test": {"field": 2}},
+            conf = SomeConfig(
+                config_values={"field": 1, "some": {"field": 2}},
                 config_filepath=filepath,
             )
         assert conf.field == 5
@@ -78,7 +78,7 @@ def test_config_filepath_specific_environ() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         filepath = os.path.join(tmpdir, "config.json")
         with open(filepath, mode="w") as _file:
-            _file.write(json.dumps({"field": 3, "test": {"field": 4}}))
+            _file.write(json.dumps({"field": 3, "some": {"field": 4}}))
         env_filepath = os.path.join(tmpdir, "config_env.json")
         with open(env_filepath, mode="w") as _file:
             _file.write(json.dumps({"field": 5}))
@@ -89,11 +89,11 @@ def test_config_filepath_specific_environ() -> None:
             os.environ,
             {
                 "PYNENC__FILEPATH": env_filepath,
-                "PYNENC__TESTCONFIG__FILEPATH": specific_env_filepath,
+                "PYNENC__SOMECONFIG__FILEPATH": specific_env_filepath,
             },
         ):
-            conf = TestConfig(
-                config_values={"field": 1, "test": {"field": 2}},
+            conf = SomeConfig(
+                config_values={"field": 1, "some": {"field": 2}},
                 config_filepath=filepath,
             )
         assert conf.field == 6
@@ -104,7 +104,7 @@ def test_config_environ_variables() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         filepath = os.path.join(tmpdir, "config.json")
         with open(filepath, mode="w") as _file:
-            _file.write(json.dumps({"field": 3, "test": {"field": 4}}))
+            _file.write(json.dumps({"field": 3, "some": {"field": 4}}))
         env_filepath = os.path.join(tmpdir, "config_env.json")
         with open(env_filepath, mode="w") as _file:
             _file.write(json.dumps({"field": 5}))
@@ -115,12 +115,12 @@ def test_config_environ_variables() -> None:
             os.environ,
             {
                 "PYNENC__FILEPATH": env_filepath,
-                "PYNENC__TESTCONFIG__FILEPATH": specific_env_filepath,
+                "PYNENC__SOMECONFIG__FILEPATH": specific_env_filepath,
                 "PYNENC__FIELD": "7",
             },
         ):
-            conf = TestConfig(
-                config_values={"field": 1, "test": {"field": 2}},
+            conf = SomeConfig(
+                config_values={"field": 1, "some": {"field": 2}},
                 config_filepath=filepath,
             )
         assert conf.field == 7
@@ -131,7 +131,7 @@ def test_config_specific_environ_variables() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         filepath = os.path.join(tmpdir, "config.json")
         with open(filepath, mode="w") as _file:
-            _file.write(json.dumps({"field": 3, "test": {"field": 4}}))
+            _file.write(json.dumps({"field": 3, "some": {"field": 4}}))
         env_filepath = os.path.join(tmpdir, "config_env.json")
         with open(env_filepath, mode="w") as _file:
             _file.write(json.dumps({"field": 5}))
@@ -142,13 +142,13 @@ def test_config_specific_environ_variables() -> None:
             os.environ,
             {
                 "PYNENC__FILEPATH": env_filepath,
-                "PYNENC__TESTCONFIG__FILEPATH": specific_env_filepath,
+                "PYNENC__SOMECONFIG__FILEPATH": specific_env_filepath,
                 "PYNENC__FIELD": "7",
-                "PYNENC__TESTCONFIG__FIELD": "8",
+                "PYNENC__SOMECONFIG__FIELD": "8",
             },
         ):
-            conf = TestConfig(
-                config_values={"field": 1, "test": {"field": 2}},
+            conf = SomeConfig(
+                config_values={"field": 1, "some": {"field": 2}},
                 config_filepath=filepath,
             )
         assert conf.field == 8

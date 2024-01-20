@@ -134,15 +134,16 @@ class Task(Generic[Params, Result]):
         # Restore instance attributes
         self.app = state["app"]
         serialized = state["task_json"]
-        task_id, func, options = Task._from_json(self.app, serialized)
+        task_id, func, options = Task._from_json(serialized)
         # Restore the cached property
         self.task_id = task_id
         self.app = self.app
         self.func = func
         self.options = options
+        self.logger = TaskLoggerAdapter(self.app.logger, self.task_id)
 
     @staticmethod
-    def _from_json(app: Pynenc, serialized: str) -> tuple[str, Func, dict[str, Any]]:
+    def _from_json(serialized: str) -> tuple[str, Func, dict[str, Any]]:
         """Returns a function and options from a serialized task"""
         task_dict = json.loads(serialized)
         task_id = task_dict["task_id"]
@@ -155,19 +156,16 @@ class Task(Generic[Params, Result]):
     @classmethod
     def from_json(cls, app: Pynenc, serialized: str) -> Task:
         """Returns a new task from a serialized task"""
-        _, func, options = cls._from_json(app, serialized)
+        _, func, options = cls._from_json(serialized)
         return cls(app, func, options)
 
     @cached_property
     def retriable_exceptions(self) -> tuple[type[Exception], ...]:
-        if self.conf.retry_for is None:
+        if not self.conf.retry_for:
             return (RetryError,)
+        if RetryError in self.conf.retry_for:
+            return self.conf.retry_for
         return self.conf.retry_for + (RetryError,)
-
-    @cached_property
-    def task_id(self) -> str:
-        """The id of the task, which is the module and function name."""
-        return f"{self.func.__module__}.{self.func.__name__}"
 
     def __str__(self) -> str:
         return f"Task(func={self.func.__name__})"

@@ -39,6 +39,7 @@ class ProcessRunner(BaseRunner):
 
     @property
     def waiting_processes(self) -> int:
+        """Number of processes waiting for other invocations to finish"""
         if not self.wait_invocation:
             return 0
         return len(set.union(*self.wait_invocation.values()))

@@ -80,10 +80,6 @@ class Pynenc:
         self.reporting = state["reporting"]
         self._runner_instance = None
 
-    def is_initialized(self, property_name: str) -> bool:
-        """Returns True if the given cached_property has been initialized"""
-        return property_name in self.__dict__
-
     @cached_property
     def conf(self) -> ConfigPynenc:
         return ConfigPynenc(

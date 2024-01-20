@@ -1,8 +1,11 @@
+import threading
 import time
 from typing import TYPE_CHECKING
+from unittest.mock import create_autospec
 
 import pytest
 
+from pynenc.conf.config_state_backend import ConfigStateBackend
 from pynenc.exceptions import InvocationNotFoundError
 from pynenc.invocation import DistributedInvocation, InvocationStatus
 
@@ -67,3 +70,23 @@ def test_get_invocation_exception(mock_base_app: "MockPynenc") -> None:
     mock_base_app.state_backend._get_invocation.return_value = None
     with pytest.raises(InvocationNotFoundError):
         mock_base_app.state_backend.get_invocation("x")
+
+
+def test_conf_property(mock_base_app: "MockPynenc") -> None:
+    assert isinstance(mock_base_app.state_backend.conf, ConfigStateBackend)
+
+
+def test_wait_for_all_async_operations(mock_base_app: "MockPynenc") -> None:
+    # Mock the threads for two dummy invocations
+    mock_thread1 = create_autospec(threading.Thread)
+    mock_thread2 = create_autospec(threading.Thread)
+    mock_base_app.state_backend.invocation_threads = {
+        "invocation1": [mock_thread1],
+        "invocation2": [mock_thread2],
+    }
+
+    mock_base_app.state_backend.wait_for_all_async_operations()
+
+    # Verify that join is called on all threads
+    mock_thread1.join.assert_called_once()
+    mock_thread2.join.assert_called_once()

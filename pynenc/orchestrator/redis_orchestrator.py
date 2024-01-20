@@ -464,11 +464,6 @@ class RedisOrchestrator(BaseOrchestrator):
     ) -> "InvocationStatus":
         return self.redis_cache.get_invocation_status(invocation)
 
-    def increase_retries(
-        self, invocation: "DistributedInvocation[Params, Result]"
-    ) -> None:
-        self.redis_cache.increment_invocation_retries(invocation)
-
     def get_invocation_retries(
         self, invocation: "DistributedInvocation[Params, Result]"
     ) -> int:

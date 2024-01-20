@@ -2,7 +2,7 @@ import importlib
 import json
 import os
 from enum import StrEnum, auto
-from typing import Any, Optional, Type, TypeVar
+from typing import Any, Optional, TypeVar
 
 from ..exceptions import RetryError
 from .config_base import ConfigBase, ConfigField
@@ -32,7 +32,7 @@ DEFAULT_KEY_ARGS: ConfigField[tuple[str, ...]] = ConfigField(())
 
 class TaskOptionsJSONEncoder(json.JSONEncoder):
     def default(self, obj: Any) -> Any:
-        if issubclass(obj, Exception):
+        if isinstance(obj, type) and issubclass(obj, Exception):
             return f"{obj.__module__}.{obj.__name__}"
         if isinstance(obj, StrEnum):
             return obj.value
@@ -59,21 +59,22 @@ def exception_mapper(
     exceptions = []
     for _exception in value:
         if isinstance(_exception, str):
-            # Handle the case where _exception is a string
-            module_name, class_name = _exception.rsplit(".", 1)
-            module = importlib.import_module(module_name)
-            exception_class = getattr(module, class_name)
-            if not issubclass(exception_class, Exception):
-                raise TypeError(
-                    f"Expected a subclass of Exception, got {exception_class}"
-                )
+            try:
+                module_name, class_name = _exception.rsplit(".", 1)
+                module = importlib.import_module(module_name)
+                exception_class = getattr(module, class_name)
+                if not issubclass(exception_class, Exception):
+                    raise TypeError(
+                        f"Expected a subclass of Exception, got {exception_class}"
+                    )
+            except (AttributeError, ModuleNotFoundError) as ex:
+                raise TypeError(f"Invalid exception class: {_exception}") from ex
             exceptions.append(exception_class)
-        elif issubclass(_exception, Exception):
-            # Handle the case where _exception is already a class
+        elif isinstance(_exception, type) and issubclass(_exception, Exception):
             exceptions.append(_exception)
         else:
             raise TypeError(
-                f"Expected str or Exception subclass, got {type(_exception)}"
+                f"Expected str or Exception subclass, got {type(_exception).__name__}"
             )
     return tuple(exceptions)
 
@@ -81,7 +82,7 @@ def exception_mapper(
 T = TypeVar("T")
 
 
-def exception_config_mapper(value: list[str], expected_type: Type[T]) -> T:
+def exception_config_mapper(value: list[str], expected_type: type[T]) -> T:
     exceptions = exception_mapper(value)
     if not isinstance(exceptions, expected_type):
         raise TypeError(f"Expected {expected_type}, got {type(exceptions)}")

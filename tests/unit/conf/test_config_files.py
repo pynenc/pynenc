@@ -27,7 +27,7 @@ class ConfigChild(ConfigParent):
 
 
 @dataclass
-class TestCase:
+class ConfigFileParserCheck:
     id: str
     content: dict
     expected_value: str
@@ -42,10 +42,10 @@ def pytest_generate_tests(metafunc: "Metafunc") -> None:
     parent_content = {**grandpa_content, "parent": {"test_field": "file_parent_value"}}
     child_content = {**parent_content, "child": {"test_field": "file_child_value"}}
     test_cases = [
-        TestCase("default", default_content, "file_default_value"),
-        TestCase("grandpa", grandpa_content, "file_grandpa_value"),
-        TestCase("parent", parent_content, "file_parent_value"),
-        TestCase("child", child_content, "file_child_value"),
+        ConfigFileParserCheck("default", default_content, "file_default_value"),
+        ConfigFileParserCheck("grandpa", grandpa_content, "file_grandpa_value"),
+        ConfigFileParserCheck("parent", parent_content, "file_parent_value"),
+        ConfigFileParserCheck("child", child_content, "file_child_value"),
     ]
     ids = [x.id for x in test_cases]
     if "test_case" in metafunc.fixturenames:
@@ -53,7 +53,7 @@ def pytest_generate_tests(metafunc: "Metafunc") -> None:
 
 
 @pytest.fixture
-def test_case(request: "FixtureRequest") -> TestCase:
+def test_case(request: "FixtureRequest") -> ConfigFileParserCheck:
     return request.param
 
 
@@ -73,17 +73,17 @@ def check_temp_file_content(
     os.remove(filepath)
 
 
-def test_yaml(test_case: TestCase) -> None:
+def test_yaml(test_case: ConfigFileParserCheck) -> None:
     yaml_content = yaml.dump(test_case.content)
     check_temp_file_content(yaml_content, ".yaml", test_case.expected_value)
 
 
-def test_json(test_case: TestCase) -> None:
+def test_json(test_case: ConfigFileParserCheck) -> None:
     json_content = json.dumps(test_case.content)
     check_temp_file_content(json_content, ".json", test_case.expected_value)
 
 
-def test_toml(test_case: TestCase) -> None:
+def test_toml(test_case: ConfigFileParserCheck) -> None:
     toml_content = ""
     for key, value in test_case.content.items():
         if isinstance(value, dict):

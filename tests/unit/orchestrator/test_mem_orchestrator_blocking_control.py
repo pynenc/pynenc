@@ -1,7 +1,7 @@
 import pytest
 
 from pynenc.call import Call
-from pynenc.invocation import DistributedInvocation
+from pynenc.invocation import DistributedInvocation, InvocationStatus
 from pynenc.orchestrator.mem_orchestrator import MemBlockingControl
 from tests.conftest import MockPynenc
 
@@ -33,6 +33,10 @@ def test_get_blocking_invocations(invocations: tuple) -> None:
     # graph.add_invocation_call(invocation0, invocation1)
     # graph.add_invocation_call(invocation1, invocation2)
     graph.waiting_for_results(invocation0, [invocation1])
+
+    invocation0.app.orchestrator.get_invocation_status.return_value = (
+        InvocationStatus.REGISTERED
+    )
 
     blocking: list[DistributedInvocation] = list(graph.get_blocking_invocations(2))
     assert len(blocking) == 1
