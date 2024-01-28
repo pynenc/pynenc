@@ -2,7 +2,7 @@ name: SimpleSmokeShow
 
 on:
   workflow_run:
-    workflows: ["CombinedTests"]
+    workflows: ["Release Drafter"]
     types: [completed]
 
 jobs:
