@@ -1,0 +1,15 @@
+name: FakeAction
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  do_nothing:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Echo a message
+        run: echo "FakeAction is running!"

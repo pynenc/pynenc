@@ -2,7 +2,7 @@ name: SimpleSmokeShow
 
 on:
   workflow_run:
-    workflows: ["Release Drafter"]
+    workflows: ["FakeAction"]
     types: [completed]
 
 jobs:
@@ -11,4 +11,4 @@ jobs:
 
     steps:
       - name: Echo a message
-        run: echo "SimpleSmokeShow has been triggered!"
+        run: echo "SimpleSmokeShow has been triggered by FakeAction competotino!"
