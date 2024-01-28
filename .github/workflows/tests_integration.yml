@@ -18,13 +18,13 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11.7"
 
       - name: cache poetry install
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.local
           key: poetry-1.7.1-0
@@ -36,7 +36,7 @@ jobs:
 
       - name: cache deps
         id: cache-deps
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: .venv
           key: pydeps-${{ hashFiles('**/poetry.lock') }}
@@ -54,7 +54,7 @@ jobs:
       - run: poetry run coverage html --show-contexts --title "Integration Coverage for ${{ github.sha }}"
 
       - name: Store integration coverage HTML
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: coverage-html-integration
           path: htmlcov

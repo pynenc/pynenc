@@ -10,8 +10,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11.7"
       # Repeat common setup steps (like installing Poetry) for both jobs
@@ -23,7 +23,7 @@ jobs:
           virtualenvs-in-project: true
       # Cache dependencies
       - name: Cache dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: .venv
           key: pydeps-${{ hashFiles('**/poetry.lock') }}
@@ -33,7 +33,7 @@ jobs:
       - run: poetry run coverage report
       - run: poetry run coverage html --show-contexts --title "Unit Test Coverage for ${{ github.sha }}"
       - name: Store unit test coverage HTML
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: coverage-html-unit
           path: htmlcov
@@ -51,8 +51,8 @@ jobs:
           --health-retries 5
 
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11.7"
       # Repeat common setup steps for both jobs
@@ -64,7 +64,7 @@ jobs:
           virtualenvs-in-project: true
       # Cache dependencies
       - name: Cache dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: .venv
           key: pydeps-${{ hashFiles('**/poetry.lock') }}
@@ -76,7 +76,7 @@ jobs:
       - run: poetry run coverage report
       - run: poetry run coverage html --show-contexts --title "Integration Test Coverage for ${{ github.sha }}"
       - name: Store integration test coverage HTML
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: coverage-html-integration
           path: htmlcov
