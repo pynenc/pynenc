@@ -1,13 +1,9 @@
 name: Smokeshow
 
-# on:
-#   workflow_run:
-#     workflows: [Tests]
-#     types: [completed]
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_run:
+    workflows: [CombinedTests]
+    types: [completed]
 
 permissions:
   statuses: write
@@ -33,7 +29,7 @@ jobs:
         uses: dawidd6/action-download-artifact@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          workflow: Tests
+          workflow: CombinedTests
           commit: ${{ github.event.workflow_run.head_sha }}
           name: coverage-html-unit
           path: coverage-html-unit
@@ -42,7 +38,7 @@ jobs:
         uses: dawidd6/action-download-artifact@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          workflow: Tests
+          workflow: CombinedTests
           commit: ${{ github.event.workflow_run.head_sha }}
           name: coverage-html-integration
           path: coverage-html-integration
