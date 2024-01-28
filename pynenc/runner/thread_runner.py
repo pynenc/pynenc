@@ -5,10 +5,9 @@ from collections import defaultdict
 from functools import cached_property
 from typing import Any, NamedTuple, Optional
 
-from pynenc.invocation import DistributedInvocation, InvocationStatus
-
-from ..conf.config_runner import ConfigThreadRunner
-from .base_runner import BaseRunner
+from pynenc.conf.config_runner import ConfigThreadRunner
+from pynenc.invocation.dist_invocation import DistributedInvocation, InvocationStatus
+from pynenc.runner.base_runner import BaseRunner
 
 
 class ThreadInfo(NamedTuple):
@@ -17,6 +16,13 @@ class ThreadInfo(NamedTuple):
 
 
 class ThreadRunner(BaseRunner):
+    """
+    ThreadRunner is a concrete implementation of BaseRunner that executes tasks in separate threads.
+
+    It manages task invocations, handling their execution and lifecycle within individual threads.
+    This runner is suitable for I/O-bound tasks and scenarios where shared memory between tasks is required.
+    """
+
     wait_conditions: dict["DistributedInvocation", threading.Condition]
     wait_invocation: dict["DistributedInvocation", set["DistributedInvocation"]]
     threads: dict[str, ThreadInfo]
@@ -32,14 +38,25 @@ class ThreadRunner(BaseRunner):
 
     @staticmethod
     def mem_compatible() -> bool:
-        # each task is executed in a different thread with shared memory
+        """
+        Indicates if the runner is compatible with in-memory components.
+        :return: True, as each task is executed in a separate thread with shared memory.
+        """
         return True
 
     @property
     def max_parallel_slots(self) -> int:
+        """
+        The maximum number of parallel tasks that the runner can handle.
+        :return: An integer representing the maximum number of parallel tasks.
+        """
         return max(self.conf.min_parallel_slots, self.max_threads)
 
     def _on_start(self) -> None:
+        """
+        Internal method called when the ThreadRunner starts.
+        Initializes the data structures for managing invocations and threads.
+        """
         # Initialize thread list and condition dictionary
         self.wait_conditions = defaultdict(threading.Condition)
         self.wait_invocation = defaultdict(set)
@@ -48,7 +65,11 @@ class ThreadRunner(BaseRunner):
         self.waiting_threads = 0
 
     def _on_stop(self) -> None:
-        """kill all the running threads and change invocation status to retry"""
+        """
+        Internal method called when the ThreadRunner stops.
+        Joins all running threads and updates their invocation statuses.
+        """
+        # kill all the running threads and change invocation status to retry
         for thread_info in self.threads.values():
             thread_info.thread.join()
             self.app.orchestrator.set_invocation_status(
@@ -56,11 +77,17 @@ class ThreadRunner(BaseRunner):
             )
 
     def _on_stop_runner_loop(self) -> None:
-        pass
+        """
+        Internal method called after receiving a signal to stop the runner loop.
+        """
+        # No specific actions needed for stopping the runner loop in ThreadRunner
 
     @property
     def available_threads(self) -> int:
-        """Return the number of available threads"""
+        """
+        Returns the number of available thread slots for new invocations.
+        :return: An integer representing available thread slots.
+        """
         self.threads = {k: v for k, v in self.threads.items() if v.thread.is_alive()}
         # do not consider waiting threads
         # in testing with only one thread available and only one worker
@@ -69,6 +96,10 @@ class ThreadRunner(BaseRunner):
         return self.max_parallel_slots - len(self.threads)  # - self.waiting_threads
 
     def runner_loop_iteration(self) -> None:
+        """
+        Executes one iteration of the ThreadRunner loop.
+        Handles the execution and monitoring of task invocations in separate threads.
+        """
         for invocation in self.app.orchestrator.get_invocations_to_run(
             max_num_invocations=self.available_threads
         ):
@@ -99,8 +130,12 @@ class ThreadRunner(BaseRunner):
         result_invocations: list["DistributedInvocation"],
         runner_args: Optional[dict[str, Any]] = None,
     ) -> None:
-        """In this case we let the current thread waiting in a condition based in the result invocation
-        So we ignore the running_invocation parameter
+        """
+        Handles invocations that are waiting for results from other invocations.
+        Pauses the current thread and registers it to wait for the results of specified invocations.
+        :param running_invocation: The invocation that is waiting for results.
+        :param result_invocations: A list of invocations whose results are being awaited.
+        :param runner_args: Additional arguments required for the ThreadRunner.
         """
         del runner_args
         if not running_invocation:

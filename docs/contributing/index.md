@@ -1,5 +1,4 @@
-Contributing to Pynenc
-======================
+# Contributing to Pynenc
 
 Thank you for your interest in contributing to Pynenc! At this moment, the project is in its initial development phase and is not yet open for external contributions. We are diligently working towards a Minimum Viable Product (MVP) and establishing a stable foundation.
 
@@ -10,8 +9,15 @@ We appreciate your understanding and look forward to your contributions in the f
 Best regards,
 The Pynenc Team
 
-Setting Up the Development Environment
----------------------------------------
+```{toctree}
+:hidden:
+:maxdepth: 2
+:caption: Detailed Use Cases
+
+./docs
+```
+
+## Setting Up the Development Environment
 
 To contribute to Pynenc once it's open for contributions, follow these typical steps to set up your development environment:
 
@@ -19,10 +25,10 @@ To contribute to Pynenc once it's open for contributions, follow these typical s
 
 2. **Clone the Fork**: Clone your fork to your local machine.
 
-   .. code-block:: bash
-
-       git clone https://github.com/pynenc/pynenc.git
-       cd pynenc
+   ```bash
+      git clone https://github.com/pynenc/pynenc.git
+      cd pynenc
+   ```
 
 3. **Install Docker**: Make sure you have Docker installed on your system as it may be used for running services such as databases or other dependencies.
 
@@ -32,68 +38,68 @@ To contribute to Pynenc once it's open for contributions, follow these typical s
 
 5. **Set Up the Project**: Inside the project directory, set up your local development environment using Poetry. This will install all dependencies, including those needed for development.
 
-   .. code-block:: bash
-
-       poetry install
+   ```bash
+      poetry install
+   ```
 
 6. **Install Pre-commit Hooks**: After installing all dependencies, set up pre-commit hooks in your local repository. This ensures that code quality checks are automatically performed before each commit.
 
-   .. code-block:: bash
-
-       poetry run pre-commit install
+   ```bash
+      poetry run pre-commit install
+   ```
 
 7. **Activate the Virtual Environment**: Use Poetry to activate the virtual environment.
 
-   .. code-block:: bash
-
-       poetry shell
+   ```bash
+      poetry shell
+   ```
 
 8. **Start Development**: You are now ready to start development. Make changes, commit them, and push them to your fork.
+
+   ```{attention}
+   The python docstrings will be render by Myst and autodoc2, use markdown to document it and any Myst formatting allowed:
+   For examples check the [MyST syntax cheat sheet](https://jupyterbook.org/en/stable/reference/cheatsheet.html),
+   [Roles and Directives](https://myst-parser.readthedocs.io/en/latest/syntax/roles-and-directives.html)
+   and the complete directives references at [Myst docs](https://mystmd.org/guide/directives)
+   ```
 
 9. **Creating Pull Requests**: Once the project is open for contributions, you will be able to create pull requests from your fork to the main Pynenc repository.
 
 10. **Set Up Pre-commit Hooks**: To ensure code quality and consistency, set up pre-commit hooks in your local environment. These hooks will automatically check your commits for issues like formatting errors.
 
-   .. code-block:: bash
+```bash
+   poetry run pre-commit install
+```
 
-       poetry run pre-commit install
-
-
-Running Tests and Checking Coverage
------------------------------------
+## Running Tests and Checking Coverage
 
 Pynenc aims to maintain a high standard of code quality, which includes thorough testing and maintaining good test coverage. Here’s how you can run tests and check coverage:
 
 1. **Running Tests**: After setting up your development environment, you can run the tests to ensure everything is working as expected.
 
-   .. code-block:: bash
-
-       poetry run pytest
+   ```bash
+      poetry run pytest
+   ```
 
    This command will execute all the tests in the `tests` directory.
 
 2. **Checking Test Coverage**: To check how much of the code is covered by tests, use the `coverage` tool.
 
    - First, run the tests with coverage tracking:
-
-     .. code-block:: bash
-
-         poetry run coverage run -m pytest
-
+     ```bash
+        poetry run coverage run -m pytest
+     ```
    - Then, generate a coverage report. There are two ways to view the coverage report:
 
      - For a summary in the console, use:
-
-       .. code-block:: bash
-
-           poetry run coverage report
-
+       ```bash
+          poetry run coverage report
+       ```
      - For a more detailed HTML report, use:
+       ```bash
+          poetry run coverage html
+       ```
 
-       .. code-block:: bash
-
-           poetry run coverage html
-
-       This will generate a report in the `htmlcov` directory. You can open `htmlcov/index.html` in a web browser to view it.
+     This will generate a report in the `htmlcov` directory. You can open `htmlcov/index.html` in a web browser to view it.
 
 Please aim to maintain or improve the test coverage with your contributions. It’s recommended to add tests for any new code or when fixing bugs.

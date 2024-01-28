@@ -8,19 +8,28 @@ from abc import ABC, abstractmethod
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, Optional
 
+from pynenc.conf.config_runner import ConfigRunner
 from pynenc.exceptions import RunnerNotExecutableError
-
-from ..conf.config_runner import ConfigRunner
-from ..util.log import RunnerLogAdapter
+from pynenc.util.log import RunnerLogAdapter
 
 if TYPE_CHECKING:
     from types import FrameType
 
-    from ..app import Pynenc
-    from ..invocation import DistributedInvocation
+    from pynenc.app import Pynenc
+    from pynenc.invocation.dist_invocation import DistributedInvocation
 
 
 class BaseRunner(ABC):
+    """
+    The BaseRunner class defines the interface for a runner that executes task invocations.
+
+    It interacts with various components of the Pynenc system, like the broker and orchestrator,
+    and is responsible for handling the execution and life cycle of task invocations.
+
+    - The runner's behavior can vary depending on the execution environment (e.g., subprocess, async, cloud function, multiprocessing).
+    - It is designed to be subclassed for specific execution environments.
+    """
+
     """
     The Runner will execute invocations from the broker.
 
@@ -41,6 +50,10 @@ class BaseRunner(ABC):
 
     @cached_property
     def runner_id(self) -> str:
+        """
+        Unique identifier for the runner instance.
+        :return: A string representing the unique identifier of the runner.
+        """
         hostname = socket.gethostname()
         pid = os.getpid()
         return f"{self.__class__.__name__}({hostname}-{pid})"
@@ -55,14 +68,22 @@ class BaseRunner(ABC):
     @staticmethod
     @abstractmethod
     def mem_compatible() -> bool:
-        """Can this runner run with memory components?"""
+        """
+        Indicates if the runner is compatible with in-memory components.
+        ```{important}
+            In memory components can only be used for testing purposes in shared memory space.
+        ```
+        :return: True if compatible, False otherwise.
+        """
         ...
 
     @property
     @abstractmethod
     def max_parallel_slots(self) -> int:
-        """The maximum number of parallel task that the runner can handle"""
-        ...
+        """
+        The maximum number of parallel tasks that the runner can handle.
+        :return: An integer representing the maximum number of parallel tasks.
+        """
 
     @abstractmethod
     def _on_start(self) -> None:
@@ -106,7 +127,11 @@ class BaseRunner(ABC):
     def stop_runner_loop(
         self, signum: Optional[int] = None, frame: Optional["FrameType"] = None
     ) -> None:
-        """Stops the runner loop"""
+        """
+        Stops the runner loop, typically in response to a signal.
+        :param signum: Signal number.
+        :param frame: Frame object at the time the signal was received.
+        """
         self.app.logger.info(
             f"Received signal {signum=} {frame=} Stopping runner loop..."
         )
@@ -120,21 +145,30 @@ class BaseRunner(ABC):
         result_invocation: list["DistributedInvocation"],
         runner_args: Optional[dict[str, Any]] = None,
     ) -> None:
-        """This method is called from the result method of an invocation
-        It signals the runner that the running invocation is waiting for the result of the result invocation
+        """
+        Method called when an invocation is waiting for results from other invocations.
 
-        The running invocation may be None, when the result was called from outside a runner (e.g. user environment)
-        In that case will be handle by the DummyRunner (default in the pynenc app to handle this cases)
+        ```{note}
+            This method is called from the result method of an invocation
+        ```
 
         The runner has the oportunity to define the waiting behaviour of the running invocation in this method
         Otherwise the running invocation will infinetely loop until the result invocation is ready
 
-        runner_args is a dictionary with the arguments passed to the runner by itself
-        e.g. process runner uses this to syncronize managed dictionaries among sub-process
+        ```{note}
+            The running invocation may be None, when the result was called from outside a runner (e.g. user environment)
+            In that case will be handle by the DummyRunner (default in the pynenc app to handle this cases)
+        ```
+
+        Subclasses can define the waiting behavior of the running invocation in this method.
+
+        :param running_invocation: The invocation that is waiting for results.
+        :param result_invocation: A list of invocations whose results are being awaited.
+        :param runner_args: Additional arguments passed to the runner, specific to the runner's implementation.
         """
 
     def run(self) -> None:
-        """Starts the runner"""
+        """Starts the runner, initiating its main loop."""
         self.on_start()
         try:
             while self.running:

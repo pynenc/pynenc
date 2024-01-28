@@ -3,11 +3,11 @@ from __future__ import annotations
 from functools import cached_property
 from typing import TYPE_CHECKING, Iterator
 
-from .. import context
-from ..exceptions import PynencError
-from ..types import Params, Result
-from .base_invocation import BaseInvocation, BaseInvocationGroup
-from .status import InvocationStatus
+from pynenc import context
+from pynenc.exceptions import PynencError
+from pynenc.invocation.base_invocation import BaseInvocation, BaseInvocationGroup
+from pynenc.invocation.status import InvocationStatus
+from pynenc.types import Params, Result
 
 if TYPE_CHECKING:
     from ..app import Pynenc
@@ -15,6 +15,18 @@ if TYPE_CHECKING:
 
 
 class SynchronousInvocation(BaseInvocation[Params, Result]):
+    """
+    A synchronous implementation of a task invocation.
+
+    This class represents an invocation of a task in a synchronous context.
+
+    :param Call[Params, Result] call: The specific call instance that this invocation represents.
+
+    ```{danger}
+        Use only for testing purposes where distributed processing is not required.
+    ```
+    """
+
     def __init__(self, call: Call[Params, Result]) -> None:
         super().__init__(call)
         self._num_retries = 0
@@ -22,11 +34,26 @@ class SynchronousInvocation(BaseInvocation[Params, Result]):
 
     @property
     def status(self) -> InvocationStatus:
-        """Get the status of the invocation"""
+        """
+        Get the status of the invocation.
+
+        :return: The current status of the invocation.
+        :rtype: InvocationStatus
+        """
         return self._status
 
     @cached_property
     def result(self) -> Result:
+        """
+        Execute the task call and return its result.
+
+        This method runs the task synchronously and returns the result.
+        It handles retries for retriable exceptions as per the task's configuration.
+
+        :return: The result of the task execution.
+        :rtype: Result
+        :raises Exception: Raised if the task execution results in an unhandled exception.
+        """
         previous_invocation_context = context.sync_inv_context.get(self.app.app_id)
         try:
             self._status = InvocationStatus.RUNNING
@@ -49,7 +76,12 @@ class SynchronousInvocation(BaseInvocation[Params, Result]):
 
     @property
     def num_retries(self) -> int:
-        """Get the number of times the invocation got retried"""
+        """
+        Get the number of retries for the invocation.
+
+        :return: The number of times the invocation has been retried.
+        :rtype: int
+        """
         return self._num_retries
 
     def to_json(self) -> str:
@@ -64,7 +96,30 @@ class SynchronousInvocation(BaseInvocation[Params, Result]):
 class SynchronousInvocationGroup(
     BaseInvocationGroup[Params, Result, SynchronousInvocation]
 ):
+    """
+    A group of synchronous invocations for a specific task.
+
+    This class extends `BaseInvocationGroup` to handle groups of `SynchronousInvocation` instances.
+    It is designed for scenarios where multiple synchronous invocations of a task are managed or processed together.
+
+    :param Task task: The task associated with these invocations.
+    :param list[SynchronousInvocation] invocations: A list of synchronous invocations.
+
+    ```{danger}
+        Use only for testing purposes where distributed processing is not required.
+    ```
+    """
+
     @property
     def results(self) -> Iterator[Result]:
+        """
+        An iterator over the results of the invocations in the group.
+
+        This property method iterates over the `SynchronousInvocation` instances in the group,
+        yielding the result of each invocation.
+
+        :return: An iterator over the results of each invocation in the group.
+        :rtype: Iterator[Result]
+        """
         for invocation in self.invocations:
             yield invocation.result

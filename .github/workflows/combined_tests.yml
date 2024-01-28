@@ -1,0 +1,82 @@
+name: CombinedTests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11.7"
+      # Repeat common setup steps (like installing Poetry) for both jobs
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: 1.7.1
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+      # Cache dependencies
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: pydeps-${{ hashFiles('**/poetry.lock') }}
+      - run: poetry install --no-interaction
+      - name: Run unit tests with coverage
+        run: poetry run coverage run -m pytest tests/unit
+      - run: poetry run coverage report
+      - run: poetry run coverage html --show-contexts --title "Unit Test Coverage for ${{ github.sha }}"
+      - name: Store unit test coverage HTML
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html-unit
+          path: htmlcov
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    container: python:3.11.7
+    services:
+      redis:
+        image: redis:7.2.3
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11.7"
+      # Repeat common setup steps for both jobs
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: 1.7.1
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+      # Cache dependencies
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: pydeps-${{ hashFiles('**/poetry.lock') }}
+      - run: poetry install --no-interaction
+      - name: Run integration tests with coverage
+        env:
+          PYNENC__REDIS_HOST: "redis"
+        run: poetry run coverage run -m pytest tests/integration
+      - run: poetry run coverage report
+      - run: poetry run coverage html --show-contexts --title "Integration Test Coverage for ${{ github.sha }}"
+      - name: Store integration test coverage HTML
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html-integration
+          path: htmlcov

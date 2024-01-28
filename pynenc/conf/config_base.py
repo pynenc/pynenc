@@ -2,9 +2,9 @@ import os
 from collections import defaultdict
 from typing import Any, Callable, Generic, Iterator, Optional, Type, TypeVar, cast
 
-from ..exceptions import ConfigMultiInheritanceError
-from ..util import files
-from .constants import ENV_FILEPATH, ENV_PREFIX, ENV_SEP
+from pynenc.conf.constants import ENV_FILEPATH, ENV_PREFIX, ENV_SEP
+from pynenc.exceptions import ConfigMultiInheritanceError
+from pynenc.util import files
 
 T = TypeVar("T")
 
@@ -31,19 +31,10 @@ class ConfigField(Generic[T]):
     This class is used to define typed configuration fields within a ConfigBase
     subclass. It ensures type consistency and supports value validation and casting.
 
-    Parameters
-    ----------
-    default_value : T
+    :param T default_value:
         The default value for the configuration field.
-    mapper : Optional[ConfigFieldMapper]
+    :param Optional[ConfigFieldMapper] mapper:
         An optional function to map or transform the value.
-
-    Attributes
-    ----------
-    _default_value : T
-        Stores the default value of the configuration field.
-    _mapper : ConfigFieldMapper
-        The function used for mapping or transforming the value.
     """
 
     def __init__(
@@ -77,6 +68,11 @@ class ConfigBase:
     hierarchical and flexible configuration from various sources, including
     environment variables, configuration files, and default values.
 
+    :param Optional[dict[str, Any]] config_values:
+        A dictionary of configuration values to use.
+    :param Optional[str] config_filepath:
+        The path to a configuration file to use.
+
     Configuration values are determined based on the following priority (highest to lowest):
     1. Direct assignment in the config instance (not recommended)
     2. Environment variables
@@ -87,32 +83,31 @@ class ConfigBase:
     7. Previous steps for any Parent config class
     8. User does not specify anything (default values)
 
-    Examples
-    --------
+    ## Examples
     Define a configuration class for a Redis client:
 
-    .. code-block:: python
-
+    ```{code-block} python
         class ConfigRedis(ConfigBase):
             redis_host = ConfigField("localhost")
             redis_port = ConfigField(6379)
             redis_db = ConfigField(0)
+    ```
 
     Define a main configuration class for orchestrator components:
 
-    .. code-block:: python
-
+    ```{code-block} python
         class ConfigOrchestrator(ConfigBase):
             cycle_control = ConfigField(True)
             blocking_control = ConfigField(True)
             auto_final_invocation_purge_hours = ConfigField(24.0)
+    ```
 
     Combine configurations using multiple inheritance:
 
-    .. code-block:: python
-
+    ```{code-block} python
         class ConfigOrchestratorRedis(ConfigOrchestrator, ConfigRedis):
             pass
+    ```
 
     The `ConfigOrchestratorRedis` class now includes settings from both `ConfigOrchestrator`
     and `ConfigRedis`.
@@ -242,27 +237,24 @@ def avoid_multi_inheritance_field_conflict(
     multiple parent classes, a `ConfigMultiInheritanceError` is raised. This check ensures deterministic behavior
     in the configuration inheritance hierarchy.
 
-    Parameters:
-        config_cls (Type): The configuration class to check for field conflicts.
+    :param Type config_cls: The configuration class to check for field conflicts.
+    :return: A dictionary mapping each configuration field to the name of the parent class where it is defined.
+    :raises ConfigMultiInheritanceError: If a configuration field is found in multiple parent classes.
 
-    Returns:
-        dict[str, str]: A dictionary mapping each configuration field to the name of the parent class where it is defined.
+    :example:
+    ```{code-block} python
+        class ParentConfig1(ConfigBase):
+            field1 = ConfigField(default_value=1)
+            ...
+        class ParentConfig2(ConfigBase):
+            field2 = ConfigField(default_value=2)
+            ...
+        class ChildConfig(ParentConfig1, ParentConfig2):
+            pass
 
-    Raises:
-        ConfigMultiInheritanceError: If a configuration field is found in multiple parent classes.
-
-    Example:
-        >>> class ParentConfig1(ConfigBase):
-        ...     field1 = ConfigField(default_value=1)
-        ...
-        >>> class ParentConfig2(ConfigBase):
-        ...     field2 = ConfigField(default_value=2)
-        ...
-        >>> class ChildConfig(ParentConfig1, ParentConfig2):
-        ...     pass
-        ...
-        >>> avoid_multi_inheritance_field_conflict(ChildConfig)
-        {'field1': 'ParentConfig1', 'field2': 'ParentConfig2'}
+        avoid_multi_inheritance_field_conflict(ChildConfig)
+        # prings: {'field1': 'ParentConfig1', 'field2': 'ParentConfig2'}
+    ```
     """
     map_field_to_config_cls: dict[str, str] = {}
     cls_fields: set[str] = set()

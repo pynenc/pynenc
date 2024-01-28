@@ -4,21 +4,34 @@ from typing import TYPE_CHECKING, Iterator, Optional
 
 import redis
 
-from ..call import Call
-from ..conf.config_orchestrator import ConfigOrchestratorRedis
-from ..exceptions import CycleDetectedError, PendingInvocationLockError
-from ..invocation import DistributedInvocation, InvocationStatus
-from ..types import Params, Result
-from ..util.redis_keys import Key
-from .base_orchestrator import BaseBlockingControl, BaseCycleControl, BaseOrchestrator
+from pynenc.call import Call
+from pynenc.conf.config_orchestrator import ConfigOrchestratorRedis
+from pynenc.exceptions import CycleDetectedError, PendingInvocationLockError
+from pynenc.invocation.dist_invocation import DistributedInvocation
+from pynenc.invocation.status import InvocationStatus
+from pynenc.orchestrator.base_orchestrator import (
+    BaseBlockingControl,
+    BaseCycleControl,
+    BaseOrchestrator,
+)
+from pynenc.types import Params, Result
+from pynenc.util.redis_keys import Key
 
 if TYPE_CHECKING:
-    from ..app import Pynenc
-    from ..task import Task
+    from pynenc.app import Pynenc
+    from pynenc.task import Task
 
 
 class RedisCycleControl(BaseCycleControl):
-    """A directed acyclic graph representing the call dependencies"""
+    """
+    A Redis-based implementation of cycle control using a directed acyclic graph (DAG).
+
+    This class manages the dependencies between task invocations in Redis
+    to prevent cycles in task calling patterns, which could lead to deadlocks or infinite loops.
+
+    :param Pynenc app: The Pynenc application instance.
+    :param redis.Redis client: The Redis client instance.
+    """
 
     def __init__(self, app: "Pynenc", client: redis.Redis) -> None:
         self.app = app
@@ -26,16 +39,20 @@ class RedisCycleControl(BaseCycleControl):
         self.client = client
 
     def purge(self) -> None:
+        """
+        Purges all data related to cycle control from Redis.
+        This includes all stored invocations, calls, and their relationships.
+        """
         self.key.purge(self.client)
 
     def add_call_and_check_cycles(
         self, caller: "DistributedInvocation", callee: "DistributedInvocation"
     ) -> None:
         """
-        Add a new invocation to the graph. This represents a dependency where the caller
-        is dependent on the callee.
-
-        Raises a CycleDetectedError if the invocation would cause a cycle.
+        Adds a new call dependency between `caller` and `callee` invocations and checks for potential cycles.
+        :param DistributedInvocation caller: The invocation that is making the call.
+        :param DistributedInvocation callee: The invocation that is being called.
+        :raises CycleDetectedError: If adding the call creates a cycle.
         """
         if caller.call_id == callee.call_id:
             raise CycleDetectedError.from_cycle([caller.call])
@@ -59,7 +76,10 @@ class RedisCycleControl(BaseCycleControl):
         self.client.sadd(self.key.edge(caller.call_id), callee.call_id)
 
     def remove_edges(self, call_id: str) -> None:
-        """Remove all edges from a call"""
+        """
+        Recursively removes all edges from a given call in the graph.
+        :param call_id: The ID of the call from which to remove edges.
+        """
         callee_calls = self.client.smembers(self.key.edge(call_id))
         self.client.delete(self.key.edge(call_id))
         for callee_call_id in callee_calls:
@@ -67,7 +87,8 @@ class RedisCycleControl(BaseCycleControl):
 
     def clean_up_invocation_cycles(self, invocation: "DistributedInvocation") -> None:
         """
-        Remove an invocation from the graph. Also removes any edges to or from the invocation.
+        Cleans up the graph by removing a given invocation and its associated edges.
+        :param DistributedInvocation invocation: The `DistributedInvocation` instance to be removed.
         """
         self.client.delete(self.key.invocation(invocation.invocation_id))
         self.client.srem(
@@ -85,19 +106,10 @@ class RedisCycleControl(BaseCycleControl):
         self, caller: "DistributedInvocation", callee: "DistributedInvocation"
     ) -> list["Call"]:
         """
-        Determines if adding an edge from the caller to the callee would create a cycle.
-
-        Parameters
-        ----------
-        caller : DistributedInvocation
-            The invocation making the call.
-        callee : DistributedInvocation
-            The invocation being called.
-
-        Returns
-        -------
-        list
-            List of invocations that would form the cycle after adding the new invocation, else an empty list.
+        Checks if adding a new call from `caller` to `callee` would create a cycle.
+        :param DistributedInvocation caller: The invocation making the call.
+        :param DistributedInvocation callee: The invocation being called.
+        :return: List of `Call` objects forming the cycle, if a cycle is detected; otherwise, an empty list.
         """
         # Temporarily add the edge to check if it would cause a cycle
         self.client.sadd(self.key.edge(caller.call_id), callee.call_id)
@@ -121,6 +133,13 @@ class RedisCycleControl(BaseCycleControl):
         visited: set[str],
         path: list[str],
     ) -> list["Call"]:
+        """
+        A utility function for cycle detection.
+        :param str current_call_id: The current call ID being examined.
+        :param set[str] visited: A set of visited call IDs for cycle detection.
+        :param list[str] path: A list representing the current path of call IDs.
+        :return: List of `Call` objects forming a cycle, if a cycle is detected; otherwise, an empty list.
+        """
         visited.add(current_call_id)
         path.append(current_call_id)
 
@@ -141,7 +160,15 @@ class RedisCycleControl(BaseCycleControl):
 
 
 class RedisBlockingControl(BaseBlockingControl):
-    """A directed acyclic graph representing the call dependencies"""
+    """
+    A Redis-based implementation of blocking control for task invocations.
+
+    Manages invocation dependencies and blocking states in a Redis-backed environment,
+    ensuring that invocations waiting for others are properly tracked and released.
+
+    :param Pynenc app: The Pynenc application instance.
+    :param redis.Redis client: The Redis client instance.
+    """
 
     def __init__(self, app: "Pynenc", client: redis.Redis) -> None:
         self.app = app
@@ -149,13 +176,19 @@ class RedisBlockingControl(BaseBlockingControl):
         self.client = client
 
     def purge(self) -> None:
+        """
+        Purges all data related to blocking control from Redis.
+        This includes all stored invocations and their waiting relationships.
+        """
         self.key.purge(self.client)
 
     def waiting_for_results(
         self, waiter: "DistributedInvocation", waiteds: list["DistributedInvocation"]
     ) -> None:
         """
-        Register that an invocation (waiter) is waiting for the results of another invocation (waited).
+        Registers that an invocation (waiter) is waiting for the results of other invocations (waiteds).
+        :param DistributedInvocation waiter: The invocation that is waiting.
+        :param DistributedInvocation waiteds: A list of invocations that the waiter is waiting for.
         """
         waited_invocation_ids = []
         for waited in waiteds:
@@ -178,7 +211,8 @@ class RedisBlockingControl(BaseBlockingControl):
 
     def release_waiters(self, invocation: "DistributedInvocation") -> None:
         """
-        Remove an invocation from the graph. Also removes any edges to or from the invocation.
+        Removes an invocation from the tracking system. Also removes any dependencies related to the invocation.
+        :param DistributedInvocation invocation: The `DistributedInvocation` instance to be removed.
         """
         # for each invocation thas is waiting for the invocation
         for waited_invocation_id in self.client.smembers(
@@ -202,18 +236,9 @@ class RedisBlockingControl(BaseBlockingControl):
         self, max_num_invocations: int
     ) -> Iterator["DistributedInvocation[Params, Result]"]:
         """
-        Returns the invocations that are blocking others but not waiting for anything themselves.
-        The oldest invocations are returned first.
-
-        Parameters
-        ----------
-        max_num_invocations : int
-            The maximum number of invocations to return.
-
-        Returns
-        -------
-        list[DistributedInvocation]
-            A list of blocking invocations or an empty list if no invocations are blocking.
+        Returns the invocations that are blocking others but are not waiting for anything themselves.
+        :param int max_num_invocations: The maximum number of blocking invocations to retrieve.
+        :return: An iterator of blocking `DistributedInvocation` instances.
         """
         index = 0
         page_size = max(10, max_num_invocations)  # adjust as needed
@@ -241,12 +266,24 @@ class StatusNotFound(Exception):
 
 
 class TaskRedisCache:
+    """
+    A Redis-based cache for managing task invocation statuses and retries.
+
+    Provides methods to set and get the status and retry counts of task invocations, leveraging Redis for scalable and efficient storage.
+
+    :param Pynenc app: The Pynenc application instance.
+    :param redis.Redis client: The Redis client instance.
+    """
+
     def __init__(self, app: "Pynenc", client: redis.Redis) -> None:
         self.app = app
         self.client = client
         self.key = Key(app.app_id, "orchestrator")
 
     def purge(self) -> None:
+        """
+        Purges all data related to task invocations from Redis.
+        """
         self.key.purge(self.client)
 
     def set_status(
@@ -254,6 +291,12 @@ class TaskRedisCache:
         invocation: "DistributedInvocation[Params, Result]",
         status: "InvocationStatus",
     ) -> None:
+        """
+        Set the status of an invocation in Redis.
+
+        :param DistributedInvocation invocation: The invocation to be updated.
+        :param InvocationStatus status: The new status of the invocation.
+        """
         task_id = invocation.task.task_id
         invocation_id = invocation.invocation_id
         try:
@@ -274,6 +317,17 @@ class TaskRedisCache:
     def set_pending_status(
         self, invocation: "DistributedInvocation[Params, Result]"
     ) -> None:
+        """
+        Set the status of an invocation to pending in Redis.
+
+        ```{danger}
+            We have to ensure that the invocation is not already pending.
+            Otherwise, we could end up with a deadlock.
+        ```
+
+        :param DistributedInvocation invocation: The invocation to be updated.
+        :raises PendingInvocationLockError: If was not possible to lock the Invocation.
+        """
         invocation_id = invocation.invocation_id
         lock = self.client.lock(
             f"lock:pending_status:{invocation_id}",
@@ -296,12 +350,24 @@ class TaskRedisCache:
     def set_up_invocation_auto_purge(
         self, invocation: "DistributedInvocation[Params, Result]"
     ) -> None:
+        """
+        Sets up an invocation for automatic purging after a specified time.
+
+        :param DistributedInvocation invocation: The invocation to be updated.
+        """
         self.client.zadd(
             self.key.invocation_auto_purge(),
             {invocation.invocation_id: time()},
         )
 
     def auto_purge(self) -> None:
+        """
+        Automatically purges invocations that have been in their final state beyond a specified duration.
+
+        ```{note}
+            The duration is specified in the configuration file using the `auto_final_invocation_purge_hours` parameter.
+        ```
+        """
         end_time = (
             time() - self.app.orchestrator.conf.auto_final_invocation_purge_hours * 3600
         )
@@ -333,10 +399,19 @@ class TaskRedisCache:
     def clean_pending_status(
         self, invocation: "DistributedInvocation[Params, Result]"
     ) -> None:
+        """
+        Cleans up the pending status of a task invocation.
+        :param invocation: The task invocation instance.
+        """
         self.client.delete(self.key.pending_timer(invocation.invocation_id))
         self.client.delete(self.key.previous_status(invocation.invocation_id))
 
     def _get_invocation_status(self, invocation_id: str) -> "InvocationStatus":
+        """
+        Gets the status of a specific task invocation.
+        :param invocation_id: The ID of the task invocation.
+        :return: The current status of the task invocation.
+        """
         if encoded_status := self.client.get(self.key.invocation_status(invocation_id)):
             return InvocationStatus(encoded_status.decode())
         raise StatusNotFound(f"Invocation status {invocation_id} not found in Redis")
@@ -344,6 +419,11 @@ class TaskRedisCache:
     def get_invocation_status(
         self, invocation: "DistributedInvocation"
     ) -> "InvocationStatus":
+        """
+        Retrieves the status of a task invocation.
+        :param invocation: The task invocation instance.
+        :return: The current status of the task invocation.
+        """
         status = self._get_invocation_status(invocation.invocation_id)
         if status == InvocationStatus.PENDING:
             if encoded_pending_timer := self.client.get(
@@ -362,6 +442,11 @@ class TaskRedisCache:
         return status
 
     def get_invocation_retries(self, invocation: "DistributedInvocation") -> int:
+        """
+        Gets the number of retries for a specific task invocation.
+        :param invocation: The task invocation instance.
+        :return: The number of retries of the task invocation.
+        """
         if encoded_retries := self.client.get(
             self.key.invocation_retries(invocation.invocation_id)
         ):
@@ -369,6 +454,10 @@ class TaskRedisCache:
         return 0
 
     def increment_invocation_retries(self, invocation: "DistributedInvocation") -> None:
+        """
+        Increments the retry count for a specific task invocation.
+        :param invocation: The task invocation instance.
+        """
         self.client.incr(self.key.invocation_retries(invocation.invocation_id))
 
     def get_invocations(
@@ -377,6 +466,13 @@ class TaskRedisCache:
         key_arguments: Optional[dict[str, str]],
         status: Optional["InvocationStatus"],
     ) -> Iterator["DistributedInvocation"]:
+        """
+        Retrieves task invocations based on task ID, key arguments, and status.
+        :param task_id: The ID of the task.
+        :param key_arguments: Optional key arguments for filtering.
+        :param status: Optional status for filtering.
+        :return: An iterator of task invocations that match the criteria.
+        """
         # Start with the set of obj_ids for the task_id
         invocation_ids = self.client.smembers(self.key.task(task_id))
 
@@ -399,6 +495,14 @@ class TaskRedisCache:
 
 
 class RedisOrchestrator(BaseOrchestrator):
+    """
+    An orchestrator implementation using Redis for managing distributed task invocations.
+
+    This orchestrator leverages Redis to handle invocation status, retries, auto-purge, and cycle and blocking controls in a distributed task environment. It extends `BaseOrchestrator` and integrates closely with Redis to provide efficient and scalable task orchestration.
+
+    :param Pynenc app: The Pynenc application instance.
+    """
+
     def __init__(self, app: "Pynenc") -> None:
         super().__init__(app)
         self.client = redis.Redis(

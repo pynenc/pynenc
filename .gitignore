@@ -166,3 +166,5 @@ cython_debug/
 
 # docs build
 docs/_build/
+# autodoc2 automodule
+docs/apidocs/

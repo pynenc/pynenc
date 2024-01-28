@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from pynenc.broker import BaseBroker
+from pynenc.broker.base_broker import BaseBroker
 from pynenc.call import Call
 from pynenc.invocation import DistributedInvocation
 from tests.conftest import MockPynenc

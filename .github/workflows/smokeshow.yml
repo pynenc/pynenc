@@ -2,7 +2,7 @@ name: Smokeshow
 
 on:
   workflow_run:
-    workflows: [TestUnit]
+    workflows: [CombinedTests]
     types: [completed]
 
 permissions:
@@ -10,37 +10,44 @@ permissions:
 
 jobs:
   smokeshow:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    # if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11.7"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install smokeshow coverage
 
       - run: pip install smokeshow
 
       - name: Download coverage artifact
-        uses: dawidd6/action-download-artifact@v2.28.0
+        uses: dawidd6/action-download-artifact@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          workflow: tests_unit.yml
+          workflow: combined_tests.yml
           commit: ${{ github.event.workflow_run.head_sha }}
-          name: coverage-html
-          path: coverage-html
+          name: coverage-html-unit
+          path: coverage-html-unit
 
       - name: Download integration test coverage artifact
-        uses: dawidd6/action-download-artifact@v2.28.0
+        uses: dawidd6/action-download-artifact@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          workflow: tests_integration.yml
+          workflow: combined_tests.yml
           commit: ${{ github.event.workflow_run.head_sha }}
           name: coverage-html-integration
           path: coverage-html-integration
 
-      - run: coverage combine coverage-html coverage-html-integration
+      - name: Combine coverage reports
+        run: coverage combine coverage-html-unit coverage-html-integration
 
-      - run: smokeshow upload combined-coverage/
+      - name: Upload combined coverage to Smokeshow
+        run: smokeshow upload combined-coverage/
         env:
           SMOKESHOW_GITHUB_STATUS_DESCRIPTION: Coverage {coverage-percentage}
           SMOKESHOW_GITHUB_COVERAGE_THRESHOLD: 100

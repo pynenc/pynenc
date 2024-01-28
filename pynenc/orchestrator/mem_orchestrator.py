@@ -4,20 +4,30 @@ from collections import OrderedDict, defaultdict, deque
 from time import time
 from typing import TYPE_CHECKING, Any, Generic, Iterator
 
-from ..exceptions import CycleDetectedError, PendingInvocationLockError
-from ..invocation import InvocationStatus
-from ..types import Params, Result
-from .base_orchestrator import BaseBlockingControl, BaseCycleControl, BaseOrchestrator
+from pynenc.exceptions import CycleDetectedError, PendingInvocationLockError
+from pynenc.invocation.status import InvocationStatus
+from pynenc.orchestrator.base_orchestrator import (
+    BaseBlockingControl,
+    BaseCycleControl,
+    BaseOrchestrator,
+)
+from pynenc.types import Params, Result
 
 if TYPE_CHECKING:
-    from ..app import Pynenc
-    from ..call import Call
-    from ..invocation import DistributedInvocation
-    from ..task import Task
+    from pynenc.app import Pynenc
+    from pynenc.call import Call
+    from pynenc.invocation.dist_invocation import DistributedInvocation
+    from pynenc.task import Task
 
 
 class MemCycleControl(BaseCycleControl):
-    """A directed acyclic graph representing the call dependencies"""
+    """
+    An implementation of cycle control using a directed acyclic graph (DAG) to represent call dependencies.
+
+    This class manages dependencies between task invocations to prevent call cycles, which could lead to deadlocks or infinite loops.
+
+    :param Pynenc app: The Pynenc application instance.
+    """
 
     def __init__(self, app: "Pynenc") -> None:
         self.app = app
@@ -32,10 +42,13 @@ class MemCycleControl(BaseCycleControl):
         self, caller: "DistributedInvocation", callee: "DistributedInvocation"
     ) -> None:
         """
-        Add a new invocation to the graph. This represents a dependency where the caller
-        is dependent on the callee.
+        Adds a new invocation to the graph, representing a dependency where the caller is dependent on the callee.
 
-        Raises a CycleDetectedError if the invocation would cause a cycle.
+        Raises a CycleDetectedError if adding the invocation would cause a cycle in the call graph.
+
+        :param DistributedInvocation caller: The invocation making the call.
+        :param DistributedInvocation callee: The invocation being called.
+        :raises CycleDetectedError: If adding the invocation causes a cycle.
         """
         if caller.call_id == callee.call_id:
             raise CycleDetectedError.from_cycle([caller.call])
@@ -51,7 +64,9 @@ class MemCycleControl(BaseCycleControl):
 
     def clean_up_invocation_cycles(self, invocation: "DistributedInvocation") -> None:
         """
-        Remove an invocation from the graph. Also removes any edges to or from the invocation.
+        Removes an invocation from the graph, along with any edges to or from the invocation.
+
+        :param DistributedInvocation invocation: The invocation to be removed from the graph.
         """
         call_id = invocation.call_id
         if call_id in self.call_to_invocation:
@@ -67,19 +82,12 @@ class MemCycleControl(BaseCycleControl):
         self, caller: "DistributedInvocation", callee: "DistributedInvocation"
     ) -> list["Call"]:
         """
-        Determines if adding an edge from the caller to the callee would create a cycle.
+        Determines if adding a new edge from the caller to the callee would create a cycle in the graph.
 
-        Parameters
-        ----------
-        caller : DistributedInvocation
-            The invocation making the call.
-        callee : DistributedInvocation
-            The invocation being called.
-
-        Returns
-        -------
-        list
-            List of invocations that would form the cycle after adding the new invocation, else an empty list.
+        :param DistributedInvocation caller: The invocation making the call.
+        :param DistributedInvocation callee: The invocation being called.
+        :return: A list of Calls that would form a cycle after adding the new invocation, else an empty list.
+        :rtype: list[Call]
         """
         # Temporarily add the edge to check if it would cause a cycle
         self.edges[caller.call_id].add(callee.call_id)
@@ -103,6 +111,15 @@ class MemCycleControl(BaseCycleControl):
         visited: set[str],
         path: list[str],
     ) -> list["Call"]:
+        """
+        Utility function for cycle detection in the graph.
+
+        :param str current_call_id: The current call ID being checked for cycles.
+        :param set[str] visited: Set of already visited call IDs.
+        :param list[str] path: Current path of call IDs being traversed.
+        :return: A list of Calls that form a cycle, if one is detected.
+        :rtype: list[Call]
+        """
         visited.add(current_call_id)
         path.append(current_call_id)
 
@@ -120,7 +137,13 @@ class MemCycleControl(BaseCycleControl):
 
 
 class MemBlockingControl(BaseBlockingControl):
-    """A directed acyclic graph representing the call dependencies"""
+    """
+    An implementation of blocking control using a directed acyclic graph (DAG) to represent invocation dependencies.
+
+    This class manages dependencies between task invocations, ensuring that invocations waiting for others are properly handled.
+
+    :param Pynenc app: The Pynenc application instance.
+    """
 
     def __init__(self, app: "Pynenc") -> None:
         self.app = app
@@ -134,7 +157,10 @@ class MemBlockingControl(BaseBlockingControl):
         result_invocations: list["DistributedInvocation[Params, Result]"],
     ) -> None:
         """
-        Register that an invocation (waiter) is waiting for the results of another invocation (waited).
+        Registers that an invocation (waiter) is waiting for the results of other invocations (waited).
+
+        :param DistributedInvocation[Params, Result] caller_invocation: The invocation waiting for results.
+        :param list[DistributedInvocation[Params, Result]] result_invocations: The invocations whose results are being waited for.
         """
         waiter = caller_invocation
         for waited in result_invocations:
@@ -146,7 +172,9 @@ class MemBlockingControl(BaseBlockingControl):
 
     def release_waiters(self, invocation: "DistributedInvocation") -> None:
         """
-        Remove an invocation from the graph. Also removes any edges to or from the invocation.
+        Removes an invocation from the graph, along with any dependencies related to it.
+
+        :param DistributedInvocation invocation: The invocation that has finished and will no longer block other invocations.
         """
         for waiter_id in self.waited_by.get(invocation.invocation_id, []):
             self.waiting_for[waiter_id].discard(invocation.invocation_id)
@@ -159,18 +187,11 @@ class MemBlockingControl(BaseBlockingControl):
         self, max_num_invocations: int
     ) -> Iterator["DistributedInvocation[Params, Result]"]:
         """
-        Returns the invocations that are blocking others but not waiting for anything themselves.
-        The oldest invocations are returned first.
+        Retrieves invocations that are blocking others but are not themselves waiting for any results.
 
-        Parameters
-        ----------
-        max_num_invocations : int
-            The maximum number of invocations to return.
-
-        Returns
-        -------
-        Set[DistributedInvocation] | None
-            A set of blocking invocations or None if no invocations are blocking.
+        :param int max_num_invocations: The maximum number of blocking invocations to retrieve.
+        :return: An iterator over invocations that are blocking others (older firsts).
+        :rtype: Iterator[DistributedInvocation[Params, Result]]
         """
         for inv_id in self.waited_by:
             if inv_id not in self.waiting_for:
@@ -206,6 +227,14 @@ class ArgPair:
 
 
 class TaskInvocationCache(Generic[Result]):
+    """
+    A cache for storing and managing task invocations and their statuses.
+
+    This class provides functionalities to track task invocations, including their arguments, statuses, retries, and auto-purge mechanisms.
+
+    :param Pynenc app: The Pynenc application instance.
+    """
+
     def __init__(self, app: "Pynenc") -> None:
         self.app = app
         self.invocations: dict[str, "DistributedInvocation"] = {}
@@ -223,6 +252,14 @@ class TaskInvocationCache(Generic[Result]):
         key_arguments: dict[str, str] | None,
         status: InvocationStatus | None,
     ) -> Iterator["DistributedInvocation"]:
+        """
+        Retrieves invocations based on provided key arguments and/or status.
+
+        :param dict[str, str] | None key_arguments: The key arguments to filter the invocations.
+        :param InvocationStatus | None status: The status to filter the invocations.
+        :return: An iterator over the filtered invocations.
+        :rtype: Iterator[DistributedInvocation]
+        """
         # Filtering by key_arguments
         if key_arguments:
             matches: list[set[str]] = []
@@ -251,9 +288,17 @@ class TaskInvocationCache(Generic[Result]):
     def set_up_invocation_auto_purge(
         self, invocation: "DistributedInvocation[Params, Result]"
     ) -> None:
+        """
+        Sets up an invocation for automatic purging after a specified time.
+
+        :param DistributedInvocation[Params, Result] invocation: The invocation to be set up for auto-purge.
+        """
         self.invocations_to_purge.append((time(), invocation.invocation_id))
 
     def auto_purge(self) -> None:
+        """
+        Automatically purges invocations that have been in a final state for longer than a specified duration.
+        """
         end_time = (
             time() - self.app.orchestrator.conf.auto_final_invocation_purge_hours * 3600
         )
@@ -262,6 +307,11 @@ class TaskInvocationCache(Generic[Result]):
             self.clean_up_invocation(elem)
 
     def clean_up_invocation(self, invocation_id: str) -> None:
+        """
+        Cleans up an invocation from the cache.
+
+        :param str invocation_id: The ID of the invocation to be cleaned up.
+        """
         invocation = self.invocations.pop(invocation_id, None)
         if invocation:
             for key, value in invocation.serialized_arguments.items():
@@ -279,6 +329,12 @@ class TaskInvocationCache(Generic[Result]):
         invocation: "DistributedInvocation[Params, Result]",
         status: InvocationStatus,
     ) -> None:
+        """
+        Sets the status of a specific invocation.
+
+        :param DistributedInvocation[Params, Result] invocation: The invocation whose status is to be set.
+        :param InvocationStatus status: The status to set for the invocation.
+        """
         if status != InvocationStatus.PENDING:
             self.clean_pending_status(invocation)
         if (_id := invocation.invocation_id) not in self.invocations:
@@ -295,12 +351,23 @@ class TaskInvocationCache(Generic[Result]):
     def clean_pending_status(
         self, invocation: "DistributedInvocation[Params, Result]"
     ) -> None:
+        """
+        Cleans the pending status of an invocation if it has exceeded the maximum pending time.
+
+        :param DistributedInvocation[Params, Result] invocation: The invocation whose pending status is to be cleaned.
+        """
         self.pending_timer.pop(invocation.invocation_id, None)
         self.pre_pending_status.pop(invocation.invocation_id, None)
 
     def set_pending_status(
         self, invocation: "DistributedInvocation[Params, Result]"
     ) -> None:
+        """
+        Sets the status of an invocation to pending, handling any potential locking issues.
+
+        :param DistributedInvocation[Params, Result] invocation: The invocation to set to pending status.
+        :raises PendingInvocationLockError: If the invocation is already in pending status or cannot acquire a lock.
+        """
         invocation_id = invocation.invocation_id
         lock = self.locks.setdefault(invocation_id, threading.Lock())
         if not lock.acquire(False):
@@ -318,6 +385,13 @@ class TaskInvocationCache(Generic[Result]):
     def get_status(
         self, invocation: "DistributedInvocation[Params, Result]"
     ) -> InvocationStatus:
+        """
+        Retrieves the current status of an invocation, accounting for pending timeout.
+
+        :param DistributedInvocation[Params, Result] invocation: The invocation to get the status for.
+        :return: The current status of the invocation.
+        :rtype: InvocationStatus
+        """
         status = self.invocation_status[invocation.invocation_id]
         if status == InvocationStatus.PENDING:
             elapsed = time() - self.pending_timer[invocation.invocation_id]
@@ -330,15 +404,42 @@ class TaskInvocationCache(Generic[Result]):
     def increase_retries(
         self, invocation: "DistributedInvocation[Params, Result]"
     ) -> None:
+        """
+        Increases the retry count for a given invocation.
+
+        :param DistributedInvocation[Params, Result] invocation: The invocation for which the retry count is to be increased.
+        """
         self.invocation_retries[invocation.invocation_id] = (
             self.invocation_retries.get(invocation.invocation_id, 0) + 1
         )
 
     def get_retries(self, invocation: "DistributedInvocation[Params, Result]") -> int:
+        """
+        Retrieves the current number of retries for a given invocation.
+
+        :param DistributedInvocation[Params, Result] invocation: The invocation to get the retry count for.
+        :return: The number of retries for the invocation.
+        :rtype: int
+        """
         return self.invocation_retries.get(invocation.invocation_id, 0)
 
 
 class MemOrchestrator(BaseOrchestrator):
+    """
+    A memory-based implementation of the Orchestrator,
+    managing task invocations and their lifecycle.
+
+    This class provides an in-memory solution for orchestrating task invocations,
+    including cycle and blocking controls, as well as caching of invocation statuses and retries.
+
+    ```{warning}
+        This orchestrator is not intended for production use.
+        As it stores all invocations in the running process memory.
+    ```
+
+    :param Pynenc app: The Pynenc application instance.
+    """
+
     def __init__(self, app: "Pynenc") -> None:
         self.cache: dict[str, TaskInvocationCache] = defaultdict(
             lambda: TaskInvocationCache(app)

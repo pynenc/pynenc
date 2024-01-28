@@ -1,6 +1,6 @@
 from unittest.mock import Mock, patch
 
-from pynenc.conf import ConcurrencyControlType
+from pynenc.conf.config_task import ConcurrencyControlType
 from pynenc.exceptions import PendingInvocationLockError
 from pynenc.invocation import DistributedInvocation, InvocationStatus
 from tests.conftest import MockPynenc

@@ -3,36 +3,52 @@ from dataclasses import dataclass, field
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, Generic
 
-from .arguments import Arguments
-from .conf.config_task import ConcurrencyControlType
-from .types import Params, Result
+from pynenc.arguments import Arguments
+from pynenc.conf.config_task import ConcurrencyControlType
+from pynenc.types import Params, Result
 
 if TYPE_CHECKING:
-    from .app import Pynenc
-    from .task import Task
+    from pynenc.app import Pynenc
+    from pynenc.task import Task
 
 
 @dataclass(frozen=True)
 class Call(Generic[Params, Result]):
-    """A specific call of a task
+    """
+    Represents a specific call of a task. A call is unique per task and its arguments.
 
-    A call is unique per task and arguments"""
+    :param Task[Params, Result] task: The task associated with the call.
+    :param Arguments arguments: The arguments used in the call. Defaults to an empty Arguments object.
+    """
 
     task: "Task[Params, Result]"
     arguments: "Arguments" = field(default_factory=Arguments)
 
     @cached_property
     def app(self) -> "Pynenc":
+        """
+        Gets the Pynenc application instance associated with the task.
+
+        :return: The Pynenc application instance.
+        """
         return self.task.app
 
     @cached_property
     def call_id(self) -> str:
-        """Returns a unique id for each task and arguments"""
+        """
+        Generates a unique identifier for the call based on the task ID and the arguments.
+
+        :return: A string representing the unique identifier of the call.
+        """
         return "#task_id#" + self.task.task_id + "#args_id#" + self.arguments.args_id
 
     @cached_property
     def serialized_arguments(self) -> dict[str, str]:
-        """Returns a dictionary with each of the call arguments serialized into a string"""
+        """
+        Serializes the call arguments into strings.
+
+        :return: A dictionary of serialized argument strings.
+        """
         return {
             k: self.app.serializer.serialize(v)
             for k, v in self.arguments.kwargs.items()
@@ -40,7 +56,11 @@ class Call(Generic[Params, Result]):
 
     @cached_property
     def serialized_args_for_concurrency_check(self) -> dict[str, str] | None:
-        """Returns a dictionary with the call arguments required for the task concurrency check"""
+        """
+        Determines the call arguments required for the task concurrency check.
+
+        :return: A dictionary of serialized argument strings required for concurrency control, or None if concurrency control is disabled.
+        """
         if self.task.conf.registration_concurrency == ConcurrencyControlType.DISABLED:
             return None
         if self.task.conf.registration_concurrency == ConcurrencyControlType.TASK:
@@ -54,7 +74,12 @@ class Call(Generic[Params, Result]):
             }
 
     def deserialize_arguments(self, serialized_arguments: dict[str, str]) -> Arguments:
-        """Returns an Arguments instance with the deserialized arguments"""
+        """
+        Deserializes the given serialized arguments.
+
+        :param dict[str, str] serialized_arguments: The serialized arguments to deserialize.
+        :return: An Arguments object representing the deserialized arguments.
+        """
         return Arguments(
             {
                 k: self.app.serializer.deserialize(v)
@@ -63,24 +88,43 @@ class Call(Generic[Params, Result]):
         )
 
     def to_json(self) -> str:
-        """Returns a string with the serialized call"""
+        """
+        Serializes the call into a JSON string.
+
+        :return: A JSON string representing the serialized call.
+        """
         return json.dumps(
             {"task": self.task.to_json(), "arguments": self.serialized_arguments}
         )
 
     def __getstate__(self) -> dict:
-        # Return state as a dictionary and a secondary value as a tuple
+        """
+        Gets the state of the Call object for serialization purposes.
+
+        :return: A dictionary representing the state of the Call object.
+        """
         return {"task": self.task, "arguments": self.serialized_arguments}
 
     def __setstate__(self, state: dict) -> None:
+        """
+        Sets the state of the Call object from the provided dictionary.
+
+        :param dict state: A dictionary representing the state to set.
+        """
         object.__setattr__(self, "task", state["task"])
         arguments = self.deserialize_arguments(state["arguments"])
         object.__setattr__(self, "arguments", arguments)
 
     @classmethod
     def from_json(cls, app: "Pynenc", serialized: str) -> "Call":
-        """Returns a new call from a serialized call"""
-        from .task import Task
+        """
+        Creates a Call object from a serialized JSON string.
+
+        :param Pynenc app: The Pynenc application instance.
+        :param str serialized: The serialized JSON string representing the call.
+        :return: A Call object created from the serialized data.
+        """
+        from pynenc.task import Task
 
         call_dict = json.loads(serialized)
         return cls(

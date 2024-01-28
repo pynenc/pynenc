@@ -4,16 +4,22 @@ import time
 from multiprocessing import Manager, Process, cpu_count
 from typing import TYPE_CHECKING, Any, Optional
 
+from pynenc.exceptions import RunnerError
 from pynenc.invocation import InvocationStatus
-
-from ..exceptions import RunnerError
-from .base_runner import BaseRunner
+from pynenc.runner.base_runner import BaseRunner
 
 if TYPE_CHECKING:
-    from ..invocation import DistributedInvocation
+    from pynenc.invocation.dist_invocation import DistributedInvocation
 
 
 class ProcessRunner(BaseRunner):
+    """
+    ProcessRunner is a concrete implementation of BaseRunner that executes tasks in separate processes.
+
+    It manages task invocations, handling their execution, monitoring, and lifecycle within individual processes.
+    This runner is suitable for CPU-bound tasks and scenarios where task isolation is essential.
+    """
+
     wait_invocation: dict["DistributedInvocation", set["DistributedInvocation"]]
     processes: dict["DistributedInvocation", Process]
     manager: Manager  # type: ignore
@@ -22,15 +28,26 @@ class ProcessRunner(BaseRunner):
 
     @staticmethod
     def mem_compatible() -> bool:
-        # each task is executed in a different process with independent memory
+        """
+        Indicates if the runner is compatible with in-memory components.
+        :return: False, as each task is executed in a separate process with independent memory.
+        """
         return False
 
     @property
     def max_parallel_slots(self) -> int:
+        """
+        The maximum number of parallel tasks that the runner can handle.
+        :return: An integer representing the maximum number of parallel tasks, based on CPU count.
+        """
         return max(self.conf.min_parallel_slots, self.max_processes)
 
     @property
     def runner_args(self) -> dict[str, Any]:
+        """
+        Provides arguments necessary for parent-subprocess communication in ProcessRunner.
+        :return: A dictionary containing the 'wait_invocation' Managed dictionary for subprocesses.
+        """
         # this is necessary for parent-subprocess communication on ProcessRunner
         # it passes the wait_invocation Managed dictinoary to the subprocesses
         # so they can notify the main loop when waiting for other invocatinos
@@ -39,15 +56,26 @@ class ProcessRunner(BaseRunner):
 
     @property
     def waiting_processes(self) -> int:
-        """Number of processes waiting for other invocations to finish"""
+        """
+        Returns the number of processes that are currently waiting for other invocations to finish.
+        :return: An integer representing the number of waiting processes.
+        """
         if not self.wait_invocation:
             return 0
         return len(set.union(*self.wait_invocation.values()))
 
     def parse_args(self, args: dict[str, Any]) -> None:
+        """
+        Parses the arguments provided to the runner.
+        :param args: A dictionary of arguments passed to the runner.
+        """
         self.wait_invocation = args["wait_invocation"]
 
     def _on_start(self) -> None:
+        """
+        Internal method called when the ProcessRunner starts.
+        Initializes the process manager and the data structures for managing invocations.
+        """
         self.logger.info("Starting ProcessRunner")
         self.manager = Manager()
         self.wait_invocation = self.manager.dict()  # type: ignore
@@ -55,7 +83,10 @@ class ProcessRunner(BaseRunner):
         self.max_processes = cpu_count()
 
     def _on_stop(self) -> None:
-        """kill all the running processes and change invocation status to retry"""
+        """
+        Internal method called when the ProcessRunner stops.
+        Terminates all running processes and updates their invocation statuses.
+        """
         self.logger.info("Stopping ProcessRunner")
         for invocation, process in self.processes.items():
             process.kill()
@@ -67,7 +98,10 @@ class ProcessRunner(BaseRunner):
         self.logger.info("ProcessRunner stopped")
 
     def _on_stop_runner_loop(self) -> None:
-        # Clear the wait_invocation dictionary
+        """
+        Internal method called after receiving a signal to stop the runner loop.
+        Clears the wait_invocation dictionary.
+        """
         self.logger.info("Stopping ProcessRunner loop")
         self.wait_invocation.clear()
         self.wait_invocation = {}
@@ -75,6 +109,10 @@ class ProcessRunner(BaseRunner):
 
     @property
     def available_processes(self) -> int:
+        """
+        Returns the number of available process slots for new invocations.
+        :return: An integer representing available process slots.
+        """
         for invocation in list(self.processes.keys()):
             if not self.processes[invocation].is_alive():
                 del self.processes[invocation]
@@ -85,6 +123,10 @@ class ProcessRunner(BaseRunner):
         return self.max_parallel_slots - len(self.processes)  # - self.waiting_processes
 
     def runner_loop_iteration(self) -> None:
+        """
+        Executes one iteration of the ProcessRunner loop.
+        Handles the execution and monitoring of task invocations in separate processes.
+        """
         # called from parent process memory space
         self.logger.debug(f"starting runner loop iteration {self.available_processes=}")
         for invocation in self.app.orchestrator.get_invocations_to_run(
@@ -132,6 +174,13 @@ class ProcessRunner(BaseRunner):
         result_invocations: list["DistributedInvocation"],
         runner_args: Optional[dict[str, Any]] = None,
     ) -> None:
+        """
+        Handles invocations that are waiting for results from other invocations.
+        Pauses the running process and registers it to wait for the results of specified invocations.
+        :param running_invocation: The invocation that is waiting for results.
+        :param result_invocations: A list of invocations whose results are being awaited.
+        :param runner_args: Additional arguments required for the ProcessRunner.
+        """
         # called from subprocess memory space
         if not running_invocation:
             time.sleep(self.conf.invocation_wait_results_sleep_time_sec)
