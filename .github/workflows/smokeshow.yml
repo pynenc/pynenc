@@ -51,8 +51,16 @@ jobs:
           name: coverage-html-integration
           path: coverage-html-integration
 
+      - name: List contents of downloaded artifacts
+        run: |
+          ls -l coverage-html-unit
+          ls -l coverage-html-integration
+
+      - name: Debug coverage data
+        run: coverage debug data
+
       - name: Combine coverage reports
-        run: poetry run coverage combine coverage-html-unit coverage-html-integration
+        run: poetry run coverage combine coverage-html-unit coverage-html-integration --verbose
 
       - name: Upload combined coverage to Smokeshow
         run: smokeshow upload combined-coverage/
