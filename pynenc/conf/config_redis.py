@@ -1,4 +1,4 @@
-from .config_base import ConfigBase, ConfigField
+from pynenc.conf.config_base import ConfigBase, ConfigField
 
 
 class ConfigRedis(ConfigBase):
@@ -8,17 +8,15 @@ class ConfigRedis(ConfigBase):
     This class provides configuration settings specific to Redis clients, allowing
     for customization of the Redis connection used in the system.
 
-    Attributes
-    ----------
-    redis_host : ConfigField[str]
+    :cvar ConfigField[str] redis_host:
         The hostname of the Redis server. Defaults to 'localhost', specifying that
         the Redis server is expected to be running on the same machine as the client.
 
-    redis_port : ConfigField[int]
+    :cvar ConfigField[int] redis_port:
         The port number on which the Redis server is listening. Defaults to 6379,
         which is the default port for Redis.
 
-    redis_db : ConfigField[int]
+    :cvar ConfigField[int] redis_db:
         The database number to connect to on the Redis server. Redis servers typically
         support multiple databases (numbered from 0), allowing different applications
         or parts of an application to operate in separate data spaces. Defaults to 0.

@@ -4,26 +4,31 @@ import os
 from enum import StrEnum, auto
 from typing import Any, Optional, TypeVar
 
-from ..exceptions import RetryError
-from .config_base import ConfigBase, ConfigField
-from .constants import ENV_PREFIX, ENV_SEP
+from pynenc.conf.config_base import ConfigBase, ConfigField
+from pynenc.conf.constants import ENV_PREFIX, ENV_SEP
+from pynenc.exceptions import RetryError
 
 
 class ConcurrencyControlType(StrEnum):
-    """Type of concurrency control"""
+    """
+    Type of concurrency control.
 
-    #: Concurrency control is disabled
+    :cvar DISABLED:
+        Concurrency control is disabled. This means there are no concurrency checks.
+    :cvar TASK:
+        Concurrency is checked per task.
+        Only one instance of each task can be in the determined state at a time.
+    :cvar ARGUMENTS:
+        Concurrency is checked for each task's arguments.
+        Only one task with the same arguments can be in the determined state at a time.
+    :cvar KEYS:
+        Concurrency is checked for each task's key arguments.
+        Only one task with the same key arguments can be in the determined state at a time.
+    """
+
     DISABLED = auto()
-
-    #: Concurrency would be check per each task, only one task can be in the determined state at a time
     TASK = auto()
-
-    #: Concurrency would be check for each task arguments,
-    #: only one task with the same arguments can be in the determined state at a time
     ARGUMENTS = auto()
-
-    #: Concurrency would be check for each task key arguments,
-    #: only one task with the same key arguments can be in the determined state at a time
     KEYS = auto()
 
 
@@ -98,35 +103,33 @@ class ConfigTask(ConfigBase):
     specified globally for all tasks, or individually for each task using environment
     variables, configuration files, or the `@task` decorator.
 
-    Attributes
-    ----------
-    auto_parallel_batch_size : ConfigField[int]
+    :cvar ConfigField[int] auto_parallel_batch_size:
         If set to 0, auto parallelization is disabled. If greater than 0, tasks with iterable
         arguments are automatically split into chunks, with each chunk potentially processed
         by a different worker. If the task arguments are not an iterable, nothing happens.
 
-    retry_for : ConfigField[tuple]
+    :cvar ConfigField[tuple] retry_for:
         A tuple of exceptions for which the task should be retried.
 
-    max_retries : ConfigField[int]
+    :cvar ConfigField[int] max_retries:
         Defines the maximum number of retries for a task. This limit ensures that a task does
         not retry indefinitely.
 
-    running_concurrency : ConfigField[ConcurrencyControlType]
+    :cvar ConfigField[ConcurrencyControlType] running_concurrency:
         Controls the concurrency behavior of the task. This option prevents the task from being
         in a running state, managing and limiting concurrent execution of the same task.
 
-    registration_concurrency : ConfigField[ConcurrencyControlType]
+    :cvar ConfigField[ConcurrencyControlType] registration_concurrency:
         Manages the registration concurrency for the task, ensuring unique task registration
         based on the configuration. Useful for tasks that should not execute multiple times in
         parallel or to avoid generating too much unnecessary tasks in the system.
 
-    key_arguments : ConfigField[str]
+    :cvar ConfigField[str] key_arguments:
         Specifies key arguments for concurrency control, relevant when concurrency control is
         set to key-based. This option determines which arguments are used to identify unique
         task invocations.
 
-    on_diff_non_key_args_raise : ConfigField[bool]
+    :cvar ConfigField[bool] on_diff_non_key_args_raise:
         If set to True, raises an exception when a task invocation with matching key arguments
         but different non-key arguments is encountered. This option is used to handle
         concurrency at the key level.
@@ -191,12 +194,12 @@ class ConfigTask(ConfigBase):
         super().__init__(config_values, config_filepath)
 
     def options_to_json(self) -> str:
-        """Returns a string with the serialized options"""
+        """:return: the serialized options"""
         return json.dumps(self.task_options, cls=TaskOptionsJSONEncoder)
 
     @staticmethod
     def options_from_json(options_json: str) -> dict[str, Any]:
-        """Returns a new options from a dictionary"""
+        """:return: a new options from a dictionary"""
         return json.loads(options_json, object_pairs_hook=options_deserializer)
 
     # SPECIFIC CONFIG FOR TASK OPTIONS, SO IT CAN BE INCLUDED IN ENV VARS, CONFIG FILES or TASK decorator

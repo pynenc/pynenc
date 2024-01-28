@@ -1,10 +1,8 @@
-Frequently Asked Questions
-==========================
+# Frequently Asked Questions
 
 This FAQ addresses common questions and issues users may encounter with Pynenc.
 
-Why can't I define tasks in a module that can run as a script?
---------------------------------------------------------------
+## Why can't I define tasks in a module that can run as a script?
 
 In Pynenc, tasks are not supported in modules that are intended to run as scripts. This includes any module executed directly (such as through `python script.py` or `python -m module`) where its `__name__` attribute is set to `"__main__"`.
 

@@ -2,47 +2,37 @@ from functools import cached_property
 from logging import Logger
 from typing import TYPE_CHECKING, Any, Callable, Optional, overload
 
-from .broker import BaseBroker
-from .conf.config_pynenc import ConfigPynenc
-from .orchestrator import BaseOrchestrator
-from .runner import BaseRunner
-from .serializer import BaseSerializer
-from .state_backend import BaseStateBackend
-from .task import Task
-from .util.log import create_logger
-from .util.subclasses import get_subclass
+from pynenc.broker.base_broker import BaseBroker
+from pynenc.conf.config_pynenc import ConfigPynenc
+from pynenc.orchestrator.base_orchestrator import BaseOrchestrator
+from pynenc.runner.base_runner import BaseRunner
+from pynenc.serializer.base_serializer import BaseSerializer
+from pynenc.state_backend.base_state_backend import BaseStateBackend
+from pynenc.task import Task
+from pynenc.util.log import create_logger
+from pynenc.util.subclasses import get_subclass
 
 if TYPE_CHECKING:
-    from .types import Func, Params, Result
+    from pynenc.types import Func, Params, Result
 
 
 class Pynenc:
     """
     The main class of the Pynenc library that creates an application object.
 
-    Parameters
-    ----------
-    task_broker : BaseTaskBroker
-        Handles routing of tasks for distributed execution.
-    state_backend : BaseStateBackend
-        Maintains the state of tasks, runners, and other relevant system states.
-    orchestrator : BaseOrchestrator
-        Coordinates all components and acts according to the configuration.
-    reporting : list of BaseReporting
-        Reports to one or more systems.
+    :param Optional[str] app_id:
+        The id of the application.
+    :param Optional[dict[str, Any]] config_values:
+        A dictionary of configuration values.
+    :param Optional[str] config_filepath:
+        A path to a configuration file.
 
-    Notes
-    -----
+    ```{note}
     All of these base classes are abstract and cannot be used directly. If none is specified,
     they will default to `MemTaskBroker`, `MemStateBackend`, etc. These default classes do not
     actually distribute the code but are helpers for tests or for running an application on your
     localhost. They may help to parallelize to some degree but cannot be used in a production system.
-
-    Examples
-    --------
-    Default Pynenc application for running in memory in a local environment.
-
-    >>> app = Pynenc()
+    ```
     """
 
     def __init__(
@@ -140,25 +130,23 @@ class Pynenc:
         Check the options reference in conf.config_task or the Pynenc documentation for a detailed explanation
         of the BaseTask instance you are applying.
 
-        Parameters
-        ----------
-        func : Callable, optional
+        :param Optional["Func"] func:
             The function to be converted into a BaseTask instance.
-        ``**options`` : dict
-            The options to be passed to the BaseTask instance.
+        :param **options:
+            Arbitrary keyword arguments representing options for the BaseTask instance.
+            Each key-value pair in options corresponds to a specific configuration setting for the task.
+            The available options and their meanings depend on the BaseTask implementation and configuration.
 
-        Returns
-        -------
-        Task | Callable[..., Task]
-            The BaseTask instance or a callable that returns a BaseTask instance.
+        :return: The BaseTask instance or a callable that returns a BaseTask instance.
 
-        Examples
-        --------
-        >>> @app.task(option1='value1', option2='value2')
-        ... def my_func(x, y):
-        ...     return x + y
-        ...
-        >>> result = my_func(1, 2)
+        :example:
+        ```python
+            @app.task(option1='value1', option2='value2')
+            def my_func(x, y):
+                return x + y
+
+            result = my_func(1, 2)
+        ```
         """
 
         def init_task(_func: "Func") -> Task["Params", "Result"]:

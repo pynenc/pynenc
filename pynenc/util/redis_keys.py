@@ -3,26 +3,36 @@ from typing import TYPE_CHECKING
 import redis
 
 if TYPE_CHECKING:
-    from ..invocation.status import InvocationStatus
+    from pynenc.invocation.status import InvocationStatus
 
 
 def sanitize_for_redis(s: str) -> str:
+    """
+    Sanitizes a string for use as a Redis key.
+
+    :param str s: The string to sanitize.
+    :return: The sanitized string.
+    """
     if s is None:
         return ""
-
     replacements = {
         "[": "__OPEN_BRACKET__",
         "]": "__CLOSE_BRACKET__",
         "*": "__ASTERISK__",
     }
-
     for k, v in replacements.items():
         s = s.replace(k, v)
-
     return s
 
 
 class Key:
+    """
+    Helper class to manage Redis key formats for various components.
+
+    :param str app_id: The application ID.
+    :param str prefix: The prefix for the keys.
+    """
+
     def __init__(self, app_id: str, prefix: str) -> None:
         app_id = sanitize_for_redis(app_id)
         prefix = sanitize_for_redis(prefix)
@@ -95,7 +105,11 @@ class Key:
         return f"{self.prefix}default_queue"
 
     def purge(self, client: redis.Redis) -> None:
-        """Purge all keys with the given prefix"""
+        """
+        Purges all keys with the given prefix in Redis.
+
+        :param redis.Redis client: The Redis client.
+        """
         scan = client.scan_iter(self.prefix + "*")
         for key in scan:
             client.delete(key)

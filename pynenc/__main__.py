@@ -1,4 +1,4 @@
-from .cli.main_cli import main
+from pynenc.cli.main_cli import main
 
 if __name__ == "__main__":
     main()

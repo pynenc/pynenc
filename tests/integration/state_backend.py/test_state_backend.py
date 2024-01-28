@@ -7,7 +7,7 @@ import pytest
 from pynenc.call import Call
 from pynenc.exceptions import PynencError
 from pynenc.invocation import DistributedInvocation, InvocationStatus
-from pynenc.state_backend import BaseStateBackend
+from pynenc.state_backend.base_state_backend import BaseStateBackend
 from pynenc.util.subclasses import get_all_subclasses
 from tests import util
 from tests.conftest import MockPynenc

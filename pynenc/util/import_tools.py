@@ -56,19 +56,14 @@ def get_object_filepath(obj: object) -> str | None:
     """
     Retrieve the file path of the module where a given object was defined.
 
-    Parameters
-    ----------
-    obj : object
+    :param object obj:
         The object whose module file path is to be found.
 
-    Returns
-    -------
-    str | None
-        The file path of the module if found, otherwise None.
+    :return: The file path of the module if found, otherwise None.
 
-    Note
-    ----
+    ```{note}
     This function is currently not in use in the main Pynenc workflow.
+    ```
     """
     return sys.modules[obj.__module__].__file__
 
@@ -80,19 +75,12 @@ def get_pynenc_instance_filepath() -> str:
     This method retrieves the file path by inspecting the call stack and finding
     the frame after the last occurrence of a frame that includes 'pynenc' or 'app.py'.
 
-    Returns
-    -------
-    str
-        The file path of the Pynenc or Task instance.
+    :return: The file path of the Pynenc or Task instance.
+    :raises RuntimeError: If the instance file path cannot be found.
 
-    Raises
-    ------
-    RuntimeError
-        If the instance file path cannot be found.
-
-    Note
-    ----
+    ```{note}
     This function is currently not in use in the main Pynenc workflow.
+    ```
     """
     if frame := get_frame_after(["pynenc", "app.py"]):
         return frame.filename
@@ -103,19 +91,14 @@ def get_frame_after(ends_with: list[str]) -> inspect.FrameInfo | None:
     """
     Get the first frame in the call stack after the last occurrence of a frame ending with a specified path.
 
-    Parameters
-    ----------
-    ends_with : list[str]
+    :param list[str] ends_with:
         The paths to search for in the call stack.
 
-    Returns
-    -------
-    inspect.FrameInfo | None
-        The frame information after the last occurrence of the specified path, or None if not found.
+    :return: The frame information after the last occurrence of the specified path, or None if not found.
 
-    Note
-    ----
+    ```{note}
     This function is currently not in use in the main Pynenc workflow.
+    ```
     """
     stack = inspect.stack()
     last_occurrence_index = None
@@ -134,19 +117,14 @@ def get_module_from_path(relative_path: str) -> str:
     """
     Convert a relative file path to a module path format.
 
-    Parameters
-    ----------
-    relative_path : str
+    :param str relative_path:
         The relative file path to be converted.
 
-    Returns
-    -------
-    str
-        The converted module path in dot-separated format.
+    :return: The converted module path in dot-separated format.
 
-    Note
-    ----
+    ```{note}
     This function is currently not in use in the main Pynenc workflow.
+    ```
     """
     if relative_path == ".":
         return ""
@@ -166,21 +144,16 @@ def get_task_modules(app_filepath: str, task_filepath: str) -> TaskModules:
     This function calculates the common path between the application and task file paths
     and then derives the relative module names for both.
 
-    Parameters
-    ----------
-    app_filepath : str
+    :param str app_filepath:
         The file path of the application.
-    task_filepath : str
+    :param str task_filepath:
         The file path of the task.
 
-    Returns
-    -------
-    TaskModules
-        A named tuple containing the module names for the application and task.
+    :return: A named tuple containing the module names for the application and task.
 
-    Note
-    ----
+    ```{note}
     This function is currently not in use in the main Pynenc workflow.
+    ```
     """
     # the module of the taask requires
     # self.app.instance_filepath and self.instance_filepath
@@ -199,21 +172,16 @@ def get_base_path(absolute_path: str, relative_path: str) -> str:
     """
     Extract the base path from an absolute path given a relative path segment.
 
-    Parameters
-    ----------
-    absolute_path : str
+    :param str absolute_path:
         The absolute path from which the base path is to be extracted.
-    relative_path : str
+    :param str relative_path:
         The relative path segment used for extraction.
 
-    Returns
-    -------
-    str
-        The base path extracted from the absolute path.
+    :return: The base path extracted from the absolute path.
 
-    Note
-    ----
+    ```{note}
     This function is currently not in use in the main Pynenc workflow.
+    ```
     """
     # Normalize paths
     absolute_path = os.path.normpath(absolute_path)
@@ -242,30 +210,21 @@ def import_task(
     This function handles the dynamic import of a task from its module path,
     considering the relative paths of the application and task modules.
 
-    Parameters
-    ----------
-    app_filepath : str
+    :param str app_filepath:
         The file path of the application.
-    app_module : str
+    :param str app_module:
         The module path of the application.
-    task_module : str
+    :param str task_module:
         The module path of the task.
-    task_name : str
+    :param str task_name:
         The name of the task to be imported.
 
-    Returns
-    -------
-    ImportedTask
-        A named tuple containing the callable task and its instance file path.
+    :return: A named tuple containing the callable task and its instance file path.
+    :raises ImportError: If the task cannot be imported from the specified file path.
 
-    Raises
-    ------
-    ImportError
-        If the task cannot be imported from the specified file path.
-
-    Note
-    ----
+    ```{note}
     This function is currently not in use in the main Pynenc workflow.
+    ```
     """
     # Transform modules to relative path
     app_relative_path = app_module.replace(".", os.path.sep)

@@ -1,20 +1,18 @@
-from .config_base import ConfigBase, ConfigField
-from .config_redis import ConfigRedis
+from pynenc.conf.config_base import ConfigBase, ConfigField
+from pynenc.conf.config_redis import ConfigRedis
 
 
 class ConfigOrchestrator(ConfigBase):
     """
     Main config of the orchestrator components.
 
-    Attributes
-    ----------
-    cycle_control : ConfigField[bool]
+    :cvar ConfigField[bool] cycle_control:
         This boolean flag enables the orchestrator to detect cycles of calls to subtasks.
         For example, if task1 calls task2 and task2 calls back to task1, this can create
         an endless loop. The cycle control functionality is enabled by default to prevent
         such scenarios. Users can choose to disable it if needed.
 
-    blocking_control : ConfigField[bool]
+    :cvar ConfigField[bool] blocking_control:
         This boolean flag activates control over tasks that are blocking on other tasks.
         If a task invocation is waiting on another invocation, it notifies the runner,
         which temporarily removes it from the processing queue and uses the slot for
@@ -23,7 +21,7 @@ class ConfigOrchestrator(ConfigBase):
         invocations that have many dependencies over new ones, ensuring efficient
         task management.
 
-    auto_final_invocation_purge_hours : ConfigField[float]
+    :cvar  ConfigField[float] auto_final_invocation_purge_hours:
         This float value, defaulting to 24.0 hours, sets the duration after which the
         orchestrator purges all invocations older than the specified time. This purge
         mechanism helps keep the orchestrator lightweight and fast, as it should

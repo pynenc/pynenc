@@ -39,13 +39,17 @@ pre-commit = "^3.5.0"
 pytest-timeout = "^2.2.0"
 
 
-[tool.poetry.group.doc]
+[tool.poetry.group.docs]
 optional = true
 
-[tool.poetry.group.doc.dependencies]
+[tool.poetry.group.docs.dependencies]
 sphinx = "^7.0"
 myst-parser = "^2"
 furo = "^2023"
+sphinx-copybutton = "^0.5.2"
+sphinx-design = "^0.5.0"
+sphinx-inline-tabs = "^2023.4.21"
+sphinx-autodoc2 = "^0.5.0"
 
 [build-system]
 requires = ["poetry-core"]

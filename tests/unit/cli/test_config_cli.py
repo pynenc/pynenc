@@ -40,10 +40,9 @@ def test_parse_config_docstring(config_cls: Type["ConfigBase"]) -> None:
     Docstring Format Guidelines for ConfigBase Subclasses:
     - Class Description: Start with a brief description of the class's purpose.
 
-    - Attributes Section:
-        - Header: Use "Attributes" as a section header, followed by an underline of dashes on the next line.
+    - Variable section:
         - Field Format: Document each configuration field as follows:
-            - Field Name and Type: Start with the field name followed by its type in the format 'field_name : ConfigField[type]'. Indent this line with four spaces.
+            - Field Name and Type: Use sphinx format to define a class variable ':cvar ConfigField[type] field_name:'
             - Description: Start the description on the next line, indented with eight spaces. Provide a clear and concise explanation of the field's purpose and behavior.
             - Multiline Descriptions: If the description spans multiple lines, ensure each subsequent line is also indented with eight spaces.
         - Consistency: Maintain consistent indentation and formatting for all fields and descriptions.
@@ -55,14 +54,12 @@ def test_parse_config_docstring(config_cls: Type["ConfigBase"]) -> None:
         \"""
         Description of what ConfigExample does and its role in the system.
 
-        Attributes
-        ----------
-        sample_field : ConfigField[str]
+        :cvar ConfigField[str] sample_field:
             A short description of what 'sample_field' represents. This might include
             its purpose, how it's used, and any default behavior or values. If the
             description is long, continue on the next line with the same indentation.
 
-        another_field : ConfigField[int]
+        :cvar ConfigField[int] another_field:
             Explanation of 'another_field'. Describe what it controls, its impact,
             and any default settings or important notes. Continue with additional
             lines as needed, all indented consistently.

@@ -15,21 +15,21 @@ class PynencError(Exception):
     """Base class for all Pynenc related errors."""
 
     def _to_json_dict(self) -> dict[str, Any]:
-        """Returns a json serializable dictionary"""
+        """:return: a json serializable dictionary"""
         return self.__dict__
 
     @classmethod
     def _from_json_dict(cls, json_dict: dict[str, Any]) -> "PynencError":
-        """Returns a new error from the serialized json compatible dictionary"""
+        """:return: a new error from the serialized json compatible dictionary"""
         return cls(**json_dict)
 
     def to_json(self) -> str:
-        """Returns a string with the serialized error"""
+        """:return: the serialized error"""
         return json.dumps(self._to_json_dict())
 
     @classmethod
     def from_json(cls, error_name: str, serialized: str) -> "PynencError":
-        """Returns the child class from a serialized error"""
+        """:return: the child class from a serialized error"""
         for subcls in [cls] + get_all_subclasses(cls):
             if subcls.__name__ == error_name:
                 return subcls._from_json_dict(json_dict=json.loads(serialized))
@@ -61,12 +61,12 @@ class TaskError(PynencError):
             return f"{self.__class__.__name__}({self.task_id})"
 
     def _to_json_dict(self) -> dict[str, Any]:
-        """Returns a string with the serialized error"""
+        """:return: the serialized error"""
         return {"task_id": self.task_id, "message": self.message}
 
     @classmethod
     def _from_json_dict(cls, json_dict: dict[str, Any]) -> "TaskError":
-        """Returns a new error from a serialized error"""
+        """:return: the serialized error"""
         return cls(json_dict["task_id"], json_dict["message"])
 
 
@@ -150,7 +150,7 @@ class InvocationConcurrencyWithDifferentArgumentsError(TaskRoutingError):
         return f"InvocationConcurrencyWithDifferentArgumentsError({self.task_id})\n{self.diff}"
 
     def _to_json_dict(self) -> dict[str, Any]:
-        """Returns a string with the serialized error"""
+        """:return: the serialized error"""
         return {
             **super()._to_json_dict(),
             "existing_invocation_id": self.existing_invocation_id,
@@ -162,7 +162,7 @@ class InvocationConcurrencyWithDifferentArgumentsError(TaskRoutingError):
     def _from_json_dict(
         cls, json_dict: dict[str, str]
     ) -> "InvocationConcurrencyWithDifferentArgumentsError":
-        """Returns a new error from a serialized error"""
+        """:return: a new error from a serialized error"""
         return cls(
             json_dict["task_id"],
             json_dict["existing_invocation_id"],
