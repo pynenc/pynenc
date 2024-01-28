@@ -44,7 +44,7 @@ jobs:
           path: coverage-html-integration
 
       - name: Combine coverage reports
-        run: coverage combine coverage-html coverage-html-integration
+        run: coverage combine coverage-html-unit coverage-html-integration
 
       - name: Upload combined coverage to Smokeshow
         run: smokeshow upload combined-coverage/
