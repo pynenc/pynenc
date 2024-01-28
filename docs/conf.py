@@ -1,19 +1,20 @@
+import datetime
+import importlib.metadata
 import os
 import sys
 from typing import Any
 
-from myst_parser import __version__
-
 sys.path.insert(0, os.path.abspath("../../pynenc"))  # Adjust the path as needed
 
-
+DISTRIBUTION_METADATA = importlib.metadata.metadata("Pynenc")
 # -- Project information -----------------------------------------------------
+author = DISTRIBUTION_METADATA["Author"]
+project = DISTRIBUTION_METADATA["Name"]
+version = DISTRIBUTION_METADATA["Version"]
+current_year = datetime.datetime.now().year
 project = "pynenc"
-copyright = "2023, Jose Diaz"
-author = "Jose Diaz"
-# TODO release/version??
-release = "0.0.5"
-version = __version__
+copyright = f"{current_year}, {author}"
+release = version
 
 # -- General configuration ---------------------------------------------------
 extensions = [
@@ -155,5 +156,5 @@ html_theme_options: dict[str, Any] = {
     "source_branch": "main",
     "source_directory": "docs/",
     # "home_page_in_toc": True,
-    "announcement": "<b>v0.0.5</b> is now out! See the Changelog for details",
+    "announcement": f"<b>{version}</b> is now out! See the Changelog for details",
 }

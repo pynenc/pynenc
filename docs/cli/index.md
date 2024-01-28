@@ -2,9 +2,6 @@
 
 The Pynenc Command Line Interface (CLI) is a tool for managing your Pynenc application. So far just provides commands for starting runners and showing configuration, but more will be added in future releases.
 
-.. contents:: Table of Contents
-:local:
-
 ## Mandatory App Option
 
 Every command in the Pynenc CLI requires the `--app` option. This mandatory option specifies the application module and name, ensuring that the CLI is interacting with the correct Pynenc instance. Upon invocation, the CLI initializes the appropriate configuration classes and the runner based on the Pynenc configuration.
