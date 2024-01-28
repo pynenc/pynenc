@@ -4,6 +4,10 @@ name: Smokeshow
 #   workflow_run:
 #     workflows: [Tests]
 #     types: [completed]
+on:
+  push:
+    branches: [main]
+  pull_request:
 
 permissions:
   statuses: write
