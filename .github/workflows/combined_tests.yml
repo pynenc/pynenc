@@ -80,3 +80,9 @@ jobs:
         with:
           name: coverage-html-integration
           path: htmlcov
+
+  all-tests-completed:
+    needs: [unit-tests, integration-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "All tests completed"
