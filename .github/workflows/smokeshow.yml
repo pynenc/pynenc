@@ -16,56 +16,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v4
         with:
-          python-version: "3.11.7"
+          python-version: "3.11"
 
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: 1.7.1
-          virtualenvs-create: true
-          virtualenvs-in-project: true
+      - run: pip install smokeshow
 
-      - name: Cache dependencies
-        uses: actions/cache@v4
-        with:
-          path: .venv
-          key: pydeps-${{ hashFiles('**/poetry.lock') }}
-      - run: poetry install --no-interaction --with dev
-
-      - name: Download unit test coverage artifact
-        uses: dawidd6/action-download-artifact@v3
+      - name: Download coverage artifact
+        uses: dawidd6/action-download-artifact@v2.28.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           workflow: combined_tests.yml
           commit: ${{ github.event.workflow_run.head_sha }}
-          name: coverage-html-unit
-          path: coverage-html-unit
+          name: coverage-html
+          path: coverage-html
 
-      - name: Download integration test coverage artifact
-        uses: dawidd6/action-download-artifact@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          workflow: combined_tests.yml
-          commit: ${{ github.event.workflow_run.head_sha }}
-          name: coverage-html-integration
-          path: coverage-html-integration
-
-      - name: List contents of downloaded artifacts
-        run: |
-          ls -l coverage-html-unit
-          ls -l coverage-html-integration
-
-      - name: Debug coverage data
-        run: poetry run coverage debug data
-
-      - name: Combine coverage reports
-        run: poetry run coverage combine coverage-html-unit coverage-html-integration
-
-      - name: Upload combined coverage to Smokeshow
-        run: smokeshow upload combined-coverage/
+      - run: smokeshow upload coverage-html/
         env:
           SMOKESHOW_GITHUB_STATUS_DESCRIPTION: Coverage {coverage-percentage}
           SMOKESHOW_GITHUB_COVERAGE_THRESHOLD: 100
