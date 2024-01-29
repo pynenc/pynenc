@@ -62,7 +62,7 @@ jobs:
         run: poetry run coverage debug data
 
       - name: Combine coverage reports
-        run: poetry run coverage combine coverage-html-unit coverage-html-integration --verbose
+        run: poetry run coverage combine coverage-html-unit coverage-html-integration
 
       - name: Upload combined coverage to Smokeshow
         run: smokeshow upload combined-coverage/
