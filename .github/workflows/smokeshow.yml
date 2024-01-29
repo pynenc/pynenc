@@ -33,7 +33,7 @@ jobs:
         with:
           path: .venv
           key: pydeps-${{ hashFiles('**/poetry.lock') }}
-      - run: poetry install --no-interaction
+      - run: poetry install --no-interaction --with dev
 
       - name: Download unit test coverage artifact
         uses: dawidd6/action-download-artifact@v3
