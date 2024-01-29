@@ -59,7 +59,7 @@ jobs:
           ls -l coverage-html-integration
 
       - name: Debug coverage data
-        run: coverage debug data
+        run: poetry run coverage debug data
 
       - name: Combine coverage reports
         run: poetry run coverage combine coverage-html-unit coverage-html-integration --verbose
