@@ -116,13 +116,17 @@ jobs:
         with:
           name: coverage-data-integration
           path: ./coverage-data-integration
-      - name: List contents of the current directory
-        run: ls -la
-      - name: List contents of downloaded artifacts
-        run: |
-          ls -l coverage-data-unit
-          ls -l coverage-data-integration
       - run: poetry run coverage combine coverage-data-unit/.coverage coverage-data-integration/.coverage
+
+      - run: poetry run coverage debug data # Optional, for debugging
+
+      - run: poetry run coverage html --show-contexts --title "Combined Test Coverage"
+      - name: Store combined test coverage HTML
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html
+          path: htmlcov
+
       - run: poetry run coverage report
       - run: poetry run coverage html --show-contexts --title "Combined Test Coverage"
       - name: Store combined test coverage HTML
