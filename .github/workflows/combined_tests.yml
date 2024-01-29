@@ -114,7 +114,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: coverage-data-integration
-      - run: poetry run coverage combine coverage-data-unit coverage-data-integration
+      - run: coverage combine coverage-data-unit/.coverage coverage-data-integration/.coverage
       - run: poetry run coverage report
       - run: poetry run coverage html --show-contexts --title "Combined Test Coverage"
       - name: Store combined test coverage HTML
