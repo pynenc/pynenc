@@ -110,10 +110,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: coverage-data-unit
+          path: ./coverage-data-unit
       - name: Download integration test coverage data
         uses: actions/download-artifact@v4
         with:
           name: coverage-data-integration
+          path: ./coverage-data-integration
       - name: List contents of the current directory
         run: ls -la
       - name: List contents of downloaded artifacts
