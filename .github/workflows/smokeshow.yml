@@ -28,8 +28,11 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           workflow: combined_tests.yml
           commit: ${{ github.event.workflow_run.head_sha }}
-          name: coverage-html
+          name: coverage
           path: coverage-html
+
+      - name: list files
+        run: ls -la coverage-html
 
       - run: smokeshow upload coverage-html/
         env:
