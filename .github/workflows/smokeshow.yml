@@ -1,9 +1,11 @@
 name: Smokeshow
 
 on:
-  workflow_run:
-    workflows: [CombinedTests]
-    types: [completed]
+  pull_request:
+    branches: [main]
+  # workflow_run:
+  #   workflows: [CombinedTests]
+  #   types: [completed]
 
 permissions:
   statuses: write
@@ -14,14 +16,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v4
         with:
-          python-version: "3.11.7"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install smokeshow coverage
+          python-version: "3.11"
 
       - run: pip install smokeshow
 
@@ -31,23 +28,10 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           workflow: combined_tests.yml
           commit: ${{ github.event.workflow_run.head_sha }}
-          name: coverage-html-unit
-          path: coverage-html-unit
+          name: coverage-html
+          path: coverage-html
 
-      - name: Download integration test coverage artifact
-        uses: dawidd6/action-download-artifact@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          workflow: combined_tests.yml
-          commit: ${{ github.event.workflow_run.head_sha }}
-          name: coverage-html-integration
-          path: coverage-html-integration
-
-      - name: Combine coverage reports
-        run: coverage combine coverage-html-unit coverage-html-integration
-
-      - name: Upload combined coverage to Smokeshow
-        run: smokeshow upload combined-coverage/
+      - run: smokeshow upload coverage-html/
         env:
           SMOKESHOW_GITHUB_STATUS_DESCRIPTION: Coverage {coverage-percentage}
           SMOKESHOW_GITHUB_COVERAGE_THRESHOLD: 100

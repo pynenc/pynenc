@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pynenc"
-version = "0.0.6"
+version = "0.0.5"
 description = "A simple task management system for complex distributed orchestration"
 authors = ["Jose Diaz"]
 license = "MIT License"
@@ -118,12 +118,13 @@ filterwarnings = [
     "ignore:Running in a secondary thread. Signal handling will be skipped.:UserWarning",
     "ignore::pytest.PytestUnhandledThreadExceptionWarning",
 ]
-timeout = 10
+timeout = 15
 
 [tool.coverage.run]
 omit = [
     "tests/*",  # Exclude all files in the tests directory
 ]
+relative_files = true # to combine coverage data from multiple processes
 
 [tool.coverage.report]
 exclude_lines = [
