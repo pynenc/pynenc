@@ -117,7 +117,7 @@ jobs:
           name: coverage-data-integration
           path: ./coverage-data-integration
 
-      - run: poetry run coverage combine coverage-data-unit/.coverage coverage-data-integration/.coverage --debug=pathmap
+      - run: poetry run coverage combine coverage-data-unit/.coverage coverage-data-integration/.coverage
 
       - run: poetry run coverage debug data # Optional, for debugging
 
