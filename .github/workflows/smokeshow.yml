@@ -1,11 +1,9 @@
 name: Smokeshow
 
 on:
-  pull_request:
-    branches: [main]
-  # workflow_run:
-  #   workflows: [CombinedTests]
-  #   types: [completed]
+  workflow_run:
+    workflows: [CombinedTests]
+    types: [completed]
 
 permissions:
   statuses: write
