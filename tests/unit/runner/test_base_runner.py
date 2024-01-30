@@ -28,6 +28,26 @@ def test_run(mock_base_app: "MockPynenc") -> None:
     mock_base_app.runner._on_stop.assert_called_once()
 
 
+def test_exception_handling_in_run_method(
+    mock_base_app: "MockPynenc", caplog: LogCaptureFixture
+) -> None:
+    """Test that a general exception in the runner loop is logged and raised"""
+    exception_message = "Test Exception"
+    mock_base_app.runner.runner_loop_iteration.side_effect = Exception(
+        exception_message
+    )
+
+    with caplog.at_level("ERROR"):
+        with pytest.raises(Exception) as exc_info:
+            mock_base_app.runner.run()
+
+        assert exception_message in str(exc_info.value)
+        assert any(
+            f"Exception in runner loop: {exception_message}" in record.message
+            for record in caplog.records
+        )
+
+
 def test_keyboard_interrupt_handling_in_run_method(
     mock_base_app: "MockPynenc", caplog: LogCaptureFixture
 ) -> None:

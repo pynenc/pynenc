@@ -10,7 +10,7 @@ For detailed information on each version, please visit the [Pynenc GitHub Releas
 - Adding Pynenc logo to the docs
 - Move all the docs files to md format
 - Using absolute imports (required by autodoc2)
-- Adding new tests for get_subclasses (requires imports in module **init**)
+- Adding new tests for get_subclasses (requires imports in module `__init__`)
 
 ## Version 0.0.5
 
