@@ -106,16 +106,22 @@ jobs:
           virtualenvs-create: true
           virtualenvs-in-project: true
       - run: poetry install --no-interaction
-      - name: Download unit test coverage data
+      - name: Download test coverage data
         uses: actions/download-artifact@v4
         with:
-          name: coverage-data-unit
-          path: ./coverage-data-unit
-      - name: Download integration test coverage data
-        uses: actions/download-artifact@v4
-        with:
-          name: coverage-data-integration
-          path: ./coverage-data-integration
+          pattern: coverage-data
+          path: .
+          merge-multiple: false
+      # - name: Download unit test coverage data
+      #   uses: actions/download-artifact@v4
+      #   with:
+      #     name: coverage-data-unit
+      #     path: ./coverage-data-unit
+      # - name: Download integration test coverage data
+      #   uses: actions/download-artifact@v4
+      #   with:
+      #     name: coverage-data-integration
+      #     path: ./coverage-data-integration
       - run: poetry run coverage combine coverage-data-unit/.coverage coverage-data-integration/.coverage
       - run: poetry run coverage html --show-contexts --title "Combined Test Coverage"
       - name: Store combined test coverage HTML

@@ -22,22 +22,14 @@ jobs:
 
       - run: pip install smokeshow
 
-      # - name: Download coverage artifact
-      #   uses: dawidd6/action-download-artifact@v3
-      #   with:
-      #     github_token: ${{ secrets.GITHUB_TOKEN }}
-      #     workflow: combined_tests.yml
-      #     commit: ${{ github.event.workflow_run.head_sha }}
-      #     name: coverage-html
-      #     path: coverage-html
-
       - name: Download coverage artifact
-        uses: actions/download-artifact@v4
+        uses: dawidd6/action-download-artifact@v3
         with:
-          name: coverage-html
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          repository: actions/CombinedTests
-          path: ./coverage-html
+          workflow: combined_tests.yml
+          commit: ${{ github.event.workflow_run.head_sha }}
+          name: coverage-html
+          path: coverage-html
 
       - run: smokeshow upload coverage-html/
         env:
