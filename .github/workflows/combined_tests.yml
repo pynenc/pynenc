@@ -128,6 +128,14 @@ jobs:
       # - run: mkdir coverage
       # - run: cp coverage-data-unit/.coverage coverage
       # - run: cp coverage-data-integration/.coverage coverage
+      # - run: poetry run coverage html --show-contexts --title "Combined Test Coverage"
+
+      - name: Download test coverage data
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-data
+          path: ./coverage-data
+
       - name: Merge coverage reports
         id: coverage
         uses: selfagency/merge-coverage@v1.1.2
@@ -138,7 +146,6 @@ jobs:
           formats: html
           artifacts: false
 
-      - run: poetry run coverage html --show-contexts --title "Combined Test Coverage"
       - name: Store combined test coverage HTML
         uses: actions/upload-artifact@v4
         with:
