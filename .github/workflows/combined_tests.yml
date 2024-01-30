@@ -29,7 +29,7 @@ jobs:
           key: pydeps-${{ hashFiles('**/poetry.lock') }}
       - run: poetry install --no-interaction
       - name: Run unit tests with coverage
-        run: poetry run coverage run -m pytest tests/unit
+        run: poetry run coverage run relative_files -m pytest tests/unit
       - run: poetry run coverage report
       - run: poetry run coverage html --show-contexts --title "Unit Test Coverage for ${{ github.sha }}"
       - name: Store unit test coverage HTML
@@ -77,7 +77,7 @@ jobs:
       - name: Run integration tests with coverage
         env:
           PYNENC__REDIS_HOST: "redis"
-        run: poetry run coverage run -m pytest tests/integration
+        run: poetry run coverage run relative_files -m pytest tests/integration
       - run: poetry run coverage report
       - run: poetry run coverage html --show-contexts --title "Integration Test Coverage for ${{ github.sha }}"
       - name: Store integration test coverage HTML
@@ -117,7 +117,7 @@ jobs:
           name: coverage-data-integration
           path: ./coverage-data-integration
 
-      - run: poetry run coverage combine coverage-data-unit/.coverage coverage-data-integration/.coverage
+      - run: poetry run coverage combine coverage-data-unit/.coverage coverage-data-integration/.coverage --debug=pathmap
 
       - run: poetry run coverage debug data # Optional, for debugging
 
