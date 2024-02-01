@@ -98,7 +98,7 @@ To get started with Pynenc, here's a simple example that demonstrates the creati
    print(result)  # This will output the result of 1 + 2
    ```
 
-For a complete guide on how to set up and run this example, visit our [Basic Redis Example on GitHub](https://github.com/pynenc/samples/tree/main/basic_redis_example).
+For a complete guide on how to set up and run pynenc, visit our [samples library](https://github.com/pynenc/samples).
 
 ## Requirements
 
