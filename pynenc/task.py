@@ -112,7 +112,7 @@ class Task(Generic[Params, Result]):
     @property
     def invocation(self) -> BaseInvocation:
         """The invocation of the task"""
-        if dist_inv := context.dist_inv_context.get(self.app.app_id):
+        if dist_inv := context.get_dist_invocation_context(self.app.app_id):
             return dist_inv
         if sync_inv := context.sync_inv_context.get(self.app.app_id):
             return sync_inv

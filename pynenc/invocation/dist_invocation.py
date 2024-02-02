@@ -88,6 +88,34 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             )
         return cls(call, parent_invocation, inv_dict["invocation_id"])
 
+    def swap_context(self) -> DistributedInvocation | None:
+        """
+        Swap the current invocation context with this invocation.
+
+        This method is responsible for setting the current invocation context to this invocation.
+        It uses the `context` module to manage the invocation context and ensure that the current invocation is tracked correctly.
+
+        The method is used to manage the invocation context when executing the task associated with this invocation.
+        It ensures that the current invocation is correctly set and tracked in the distributed environment.
+        """
+        return context.swap_dist_invocation_context(self.app.app_id, self)
+
+    def reset_context(
+        self, previous_invocation_context: DistributedInvocation | None
+    ) -> None:
+        """
+        Reset the invocation context to a previous state.
+
+        This method is responsible for resetting the current invocation context to a previous state.
+        It uses the `context` module to manage the invocation context and ensures that the previous invocation context is restored correctly.
+
+        :param Any previous_invocation_context:
+            The previous invocation context to restore. This value is returned by the `swap_context` method.
+        """
+        context.swap_dist_invocation_context(
+            self.app.app_id, previous_invocation_context
+        )
+
     def run(self, runner_args: dict[str, Any] | None = None) -> None:
         """
         Execute the task associated with this invocation in a distributed environment.
@@ -120,11 +148,9 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         """
         # runner_args are passed from/to the runner (e.g. used to sync subprocesses)
         context.runner_args = runner_args
-        # Set current invocation
-        previous_invocation_context = context.dist_inv_context.get(self.app.app_id)
         try:
             self.task.logger.info(f"Invocation {self.invocation_id} started")
-            context.dist_inv_context[self.app.app_id] = self
+            previous_invocation_context = self.swap_context()
             if not self.app.orchestrator.is_authorize_to_run_by_concurrency_control(
                 self
             ):
@@ -144,7 +170,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             self.app.orchestrator.set_invocation_exception(self, ex)
             raise ex
         finally:
-            context.dist_inv_context[self.app.app_id] = previous_invocation_context
+            self.reset_context(previous_invocation_context)
 
     @property
     def result(self) -> Result:

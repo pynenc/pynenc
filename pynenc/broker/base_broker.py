@@ -2,9 +2,9 @@ from abc import ABC, abstractmethod
 from functools import cached_property
 from typing import TYPE_CHECKING, Optional
 
+from pynenc import context
 from pynenc.call import Call
 from pynenc.conf.config_broker import ConfigBroker
-from pynenc.context import dist_inv_context
 from pynenc.invocation.dist_invocation import DistributedInvocation
 from pynenc.types import Params, Result
 
@@ -123,9 +123,10 @@ class BaseBroker(ABC):
         The method also logs the routing process for debugging purposes.
         ```
         """
+        parent_invocation = context.get_dist_invocation_context(self.app.app_id)
         self.route_invocation(
             invocation := DistributedInvocation(
-                call, parent_invocation=dist_inv_context.get(self.app.app_id)
+                call, parent_invocation=parent_invocation
             )
         )
         self.app.logger.debug(
