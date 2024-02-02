@@ -9,7 +9,7 @@ from pynenc.conf.config_task import ConfigTask
 from pynenc.exceptions import RetryError
 from pynenc.invocation import DistributedInvocation, SynchronousInvocation
 
-app = Pynenc()
+app = Pynenc(app_id="test_task")
 
 
 @app.task
@@ -97,10 +97,11 @@ def test_sync_run_retry() -> None:
     Test that the Task will retry once for synchronous invocation
     """
     with patch.dict(os.environ, {"PYNENC__DEV_MODE_FORCE_SYNC_TASKS": "True"}):
-        retry_once.app = Pynenc()
+        retry_once.app = Pynenc(app_id="test_sync_run_retry")
         invocation = retry_once()
 
     assert isinstance(invocation, SynchronousInvocation)
+    assert retry_once.conf.max_retries == 1
     assert invocation.num_retries == 0
     assert invocation.result == 1
     assert invocation.num_retries == 1
