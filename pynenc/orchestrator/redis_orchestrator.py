@@ -464,13 +464,13 @@ class TaskRedisCache:
         self,
         task_id: str,
         key_arguments: Optional[dict[str, str]],
-        status: Optional["InvocationStatus"],
+        statuses: Optional[list["InvocationStatus"]],
     ) -> Iterator["DistributedInvocation"]:
         """
         Retrieves task invocations based on task ID, key arguments, and status.
-        :param task_id: The ID of the task.
-        :param key_arguments: Optional key arguments for filtering.
-        :param status: Optional status for filtering.
+        :param str task_id: The ID of the task.
+        :param Optional[dict[str, str]] key_arguments: Optional key arguments for filtering.
+        :param Optional[list["InvocationStatus"]] statuses: Optional status for filtering.
         :return: An iterator of task invocations that match the criteria.
         """
         # Start with the set of obj_ids for the task_id
@@ -483,7 +483,7 @@ class TaskRedisCache:
                 invocation_ids = invocation_ids.intersection(arg_val_ids)
 
         # If status was provided, intersect the current obj_ids with those matching the status
-        if status:
+        for status in statuses or []:
             status_ids = self.client.smembers(self.key.status(task_id, status))
             invocation_ids = invocation_ids.intersection(status_ids)
 
@@ -535,10 +535,10 @@ class RedisOrchestrator(BaseOrchestrator):
         self,
         task: "Task[Params, Result]",
         key_serialized_arguments: Optional[dict[str, str]] = None,
-        status: Optional["InvocationStatus"] = None,
+        statuses: Optional[list["InvocationStatus"]] = None,
     ) -> Iterator["DistributedInvocation"]:
         return self.redis_cache.get_invocations(
-            task.task_id, key_serialized_arguments, status
+            task.task_id, key_serialized_arguments, statuses
         )
 
     def _set_invocation_status(

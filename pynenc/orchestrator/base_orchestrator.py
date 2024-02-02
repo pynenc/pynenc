@@ -117,14 +117,14 @@ class BaseOrchestrator(ABC):
         self,
         task: "Task[Params, Result]",
         key_serialized_arguments: Optional[dict[str, str]] = None,
-        status: Optional["InvocationStatus"] = None,
+        statuses: Optional[list["InvocationStatus"]] = None,
     ) -> Iterator["DistributedInvocation"]:
         """
         Retrieves existing invocations based on task, arguments, and status.
 
         :param Task[Params, Result] task: The task for which to retrieve invocations.
         :param Optional[dict[str, str]] key_serialized_arguments: Serialized arguments to filter invocations.
-        :param Optional[InvocationStatus] status: The status to filter invocations.
+        :param Optional[list[InvocationStatus]] status: The status to filter invocations.
         :return: An iterator over the matching invocations.
         :rtype: Iterator[DistributedInvocation]
         """
@@ -464,7 +464,7 @@ class BaseOrchestrator(ABC):
             self.get_existing_invocations(
                 task=invocation.call.task,
                 key_serialized_arguments=invocation.call.serialized_args_for_concurrency_check,
-                status=InvocationStatus.RUNNING,
+                statuses=[InvocationStatus.RUNNING],
             ),
             None,
         )
@@ -628,7 +628,7 @@ class BaseOrchestrator(ABC):
             self.get_existing_invocations(
                 task=call.task,
                 key_serialized_arguments=call.serialized_args_for_concurrency_check,
-                status=InvocationStatus.REGISTERED,
+                statuses=[InvocationStatus.REGISTERED],
             ),
             None,
         )
