@@ -5,10 +5,9 @@ from dataclasses import dataclass
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, Iterator
 
-from pynenc import context
+from pynenc import context, exceptions
 from pynenc.arguments import Arguments
 from pynenc.call import Call
-from pynenc.exceptions import InvocationError
 from pynenc.invocation.base_invocation import BaseInvocation, BaseInvocationGroup
 from pynenc.invocation.status import InvocationStatus
 from pynenc.types import Params, Result
@@ -126,6 +125,10 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         try:
             self.task.logger.info(f"Invocation {self.invocation_id} started")
             context.dist_inv_context[self.app.app_id] = self
+            if not self.app.orchestrator.is_authorize_to_run_by_concurrency_control(
+                self
+            ):
+                self.app.orchestrator.reroute_invocations({self})
             self.app.orchestrator.set_invocation_run(self.parent_invocation, self)
             result = self.task.func(**self.arguments.kwargs)
             self.app.orchestrator.set_invocation_result(self, result)
@@ -186,10 +189,12 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         :return: The final result of the task execution.
         :rtype: Result
 
-        :raises InvocationError: If the invocation is not in a final state when this method is called.
+        :raises exceptions.InvocationError: If the invocation is not in a final state when this method is called.
         """
         if not self.status.is_final():
-            raise InvocationError(self.invocation_id, "Invocation is not final")
+            raise exceptions.InvocationError(
+                self.invocation_id, "Invocation is not final"
+            )
         if self.status == InvocationStatus.FAILED:
             raise self.app.state_backend.get_exception(self)
         return self.app.state_backend.get_result(self)

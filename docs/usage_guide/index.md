@@ -7,7 +7,7 @@ This Usage Guide is designed to provide you with detailed instructions and pract
 :maxdepth: 2
 :caption: Detailed Use Cases
 
-./use_case_001_basic_local_threaded_demonstration
+./use_case_001_basic_local_threaded
 ```
 
 ## Getting Started with Pynenc
@@ -32,15 +32,31 @@ Each use case in this guide represents a typical scenario where Pynenc can signi
 
 Learn the basics of setting up and executing tasks using Pynenc in a local, non-distributed environment. This use case is ideal for understanding the fundamental workings of Pynenc, especially for development and testing purposes.
 
-For a detailed guide and example, see {doc}`./use_case_001_basic_local_threaded_demonstration`.
+```python
+from pynenc import Pynenc
+
+app = Pynenc()
+
+@app.task
+def add(x: int, y: int) -> int:
+    add.logger.info(f"{add.task_id=} Adding {x} + {y}")
+    return x + y
+
+```
+
+For a detailed guide and example, see {doc}`./use_case_001_basic_local_threaded`.
 
 ## Use Case 2: Distributed System with Redis and Process Runner
 
-Explore how to set up a distributed Pynenc system using Redis for message brokering and a process-based runner for task execution. This guide will include installation, configuration, and an example of distributed task processing.
+Explore how to set up a distributed Pynenc system using Redis for message brokering and a process-based runner for task execution. This guide will include installation, configuration, and examples of distributed task processing (simple call and parallelization).
 
-## Use Case 3: Emulating a Distributed System Locally
+For a detailed guide and example, see {doc}`./use_case_002_basic_redis`.
 
-Learn how to simulate a distributed environment on your local machine using the `Mem` classes and the `ThreadRunner`. This setup is ideal for development and testing purposes.
+## Use Case 3: Concurrency Control
+
+Pynenc implements concurrency control to avoid concurrent execution and limit routing of similar tasks.
+
+For a detailed guide and example, see {doc}`./use_case_003_concurrency_control`.
 
 ## Use Case 4: Running Locally with Synchronous Mode
 

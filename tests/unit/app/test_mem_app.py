@@ -11,7 +11,7 @@ from tests.conftest import MockPynenc
 if TYPE_CHECKING:
     from _pytest.fixtures import FixtureRequest
 
-mock_all = MockPynenc()
+mock_all = MockPynenc(app_id="unit.test_mem_app")
 
 
 @mock_all.task
@@ -106,6 +106,7 @@ def test_mem_sub_invocation_dependency(app: Pynenc) -> None:
 
 def test_avoid_cycles(app: Pynenc) -> None:
     """Test that a cycle in the dependency graph is detected"""
+    app.orchestrator.conf.cycle_control = True
 
     def run_in_thread() -> None:
         app.runner.run()
@@ -138,6 +139,7 @@ def test_run_retry(app: Pynenc) -> None:
     """
 
     def run_in_thread() -> None:
+        app.conf.runner_cls = "ThreadRunner"
         app.runner.run()
 
     thread = threading.Thread(target=run_in_thread, daemon=True)

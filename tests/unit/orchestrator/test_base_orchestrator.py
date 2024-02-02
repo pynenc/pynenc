@@ -5,7 +5,7 @@ from pynenc.exceptions import PendingInvocationLockError
 from pynenc.invocation import DistributedInvocation, InvocationStatus
 from tests.conftest import MockPynenc
 
-mock_base_app = MockPynenc()
+mock_base_app = MockPynenc(app_id="tests/unit/orchestrator/test_base_orchestrator.py")
 
 
 @mock_base_app.task
@@ -69,22 +69,22 @@ def dummy_run_disable_concurrency() -> None:
 
 def test_running_concurrency_disabled(mock_base_app: MockPynenc) -> None:
     """Test that when `task.options.running_concurrency` is disabled
-    is_authorize_to_run_by_concurrency_control will always return True
+    _is_authorize_by_concurrency_control will always return True
     """
     running_invocation = dummy_run_disable_concurrency()
     to_run_invocation = dummy_run_disable_concurrency()
     assert isinstance(to_run_invocation, DistributedInvocation)
     # If there's no invocation it can run
     mock_base_app.orchestrator.get_existing_invocations.return_value = iter([])
-    assert mock_base_app.orchestrator.is_authorize_to_run_by_concurrency_control(
-        to_run_invocation
+    assert mock_base_app.orchestrator._is_authorize_by_concurrency_control(
+        to_run_invocation, []
     )
     # but also if there's one running invocation
     mock_base_app.orchestrator.get_existing_invocations.return_value = iter(
         [running_invocation]
     )
-    assert mock_base_app.orchestrator.is_authorize_to_run_by_concurrency_control(
-        to_run_invocation
+    assert mock_base_app.orchestrator._is_authorize_by_concurrency_control(
+        to_run_invocation, []
     )
 
 
@@ -153,7 +153,7 @@ def test_get_blocking_invocations_to_run(
 
 
 @patch(
-    "pynenc.orchestrator.base_orchestrator.BaseOrchestrator.is_authorize_to_run_by_concurrency_control"
+    "pynenc.orchestrator.base_orchestrator.BaseOrchestrator.is_candidate_to_run_by_concurrency_control"
 )
 @patch("pynenc.orchestrator.base_orchestrator.BaseOrchestrator._set_pending")
 def test_get_blocking_invocations_to_run_disabled(
@@ -178,7 +178,7 @@ def test_get_blocking_invocations_to_run_disabled(
 
 
 @patch(
-    "pynenc.orchestrator.base_orchestrator.BaseOrchestrator.is_authorize_to_run_by_concurrency_control"
+    "pynenc.orchestrator.base_orchestrator.BaseOrchestrator.is_candidate_to_run_by_concurrency_control"
 )
 @patch("pynenc.orchestrator.base_orchestrator.BaseOrchestrator._set_pending")
 def test_get_blocking_invocations_to_run_handles_lock(

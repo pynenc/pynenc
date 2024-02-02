@@ -247,43 +247,48 @@ class TaskInvocationCache(Generic[Result]):
         self.invocations_to_purge: deque[tuple[float, str]] = deque()
         self.locks: dict[str, threading.Lock] = {}
 
+    def filter_by_key_arguments(self, key_arguments: dict[str, str]) -> set[str]:
+        matches = []
+        for key, value in key_arguments.items():
+            invocation_ids = set()
+            for _id in self.args_index[ArgPair(key, value)]:
+                invocation_ids.add(_id)
+            if invocation_ids:
+                matches.append(invocation_ids)
+        return set.intersection(*matches) if matches else set()
+
+    def filter_by_statuses(self, statuses: list[InvocationStatus]) -> set[str]:
+        matched_ids = set()
+        for status in statuses:
+            matched_ids.update(self.status_index[status])
+        return matched_ids
+
     def get_invocations(
         self,
         key_arguments: dict[str, str] | None,
-        status: InvocationStatus | None,
+        statuses: list[InvocationStatus] | None,
     ) -> Iterator["DistributedInvocation"]:
         """
         Retrieves invocations based on provided key arguments and/or status.
 
         :param dict[str, str] | None key_arguments: The key arguments to filter the invocations.
-        :param InvocationStatus | None status: The status to filter the invocations.
+        :param list[InvocationStatus] | None status: The statuses to filter the invocations.
         :return: An iterator over the filtered invocations.
         :rtype: Iterator[DistributedInvocation]
         """
-        # Filtering by key_arguments
-        if key_arguments:
-            matches: list[set[str]] = []
-            # Check all the task invocations related per each key_argument
-            for key, value in key_arguments.items():
-                invocation_ids = set()
-                for _id in self.args_index[ArgPair(key, value)]:
-                    # Check if the invocation also matches the (optionally) specified status
-                    if not status or _id in self.status_index[status]:
-                        invocation_ids.add(_id)
-                # add the matching invocations for the key:val pair to the list
-                if invocation_ids:
-                    matches.append(invocation_ids)
-            # yield the invocations that matches all the specified key:val pairs
-            if matches:
-                for invocation_id in set.intersection(*matches):
-                    yield self.invocations[invocation_id]
-        # Filtered only by statys
-        elif status:
-            for invocation_id in self.status_index[status]:
-                yield self.invocations[invocation_id]
-        # No filters, return all invocations
+        if key_arguments and statuses:
+            key_matches = self.filter_by_key_arguments(key_arguments)
+            status_matches = self.filter_by_statuses(statuses)
+            invocation_ids = key_matches.intersection(status_matches)
+        elif key_arguments:
+            invocation_ids = self.filter_by_key_arguments(key_arguments)
+        elif statuses:
+            invocation_ids = self.filter_by_statuses(statuses)
         else:
-            yield from self.invocations.values()
+            invocation_ids = set(self.invocations.keys())
+
+        for invocation_id in invocation_ids:
+            yield self.invocations[invocation_id]
 
     def set_up_invocation_auto_purge(
         self, invocation: "DistributedInvocation[Params, Result]"
@@ -464,10 +469,10 @@ class MemOrchestrator(BaseOrchestrator):
         self,
         task: "Task[Params, Result]",
         key_serialized_arguments: dict[str, str] | None = None,
-        status: InvocationStatus | None = None,
+        statuses: list[InvocationStatus] | None = None,
     ) -> Iterator["DistributedInvocation"]:
         return self.cache[task.task_id].get_invocations(
-            key_serialized_arguments, status
+            key_serialized_arguments, statuses
         )
 
     def _set_invocation_status(

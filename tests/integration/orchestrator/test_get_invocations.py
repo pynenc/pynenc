@@ -82,14 +82,14 @@ def test_get_by_status(test_vars: Vars) -> None:
     app = test_vars.app
     invocations = list(
         app.orchestrator.get_existing_invocations(
-            test_vars.task, status=InvocationStatus.REGISTERED
+            test_vars.task, statuses=[InvocationStatus.REGISTERED]
         )
     )
     assert len(invocations) == 1
     assert invocations[0].invocation_id == test_vars.inv1.invocation_id
     invocations = list(
         app.orchestrator.get_existing_invocations(
-            test_vars.task, status=InvocationStatus.SUCCESS
+            test_vars.task, statuses=[InvocationStatus.SUCCESS]
         )
     )
     assert len(invocations) == 2
@@ -109,7 +109,7 @@ def test_get_mix(test_vars: Vars) -> None:
     app = test_vars.app
     invocations = list(
         app.orchestrator.get_existing_invocations(
-            test_vars.task, {"arg1": '"a"'}, status=InvocationStatus.SUCCESS
+            test_vars.task, {"arg1": '"a"'}, statuses=[InvocationStatus.SUCCESS]
         )
     )
     assert len(invocations) == 1
