@@ -40,6 +40,10 @@ class RetryError(PynencError):
     """Error raised when a task should be retried."""
 
 
+class ConcurrencyRetryError(RetryError):
+    """Error raised when a task should be retried due to concurrency control."""
+
+
 class PendingInvocationLockError(PynencError):
     """Error raised when two processes try to set the same invocation as pending concurrently"""
 

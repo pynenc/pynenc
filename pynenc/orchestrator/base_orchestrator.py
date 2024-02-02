@@ -432,31 +432,57 @@ class BaseOrchestrator(ABC):
         self.app.orchestrator.increment_invocation_retries(invocation)
         self.app.broker.route_invocation(invocation)
 
+    def is_candidate_to_run_by_concurrency_control(
+        self, invocation: "DistributedInvocation"
+    ) -> bool:
+        """
+        Checks if an invocation can be candidate to run based on the task's concurrency control configuration.
+
+        :param DistributedInvocation invocation: The invocation to check for authorization.
+        :return: True if the invocation is authorized to be a running candidate, False otherwise.
+        """
+        return self._is_authorize_by_concurrency_control(
+            invocation, [InvocationStatus.PENDING, InvocationStatus.RUNNING]
+        )
+
     def is_authorize_to_run_by_concurrency_control(
         self, invocation: "DistributedInvocation"
     ) -> bool:
         """
-        Checks if an invocation is authorized to run based on the task's concurrency control configuration.
-
-        ```{important}
-        The authorization is determined by the task's running_concurrency setting:
-        - If ConcurrencyControlType.DISABLED, the invocation is always authorized to run.
-        - If ConcurrencyControlType.TASK, it checks if there are any other running invocations of the same task.
-        If there are, the invocation is not authorized to run.
-        - If ConcurrencyControlType.ARGUMENTS, it checks for any running invocation of the same task with the same arguments.
-        If there are, the invocation is not authorized to run.
-        - If ConcurrencyControlType.KEYS, it checks for any running invocation with the same (key) arguments.
-        If any are found, the invocation is not authorized to run.
-        ```
-
-        ```{note}
-        The function call.serialized_args_for_concurrency_check is used to determine the arguments
-        that are relevant for checking existing running invocations based on the task's running_concurrency option.
-        ```
+        Checks if an invocation can be candidate to run based on the task's concurrency control configuration.
 
         :param DistributedInvocation invocation: The invocation to check for authorization.
-        :return: True if the invocation is authorized to run, False otherwise.
-        :rtype: bool
+        :return: True if the invocation is authorized to be a running candidate, False otherwise.
+        """
+        return self._is_authorize_by_concurrency_control(
+            invocation, [InvocationStatus.RUNNING]
+        )
+
+    def _is_authorize_by_concurrency_control(
+        self, invocation: "DistributedInvocation", statuses: list["InvocationStatus"]
+    ) -> bool:
+        """
+                Checks if an invocation is authorized to run based on the task's concurrency control configuration.
+
+                ```{important}
+                The authorization is determined by the task's running_concurrency setting:
+                - If ConcurrencyControlType.DISABLED, the invocation is always authorized to run.
+                - If ConcurrencyControlType.TASK, it checks if there are any other running invocations of the same task.
+                If there are, the invocation is not authorized to run.
+                - If ConcurrencyControlType.ARGUMENTS, it checks for any running invocation of the same task with the same arguments.
+                If there are, the invocation is not authorized to run.
+                - If ConcurrencyControlType.KEYS, it checks for any running invocation with the same (key) arguments.
+                If any are found, the invocation is not authorized to run.
+                ```
+
+                ```{note}
+                The function call.serialized_args_for_concurrency_check is used to determine the arguments
+                that are relevant for checking existing running invocations based on the task's running_concurrency option.
+                ```
+
+                :param DistributedInvocation invocation: The invocation to check for authorization.
+                :param list[InvocationStatus] statuses: The statuses to check for existing invocations.
+        :return: True if the invocation is authorized, False otherwise.
         """
         if invocation.task.conf.running_concurrency == ConcurrencyControlType.DISABLED:
             return True
@@ -464,14 +490,14 @@ class BaseOrchestrator(ABC):
             self.get_existing_invocations(
                 task=invocation.call.task,
                 key_serialized_arguments=invocation.call.serialized_args_for_concurrency_check,
-                statuses=[InvocationStatus.RUNNING],
+                statuses=statuses,
             ),
             None,
         )
         if not running_invocation:
             return True
         invocation.task.logger.debug(
-            f"{invocation=} cannot run because {running_invocation} is already running"
+            f"{invocation=} cannot run because {running_invocation} is already in {statuses} status"
         )
         return False
 
@@ -487,7 +513,7 @@ class BaseOrchestrator(ABC):
         :rtype: Iterator[DistributedInvocation]
         """
         for blocking_invocation in self.get_blocking_invocations(max_num_invocations):
-            if not self.is_authorize_to_run_by_concurrency_control(blocking_invocation):
+            if not self.is_candidate_to_run_by_concurrency_control(blocking_invocation):
                 continue
             blocking_invocation_ids.add(blocking_invocation.invocation_id)
             try:
@@ -515,7 +541,7 @@ class BaseOrchestrator(ABC):
             if invocation := self.app.broker.retrieve_invocation():
                 if invocation.invocation_id not in blocking_invocation_ids:
                     if self.get_invocation_status(invocation).is_available_for_run():
-                        if not self.is_authorize_to_run_by_concurrency_control(
+                        if not self.is_candidate_to_run_by_concurrency_control(
                             invocation
                         ):
                             invocations_to_reroute.add(invocation)

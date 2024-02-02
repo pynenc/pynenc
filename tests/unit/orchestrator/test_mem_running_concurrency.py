@@ -7,8 +7,10 @@ def any_run_in_parallel(results: list[tasks.SleepResult]) -> bool:
     """Check if any tasks in the list ran in parallel (overlapping times)."""
     sorted_results = sorted(results, key=lambda x: x.start)
     for i in range(1, len(sorted_results)):
-        if results[i].start < results[i - 1].end:
-            print(f"Overlap: {results[i - 1]} and {results[i]}")
+        if sorted_results[i].start < sorted_results[i - 1].end:
+            tasks.app.logger.warning(
+                f"Overlap: {sorted_results[i - 1]} and {sorted_results[i]}"
+            )
             return True  # Found an overlap, tasks ran in parallel
     return False  # No overlap found, tasks did not run in parallel
 
@@ -28,7 +30,7 @@ def test_running_concurrency() -> None:
     thread = threading.Thread(target=run_in_thread, daemon=True)
     thread.start()
 
-    # check that without control runs in parallel
+    tasks.app.logger.info("check that without control runs in parallel")
     no_control_invocations = [
         tasks.sleep_without_running_concurrency(0.1) for _ in range(10)
     ]
@@ -36,7 +38,7 @@ def test_running_concurrency() -> None:
     if not any_run_in_parallel(no_control_results):
         raise ValueError(f"Expected parallel execution, got {no_control_results}")
 
-    # check that with control does not run in parallel
+    tasks.app.logger.info("check that with control does not run in parallel")
     controlled_invocations = [
         tasks.sleep_with_running_concurrency(0.1) for _ in range(10)
     ]

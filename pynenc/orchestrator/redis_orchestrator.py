@@ -483,9 +483,12 @@ class TaskRedisCache:
                 invocation_ids = invocation_ids.intersection(arg_val_ids)
 
         # If status was provided, intersect the current obj_ids with those matching the status
-        for status in statuses or []:
-            status_ids = self.client.smembers(self.key.status(task_id, status))
-            invocation_ids = invocation_ids.intersection(status_ids)
+        if statuses:
+            all_status_ids = set()
+            for status in statuses or []:
+                status_ids = self.client.smembers(self.key.status(task_id, status))
+                all_status_ids.update(status_ids)
+            invocation_ids = invocation_ids.intersection(all_status_ids)
 
         # Now obj_ids contains only the ids of obj_strings that match all the provided keys
         # Fetch the obj_strings for these ids
