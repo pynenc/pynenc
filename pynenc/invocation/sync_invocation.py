@@ -56,17 +56,21 @@ class SynchronousInvocation(BaseInvocation[Params, Result]):
         """
         previous_invocation_context = context.sync_inv_context.get(self.app.app_id)
         try:
+            self.task.logger.info(f"Sync Invocation {self.invocation_id} started")
             self._status = InvocationStatus.RUNNING
             context.sync_inv_context[self.app.app_id] = self
             result = self.task.func(**self.arguments.kwargs)
             self._status = InvocationStatus.SUCCESS
+            self.task.logger.info(f"Sync Invocation {self.invocation_id} finished")
             return result
         except self.task.retriable_exceptions as exc:
             if self._num_retries >= self.task.conf.max_retries:
+                self.task.logger.exception("Max retries reached")
                 self._status = InvocationStatus.FAILED
                 raise exc
             self._status = InvocationStatus.RETRY
             self._num_retries += 1
+            self.task.logger.warning("Retrying invocation")
             return self.result
         except Exception as exc:
             self._status = InvocationStatus.FAILED
