@@ -19,8 +19,6 @@ def test_running_concurrency() -> None:
     """checks that the concurrency control will prevent running multiple tasks at the same time"""
     # first purge any invocation pending from previous runs
     tasks.app.purge()
-    # TODO remove after fixing the bug: https://github.com/pynenc/pynenc/issues/45
-    tasks.app.orchestrator.conf.cycle_control = False
 
     # start a runner
     def run_in_thread() -> None:

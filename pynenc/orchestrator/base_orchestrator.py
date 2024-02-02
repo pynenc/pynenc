@@ -2,9 +2,9 @@ from abc import ABC, abstractmethod
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, Iterator, Optional
 
+from pynenc import context
 from pynenc.conf.config_orchestrator import ConfigOrchestrator
 from pynenc.conf.config_task import ConcurrencyControlType
-from pynenc.context import dist_inv_context
 from pynenc.exceptions import (
     InvocationConcurrencyWithDifferentArgumentsError,
     PendingInvocationLockError,
@@ -604,9 +604,8 @@ class BaseOrchestrator(ABC):
         :return: The newly created `DistributedInvocation` for the call.
         :rtype: DistributedInvocation[Params, Result]
         """
-        new_invocation = DistributedInvocation(
-            call, parent_invocation=dist_inv_context.get(self.app.app_id)
-        )
+        parent_invocation = context.get_dist_invocation_context(self.app.app_id)
+        new_invocation = DistributedInvocation(call, parent_invocation)
         self.set_invocation_status(new_invocation, InvocationStatus.REGISTERED)
         self.app.broker.route_invocation(new_invocation)
         return new_invocation
