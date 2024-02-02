@@ -1,4 +1,5 @@
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 import pytest
 
@@ -50,3 +51,20 @@ def test_max_retries(caplog: "LogCaptureFixture") -> None:
         with pytest.raises(RetryError):
             invocation.run(runner_args={})
         assert any("Max retries reached" in record.message for record in caplog.records)
+
+
+def test_reroute_on_running_control() -> None:
+    """
+    Tests that invocations are rerouted when not authorized to run by concurrency control.
+    """
+    with patch.object(
+        app.orchestrator,
+        "is_authorize_to_run_by_concurrency_control",
+        return_value=False,
+    ) as mock_is_authorized, patch.object(
+        app.orchestrator, "reroute_invocations"
+    ) as mock_reroute_invocations:
+        invocation: DistributedInvocation = add(1, 2)  # type: ignore
+        invocation.run()
+        mock_is_authorized.assert_called_once()
+        mock_reroute_invocations.assert_called_once_with({invocation})
