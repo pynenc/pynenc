@@ -1,4 +1,4 @@
-# Basic Local Threaded Demonstration
+# Basic Local Threaded
 
 ## Overview
 

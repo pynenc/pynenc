@@ -1,4 +1,4 @@
-# Concurrency Control Demonstration
+# Concurrency Control
 
 ## Overview
 

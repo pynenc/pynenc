@@ -1,4 +1,4 @@
-# Basic Redis Example Guide
+# Basic Redis
 
 ## Overview
 

@@ -1,4 +1,4 @@
-# Automatic Orchestration Guide
+# Automatic Orchestration
 
 ## Overview
 

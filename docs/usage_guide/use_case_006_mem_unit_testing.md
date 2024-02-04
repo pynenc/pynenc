@@ -1,4 +1,4 @@
-# In-Memory Unit Testing Guide
+# In-Memory Unit Testing
 
 ## Overview
 

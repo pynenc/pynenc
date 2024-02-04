@@ -1,4 +1,4 @@
-# Synchronous Unit Testing Guide
+# Synchronous Unit Testing
 
 ## Overview
 
