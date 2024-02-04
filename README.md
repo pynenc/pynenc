@@ -3,7 +3,7 @@
 </p>
 <h1 align="center">Pynenc</h1>
 <p align="center">
-    <em>A simple task management system for complex distributed orchestration</em>
+    <em>A powerful task management and orchestration tool for distributed Python applications.</em>
 </p>
 <p align="center">
     <a href="https://pypi.org/project/pynenc" target="_blank">
@@ -40,7 +40,7 @@
 
 ---
 
-Pynenc is a task management tool specifically designed for orchestration in distributed Python environments. At its core, Pynenc streamlines task orchestration with an emphasis on user-friendly configuration and efficient execution. Key features include intuitive setup, configurable concurrency management at various levels, and advanced mechanisms for task prioritization, automatic pausing, and cycle detection. This makes Pynenc an ideal choice for managing complex dependencies and ensuring smooth task execution in distributed systems, even at an early stage of its development.
+Pynenc addresses the complex challenges of task management in distributed environments, offering a robust solution for developers looking to efficiently orchestrate asynchronous tasks across multiple systems. By combining intuitive configuration with advanced features like automatic task prioritization and cycle detection, Pynenc empowers developers to build scalable and reliable distributed applications with ease.
 
 ## Key Features
 
@@ -78,7 +78,7 @@ For more detailed instructions and advanced installation options, please refer t
 
 To get started with Pynenc, here's a simple example that demonstrates the creation of a distributed task for adding two numbers. Follow these steps to quickly set up a basic task and execute it.
 
-1. **Define a Task**: First, define a task using the `@app.task` decorator. Here, we define a simple `add` function that adds two integers and logs the operation.
+1. **Define a Task**: Create a file named `tasks.py` and define a simple addition task:
 
    ```python
    from pynenc import Pynenc
@@ -91,7 +91,23 @@ To get started with Pynenc, here's a simple example that demonstrates the creati
        return x + y
    ```
 
-2. **Execute the Task**: To execute the task and get the result, simply call the task function with your desired arguments. In this case, we'll add 1 and 2.
+2. **Start Your Runner or Run Synchronously:**
+
+   Before executing the task, decide if you want to run it asynchronously with a runner or synchronously for testing or development purposes.
+
+   - **Asynchronously:**
+     Start a runner in a separate terminal or script:
+
+     ```bash
+     pynenc --app=tasks.app runner start
+     ```
+
+     Check for the [basic_redis_example](https://github.com/pynenc/samples/tree/main/basic_redis_example)
+
+   - **Synchronously:**
+     For test or local demonstration, to try synchronous execution, you can set the environment variable `PYNENC__DEV_MODE_FORCE_SYNC_TASKS=True` to force tasks to run in the same thread.
+
+3. **Execute the Task:**
 
    ```python
    result = add(1, 2).result
