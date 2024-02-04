@@ -3,7 +3,7 @@
 </p>
 <h1 align="center">Pynenc</h1>
 <p align="center">
-    <em>A powerful task management and orchestration tool for distributed Python applications.</em>
+    <em>A task management system for complex distributed orchestration</em>
 </p>
 <p align="center">
     <a href="https://pypi.org/project/pynenc" target="_blank">
