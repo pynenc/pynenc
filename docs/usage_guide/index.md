@@ -8,6 +8,11 @@ This Usage Guide is designed to provide you with detailed instructions and pract
 :caption: Detailed Use Cases
 
 ./use_case_001_basic_local_threaded
+./use_case_002_basic_redis
+./use_case_003_concurrency_control
+./use_case_004_auto_orchestration
+./use_case_005_sync_unit_testing
+./use_case_006_mem_unit_testing
 ```
 
 ## Getting Started with Pynenc
