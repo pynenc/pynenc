@@ -1,6 +1,6 @@
 # Welcome to Pynenc's Documentation!
 
-**Pynenc: A simple task management system for complex distributed orchestration.**
+**Pynenc: A task management system for complex distributed orchestration.**
 
 ## Introduction
 

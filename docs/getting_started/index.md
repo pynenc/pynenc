@@ -18,23 +18,40 @@ For more detailed instructions and advanced installation options, refer to the `
 
 To get a quick feel of Pynenc, here's a basic example of creating and executing a distributed task.
 
-1. **Define a Task**: Start by defining a simple task with the `@app.task` decorator:
+1. **Define a Task**: Create a file named `tasks.py` and define a simple addition task:
 
-   ```{code-block} python
-    from pynenc import Pynenc
+   ```python
+   from pynenc import Pynenc
 
-    app = Pynenc()
+   app = Pynenc()
 
-    @app.task
-    def add(x: int, y: int) -> int:
-        add.logger.info(f"{add.task_id=} Adding {x} + {y}")
-        return x + y
+   @app.task
+   def add(x: int, y: int) -> int:
+       add.logger.info(f"{add.task_id=} Adding {x} + {y}")
+       return x + y
    ```
 
-2. **Execute the Task**: Now execute the task and retrieve the result:
-   ```{code-block} python
-    result = add(1, 2).result
-    print(result)  # Outputs: 3
+2. **Start Your Runner or Run Synchronously:**
+
+   Before executing the task, decide if you want to run it asynchronously with a runner or synchronously for testing or development purposes.
+
+   - **Asynchronously:**
+     Start a runner in a separate terminal or script:
+
+     ```bash
+     pynenc --app=tasks.app runner start
+     ```
+
+     Check for the [basic_redis_example](https://github.com/pynenc/samples/tree/main/basic_redis_example)
+
+   - **Synchronously:**
+     For test or local demonstration, to try synchronous execution, you can set the environment variable `PYNENC__DEV_MODE_FORCE_SYNC_TASKS=True` to force tasks to run in the same thread.
+
+3. **Execute the Task:**
+
+   ```python
+   result = add(1, 2).result
+   print(result)  # This will output the result of 1 + 2
    ```
 
 For a more comprehensive guide on setting up and running this example, visit our [Basic Redis Example on GitHub](https://github.com/pynenc/samples/tree/main/basic_redis_example).
