@@ -44,7 +44,7 @@ Pynenc addresses the complex challenges of task management in distributed enviro
 
 ## Requirements
 
-- **Python 3.8+**
+- **Python 3.11+**
 - **Redis**: For distributed task management.
 
 ## Key Features
@@ -57,25 +57,67 @@ Pynenc addresses the complex challenges of task management in distributed enviro
 
 ## Installation
 
+Installing Pynenc is a simple process that can be done using pip. Just run the following command in your terminal:
+
 ```bash
 pip install pynenc
 ```
 
-For detailed installation instructions, see the [Pynenc Documentation](https://docs.pynenc.org/).
+This command will download and install Pynenc along with its dependencies. Once the installation is complete, you can start using Pynenc in your Python projects.
 
-## Quick Start
+For more detailed instructions and advanced installation options, please refer to the [Pynenc Documentation](https://docs.pynenc.org/).
 
-```python
-from pynenc import Pynenc
+## Quick Start Example
 
-app = Pynenc()
+To get started with Pynenc, here's a simple example that demonstrates the creation of a distributed task for adding two numbers. Follow these steps to quickly set up a basic task and execute it.
 
-@app.task
-def add(x: int, y: int) -> int:
-    return x + y
-```
+1. **Define a Task**: Create a file named `tasks.py` and define a simple addition task:
 
-For more examples and guides, visit our [samples library](https://github.com/pynenc/samples).
+   ```python
+   from pynenc import Pynenc
+
+   app = Pynenc()
+
+   @app.task
+   def add(x: int, y: int) -> int:
+       add.logger.info(f"{add.task_id=} Adding {x} + {y}")
+       return x + y
+   ```
+
+2. **Start Your Runner or Run Synchronously:**
+
+   Before executing the task, decide if you want to run it asynchronously with a runner or synchronously for testing or development purposes.
+
+   - **Asynchronously:**
+     Start a runner in a separate terminal or script:
+
+     ```bash
+     pynenc --app=tasks.app runner start
+     ```
+
+     Check for the [basic_redis_example](https://github.com/pynenc/samples/tree/main/basic_redis_example)
+
+   - **Synchronously:**
+     For test or local demonstration, to try synchronous execution, you can set the environment variable `PYNENC__DEV_MODE_FORCE_SYNC_TASKS=True` to force tasks to run in the same thread.
+
+3. **Execute the Task:**
+
+   ```python
+   result = add(1, 2).result
+   print(result)  # This will output the result of 1 + 2
+   ```
+
+For a complete guide on how to set up and run pynenc, visit our [samples library](https://github.com/pynenc/samples).
+
+## Requirements
+
+To use Pynenc in a distributed system, the current primary requirement is:
+
+- **Redis**: As of now, Pynenc requires a Redis server to handle distributed task management. Ensure that you have Redis installed and running in your environment.
+
+Future Updates:
+
+- Pynenc is being developed to support additional databases and message queues. This will expand its compatibility and usability in various distributed systems.
 
 ## Contact or Support
 
