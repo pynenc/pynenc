@@ -2,6 +2,11 @@
 
 For detailed information on each version, please visit the [Pynenc GitHub Releases page](https://github.com/pynenc/pynenc/releases).
 
+## Version 0.0.8
+
+- Test for (this) changelog so it's sync with pynenc version
+- Minimum changes in the docs
+
 ## Version 0.0.7
 
 - Improve the docs and README.md

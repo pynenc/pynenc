@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pynenc"
-version = "0.0.7"
+version = "0.0.8"
 description = "A task management system for complex distributed orchestration"
 authors = ["Jose Diaz"]
 license = "MIT License"
