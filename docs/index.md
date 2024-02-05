@@ -46,6 +46,24 @@ Refer to the {doc}`getting_started/index` section for more detailed installation
 
 ## Quick Start
 
+Define your first task:
+
+```python
+from pynenc import Pynenc
+
+app = Pynenc()
+
+@app.task
+def add(x: int, y: int) -> int:
+    return x + y
+```
+
+And get the result (requires a distributed runner, redis or dev mode):
+
+```python
+result = add(1, 2).result
+```
+
 Get started quickly with a basic example in the {doc}`getting_started/index` section.
 
 ## Requirements
