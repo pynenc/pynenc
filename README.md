@@ -42,18 +42,25 @@
 
 Pynenc addresses the complex challenges of task management in distributed environments, offering a robust solution for developers looking to efficiently orchestrate asynchronous tasks across multiple systems. By combining intuitive configuration with advanced features like automatic task prioritization and cycle detection, Pynenc empowers developers to build scalable and reliable distributed applications with ease.
 
-## Requirements
-
-- **Python 3.11+**
-- **Redis**: For distributed task management.
-
 ## Key Features
 
-- **Fast and Efficient**: Enables quick setup and management of distributed tasks with minimal overhead.
-- **Advanced Concurrency Control**: Offers comprehensive mechanisms for controlling task execution concurrency, including task-level, argument-level, and key argument-level concurrency.
-- **Automatic Task Prioritization and Pausing**: Intelligent task handling that maximizes resource efficiency and prevents deadlocks.
-- **Cycle Detection**: Prevents endless loops in task execution with automated cycle detection.
-- **Extensible**: Designed for modularity, allowing for easy integration with various components and future expansion.
+- **Intuitive Orchestration**: Simplifies the setup and management of tasks in distributed systems, focusing on usability and practicality.
+
+- **Configurable Concurrency Management**: Pynenc offers versatile concurrency control mechanisms at various levels. It includes:
+
+  - **Task-Level Concurrency**: Ensures only one instance of a specific task is in a running state at any given time.
+  - **Argument-Level Concurrency**: Limits concurrent execution based on the arguments of the task, allowing only one task with a unique set of arguments to be running or pending.
+  - **Key Argument-Level Concurrency**: Further refines control by focusing on key arguments, ensuring uniqueness in task execution based on specified key arguments.
+
+  This structured approach to concurrency management in Pynenc allows for precise control over task execution, ensuring efficient handling of tasks without overloading the system and adhering to specified constraints.
+
+- **Automatic Task Prioritization**: Pynenc prioritizes tasks by simply counting the number of dependencies each task has. The task with the most dependencies is selected first.
+
+- **Automatic Task Pausing**: Pynenc pauses tasks that are waiting for other tasks to complete. So those with higher priority (has more dependent task waiting for them) can run instead, instead of blocking a runner and preventing deadlocks.
+
+- **Cycle Detection**: Automatically detects cyclical dependencies among tasks and raises exceptions to prevent endless loops in task execution.
+
+- **Modularity and Extensibility**: Pynenc is built with modularity at its core, supporting various components such as orchestrators, brokers, state backends, runners, and serializers. Currently compatible with Redis and a development/test mode using an in-memory synchronous version, Pynenc is designed to be extensible. Future plans include support for additional databases, queues, and services, enabling easy customization and adaptation to different operational needs and environments.
 
 ## Installation
 
