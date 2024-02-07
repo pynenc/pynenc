@@ -2,6 +2,11 @@
 
 For detailed information on each version, please visit the [Pynenc GitHub Releases page](https://github.com/pynenc/pynenc/releases).
 
+## version 0.0.9
+
+- Specify available pptions in task decorator for improved code clarity and completion
+- Adding unit test to ensure that ConfigTask and task decorator parameters are in sync
+
 ## Version 0.0.8
 
 - Test for (this) changelog so it's sync with pynenc version

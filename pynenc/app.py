@@ -1,9 +1,10 @@
 from functools import cached_property
 from logging import Logger
-from typing import TYPE_CHECKING, Any, Callable, Optional, overload
+from typing import TYPE_CHECKING, Any, Callable, Optional, Type, overload
 
 from pynenc.broker.base_broker import BaseBroker
 from pynenc.conf.config_pynenc import ConfigPynenc
+from pynenc.conf.config_task import ConcurrencyControlType
 from pynenc.orchestrator.base_orchestrator import BaseOrchestrator
 from pynenc.runner.base_runner import BaseRunner
 from pynenc.serializer.base_serializer import BaseSerializer
@@ -113,41 +114,89 @@ class Pynenc:
         self.state_backend.purge()
 
     @overload
-    def task(self, func: "Func", **options: Any) -> "Task":
+    def task(
+        self,
+        func: "Func",
+        *,
+        auto_parallel_batch_size: Optional[int] = None,
+        retry_for: Optional[tuple[Type[Exception], ...]] = None,
+        max_retries: Optional[int] = None,
+        running_concurrency: Optional[ConcurrencyControlType] = None,
+        registration_concurrency: Optional[ConcurrencyControlType] = None,
+        key_arguments: Optional[tuple[str, ...]] = None,
+        on_diff_non_key_args_raise: Optional[bool] = None,
+    ) -> "Task":
         ...
 
     @overload
-    def task(self, func: None = None, **options: Any) -> Callable[["Func"], "Task"]:
+    def task(
+        self,
+        func: None = None,
+        *,
+        auto_parallel_batch_size: Optional[int] = None,
+        retry_for: Optional[tuple[Type[Exception], ...]] = None,
+        max_retries: Optional[int] = None,
+        running_concurrency: Optional[ConcurrencyControlType] = None,
+        registration_concurrency: Optional[ConcurrencyControlType] = None,
+        key_arguments: Optional[tuple[str, ...]] = None,
+        on_diff_non_key_args_raise: Optional[bool] = None,
+    ) -> Callable[["Func"], "Task"]:
         ...
 
     def task(
-        self, func: Optional["Func"] = None, **options: Any
+        self,
+        func: Optional["Func"] = None,
+        *,
+        auto_parallel_batch_size: Optional[int] = None,
+        retry_for: Optional[tuple[Type[Exception], ...]] = None,
+        max_retries: Optional[int] = None,
+        running_concurrency: Optional[ConcurrencyControlType] = None,
+        registration_concurrency: Optional[ConcurrencyControlType] = None,
+        key_arguments: Optional[tuple[str, ...]] = None,
+        on_diff_non_key_args_raise: Optional[bool] = None,
     ) -> "Task" | Callable[["Func"], "Task"]:
         """
         The task decorator converts the function into an instance of a BaseTask. It accepts any kind of options,
         however these options will be validated with the options class assigned to the class.
 
-        Check the options reference in conf.config_task or the Pynenc documentation for a detailed explanation
-        of the BaseTask instance you are applying.
+        :param Optional[Callable] func:
+            The function to be converted into a Task instance.
+        :param Optional[int] auto_parallel_batch_size:
+            If set to 0, auto parallelization is disabled. If greater than 0, tasks with iterable
+            arguments are automatically split into chunks.
+        :param Optional[Tuple[Exception, ...]] retry_for:
+            Exceptions for which the task should be retried.
+        :param Optional[int] max_retries:
+            The maximum number of retries for a task.
+        :param Optional[ConcurrencyControlType] running_concurrency:
+            Controls the concurrency behavior of the task.
+        :param Optional[ConcurrencyControlType] registration_concurrency:
+            Manages task registration concurrency.
+        :param Optional[Tuple[str, ...]] key_arguments:
+            Key arguments for concurrency control.
+        :param Optional[bool] on_diff_non_key_args_raise:
+            If True, raises an exception for task invocations with matching key arguments but
+            different non-key arguments.
 
-        :param Optional["Func"] func:
-            The function to be converted into a BaseTask instance.
-        :param **options:
-            Arbitrary keyword arguments representing options for the BaseTask instance.
-            Each key-value pair in options corresponds to a specific configuration setting for the task.
-            The available options and their meanings depend on the BaseTask implementation and configuration.
-
-        :return: The BaseTask instance or a callable that returns a BaseTask instance.
+        :return: A Task instance or a callable that when called returns a Task instance.
 
         :example:
         ```python
-            @app.task(option1='value1', option2='value2')
-            def my_func(x, y):
-                return x + y
-
-            result = my_func(1, 2)
+        @app.task(auto_parallel_batch_size=10, max_retries=3)
+        def my_func(x, y):
+            return x + y
         ```
         """
+        options = {
+            "auto_parallel_batch_size": auto_parallel_batch_size,
+            "retry_for": retry_for,
+            "max_retries": max_retries,
+            "running_concurrency": running_concurrency,
+            "registration_concurrency": registration_concurrency,
+            "key_arguments": key_arguments,
+            "on_diff_non_key_args_raise": on_diff_non_key_args_raise,
+        }
+        options = {k: v for k, v in options.items() if v is not None}
 
         def init_task(_func: "Func") -> Task["Params", "Result"]:
             if _func.__qualname__ != _func.__name__:
