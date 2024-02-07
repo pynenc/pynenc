@@ -1,3 +1,4 @@
+import inspect
 import os
 import tempfile
 from unittest.mock import patch
@@ -8,6 +9,7 @@ import yaml
 from pynenc import Pynenc
 from pynenc.conf.config_task import ConcurrencyControlType, ConfigTask
 from pynenc.exceptions import InvalidTaskOptionsError
+from pynenc.task import Task
 
 app = Pynenc()
 
@@ -137,9 +139,27 @@ def test_exception_on_wrong_options() -> None:
     if the option do not match any value on the task config it will raise an exception
     """
     with pytest.raises(InvalidTaskOptionsError) as exc_info:
-        app.task(non_existing_option=1)(print)
+        Task(app, print, {"non_existing_option": 1})
 
     assert (
         str(exc_info.value)
         == "InvalidTaskOptionsError(builtins.print): Invalid options: ['non_existing_option']"
     )
+
+
+def test_all_task_options_in_task_decorator() -> None:
+    """
+    Test that all the task options are defined as optional parameters in the task decorator
+    """
+    config_task_fields = set(ConfigTask.config_fields())
+
+    # Using inspect to get the parameters of the task decorator
+    task_decorator_params = set(inspect.signature(Pynenc.task).parameters.keys()) - {
+        "self",  # Excluding 'self' since it's not a task option but a method parameter
+        "func",  # Excluding 'func' as it's explicitly handled in the decorator
+    }
+
+    missing_in_decorator = config_task_fields - task_decorator_params
+    assert (
+        len(missing_in_decorator) == 0
+    ), f"Missing task options in decorator: {missing_in_decorator}"
