@@ -9,7 +9,7 @@ import pytest
 from pynenc import Pynenc
 from pynenc.cli import config_cli
 from pynenc.cli.main_cli import main
-from pynenc.conf.config_base import ConfigBase
+from pynenc.conf.config_base import ConfigPynencBase
 from pynenc.conf.config_runner import ConfigThreadRunner
 from pynenc.conf.config_task import ConfigTask
 from pynenc.util.subclasses import get_all_subclasses
@@ -20,24 +20,24 @@ if TYPE_CHECKING:
 
 
 def pytest_generate_tests(metafunc: "Metafunc") -> None:
-    subclasses = get_all_subclasses(ConfigBase)  # type: ignore # mypy issue #4717
+    subclasses = get_all_subclasses(ConfigPynencBase)  # type: ignore # mypy issue #4717
     if "config_cls" in metafunc.fixturenames:
         metafunc.parametrize("config_cls", subclasses, indirect=True)
 
 
 @pytest.fixture
-def config_cls(request: "FixtureRequest") -> Type[ConfigBase]:
+def config_cls(request: "FixtureRequest") -> Type[ConfigPynencBase]:
     return request.param
 
 
 app = Pynenc()
 
 
-def test_parse_config_docstring(config_cls: Type["ConfigBase"]) -> None:
+def test_parse_config_docstring(config_cls: Type["ConfigPynencBase"]) -> None:
     """
-    Test that the docstring of a ConfigBase subclass follows the expected format.
+    Test that the docstring of a ConfigPynencBase subclass follows the expected format.
 
-    Docstring Format Guidelines for ConfigBase Subclasses:
+    Docstring Format Guidelines for ConfigPynencBase Subclasses:
     - Class Description: Start with a brief description of the class's purpose.
 
     - Variable section:
@@ -48,9 +48,9 @@ def test_parse_config_docstring(config_cls: Type["ConfigBase"]) -> None:
         - Consistency: Maintain consistent indentation and formatting for all fields and descriptions.
 
     Example:
-    Here's an example docstring for a ConfigBase subclass following these guidelines:
+    Here's an example docstring for a ConfigPynencBase subclass following these guidelines:
 
-    class ConfigExample(ConfigBase):
+    class ConfigExample(ConfigPynencBase):
         \"""
         Description of what ConfigExample does and its role in the system.
 
@@ -68,12 +68,12 @@ def test_parse_config_docstring(config_cls: Type["ConfigBase"]) -> None:
         sample_field = ConfigField("default_value")
         another_field = ConfigField(10)
 
-    The test implementation should verify that the docstring of each ConfigBase subclass
+    The test implementation should verify that the docstring of each ConfigPynencBase subclass
     adheres to these guidelines.
     """
     field_docs = config_cli.extract_descriptions_from_docstring(config_cls)
     if issubclass(config_cls, ConfigTask):
-        config: ConfigBase = config_cls("module.task")
+        config: ConfigPynencBase = config_cls("module.task")
     else:
         config = config_cls()
     for key in config.all_fields:
@@ -162,7 +162,7 @@ def test_cli_show_config_mem_runner() -> None:
     check_fields_in_output(output, ConfigThreadRunner())
 
 
-def check_fields_in_output(output: str, config: ConfigBase) -> None:
+def check_fields_in_output(output: str, config: ConfigPynencBase) -> None:
     """Check that all the fields are present in the output."""
     field_docs = config_cli.extract_descriptions_from_docstring(config.__class__)
     for field in config.all_fields:
@@ -172,12 +172,12 @@ def check_fields_in_output(output: str, config: ConfigBase) -> None:
 
 
 def test_extract_descriptions_from_docstring_with_config_base() -> None:
-    """Test extract_descriptions_from_docstring with ConfigBase."""
-    descriptions = config_cli.extract_descriptions_from_docstring(ConfigBase)
+    """Test extract_descriptions_from_docstring with ConfigPynencBase."""
+    descriptions = config_cli.extract_descriptions_from_docstring(ConfigPynencBase)
     assert descriptions == {}
 
 
-class ConfigWithoutDoc(ConfigBase):
+class ConfigWithoutDoc(ConfigPynencBase):
     pass
 
 

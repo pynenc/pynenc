@@ -3,11 +3,13 @@ import os
 import tempfile
 from unittest.mock import patch
 
+from cistell import ConfigField
+
 from pynenc.conf import config_base
 
 
-class SomeConfig(config_base.ConfigBase):
-    field = config_base.ConfigField(0)
+class SomeConfig(config_base.ConfigPynencBase):
+    field = ConfigField(0)
 
 
 def test_default() -> None:

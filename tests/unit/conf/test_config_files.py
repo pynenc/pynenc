@@ -6,15 +6,16 @@ from typing import TYPE_CHECKING
 
 import pytest
 import yaml
+from cistell import ConfigField
 
-from pynenc.conf.config_base import ConfigBase, ConfigField
+from pynenc.conf.config_base import ConfigPynencBase
 
 if TYPE_CHECKING:
     from _pytest.fixtures import FixtureRequest
     from _pytest.python import Metafunc
 
 
-class ConfigGrandpa(ConfigBase):
+class ConfigGrandpa(ConfigPynencBase):
     test_field = ConfigField("grandpa_value")
 
 

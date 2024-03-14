@@ -4,8 +4,10 @@ import os
 from enum import StrEnum, auto
 from typing import Any, Optional, TypeVar
 
-from pynenc.conf.config_base import ConfigBase, ConfigField
-from pynenc.conf.constants import ENV_PREFIX, ENV_SEP
+from cistell import ConfigField
+
+from pynenc.conf.config_base import ConfigPynencBase
+from pynenc.conf.constants import ENV_PREFIX, ENV_SEPARATOR
 from pynenc.exceptions import RetryError
 
 
@@ -94,11 +96,11 @@ def exception_config_mapper(value: list[str], expected_type: type[T]) -> T:
     return exceptions
 
 
-class ConfigTask(ConfigBase):
+class ConfigTask(ConfigPynencBase):
     """
     Provides task-specific configuration settings for the distributed task system.
 
-    This subclass of `ConfigBase` adds task-level configuration options, allowing for
+    This subclass of `ConfigPynencBase` adds task-level configuration options, allowing for
     fine-grained control over the behavior of individual tasks. Configuration can be
     specified globally for all tasks, or individually for each task using environment
     variables, configuration files, or the `@task` decorator.
@@ -217,12 +219,14 @@ class ConfigTask(ConfigBase):
                 setattr(self, key, conf_mapping[self.task_id][key])
                 self._mapped_keys.add(task_key)
 
-    def init_config_value_from_env_vars(self, config_cls: type[ConfigBase]) -> None:
+    def init_config_value_from_env_vars(
+        self, config_cls: type[ConfigPynencBase]
+    ) -> None:
         super().init_config_value_from_env_vars(config_cls)
         # specific env vars for task options
-        config_key = f"{ENV_PREFIX}{ENV_SEP}{self.__class__.__name__.upper()}{ENV_SEP}"
+        config_key = f"{ENV_PREFIX}{ENV_SEPARATOR}{self.__class__.__name__.upper()}{ENV_SEPARATOR}"
         task_key = config_key + self.task_id.upper().replace(".", "#")
         for key in self.config_cls_to_fields.get(config_cls.__name__, []):
-            env_key = f"{task_key}{ENV_SEP}{key.upper()}"
+            env_key = f"{task_key}{ENV_SEPARATOR}{key.upper()}"
             if env_key in os.environ:
                 setattr(self, key, os.environ[env_key])

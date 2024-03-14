@@ -72,6 +72,7 @@ class Call(Generic[Params, Result]):
                 key: self.serialized_arguments[key]
                 for key in self.task.conf.key_arguments
             }
+        return None
 
     def deserialize_arguments(self, serialized_arguments: dict[str, str]) -> Arguments:
         """

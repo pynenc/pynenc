@@ -1,19 +1,21 @@
 import pytest
+from cistell import ConfigField
+from cistell.exceptions import ConfigMultiInheritanceError
 
-from pynenc.conf.config_base import ConfigBase, ConfigField, ConfigMultiInheritanceError
+from pynenc.conf.config_base import ConfigPynencBase
 
 
-class ConfigParent0(ConfigBase):
+class ConfigParent0(ConfigPynencBase):
     unique_0 = ConfigField(default_value=0)
     common = ConfigField(0)
 
 
-class ConfigParent1(ConfigBase):
+class ConfigParent1(ConfigPynencBase):
     unique_1 = ConfigField(1)
     common = ConfigField(1)
 
 
-class ConfigParent2(ConfigBase):
+class ConfigParent2(ConfigPynencBase):
     unique_2 = ConfigField(2)
 
 
