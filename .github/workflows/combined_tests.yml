@@ -45,7 +45,7 @@ jobs:
 
   integration-tests:
     runs-on: ubuntu-latest
-    container: python:3.11.7
+    container: python:3.11.7-alpine
     services:
       redis:
         image: redis:7.2.3
