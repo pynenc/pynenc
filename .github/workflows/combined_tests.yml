@@ -44,8 +44,8 @@ jobs:
           path: .coverage
 
   integration-tests:
-    runs-on: ubuntu-latest
-    container: python:3.11.7-alpine
+    runs-on: ubuntu-20.04
+    container: python:3.11.7
     services:
       redis:
         image: redis:7.2.3
