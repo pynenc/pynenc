@@ -4,9 +4,9 @@ from functools import wraps
 from typing import Callable, Type, TypeVar
 
 from pynenc.app import Pynenc
-from pynenc.conf.config_base import ConfigBase
+from pynenc.conf.config_base import ConfigPynencBase
 
-T = TypeVar("T", bound="ConfigBase")
+T = TypeVar("T", bound="ConfigPynencBase")
 
 
 def config_cls_cache(
@@ -36,7 +36,7 @@ def config_cls_cache(
 
 @config_cls_cache
 def extract_descriptions_from_docstring(
-    config_cls: Type["ConfigBase"],
+    config_cls: Type["ConfigPynencBase"],
 ) -> dict[str, str]:
     """
     Extract field descriptions from the docstring of a configuration class.
@@ -45,14 +45,14 @@ def extract_descriptions_from_docstring(
     extract descriptions for each configuration field. The descriptions are expected to
     be formatted in a specific way within the docstring.
 
-    :param Type[ConfigBase] config_cls: The configuration class to extract descriptions from.
+    :param Type[ConfigPynencBase] config_cls: The configuration class to extract descriptions from.
     :return: A dictionary mapping field names to their descriptions.
     """
-    if config_cls == ConfigBase:
+    if config_cls == ConfigPynencBase:
         return {}
     field_docs = {}
     for parent in config_cls.__bases__:
-        if parent != ConfigBase and issubclass(parent, ConfigBase):
+        if parent != ConfigPynencBase and issubclass(parent, ConfigPynencBase):
             field_docs.update(extract_descriptions_from_docstring(parent))
 
     if not (docstring := config_cls.__doc__):
@@ -63,7 +63,7 @@ def extract_descriptions_from_docstring(
 
     matches = re.finditer(pattern, docstring, re.DOTALL)
     for match in matches:
-        field_type, field_name, description = match.groups()
+        _, field_name, description = match.groups()
         # Process multiline description
         description_lines = description.split("\n")
         description = " ".join(line.strip() for line in description_lines)
@@ -99,10 +99,10 @@ def show_config_command(args: argparse.Namespace) -> None:
     :param argparse.Namespace args: The parsed CLI arguments, including the Pynenc application instance.
     """
     if not isinstance(args.app_instance, Pynenc):
-        raise TypeError("app_instance must be an instance of ConfigBase")
+        raise TypeError("app_instance must be an instance of ConfigPynencBase")
 
     if hasattr(args, "runner_command"):
-        config: ConfigBase = args.app_instance.runner.conf
+        config: ConfigPynencBase = args.app_instance.runner.conf
     else:
         config = args.app_instance.conf
 

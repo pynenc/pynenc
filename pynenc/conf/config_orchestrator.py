@@ -1,8 +1,10 @@
-from pynenc.conf.config_base import ConfigBase, ConfigField
+from cistell import ConfigField
+
+from pynenc.conf.config_base import ConfigPynencBase
 from pynenc.conf.config_redis import ConfigRedis
 
 
-class ConfigOrchestrator(ConfigBase):
+class ConfigOrchestrator(ConfigPynencBase):
     """
     Main config of the orchestrator components.
 

@@ -1,7 +1,9 @@
-from pynenc.conf.config_base import ConfigBase, ConfigField
+from cistell import ConfigField
+
+from pynenc.conf.config_base import ConfigPynencBase
 
 
-class ConfigRedis(ConfigBase):
+class ConfigRedis(ConfigPynencBase):
     """
     Specific Configuration for any Redis client.
 

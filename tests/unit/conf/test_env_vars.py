@@ -1,14 +1,16 @@
 import os
 from unittest.mock import patch
 
+from cistell import ConfigField
+
 from pynenc.conf import config_base
 from pynenc.conf.config_broker import ConfigBrokerRedis
 from pynenc.conf.config_orchestrator import ConfigOrchestratorRedis
 from pynenc.conf.config_redis import ConfigRedis
 
 
-class SomeConfig(config_base.ConfigBase):
-    test_value = config_base.ConfigField(0)
+class SomeConfig(config_base.ConfigPynencBase):
+    test_value = ConfigField(0)
 
 
 def test_env_var() -> None:

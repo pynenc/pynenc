@@ -1,9 +1,11 @@
+from cistell import ConfigField
+
 from pynenc import Pynenc
 from pynenc.conf import config_base
 
 
 class ConfTest(config_base.ConfigBase):
-    cf = config_base.ConfigField(0)
+    cf = ConfigField(0)
 
 
 def test_isolation_both_instantiate_both_first() -> None:

@@ -1,7 +1,9 @@
-from pynenc.conf.config_base import ConfigBase, ConfigField
+from cistell import ConfigField
+
+from pynenc.conf.config_base import ConfigPynencBase
 
 
-class ConfigRunner(ConfigBase):
+class ConfigRunner(ConfigPynencBase):
     """
     Specific configuration settings for any Runner in the system.
 
