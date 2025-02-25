@@ -1,30 +1,12 @@
 name: Release
 
-permissions: write-all
-
 on:
   push:
     branches:
       - main
       - master
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version to release (e.g., 0.0.11)'
-        required: true
 
 jobs:
-  debug:
-    name: Debug Workflow
-    runs-on: ubuntu-latest
-    steps:
-      - name: Debug Info
-        run: |
-          echo "Event name: ${{ github.event_name }}"
-          echo "Repository: ${{ github.repository }}"
-          echo "Actor: ${{ github.actor }}"
-          echo "Ref: ${{ github.ref }}"
-
   release:
     name: Release
     runs-on: ubuntu-latest
