@@ -5,6 +5,11 @@ on:
     branches:
       - main
       - master
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 0.0.11)'
+        required: true
 
 jobs:
   release:
