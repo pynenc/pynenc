@@ -2,7 +2,7 @@
 
 For detailed information on each version, please visit the [Pynenc GitHub Releases page](https://github.com/pynenc/pynenc/releases).
 
-## Version 0.0.11
+## Version 0.0.12
 
 - Relax dependency version pins for redis and pyyaml to improve compatibility
 
