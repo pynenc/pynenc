@@ -2,6 +2,10 @@
 
 For detailed information on each version, please visit the [Pynenc GitHub Releases page](https://github.com/pynenc/pynenc/releases).
 
+## Version 0.0.11
+
+- Relax dependency version pins for redis and pyyaml to improve compatibility
+
 ## Version 0.0.10
 
 - Refactor of conf module to use pynenc.cistell pypi package
