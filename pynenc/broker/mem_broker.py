@@ -54,6 +54,12 @@ class MemBroker(BaseBroker):
             return DistributedInvocation.from_json(self.app, inv)
         return None
 
+    def count_invocations(self) -> int:
+        """
+        Get the number of invocations in the in-memory queue.
+        """
+        return len(self._queue)
+
     def purge(self) -> None:
         """
         Clear all invocations from the in-memory queue.

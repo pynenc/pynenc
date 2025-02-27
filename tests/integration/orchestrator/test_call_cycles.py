@@ -122,6 +122,7 @@ def test_avoid_getting_always_same_invocations(test_vars: Vars) -> None:
     assert blocking_inv == inv_to_run == [test_vars.inv3]
     # when we call again get_blocking_invocations or get_invocation_to_run
     # it will not return anything because inv3 is already pending
+    app.broker.count_invocations.return_value = 0  # type: ignore
     app.broker.retrieve_invocation.return_value = None  # type: ignore
     no_inv_1 = list(test_vars.app.orchestrator.get_invocations_to_run(1))
     no_inv_2 = list(test_vars.app.orchestrator.get_blocking_invocations(1))

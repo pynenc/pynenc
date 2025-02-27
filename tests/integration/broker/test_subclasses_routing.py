@@ -49,6 +49,7 @@ def test_routing(app: MockPynenc, call: "Call") -> None:
     inv2: DistributedInvocation = DistributedInvocation(call, None)
     expected_ids = {inv1.invocation_id, inv2.invocation_id}
     app.broker.route_invocation(inv2)
+    assert app.broker.count_invocations() == 2
     assert (retrieved_inv_a := app.broker.retrieve_invocation())
     assert (retrieved_inv_b := app.broker.retrieve_invocation())
     assert retrieved_inv_a != retrieved_inv_b

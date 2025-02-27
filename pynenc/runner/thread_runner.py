@@ -50,7 +50,9 @@ class ThreadRunner(BaseRunner):
         The maximum number of parallel tasks that the runner can handle.
         :return: An integer representing the maximum number of parallel tasks.
         """
-        return max(self.conf.min_parallel_slots, self.max_threads)
+        return max(
+            self.conf.min_parallel_slots, self.conf.min_threads, self.max_threads
+        )
 
     def _on_start(self) -> None:
         """
@@ -61,7 +63,7 @@ class ThreadRunner(BaseRunner):
         self.wait_conditions = defaultdict(threading.Condition)
         self.wait_invocation = defaultdict(set)
         self.threads = {}
-        self.max_threads = multiprocessing.cpu_count()
+        self.max_threads = self.conf.max_threads or multiprocessing.cpu_count()
         self.waiting_threads = 0
 
     def _on_stop(self) -> None:
@@ -100,14 +102,28 @@ class ThreadRunner(BaseRunner):
         Executes one iteration of the ThreadRunner loop.
         Handles the execution and monitoring of task invocations in separate threads.
         """
-        for invocation in self.app.orchestrator.get_invocations_to_run(
+        self.logger.debug(
+            f"Starting runner loop iteration with {self.available_threads=}"
+        )
+
+        invocations = self.app.orchestrator.get_invocations_to_run(
             max_num_invocations=self.available_threads
-        ):
+        )
+
+        for invocation in invocations:
             thread = threading.Thread(target=invocation.run, daemon=True)
             thread.start()
             self.threads[invocation.invocation_id] = ThreadInfo(thread, invocation)
             self.logger.info(f"Running {invocation=} on {thread=}")
+
+        # Check waiting conditions
+        waiting_count = len(self.wait_conditions)
+        self.logger.debug(f"Checking {waiting_count} waiting conditions")
+
         for invocation in list(self.wait_conditions):
+            self.logger.debug(
+                f"Checking invocation {invocation.invocation_id} status={invocation.status}"
+            )
             if invocation.status.is_final():
                 # Notify all waiting threads to continue
                 with self.wait_conditions[invocation]:
@@ -120,8 +136,13 @@ class ThreadRunner(BaseRunner):
                 )
                 self.waiting_threads -= len(waiting_invocations)
                 self.logger.debug(
-                    f"{invocation=} on final {invocation.status=}, resuming {waiting_invocations=}"
+                    f"{invocation=} on final {invocation.status=}, "
+                    f"resuming {waiting_invocations=}"
                 )
+
+        self.logger.debug(
+            f"Finished loop iteration, sleeping for {self.conf.runner_loop_sleep_time_sec}s"
+        )
         time.sleep(self.conf.runner_loop_sleep_time_sec)
 
     def waiting_for_results(

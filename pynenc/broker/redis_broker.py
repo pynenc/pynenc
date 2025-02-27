@@ -55,6 +55,16 @@ class RedisQueue:
             return msg.decode()
         return None
 
+    def count_invocations(self) -> int:
+        """
+        Get the number of messages in the Redis queue.
+
+        This method queries the Redis queue for the number of messages currently in the queue.
+
+        :return: The number of messages in the queue.
+        """
+        return self.client.llen(self.key.default_queue())
+
     def purge(self) -> None:
         """
         Purge all messages from the Redis queue.
@@ -113,6 +123,16 @@ class RedisBroker(BaseBroker):
         if inv := self.queue.receive_message():
             return DistributedInvocation.from_json(self.app, inv)
         return None
+
+    def count_invocations(self) -> int:
+        """
+        Get the number of invocations in the Redis queue.
+
+        This method queries the Redis queue for the number of messages currently in the queue.
+
+        :return: The number of invocations in the queue.
+        """
+        return self.queue.count_invocations()
 
     def purge(self) -> None:
         """

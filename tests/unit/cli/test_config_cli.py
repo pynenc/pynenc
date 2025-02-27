@@ -1,7 +1,7 @@
 import argparse
 import os
 from io import StringIO
-from typing import TYPE_CHECKING, Type
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -26,14 +26,14 @@ def pytest_generate_tests(metafunc: "Metafunc") -> None:
 
 
 @pytest.fixture
-def config_cls(request: "FixtureRequest") -> Type[ConfigPynencBase]:
+def config_cls(request: "FixtureRequest") -> type[ConfigPynencBase]:
     return request.param
 
 
 app = Pynenc()
 
 
-def test_parse_config_docstring(config_cls: Type["ConfigPynencBase"]) -> None:
+def test_parse_config_docstring(config_cls: type["ConfigPynencBase"]) -> None:
     """
     Test that the docstring of a ConfigPynencBase subclass follows the expected format.
 
