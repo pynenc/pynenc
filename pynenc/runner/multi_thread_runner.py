@@ -1,8 +1,8 @@
 import time
-from multiprocessing import Manager, Process, cpu_count
-from functools import cached_property
 from enum import Enum
-from typing import Any, Optional, TYPE_CHECKING, NamedTuple
+from functools import cached_property
+from multiprocessing import Manager, Process, cpu_count
+from typing import TYPE_CHECKING, Any, NamedTuple, Optional
 
 from pynenc.conf.config_runner import ConfigMultiThreadRunner
 from pynenc.runner.base_runner import BaseRunner
