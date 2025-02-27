@@ -95,7 +95,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11.7"
-      
+
       - name: Install Poetry
         uses: snok/install-poetry@v1
         with:
@@ -110,14 +110,14 @@ jobs:
           pattern: coverage-data-*
           path: coverage-data
           merge-multiple: true
-      
+
       - name: Combine coverage data
         run: |
           ls -la coverage-data/
           poetry run coverage combine coverage-data/.coverage*
-      
+
       - run: poetry run coverage html --show-contexts --title "Combined Test Coverage"
-      
+
       - name: Store combined test coverage HTML
         uses: actions/upload-artifact@v4
         with:
