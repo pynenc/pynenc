@@ -163,3 +163,54 @@ def test_waiting_for_results_without_invocation(
         mock_sleep.assert_called_once_with(
             multi_thread_runner.conf.invocation_wait_results_sleep_time_sec
         )
+
+
+def test_max_parallel_slots(multi_thread_runner: MultiThreadRunner) -> None:
+    """Test max_parallel_slots returns the maximum of min_processes and max_processes."""
+    # Given min_processes=2 from TestConfig
+    multi_thread_runner.max_processes = 4  # Set max_processes explicitly
+    assert multi_thread_runner.max_parallel_slots == 4
+
+    # Test when max_processes is less than min_processes
+    multi_thread_runner.max_processes = 1
+    assert multi_thread_runner.max_parallel_slots == 2  # Should return min_processes
+
+
+def test_scale_up_processes_enforce_max(multi_thread_runner: MultiThreadRunner) -> None:
+    """Test that _scale_up_processes spawns processes up to max_processes when enforce_max_processes is True."""
+    # Configure runner
+    multi_thread_runner.conf.enforce_max_processes = True
+    multi_thread_runner.max_processes = 3
+
+    # Mock _spawn_thread_runner_process to update processes dict
+    spawn_count = 0
+
+    def mock_spawn() -> None:
+        nonlocal spawn_count
+        spawn_count += 1
+        multi_thread_runner.processes[f"mock-process-{spawn_count}"] = Mock()
+
+    with patch.object(
+        multi_thread_runner, "_spawn_thread_runner_process", side_effect=mock_spawn
+    ):
+        multi_thread_runner._scale_up_processes()
+        # Should spawn processes until reaching max_processes (3)
+        assert spawn_count == 3
+        assert len(multi_thread_runner.processes) == 3
+
+
+def test_scale_up_processes_based_on_queue(
+    multi_thread_runner: MultiThreadRunner,
+) -> None:
+    """Test that _scale_up_processes spawns processes based on queue when enforce_max_processes is False."""
+    # Configure runner
+    multi_thread_runner.conf.enforce_max_processes = False
+    multi_thread_runner.max_processes = 4
+    multi_thread_runner.app.broker.count_invocations.return_value = 3  # type: ignore
+
+    with patch.object(
+        multi_thread_runner, "_spawn_thread_runner_process"
+    ) as mock_spawn:
+        multi_thread_runner._scale_up_processes()
+        # Should spawn 3 processes (based on queued_invocations)
+        assert mock_spawn.call_count == 3

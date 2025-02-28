@@ -70,6 +70,7 @@ def test_equality_and_hash(mock_task: MagicMock, mock_arguments: MagicMock) -> N
     [
         ConcurrencyControlType.DISABLED,
         ConcurrencyControlType.TASK,
+        "UNKNOWN_TYPE",  # Test for unhandled concurrency type
     ],
 )
 def test_serialized_args_for_concurrency_check_returns_none(
