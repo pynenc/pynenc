@@ -22,65 +22,88 @@ git clone https://github.com/YOUR_USERNAME/pynenc.git
 cd pynenc
 ```
 
-3. **Install Docker**: Ensure you have Docker installed on your system as it might be used for running services such as databases or other dependencies.
+3. **Install Docker**: Ensure you have Docker installed on your system as it's used for running services such as Redis during integration tests.
 
 - Docker Installation: [Get Docker](https://docs.docker.com/get-docker/)
 
 4. **Install Poetry**: pynenc uses Poetry for dependency management. Install Poetry as per the official documentation: [Poetry Installation](https://python-poetry.org/docs/#installation).
 
-5. **Set Up the Project**: Inside the project directory, set up your local development environment using Poetry. This will install all dependencies, including those needed for development.
+5. **Set Up the Project**: Inside the project directory, set up your local development environment using Poetry and install pre-commit hooks.
 
 ```bash
-poetry install
+# Install dependencies and set up the project
+make install
+
+# Install pre-commit hooks
+make install-pre-commit
 ```
 
-6. **Install Pre-commit Hooks**: Set up pre-commit hooks in your local repository.
-
-```bash
-poetry run pre-commit install
-```
-
-7. **Activate the Virtual Environment**: Use Poetry to activate the virtual environment.
+6. **Activate the Virtual Environment**: Use Poetry to activate the virtual environment.
 
 ```bash
 poetry shell
 ```
 
-8. **Start Development**: You're now ready to start development. Feel free to make changes, commit them, and push them to your fork.
+7. **Start Development**: You're now ready to start development. Feel free to make changes, commit them, and push them to your fork.
 
 ## Running Tests and Checking Coverage
 
 Maintaining a high standard of code quality is crucial, which includes thorough testing and good test coverage. Here's how to run tests and check coverage:
 
-1. **Running Tests**: After setting up your development environment, run the tests to ensure everything works as expected.
+### Starting Required Services
 
-The integration tests require an instance of redis running, eg:
-
-```bash
-docker run --name redis -e REDIS_PASSWORD=password -p 6379:6379 -d redis:7.4-rc
-```
-
-Start the test in poetry
+The integration tests require an instance of Redis running. You can start it using Docker with:
 
 ```bash
-poetry run pytest
+make docker-redis
 ```
 
-2. **Checking Test Coverage**: Use the `coverage` tool to check the code coverage by tests.
+### Running Tests
 
-- Run the tests with coverage tracking:
-  ```bash
-  poetry run coverage run -m pytest
-  ```
-- Generate a coverage report. You can view the coverage report in two ways:
-  - For a console summary:
-    ```bash
-    poetry run coverage report
-    ```
-  - For a detailed HTML report:
-    ```bash
-    poetry run coverage html
-    ```
-    This generates a report in the `htmlcov` directory. Open `htmlcov/index.html` in a web browser to view it.
+You can run different test suites using the following make commands:
+
+```bash
+# Run all tests with combined coverage
+make test
+
+# Run only unit tests
+make test-unit
+
+# Run only integration tests
+make test-integration
+```
+
+### Checking Test Coverage
+
+After running tests, you can check coverage in multiple ways:
+
+```bash
+# Display coverage report in the console
+make coverage
+
+# Generate an HTML coverage report
+make htmlcov
+```
+
+The HTML report will be available at `htmlcov/index.html`. Open it in a web browser to view detailed coverage information.
+
+## Pre-commit Hooks
+
+The project uses pre-commit hooks to ensure code quality and consistency. These hooks run automatically when you commit changes, but you can also run them manually:
+
+```bash
+make pre-commit
+```
+
+## Continuous Integration
+
+The project uses GitHub Actions for continuous integration. The CI pipeline runs:
+
+1. Pre-commit checks
+2. Unit tests
+3. Integration tests
+4. Combines coverage reports
+
+When you submit a pull request, all these checks will run automatically. Make sure your changes pass all these checks before requesting a review.
 
 Remember, these guidelines will become relevant once the project is open for contributions. Until then, feel free to familiarize yourself with the codebase and the project's goals.
