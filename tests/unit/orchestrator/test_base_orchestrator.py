@@ -203,3 +203,22 @@ def test_get_blocking_invocations_to_run_handles_lock(
     )
     assert blocking_invocations == []
     mock_set_pending.assert_called_once_with(mock_invocation_1)
+
+
+def test_waiting_for_results_empty_invocations(mock_base_app: MockPynenc) -> None:
+    """Test that waiting_for_results logs warning when called with empty result_invocations."""
+    # Create a mock invocation as the caller
+    mock_caller = Mock(spec=DistributedInvocation)
+
+    # Patch the logger to verify warning
+    with patch.object(mock_base_app.logger, "warning") as mock_warning:
+        # Call waiting_for_results with empty result_invocations
+        mock_base_app.orchestrator.waiting_for_results(
+            caller_invocation=mock_caller, result_invocations=[]
+        )
+
+        # Verify a warning was logged
+        mock_warning.assert_called_once()
+
+        # Verify blocking_control.waiting_for_results was not called
+        mock_base_app.orchestrator.blocking_control.waiting_for_results.assert_not_called()
