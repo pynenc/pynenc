@@ -54,6 +54,14 @@ Maintaining a high standard of code quality is crucial, which includes thorough 
 
 1. **Running Tests**: After setting up your development environment, run the tests to ensure everything works as expected.
 
+The integration tests require an instance of redis running, eg:
+
+```bash
+docker run --name redis -e REDIS_PASSWORD=password -p 6379:6379 -d redis:7.4-rc
+```
+
+Start the test in poetry
+
 ```bash
 poetry run pytest
 ```

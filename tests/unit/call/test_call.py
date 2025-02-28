@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from pynenc.call import Call
+from pynenc.conf.config_task import ConcurrencyControlType
 
 
 @pytest.fixture
@@ -62,3 +63,26 @@ def test_equality_and_hash(mock_task: MagicMock, mock_arguments: MagicMock) -> N
     assert hash(call1) != hash(call4)
 
     assert call1 != "not a call"
+
+
+@pytest.mark.parametrize(
+    "concurrency_type",
+    [
+        ConcurrencyControlType.DISABLED,
+        ConcurrencyControlType.TASK,
+        "UNKNOWN_TYPE",  # Test for unhandled concurrency type
+    ],
+)
+def test_serialized_args_for_concurrency_check_returns_none(
+    mock_task: MagicMock,
+    mock_arguments: MagicMock,
+    concurrency_type: ConcurrencyControlType,
+) -> None:
+    """Test that serialized_args_for_concurrency_check returns None for DISABLED and TASK types."""
+    # Configure mock task
+    mock_task.conf.registration_concurrency = concurrency_type
+    mock_task.conf.key_arguments = []
+
+    call: Call = Call(task=mock_task, arguments=mock_arguments)
+
+    assert call.serialized_args_for_concurrency_check is None

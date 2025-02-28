@@ -2,6 +2,27 @@
 
 For detailed information on each version, please visit the [Pynenc GitHub Releases page](https://github.com/pynenc/pynenc/releases).
 
+## Version 0.0.13
+
+- **New MultiThreadRunner Implementation**:
+  - Added `MultiThreadRunner` class that manages multiple `ThreadRunner` instances across separate processes
+  - Added process-level task distribution and management
+  - Implemented dynamic process scaling based on pending invocations
+  - Added process lifecycle management (spawn/terminate) based on workload
+  - Added idle process detection and cleanup
+  - Added shared status tracking between processes
+  - Added configuration options:
+    - `max_threads`: Override default threads per process (default: 4)
+    - `min_processes`: Minimum number of processes (default: 1)
+    - `max_processes`: Maximum processes, defaults to CPU count
+    - `idle_timeout_process_sec`: Time before terminating idle processes (default: 4s)
+    - `enforce_max_processes`: Flag to maintain max processes count (default: False)
+- **Broker Enhancements**:
+  - Added `count_invocations()` method to `BaseBroker` for efficient queue size checking
+- **ThreadRunner Improvements**:
+  - Added configurable `min_threads` and `max_threads` settings
+  - Optimized thread management when running under `MultiThreadRunner`
+
 ## Version 0.0.12
 
 - Relax dependency version pins for redis and pyyaml to improve compatibility

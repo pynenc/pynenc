@@ -8,20 +8,17 @@ on:
 jobs:
   unit-tests:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11.7"
-      # Repeat common setup steps (like installing Poetry) for both jobs
       - name: Install Poetry
         uses: snok/install-poetry@v1
         with:
           version: 1.7.1
           virtualenvs-create: true
           virtualenvs-in-project: true
-      # Cache dependencies
       - name: Cache dependencies
         uses: actions/cache@v4
         with:
@@ -32,16 +29,20 @@ jobs:
         run: poetry run coverage run -m pytest tests/unit
       - run: poetry run coverage report
       - run: poetry run coverage html --show-contexts --title "Unit Test Coverage for ${{ github.sha }}"
-      - name: Store unit test coverage HTML
+      - name: Upload unit test coverage HTML
         uses: actions/upload-artifact@v4
         with:
           name: coverage-html-unit
           path: htmlcov
-      - name: Store unit test coverage data
+      - name: Prepare unit coverage file for upload
+        run: |
+          cp .coverage coverage.unit
+          ls -la coverage.unit
+      - name: Upload unit test coverage data
         uses: actions/upload-artifact@v4
         with:
           name: coverage-data-unit
-          path: .coverage
+          path: coverage.unit
 
   integration-tests:
     runs-on: ubuntu-latest
@@ -54,7 +55,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-
     steps:
       - uses: actions/checkout@v4
       - name: Install Poetry
@@ -63,7 +63,6 @@ jobs:
           version: 1.7.1
           virtualenvs-create: true
           virtualenvs-in-project: true
-      # Cache dependencies
       - name: Cache dependencies
         uses: actions/cache@v4
         with:
@@ -76,16 +75,20 @@ jobs:
         run: poetry run coverage run -m pytest tests/integration
       - run: poetry run coverage report
       - run: poetry run coverage html --show-contexts --title "Integration Test Coverage for ${{ github.sha }}"
-      - name: Store integration test coverage HTML
+      - name: Upload integration test coverage HTML
         uses: actions/upload-artifact@v4
         with:
           name: coverage-html-integration
           path: htmlcov
-      - name: Store integration test coverage data
+      - name: Prepare integration coverage file for upload
+        run: |
+          cp .coverage coverage.integration
+          ls -la coverage.integration
+      - name: Upload integration test coverage data
         uses: actions/upload-artifact@v4
         with:
           name: coverage-data-integration
-          path: .coverage
+          path: coverage.integration
 
   all-tests-completed:
     needs: [unit-tests, integration-tests]
@@ -102,25 +105,20 @@ jobs:
           virtualenvs-create: true
           virtualenvs-in-project: true
       - run: poetry install --no-interaction
-      - name: Download test coverage data
+      - name: Download all coverage artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: coverage-data-*
+          pattern: "coverage-data-*"
           path: .
-          merge-multiple: false
-      # - name: Download unit test coverage data
-      #   uses: actions/download-artifact@v4
-      #   with:
-      #     name: coverage-data-unit
-      #     path: ./coverage-data-unit
-      # - name: Download integration test coverage data
-      #   uses: actions/download-artifact@v4
-      #   with:
-      #     name: coverage-data-integration
-      #     path: ./coverage-data-integration
-      - run: poetry run coverage combine coverage-data-unit/.coverage coverage-data-integration/.coverage
+          merge-multiple: true
+      - name: List downloaded files (debug)
+        run: find . -type f -name 'coverage.*'
+      - name: Combine coverage data
+        run: |
+          poetry run coverage combine coverage.unit coverage.integration
+      - run: poetry run coverage report
       - run: poetry run coverage html --show-contexts --title "Combined Test Coverage"
-      - name: Store combined test coverage HTML
+      - name: Upload combined test coverage HTML
         uses: actions/upload-artifact@v4
         with:
           name: coverage-html

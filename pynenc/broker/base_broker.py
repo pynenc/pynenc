@@ -87,6 +87,17 @@ class BaseBroker(ABC):
         """
 
     @abstractmethod
+    def count_invocations(self) -> int:
+        """
+        Method to count the number of invocations in the queue.
+
+        This method should return the current count of pending invocations in the
+        broker's queue. It's useful for monitoring and managing the queue's state.
+
+        :return: The number of invocations in the queue.
+        """
+
+    @abstractmethod
     def purge(self) -> None:
         """
         Method to purge the message queue.

@@ -19,12 +19,14 @@ if TYPE_CHECKING:
 class MockBroker(BaseBroker):
     route_invocation = MagicMock()
     retrieve_invocation = MagicMock()
+    count_invocations = MagicMock()
     purge = MagicMock()
 
     def __init__(self, app: "Pynenc") -> None:
         super().__init__(app)
         self.route_invocation.reset_mock()
         self.retrieve_invocation.reset_mock()
+        self.count_invocations.reset_mock()
         self.purge.reset_mock()
 
 

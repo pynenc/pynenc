@@ -90,3 +90,30 @@ def test_dummy_runner_waiting_for_result(
     mock_sleep.reset_mock()
     runner.waiting_for_results(None, None)  # type: ignore
     mock_sleep.assert_any_call(-1313)
+
+
+def test_all_runners_can_be_instantiated(mock_base_app: "MockPynenc") -> None:
+    """Test that all concrete runner classes can be instantiated."""
+    from pynenc.runner.base_runner import BaseRunner
+
+    # Get all subclasses recursively
+    def get_all_subclasses(cls: type) -> list[type]:
+        subclasses: list[type] = []
+        for c in cls.__subclasses__():
+            if "mock" in c.__name__.lower():
+                continue
+            subclasses.append(c)
+            subclasses.extend(get_all_subclasses(c))
+        return subclasses
+
+    runners = get_all_subclasses(BaseRunner)
+
+    assert runners, "No runner subclasses found"
+
+    for runner_class in runners:
+        try:
+            runner = runner_class(mock_base_app)
+            # Check that the instance is created successfully
+            assert isinstance(runner, BaseRunner)
+        except Exception as e:
+            pytest.fail(f"Failed to instantiate {runner_class.__name__}: {str(e)}")

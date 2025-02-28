@@ -1,6 +1,7 @@
 import json
 import os
-from typing import Any, Dict
+from typing import Any
+from unittest.mock import patch
 
 import pytest
 import yaml
@@ -19,14 +20,14 @@ def create_temp_file(tmpdir: TempPathFactory, filename: str, content: str) -> st
 
 # Test for loading JSON file
 def test_load_json_file(tmpdir: TempPathFactory) -> None:
-    content: Dict[str, Any] = {"key": "value"}
+    content: dict[str, Any] = {"key": "value"}
     file_path: str = create_temp_file(tmpdir, "config.json", json.dumps(content))
     assert files.load_file(file_path) == content
 
 
 # Test for loading YAML file
 def test_load_yaml_file(tmpdir: TempPathFactory) -> None:
-    content: Dict[str, Any] = {"key": "value"}
+    content: dict[str, Any] = {"key": "value"}
     file_path: str = create_temp_file(tmpdir, "config.yaml", yaml.dump(content))
     assert files.load_file(file_path) == content
 
@@ -52,3 +53,19 @@ def test_load_unsupported_file_extension(tmpdir: TempPathFactory) -> None:
     file_path: str = create_temp_file(tmpdir, "config.unsupported", "some content")
     with pytest.raises(ValueError):
         files.load_file(file_path)
+
+
+# Test that load file will call load_config_from_toml for TOML extension
+def test_load_file_calls_load_config_from_toml(tmpdir: TempPathFactory) -> None:
+    """Test that load_file delegates TOML loading to load_config_from_toml."""
+    content: str = '[tool.pynenc]\nkey = "value"'
+    file_path: str = create_temp_file(tmpdir, "config.toml", content)
+
+    with patch("pynenc.util.files.load_config_from_toml") as mock_load_toml:
+        mock_load_toml.return_value = {"mocked": "data"}
+        result = files.load_file(file_path)
+
+        # Verify load_config_from_toml was called with correct path
+        mock_load_toml.assert_called_once_with(file_path)
+        # Verify the result is what load_config_from_toml returned
+        assert result == {"mocked": "data"}
