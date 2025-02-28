@@ -38,12 +38,12 @@ jobs:
           name: coverage-html-unit
           path: htmlcov
       - name: Rename coverage file for artifact
-        run: cp .coverage .coverage.unit
+        run: cp .coverage coverage.unit
       - name: Store unit test coverage data
         uses: actions/upload-artifact@v4
         with:
           name: coverage-data-unit-${{ github.run_id }}
-          path: .coverage.unit
+          path: coverage.unit
 
   integration-tests:
     runs-on: ubuntu-latest
@@ -85,26 +85,13 @@ jobs:
           path: htmlcov
       - name: Debug list workspace files
         run: ls -la
-      - name: Rename and fix coverage file permissions
-        run: |
-          echo "Checking for coverage files..."
-          ls -la
-          if [ -f ".coverage" ]; then
-            cp .coverage .coverage.integration
-            # Fix permissions
-            chmod 644 .coverage.integration
-            # Move to workspace root to ensure visibility
-            mv .coverage.integration ${GITHUB_WORKSPACE}/
-            ls -la ${GITHUB_WORKSPACE}/.coverage.integration
-          else
-            echo "No coverage file found. Exiting."
-            exit 1
-          fi
+      - name: Rename coverage file for artifact
+        run: cp .coverage coverage.integration
       - name: Store integration test coverage data
         uses: actions/upload-artifact@v4
         with:
           name: coverage-data-integration-${{ github.run_id }}
-          path: .coverage.integration
+          path: coverage.integration
 
   all-tests-completed:
     needs: [unit-tests, integration-tests]
@@ -129,6 +116,7 @@ jobs:
           curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
                "https://api.github.com/repos/${{ github.repository }}/actions/artifacts" | \
                jq -r '.artifacts[] | "\(.name) - \(.size_in_bytes) bytes"'
+
       - name: Download unit test coverage data
         uses: actions/download-artifact@v4
         with:
@@ -141,10 +129,11 @@ jobs:
           path: coverage/integration
       - name: List downloaded files (debug)
         run: find coverage -type f
+
       - name: Combine coverage data
         run: |
-          cp coverage/unit/.coverage.unit .
-          cp coverage/integration/.coverage.integration .
+          cp coverage/unit/coverage.unit .
+          cp coverage/integration/coverage.integration .
           poetry run coverage combine .coverage.unit .coverage.integration
       - run: poetry run coverage report
       - run: poetry run coverage html --show-contexts --title "Combined Test Coverage"
