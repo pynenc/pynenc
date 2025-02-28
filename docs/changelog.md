@@ -2,7 +2,18 @@
 
 For detailed information on each version, please visit the [Pynenc GitHub Releases page](https://github.com/pynenc/pynenc/releases).
 
-## Version 0.0.14 (unreleased)
+## Version 0.0.15
+
+- **Development Infrastructure**:
+
+  - Added comprehensive Makefile for development tasks
+  - Simplified test execution and coverage reporting
+  - Improved development workflow documentation
+
+- **Bug Fixes**:
+  - Fixed redundant orchestrator notification in `DistributedInvocationGroup.results` when all invocations are already resolved
+
+## Version 0.0.14
 
 - **Redis Connection Improvements**:
   - Added `redis_client` utility to centralize Redis connection handling

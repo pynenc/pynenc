@@ -273,6 +273,8 @@ class DistributedInvocationGroup(
                 if invocation.status.is_final():
                     waiting_invocations.remove(invocation)
                     yield invocation.result
+            if not waiting_invocations:
+                break
             if not notified_orchestrator:
                 self.app.orchestrator.waiting_for_results(
                     parent_invocation, waiting_invocations

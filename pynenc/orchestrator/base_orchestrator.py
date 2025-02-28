@@ -307,6 +307,11 @@ class BaseOrchestrator(ABC):
         :param Optional[DistributedInvocation[Params, Result]] caller_invocation: The waiting invocation.
         :param list[DistributedInvocation[Params, Result]] result_invocations: The invocations being waited on.
         """
+        if not result_invocations:
+            self.app.logger.warning(
+                f"Unnecessary call to waiting_for_results, {caller_invocation=} is not waiting for any results"
+            )
+            return
         if self.app.orchestrator.conf.blocking_control and caller_invocation:
             self.blocking_control.waiting_for_results(
                 caller_invocation, result_invocations
