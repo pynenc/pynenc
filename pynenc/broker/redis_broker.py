@@ -6,6 +6,7 @@ import redis
 from pynenc.broker.base_broker import BaseBroker
 from pynenc.conf.config_broker import ConfigBrokerRedis
 from pynenc.invocation.dist_invocation import DistributedInvocation
+from pynenc.util.redis_client import get_redis_client
 from pynenc.util.redis_keys import Key
 
 if TYPE_CHECKING:
@@ -88,9 +89,7 @@ class RedisBroker(BaseBroker):
 
     def __init__(self, app: "Pynenc") -> None:
         super().__init__(app)
-        client = redis.Redis(
-            host=self.conf.redis_host, port=self.conf.redis_port, db=self.conf.redis_db
-        )
+        client = get_redis_client(self.conf)
         self.queue = RedisQueue(app, client, "default")
 
     @cached_property

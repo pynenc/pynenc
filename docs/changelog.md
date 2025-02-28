@@ -2,6 +2,15 @@
 
 For detailed information on each version, please visit the [Pynenc GitHub Releases page](https://github.com/pynenc/pynenc/releases).
 
+## Version 0.0.14 (unreleased)
+
+- **Redis Connection Improvements**:
+  - Added `redis_client` utility to centralize Redis connection handling
+  - Support for Redis URL-based connections
+  - Improved handling of Redis credentials (username/password)
+  - Added comprehensive test coverage for Redis client creation
+  - Empty credentials now properly handled as None values
+
 ## Version 0.0.13
 
 - **New MultiThreadRunner Implementation**:
