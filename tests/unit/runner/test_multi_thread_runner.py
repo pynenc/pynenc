@@ -214,3 +214,107 @@ def test_scale_up_processes_based_on_queue(
         multi_thread_runner._scale_up_processes()
         # Should spawn 3 processes (based on queued_invocations)
         assert mock_spawn.call_count == 3
+
+
+def test_terminate_idle_processes_skips_when_enforce_max_exceeded(
+    multi_thread_runner: MultiThreadRunner,
+) -> None:
+    """Test that _terminate_idle_processes skips when enforce_max_processes and over max."""
+    # Configure runner
+    multi_thread_runner.conf.enforce_max_processes = True
+    multi_thread_runner.max_processes = 2
+
+    # Create 3 processes (more than max_processes)
+    for i in range(3):
+        proc = Mock(spec=Process)
+        proc.is_alive.return_value = True
+        proc.terminate = Mock()
+        proc.join = Mock()
+        key = f"process-{i}"
+        multi_thread_runner.processes[key] = proc
+        multi_thread_runner.shared_status[key] = ProcessStatus(
+            time.time() - 100, 0, ProcessState.IDLE
+        )
+
+    multi_thread_runner._terminate_idle_processes()
+
+    # Verify no processes were terminated
+    for proc in multi_thread_runner.processes.values():  # type: ignore
+        proc.terminate.assert_not_called()
+
+
+def test_waiting_for_results_logs_warning_with_invocation(
+    multi_thread_runner: MultiThreadRunner,
+) -> None:
+    """Test that waiting_for_results logs warning when called with running_invocation."""
+    from pynenc.invocation import DistributedInvocation
+
+    # Create mock invocation
+    mock_invocation = Mock(spec=DistributedInvocation)
+
+    with patch.object(multi_thread_runner.logger, "warning") as mock_warning:
+        multi_thread_runner.waiting_for_results(
+            running_invocation=mock_invocation, result_invocations=[]
+        )
+
+        # Verify warning was logged
+        mock_warning.assert_called_once_with(
+            "waiting_for_results called on MultiThreadRunner from within a task. "
+            "This should be handled by the ThreadRunner instance in the process."
+        )
+
+
+def test_terminate_idle_processes_skips_missing_status(
+    multi_thread_runner: MultiThreadRunner,
+) -> None:
+    """Test that _terminate_idle_processes skips processes with missing status and continues iteration."""
+    # Configure runner to allow termination (min_processes = 1)
+    multi_thread_runner.conf.min_processes = 1
+    current_time = time.time()
+
+    # Process 1 - No status
+    proc1 = Mock(spec=Process)
+    proc1.is_alive.return_value = True
+    proc1.terminate = Mock()
+    proc1.join = Mock()
+    multi_thread_runner.processes["process-1"] = proc1
+    # Deliberately not setting shared_status for process-1
+
+    # Process 2 - With idle status (should be terminated)
+    proc2 = Mock(spec=Process)
+    proc2.is_alive.return_value = True
+    proc2.terminate = Mock()
+    proc2.join = Mock()
+    multi_thread_runner.processes["process-2"] = proc2
+    multi_thread_runner.shared_status["process-2"] = ProcessStatus(
+        current_time - 100,  # Old timestamp to ensure idle
+        0,
+        ProcessState.IDLE,
+    )
+
+    # Process 3 - To ensure we're above min_processes
+    proc3 = Mock(spec=Process)
+    proc3.is_alive.return_value = True
+    proc3.terminate = Mock()
+    proc3.join = Mock()
+    multi_thread_runner.processes["process-3"] = proc3
+    multi_thread_runner.shared_status["process-3"] = ProcessStatus(
+        current_time,  # Recent timestamp, not idle
+        1,
+        ProcessState.ACTIVE,
+    )
+
+    multi_thread_runner._terminate_idle_processes()
+
+    # Verify process-1 (missing status) wasn't terminated
+    proc1.terminate.assert_not_called()
+    assert "process-1" in multi_thread_runner.processes
+
+    # Verify process-2 (with idle status) was terminated
+    proc2.terminate.assert_called_once()
+    proc2.join.assert_called_once()
+    assert "process-2" not in multi_thread_runner.processes
+
+    # Verify process-3 (active) wasn't terminated
+    proc3.terminate.assert_not_called()
+    assert "process-3" in multi_thread_runner.processes
