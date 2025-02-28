@@ -2,12 +2,11 @@ import json
 from functools import cached_property
 from typing import TYPE_CHECKING
 
-import redis
-
 from pynenc import exceptions
 from pynenc.conf.config_state_backend import ConfigStateBackendRedis
 from pynenc.invocation.dist_invocation import DistributedInvocation
 from pynenc.state_backend.base_state_backend import BaseStateBackend, InvocationHistory
+from pynenc.util.redis_client import get_redis_client
 from pynenc.util.redis_keys import Key
 
 if TYPE_CHECKING:
@@ -25,9 +24,7 @@ class RedisStateBackend(BaseStateBackend):
 
     def __init__(self, app: "Pynenc") -> None:
         super().__init__(app)
-        self.client = redis.Redis(
-            host=self.conf.redis_host, port=self.conf.redis_port, db=self.conf.redis_db
-        )
+        self.client = get_redis_client(self.conf)
         self.key = Key(app.app_id, "state_backend")
 
     @cached_property

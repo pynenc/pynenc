@@ -15,6 +15,7 @@ from pynenc.orchestrator.base_orchestrator import (
     BaseOrchestrator,
 )
 from pynenc.types import Params, Result
+from pynenc.util.redis_client import get_redis_client
 from pynenc.util.redis_keys import Key
 
 if TYPE_CHECKING:
@@ -508,9 +509,7 @@ class RedisOrchestrator(BaseOrchestrator):
 
     def __init__(self, app: "Pynenc") -> None:
         super().__init__(app)
-        self.client = redis.Redis(
-            host=self.conf.redis_host, port=self.conf.redis_port, db=self.conf.redis_db
-        )
+        self.client = get_redis_client(self.conf)
         self.redis_cache = TaskRedisCache(app, self.client)
         self._cycle_control: Optional[RedisCycleControl] = None
         self._blocking_control: Optional[RedisBlockingControl] = None
