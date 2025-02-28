@@ -42,7 +42,7 @@ jobs:
       - name: Store unit test coverage data
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-data-unit
+          name: coverage-data-unit-${{ github.run_id }}
           path: .coverage.unit
 
   integration-tests:
@@ -88,7 +88,7 @@ jobs:
       - name: Store integration test coverage data
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-data-integration
+          name: coverage-data-integration-${{ github.run_id }}
           path: .coverage.integration
 
   all-tests-completed:
@@ -108,23 +108,21 @@ jobs:
           virtualenvs-in-project: true
 
       - run: poetry install --no-interaction
-
       - name: Debug available artifacts
         run: |
           echo "Listing available artifacts:"
           curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
                "https://api.github.com/repos/${{ github.repository }}/actions/artifacts" | \
-          jq -r '.artifacts[] | "\(.name) - \(.size_in_bytes) bytes"'
-
+               jq -r '.artifacts[] | "\(.name) - \(.size_in_bytes) bytes"'
       - name: Download unit test coverage data
         uses: actions/download-artifact@v4
         with:
-          name: coverage-data-unit
+          name: coverage-data-unit-${{ github.run_id }}
           path: coverage/unit
       - name: Download integration test coverage data
         uses: actions/download-artifact@v4
         with:
-          name: coverage-data-integration
+          name: coverage-data-integration-${{ github.run_id }}
           path: coverage/integration
       - name: List downloaded files (debug)
         run: find coverage -type f
@@ -138,5 +136,5 @@ jobs:
       - name: Store combined test coverage HTML
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-html
+          name: coverage-html-${{ github.run_id }}
           path: htmlcov
