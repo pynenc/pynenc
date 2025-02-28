@@ -83,8 +83,18 @@ jobs:
         with:
           name: coverage-html-integration
           path: htmlcov
+      - name: Debug list workspace files
+        run: ls -la
       - name: Rename coverage file for artifact
-        run: cp .coverage .coverage.integration
+        run: |
+          echo "Checking for coverage files..."
+          ls -la
+          if ls .coverage* 1> /dev/null 2>&1; then
+            cp .coverage* .coverage.integration
+            ls -la .coverage.integration
+          else
+            echo "No coverage file found. Exiting." && exit 1
+          fi
       - name: Store integration test coverage data
         uses: actions/upload-artifact@v4
         with:
