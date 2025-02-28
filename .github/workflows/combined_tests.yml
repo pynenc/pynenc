@@ -85,15 +85,20 @@ jobs:
           path: htmlcov
       - name: Debug list workspace files
         run: ls -la
-      - name: Rename coverage file for artifact
+      - name: Rename and fix coverage file permissions
         run: |
           echo "Checking for coverage files..."
           ls -la
-          if ls .coverage* 1> /dev/null 2>&1; then
-            cp .coverage* .coverage.integration
-            ls -la .coverage.integration
+          if [ -f ".coverage" ]; then
+            cp .coverage .coverage.integration
+            # Fix permissions
+            chmod 644 .coverage.integration
+            # Move to workspace root to ensure visibility
+            mv .coverage.integration ${GITHUB_WORKSPACE}/
+            ls -la ${GITHUB_WORKSPACE}/.coverage.integration
           else
-            echo "No coverage file found. Exiting." && exit 1
+            echo "No coverage file found. Exiting."
+            exit 1
           fi
       - name: Store integration test coverage data
         uses: actions/upload-artifact@v4
