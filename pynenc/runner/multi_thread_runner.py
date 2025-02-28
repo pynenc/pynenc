@@ -190,7 +190,7 @@ class MultiThreadRunner(BaseRunner):
         now = time.time()
         keys_to_remove: list[str] = []
         for key, proc in self.processes.items():
-            if len(self.processes) + len(keys_to_remove) <= self.conf.min_processes:
+            if len(self.processes) - len(keys_to_remove) <= self.conf.min_processes:
                 break
             if (status := self.shared_status.get(key)) is None:
                 continue
