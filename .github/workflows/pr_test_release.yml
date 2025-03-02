@@ -31,9 +31,13 @@ jobs:
       - name: Set PR version
         run: |
           current_version=$(poetry version -s)
-          pr_version="${current_version}rc${GITHUB_RUN_NUMBER}.pr${{ steps.pr.outputs.number }}"
+          # PEP 440: {version}rc{pr}.dev{run}
+          # Example: 0.0.16rc72.dev1 (PR #72, first run)
+          pr_version="${current_version}rc${PR_NUMBER}.dev${GITHUB_RUN_NUMBER}"
           poetry version $pr_version
           echo "VERSION=$pr_version" >> $GITHUB_ENV
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
 
       - name: Build package
         run: poetry build --ansi
