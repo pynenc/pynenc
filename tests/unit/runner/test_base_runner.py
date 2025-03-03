@@ -3,10 +3,10 @@ from typing import TYPE_CHECKING
 from unittest.mock import Mock, patch
 
 import pytest
-from _pytest.logging import LogCaptureFixture
 
 from pynenc.exceptions import RunnerNotExecutableError
 from pynenc.runner.base_runner import DummyRunner
+from tests.util import capture_logs
 
 if TYPE_CHECKING:
     from tests.conftest import MockPynenc
@@ -28,36 +28,28 @@ def test_run(mock_base_app: "MockPynenc") -> None:
     mock_base_app.runner._on_stop.assert_called_once()
 
 
-def test_exception_handling_in_run_method(
-    mock_base_app: "MockPynenc", caplog: LogCaptureFixture
-) -> None:
+def test_exception_handling_in_run_method(mock_base_app: "MockPynenc") -> None:
     """Test that a general exception in the runner loop is logged and raised"""
     exception_message = "Test Exception"
     mock_base_app.runner.runner_loop_iteration.side_effect = Exception(
         exception_message
     )
 
-    with caplog.at_level("ERROR"):
+    with capture_logs(mock_base_app.logger) as log_buffer:
         with pytest.raises(Exception) as exc_info:
             mock_base_app.runner.run()
 
         assert exception_message in str(exc_info.value)
-        assert any(
-            f"Exception in runner loop: {exception_message}" in record.message
-            for record in caplog.records
-        )
+        log_output = log_buffer.getvalue()
+        assert f"Exception in runner loop: {exception_message}" in log_output
 
 
-def test_keyboard_interrupt_handling_in_run_method(
-    mock_base_app: "MockPynenc", caplog: LogCaptureFixture
-) -> None:
-    with caplog.at_level("WARNING"):
+def test_keyboard_interrupt_handling_in_run_method(mock_base_app: "MockPynenc") -> None:
+    with capture_logs(mock_base_app.logger) as log_buffer:
         mock_base_app.runner.runner_loop_iteration.side_effect = KeyboardInterrupt
         mock_base_app.runner.run()
-        assert any(
-            "KeyboardInterrupt received. Stopping runner..." in record.message
-            for record in caplog.records
-        )
+        log_output = log_buffer.getvalue()
+        assert "KeyboardInterrupt received. Stopping runner..." in log_output
 
 
 def test_dummy_runner(mock_base_app: "MockPynenc") -> None:

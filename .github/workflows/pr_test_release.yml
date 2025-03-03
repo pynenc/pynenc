@@ -1,0 +1,62 @@
+name: PR Release to TestPyPI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  pr-deploy:
+    name: Deploy PR to TestPyPI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11.7"
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: 1.7.0
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Get PR number
+        id: pr
+        run: echo "::set-output name=number::${{ github.event.pull_request.number }}"
+
+      - name: Set PR version
+        run: |
+          current_version=$(poetry version -s)
+          # PEP 440: {version}rc{pr}.dev{run}
+          # Example: 0.0.16rc72.dev1 (PR #72, first run)
+          pr_version="${current_version}rc${PR_NUMBER}.dev${GITHUB_RUN_NUMBER}"
+          poetry version $pr_version
+          echo "VERSION=$pr_version" >> $GITHUB_ENV
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+
+      - name: Build package
+        run: poetry build --ansi
+
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@v1.8.6
+        with:
+          user: __token__
+          password: ${{ secrets.TEST_PYPI_TOKEN }}
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
+
+      - name: Comment PR
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `📦 PR version deployed to TestPyPI\n\nYou can install this version with:\n\`\`\`bash\npip install --index-url https://test.pypi.org/simple/ pynenc==${{ env.VERSION }}\n\`\`\``
+            })

@@ -1,4 +1,3 @@
-from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
@@ -7,9 +6,7 @@ from pynenc.call import Call
 from pynenc.exceptions import InvocationError, RetryError
 from pynenc.invocation import DistributedInvocation, InvocationStatus
 from tests.conftest import MockPynenc
-
-if TYPE_CHECKING:
-    from _pytest.logging import LogCaptureFixture
+from tests.util import capture_logs
 
 app = MockPynenc()
 
@@ -44,13 +41,14 @@ def retry() -> int:
     raise RetryError()
 
 
-def test_max_retries(caplog: "LogCaptureFixture") -> None:
+def test_max_retries() -> None:
     app.orchestrator.get_invocation_retries.return_value = 1
     invocation: DistributedInvocation = retry()  # type: ignore
-    with caplog.at_level("DEBUG"):
+
+    with capture_logs(app.logger) as log_buffer:
         with pytest.raises(RetryError):
             invocation.run(runner_args={})
-        assert any("Max retries reached" in record.message for record in caplog.records)
+        assert "Max retries reached" in log_buffer.getvalue()
 
 
 def test_reroute_on_running_control() -> None:

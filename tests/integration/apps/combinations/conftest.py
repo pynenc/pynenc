@@ -107,6 +107,9 @@ def app(request: "FixtureRequest", monkeypatch: MonkeyPatch) -> Pynenc:
     monkeypatch.setenv("PYNENC__RUNNER_CLS", components.runner.__name__)
     monkeypatch.setenv("PYNENC__LOGGING_LEVEL", "debug")
     monkeypatch.setenv("PYNENC__ORCHESTRATOR__CYCLE_CONTROL", "True")
+    # Set logging level before app initialization
+    monkeypatch.setenv("PYNENC__LOGGING_LEVEL", "info")
+
     app = Pynenc()
     app.purge()
     request.addfinalizer(app.purge)
@@ -166,3 +169,9 @@ def task_retry_once(app: Pynenc) -> "Task":
 def task_sleep(app: Pynenc) -> "Task":
     tasks.sleep_seconds.app = app
     return tasks.sleep_seconds
+
+
+@pytest.fixture(scope="function")
+def task_cpu_intensive_no_conc(app: Pynenc) -> "Task":
+    tasks.cpu_intensive_no_conc.app = app
+    return tasks.cpu_intensive_no_conc

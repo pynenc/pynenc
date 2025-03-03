@@ -61,11 +61,14 @@ class ConfigThreadRunner(ConfigRunner):
 class ConfigMultiThreadRunner(ConfigThreadRunner):
     """Specific Configuration for the MultiThreadRunner
 
+    :cvar ConfigFiled[int] min_threads:
+        Defines the default value of the ThreadRunner min_threads configuration. The default value is 1.
+        It should scale up by processes not threads, leaving only one thread running per process.
+
     :cvar ConfigField[int] max_threads:
-        Override the default max_threads value from ConfigThreadRunner. In the ThreadRunner, the default value is
-        multiprocessing.cpu_count(). But in the MultiThreadRunner, the number of ThreadRunner processes will depend
-        by default on the number of CPU cores available. If the max_threads also depends on the CPU by default, may
-        generate too much tasks in each ThreadRunner generating unnecessary overhead and memory consumption.
+        Override the default max_threads value from ConfigThreadRunner to 1. In the ThreadRunner, the default value is
+        multiprocessing.cpu_count(). But in the MultiThreadRunner, we create new independent ThreadRunners in separate
+        processes, so we should limit the number of threads to 1 per process to avoid overhead.
 
     :cvar ConfigField[int] min_processes:
         Minimum number of processes that the runner can handle. This setting determines the minimum number of processes
@@ -89,7 +92,8 @@ class ConfigMultiThreadRunner(ConfigThreadRunner):
         threads load. If set to False, the runner will scale the number of threads based on the thread load.
     """
 
-    max_threads = ConfigField(4)
+    min_threads = ConfigField(1)
+    max_threads = ConfigField(1)
     min_processes = ConfigField(1)
     max_processes = ConfigField(0)
     idle_timeout_process_sec = ConfigField(4)

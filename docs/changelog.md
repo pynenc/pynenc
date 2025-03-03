@@ -1,71 +1,120 @@
 # Changelog
 
-For detailed information on each version, please visit the [Pynenc GitHub Releases page](https://github.com/pynenc/pynenc/releases).
+All notable changes to this project will be documented in this file.
 
-## Version 0.0.15
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-- **Development Infrastructure**:
+## [0.0.16] - 2025-03-02
 
-  - Added comprehensive Makefile for development tasks
-  - Simplified test execution and coverage reporting
-  - Improved development workflow documentation
+### Added
 
-- **Bug Fixes**:
-  - Fixed redundant orchestrator notification in `DistributedInvocationGroup.results` when all invocations are already resolved
+- Millisecond precision to log timestamps.
+- Colored output for logs using ANSI color codes.
+- Comprehensive performance testing framework:
+  - Support for different runner types (Thread, Process, MultiThread).
+  - Automated test configuration based on runner type.
+  - Performance metrics collection and analysis.
+  - Environment-aware test parameters.
+- Automated PR test releases to TestPyPI:
+  - Version format: `{version}rc{run_number}.pr{pr_number}`.
+  - Automatic deployment on PR creation and updates.
+  - PR comments with installation instructions.
+  - Skip existing versions to handle multiple PR updates.
+- Direct log testing with `capture_logs` utility in tests
+  - Support for colored output in test assertions
+  - No dependency on pytest's caplog fixture
+  - Automatic cleanup with context manager
 
-## Version 0.0.14
+### Changed
 
-- **Redis Connection Improvements**:
-  - Added `redis_client` utility to centralize Redis connection handling
-  - Support for Redis URL-based connections
-  - Improved handling of Redis credentials (username/password)
-  - Added comprehensive test coverage for Redis client creation
-  - Empty credentials now properly handled as None values
+- Improved logging format with colored level names and prefixes.
+- Restructured performance tests for better maintainability.
+- Enhanced test assertions with detailed performance data.
 
-## Version 0.0.13
+## [0.0.15] - 2025-02-28
 
-- **New MultiThreadRunner Implementation**:
-  - Added `MultiThreadRunner` class that manages multiple `ThreadRunner` instances across separate processes
-  - Added process-level task distribution and management
-  - Implemented dynamic process scaling based on pending invocations
-  - Added process lifecycle management (spawn/terminate) based on workload
-  - Added idle process detection and cleanup
-  - Added shared status tracking between processes
-  - Added configuration options:
-    - `max_threads`: Override default threads per process (default: 4)
-    - `min_processes`: Minimum number of processes (default: 1)
-    - `max_processes`: Maximum processes, defaults to CPU count
-    - `idle_timeout_process_sec`: Time before terminating idle processes (default: 4s)
-    - `enforce_max_processes`: Flag to maintain max processes count (default: False)
-- **Broker Enhancements**:
-  - Added `count_invocations()` method to `BaseBroker` for efficient queue size checking
-- **ThreadRunner Improvements**:
-  - Added configurable `min_threads` and `max_threads` settings
-  - Optimized thread management when running under `MultiThreadRunner`
+### Added
 
-## Version 0.0.12
+- Comprehensive Makefile for development tasks.
+  - Test execution, coverage reporting, and Docker Redis container management.
+- Updated CONTRIBUTING.md with development workflow details.
 
-- Relax dependency version pins for redis and pyyaml to improve compatibility
+### Fixed
 
-## Version 0.0.10
+- Redundant orchestrator notification in `DistributedInvocationGroup.results` to avoid unnecessary Redis calls.
 
-- Refactor of conf module to use pynenc.cistell pypi package
+## [0.0.14] - 2025-02-28
 
-## Version 0.0.9
+### Added
 
-- Specify available pptions in task decorator for improved code clarity and completion
-- Adding unit test to ensure that ConfigTask and task decorator parameters are in sync
+- Centralized `redis_client` utility for consistent Redis connection handling.
+  - Support for both URL-based and parameter-based connections.
+  - Comprehensive test coverage for Redis client creation.
 
-## Version 0.0.8
+### Fixed
 
-- Test for (this) changelog so it's sync with pynenc version
-- Minimum changes in the docs
+- Handling of empty Redis credentials now properly treats them as `None`.
 
-## Version 0.0.7
+## [0.0.13] - 2025-02-28
 
-- Improve the docs and README.md
+### Added
 
-## Version 0.0.6
+- `MultiThreadRunner` class to manage multiple `ThreadRunner` instances across processes.
+  - Process-level task distribution and dynamic scaling.
+  - Process lifecycle management including idle detection and cleanup.
+  - Configuration options:
+    - `max_threads`: Override default threads per process (default: 4).
+    - `min_processes`: Minimum number of processes (default: 1).
+    - `max_processes`: Maximum processes (defaults to CPU count).
+    - `idle_timeout_process_sec`: Time before terminating idle processes (default: 4s).
+    - `enforce_max_processes`: Flag to maintain max processes count (default: False).
+- Broker enhancements:
+  - Added `count_invocations()` to `BaseBroker` for efficient queue size checking.
+- ThreadRunner improvements:
+  - Configurable `min_threads` and `max_threads` settings.
+  - Optimized thread management when running under `MultiThreadRunner`.
+
+## [0.0.12] - 2025-02-25
+
+### Changed
+
+- Relaxed dependency version pins for redis and pyyaml to improve compatibility.
+
+## [0.0.11] - 2025-02-25
+
+### Changed
+
+- Relaxed dependency version pins (redis and pyyaml) and adjusted constraints in `pyproject.toml` for better integration.
+
+## [0.0.10] - 2024-03-15
+
+### Changed
+
+- Refactored the configuration module to use the external package `pynenc.cistell`.
+
+## [0.0.9] - 2024-02-07
+
+### Changed
+
+- Specified available options in the task decorator for improved code clarity.
+- Added unit tests to ensure synchronization between `ConfigTask` and task decorator parameters.
+
+## [0.0.8] - 2024-02-05
+
+### Changed
+
+- Added tests to verify changelog sync with the pynenc version.
+- Made minimal changes in the documentation.
+
+## [0.0.7] - 2024-02-04
+
+### Changed
+
+- Improved documentation and updated README.md.
+
+## [0.0.6] - 2024-02-02
+
+### Changed
 
 - Use autodoc2 for automatic documentation using Sphinx and Myst markdown formats
 - Refactor all the docstrings in markdown and sphinx syntax
@@ -75,34 +124,54 @@ For detailed information on each version, please visit the [Pynenc GitHub Releas
 - Using absolute imports (required by autodoc2)
 - Adding new tests for get_subclasses (requires imports in module `__init__`)
 
-## Version 0.0.5
+## [0.0.5] - 2024-01-12
 
-- **Implement exception handling for tasks in **main** module and enhance test robustness**:
-  This update includes raising RuntimeError for task definitions in `__main__` modules,
-  serialization/deserialization in test/dev environments, syntax changes in task configuration arguments,
-  logging updates in `dist_invocation`, new tests for exception handling and task ID generation,
-  and comprehensive documentation revisions.
+### Changed
 
-## Version 0.0.4
+- Enhanced exception handling for tasks in the `__main__` module.
+  - Now raises a RuntimeError for tasks defined in `__main__`.
+  - Updated serialization/deserialization in test/dev environments.
+  - Revised task configuration arguments and logging in `dist_invocation`.
 
-- Add scripts section to pyproject.toml for cli executable
+### Added
 
-## Version 0.0.3
+- New tests for exception handling and task ID generation.
+- Documentation updates to reflect these changes.
 
-- Rename MemRunner to ThreadRunner
-- Implement command line interface for starting runners
-- Configuration options for specifying subclasses
-- Adding automatic task retry
+## [0.0.4] - 2024-01-06
 
-## Version 0.0.2
+### Added
 
-- Fixing github actions
-- Bug on runners when running only one thread globaly
-- Fix config inheritance and class/instance variables
-- Add timeout to integration tests
+- Added a scripts section to `pyproject.toml` for the CLI executable.
+
+## [0.0.3] - 2024-01-06
+
+### Changed
+
+- Renamed `MemRunner` to `ThreadRunner`.
+- Implemented a command line interface for starting runners.
+
+### Added
+
+- Added configuration options for specifying subclasses.
+- Introduced automatic task retry functionality.
+
+## [0.0.2] - 2023-12-10
+
+### Changed
+
+- Fixed GitHub Actions configuration.
+- Resolved bug in runners when only one thread was used globally.
+- Fixed config inheritance issues and class/instance variables.
+
+### Added
+
+- Added timeouts to integration tests.
+
+## [0.0.1] - 2023-12-10
+
+### Added
+
+- Initial development of GitHub Actions for testing and building the package.
 
 The changelog documents the history of changes and version releases for Pynenc.
-
-## Version 0.0.1
-
-- Developing github actions for testing and building the package
