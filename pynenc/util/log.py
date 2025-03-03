@@ -1,6 +1,6 @@
 import logging
 from collections.abc import MutableMapping
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Literal, Optional
 
 if TYPE_CHECKING:
     from logging import LogRecord
@@ -35,6 +35,23 @@ class ColoredFormatter(logging.Formatter):
         "ERROR": Colors.RED,
         "CRITICAL": f"{Colors.WHITE}{Colors.RED_BG}",
     }
+
+    def __init__(
+        self,
+        fmt: str | None = None,
+        datefmt: str | None = None,
+        style: Literal["%", "{", "$"] = "%",
+        validate: bool = True,
+    ) -> None:
+        """Initialize the formatter with specified format strings.
+
+        Args:
+            fmt: The format string for the message
+            datefmt: The format string for datetime objects
+            style: The style of the fmt string
+            validate: Whether to validate the format string
+        """
+        super().__init__(fmt=fmt, datefmt=datefmt, style=style, validate=validate)
 
     def format(self, record: "LogRecord") -> str:
         # Save original values to restore them after formatting

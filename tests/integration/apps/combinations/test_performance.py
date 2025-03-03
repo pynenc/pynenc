@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import TYPE_CHECKING, NamedTuple
 
+import pytest
+
 from pynenc import Task
 from pynenc.runner.process_runner import ProcessRunner
 
@@ -118,8 +120,19 @@ def calculate_performance_metrics(
     }
 
 
+MIN_CPUS_FOR_PERFORMANCE_TEST = 2
+
+
 def test_parallel_performance(app: "Pynenc", task_cpu_intensive_no_conc: Task) -> None:
     """Test performance characteristics of different runners."""
+    # Skip test if running on a single CPU (CI environments)
+    cpu_count = multiprocessing.cpu_count()
+    if cpu_count < MIN_CPUS_FOR_PERFORMANCE_TEST:
+        pytest.skip(
+            f"Performance tests require at least {MIN_CPUS_FOR_PERFORMANCE_TEST} CPU cores "
+            f"(found {cpu_count})"
+        )
+
     app.conf.logging_level = "info"
     config = get_test_config(app)
     results = run_performance_test(app, task_cpu_intensive_no_conc, config)

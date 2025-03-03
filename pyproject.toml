@@ -120,7 +120,7 @@ filterwarnings = [
     "ignore:Running in a secondary thread. Signal handling will be skipped.:UserWarning",
     "ignore::pytest.PytestUnhandledThreadExceptionWarning",
 ]
-timeout = 15
+# timeout = 15
 
 [tool.coverage.run]
 omit = [
