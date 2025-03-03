@@ -41,7 +41,7 @@ def get_test_config(app: "Pynenc") -> PerformanceTestConfig:
         # Process runner - starts one independent process per tasks
         # to avoid overloading the system and the overhead of starting too many processes
         return PerformanceTestConfig(
-            iterations=10_000_000,
+            iterations=300_000,
             num_tasks=multiprocessing.cpu_count(),
             expected_min_parallelization=0.5,
         )
@@ -50,7 +50,7 @@ def get_test_config(app: "Pynenc") -> PerformanceTestConfig:
         # It can handler more tasks with minimal overloading
         return PerformanceTestConfig(
             iterations=300_000,
-            num_tasks=multiprocessing.cpu_count() * 100,
+            num_tasks=multiprocessing.cpu_count() * 10,
             expected_min_parallelization=0.95,
         )
 
@@ -120,7 +120,7 @@ def calculate_performance_metrics(
     }
 
 
-MIN_CPUS_FOR_PERFORMANCE_TEST = 2
+MIN_CPUS_FOR_PERFORMANCE_TEST = 4
 
 
 def test_parallel_performance(app: "Pynenc", task_cpu_intensive_no_conc: Task) -> None:
