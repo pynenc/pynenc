@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.0.16] – 2025-03-02
+## [0.0.16] - 2025-03-02
 
 ### Added
 
@@ -20,6 +20,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Automatic deployment on PR creation and updates.
   - PR comments with installation instructions.
   - Skip existing versions to handle multiple PR updates.
+- Direct log testing with `capture_logs` utility in tests
+  - Support for colored output in test assertions
+  - No dependency on pytest's caplog fixture
+  - Automatic cleanup with context manager
 
 ### Changed
 
@@ -27,7 +31,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Restructured performance tests for better maintainability.
 - Enhanced test assertions with detailed performance data.
 
-## [0.0.15] – 2025-02-28
+## [0.0.15] - 2025-02-28
 
 ### Added
 
@@ -39,7 +43,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Redundant orchestrator notification in `DistributedInvocationGroup.results` to avoid unnecessary Redis calls.
 
-## [0.0.14] – 2025-02-28
+## [0.0.14] - 2025-02-28
 
 ### Added
 
@@ -51,7 +55,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Handling of empty Redis credentials now properly treats them as `None`.
 
-## [0.0.13] – 2025-02-28
+## [0.0.13] - 2025-02-28
 
 ### Added
 
@@ -70,33 +74,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Configurable `min_threads` and `max_threads` settings.
   - Optimized thread management when running under `MultiThreadRunner`.
 
-## [0.0.12] – 2025-02-25
+## [0.0.12] - 2025-02-25
+
+### Changed
 
 - Relaxed dependency version pins for redis and pyyaml to improve compatibility.
 
-## [0.0.11] – 2025-02-25
+## [0.0.11] - 2025-02-25
+
+### Changed
 
 - Relaxed dependency version pins (redis and pyyaml) and adjusted constraints in `pyproject.toml` for better integration.
 
-## [0.0.10] – 2024-03-15
+## [0.0.10] - 2024-03-15
+
+### Changed
 
 - Refactored the configuration module to use the external package `pynenc.cistell`.
 
-## [0.0.9] – 2024-02-07
+## [0.0.9] - 2024-02-07
+
+### Changed
 
 - Specified available options in the task decorator for improved code clarity.
 - Added unit tests to ensure synchronization between `ConfigTask` and task decorator parameters.
 
-## [0.0.8] – 2024-02-05
+## [0.0.8] - 2024-02-05
+
+### Changed
 
 - Added tests to verify changelog sync with the pynenc version.
 - Made minimal changes in the documentation.
 
-## [0.0.7] – 2024-02-04
+## [0.0.7] - 2024-02-04
+
+### Changed
 
 - Improved documentation and updated README.md.
 
-## [0.0.6] – 2024-02-02
+## [0.0.6] - 2024-02-02
+
+### Changed
 
 - Use autodoc2 for automatic documentation using Sphinx and Myst markdown formats
 - Refactor all the docstrings in markdown and sphinx syntax
@@ -106,7 +124,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Using absolute imports (required by autodoc2)
 - Adding new tests for get_subclasses (requires imports in module `__init__`)
 
-## [0.0.5] – 2024-01-12
+## [0.0.5] - 2024-01-12
 
 ### Changed
 
@@ -120,25 +138,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - New tests for exception handling and task ID generation.
 - Documentation updates to reflect these changes.
 
-## [0.0.4] – 2024-01-06
+## [0.0.4] - 2024-01-06
+
+### Added
 
 - Added a scripts section to `pyproject.toml` for the CLI executable.
 
-## [0.0.3] – 2024-01-06
+## [0.0.3] - 2024-01-06
+
+### Changed
 
 - Renamed `MemRunner` to `ThreadRunner`.
 - Implemented a command line interface for starting runners.
+
+### Added
+
 - Added configuration options for specifying subclasses.
 - Introduced automatic task retry functionality.
 
-## [0.0.2] – 2023-12-10
+## [0.0.2] - 2023-12-10
+
+### Changed
 
 - Fixed GitHub Actions configuration.
 - Resolved bug in runners when only one thread was used globally.
 - Fixed config inheritance issues and class/instance variables.
+
+### Added
+
 - Added timeouts to integration tests.
 
-## [0.0.1] – 2023-12-10
+## [0.0.1] - 2023-12-10
+
+### Added
 
 - Initial development of GitHub Actions for testing and building the package.
 
