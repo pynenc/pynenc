@@ -322,3 +322,33 @@ def test_terminate_idle_processes_skips_missing_status(
     # Verify process-3 (active) wasn't terminated
     proc3.terminate.assert_not_called()
     assert "process-3" in multi_thread_runner.processes
+
+
+def test_safe_remove_shared_state_handles_errors(
+    multi_thread_runner: MultiThreadRunner,
+) -> None:
+    """Test that _safe_remove_shared_state handles manager shutdown errors gracefully."""
+    # Mock shared_status.pop to raise different errors
+    test_cases = [
+        EOFError("Mock EOF Error"),
+        BrokenPipeError("Mock Broken Pipe Error"),
+    ]
+
+    for error in test_cases:
+        # Setup mock with error
+        mock_dict = Mock()
+        mock_dict.pop.side_effect = error
+        multi_thread_runner.shared_status = mock_dict
+
+        # Verify error is caught and logged
+        with patch.object(multi_thread_runner.logger, "debug") as mock_debug:
+            # Should not raise exception
+            multi_thread_runner._safe_remove_shared_state("test-key")
+
+            # Verify error was logged
+            mock_debug.assert_called_once_with(
+                "Manager already stopped while removing state for test-key"
+            )
+
+        # Verify pop was attempted
+        mock_dict.pop.assert_called_once_with("test-key", None)
