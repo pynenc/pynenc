@@ -142,6 +142,17 @@ class MultiThreadRunner(BaseRunner):
         self.manager.shutdown()  # type: ignore
         self.logger.info("MultiThreadRunner stopped")
 
+    def _safe_remove_shared_state(self, key: str) -> None:
+        """
+        Safely remove a process's shared state, handling manager shutdown cases.
+
+        :param str key: The process key to remove from shared state
+        """
+        try:
+            self.shared_status.pop(key, None)
+        except (EOFError, BrokenPipeError):
+            self.logger.debug(f"Manager already stopped while removing state for {key}")
+
     def _on_stop_runner_loop(self) -> None:
         """
         Internal method called after receiving a signal to stop the runner loop.
@@ -154,7 +165,7 @@ class MultiThreadRunner(BaseRunner):
                 proc.terminate()
                 proc.join()
                 self.processes.pop(key, None)
-                self.shared_status.pop(key, None)
+                self._safe_remove_shared_state(key)
                 self.logger.info(f"Terminated process {key} during loop stop")
         self.logger.info("MultiThreadRunner loop stopped")
 
@@ -165,7 +176,7 @@ class MultiThreadRunner(BaseRunner):
             self.logger.warning(f"Found {len(dead_keys)} dead processes to clean up")
             for key in dead_keys:
                 self.processes.pop(key, None)
-                self.shared_status.pop(key, None)
+                self._safe_remove_shared_state(key)
                 self.logger.info(f"Cleaned up dead process {key}")
 
     def _scale_up_processes(self) -> None:
@@ -214,7 +225,7 @@ class MultiThreadRunner(BaseRunner):
                 keys_to_remove.append(key)
         for key in keys_to_remove:
             self.processes.pop(key, None)
-            self.shared_status.pop(key, None)
+            self._safe_remove_shared_state(key)
 
     def runner_loop_iteration(self) -> None:
         # self._cleanup_dead_processes()

@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [0.0.17] - 2025-03-04
 
+### Fixed
+
+- Handle broken pipe errors during MultiThreadRunner shutdown
+- Prevent crashes when cleaning up shared state after manager shutdown
+- Add safe removal of process state from manager dictionary
+
 ### Added
 
 - Argument caching system for large serialized arguments:
