@@ -22,7 +22,6 @@ def test_running_concurrency() -> None:
 
     # start a runner
     def run_in_thread() -> None:
-        tasks.app.conf.runner_cls = "ThreadRunner"
         tasks.app.runner.run()
 
     thread = threading.Thread(target=run_in_thread, daemon=True)

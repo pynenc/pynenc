@@ -31,12 +31,16 @@ class ProcessStatus(NamedTuple):
 
 
 def thread_runner_process_main(
-    app: "Pynenc", *, shared_status: dict[str, ProcessStatus], process_key: str
+    app: "Pynenc",
+    *,
+    runner_cache: dict,
+    shared_status: dict[str, ProcessStatus],
+    process_key: str,
 ) -> None:
     """
     Runs a ThreadRunner in a separate process.
     """
-    runner = ThreadRunner(app)
+    runner = ThreadRunner(app, runner_cache)
     # Replace the MultiThreadRunner with ThreadRunner in this process
     app.runner = runner
     runner._on_start()
@@ -71,6 +75,7 @@ class MultiThreadRunner(BaseRunner):
     # shared_status: Maps process key to ProcessStatus
     shared_status: dict[str, ProcessStatus]
     max_processes: int
+    runner_cache: dict
 
     @cached_property
     def conf(self) -> ConfigMultiThreadRunner:
@@ -78,6 +83,11 @@ class MultiThreadRunner(BaseRunner):
             config_values=self.app.config_values,
             config_filepath=self.app.config_filepath,
         )
+
+    @property
+    def cache(self) -> dict:
+        """Returns the cache for the ProcessRunner instance."""
+        return self.runner_cache
 
     @staticmethod
     def mem_compatible() -> bool:
@@ -99,6 +109,7 @@ class MultiThreadRunner(BaseRunner):
         self.logger.info("Starting MultiThreadRunner")
         self.manager = Manager()
         self.shared_status = self.manager.dict()  # type: ignore
+        self.runner_cache = self._runner_cache or self.manager.dict()  # type: ignore
         self.processes = {}
         self.max_processes = self.conf.max_processes or cpu_count()
         for _ in range(self.conf.min_processes):
@@ -108,6 +119,7 @@ class MultiThreadRunner(BaseRunner):
         process_key = f"trp-{time.time()}-{len(self.processes)}"
         args = {
             "app": self.app,
+            "runner_cache": self.runner_cache,
             "shared_status": self.shared_status,
             "process_key": process_key,
         }

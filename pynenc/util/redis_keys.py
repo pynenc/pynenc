@@ -104,6 +104,9 @@ class Key:
     def default_queue(self) -> str:
         return f"{self.prefix}default_queue"
 
+    def arg_cache(self, key: str) -> str:
+        return f"{self.prefix}arg_key:{key}"
+
     def purge(self, client: redis.Redis) -> None:
         """
         Purges all keys with the given prefix in Redis.

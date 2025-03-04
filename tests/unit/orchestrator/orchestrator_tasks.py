@@ -5,6 +5,7 @@ from pynenc import Pynenc
 from pynenc.conf.config_task import ConcurrencyControlType
 
 app = Pynenc()
+app.conf.runner_cls = "ThreadRunner"
 
 
 class SleepResult(NamedTuple):

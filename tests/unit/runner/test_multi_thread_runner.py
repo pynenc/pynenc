@@ -68,6 +68,7 @@ def test_process_status_is_idle(
 
 
 def test_thread_runner_process_main_updates_status(app: MockPynenc) -> None:
+    runner_cache: dict = {}
     shared_status: dict[str, ProcessStatus] = {}
     process_key = "test-process"
 
@@ -77,7 +78,10 @@ def test_thread_runner_process_main_updates_status(app: MockPynenc) -> None:
         mock_runner.return_value.runner_loop_iteration.side_effect = KeyboardInterrupt()
 
         thread_runner_process_main(
-            app, shared_status=shared_status, process_key=process_key
+            app,
+            runner_cache=runner_cache,
+            shared_status=shared_status,
+            process_key=process_key,
         )
 
         assert process_key in shared_status

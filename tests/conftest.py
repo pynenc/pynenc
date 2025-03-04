@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from pynenc import Pynenc
+from pynenc.arg_cache.base_arg_cache import BaseArgCache
 from pynenc.broker.base_broker import BaseBroker
 from pynenc.call import Call
 from pynenc.invocation import DistributedInvocation
@@ -82,6 +83,19 @@ class MockStateBackend(BaseStateBackend):
         self._get_exception.reset_mock()
 
 
+class MockArgCache(BaseArgCache):
+    _store = MagicMock()
+    _retrieve = MagicMock()
+    _purge = MagicMock()
+
+    def __init__(self, app: "Pynenc") -> None:
+        super().__init__(app)
+        # Reset all mocks in init to ensure clean state
+        self._store.reset_mock()
+        self._retrieve.reset_mock()
+        self._purge.reset_mock()
+
+
 class MockRunner(BaseRunner):
     mem_compatible = MagicMock(return_value=True)
     _on_start = MagicMock()
@@ -98,6 +112,12 @@ class MockRunner(BaseRunner):
         self._on_stop_runner_loop.reset_mock()
         self.runner_loop_iteration.reset_mock()
         self.waiting_for_results.reset_mock()
+
+    @property
+    def cache(self) -> dict:
+        if self._runner_cache is None:
+            self._runner_cache = {}
+        return self._runner_cache
 
 
 class MockPynenc(Pynenc):
@@ -116,6 +136,10 @@ class MockPynenc(Pynenc):
     @cached_property
     def state_backend(self) -> MockStateBackend:
         return MockStateBackend(self)
+
+    @cached_property
+    def arg_cache(self) -> MockArgCache:
+        return MockArgCache(self)
 
     @property  # type: ignore
     def runner(self) -> MockRunner:

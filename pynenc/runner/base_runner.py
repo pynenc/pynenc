@@ -42,11 +42,12 @@ class BaseRunner(ABC):
       * For an asyncio worker, it runs several tasks in one processor, and the value should wait with async.
     """
 
-    def __init__(self, app: "Pynenc") -> None:
+    def __init__(self, app: "Pynenc", runner_cache: Optional[dict] = None) -> None:
         self.app = app
         self.app.runner = self
         self.running = False
         self.logger = RunnerLogAdapter(self.app.logger, self.runner_id)
+        self._runner_cache = runner_cache
 
     @cached_property
     def runner_id(self) -> str:
@@ -64,6 +65,14 @@ class BaseRunner(ABC):
             config_values=self.app.config_values,
             config_filepath=self.app.config_filepath,
         )
+
+    @property
+    @abstractmethod
+    def cache(self) -> dict:
+        """
+        Returns the runner cache.
+        :return: A dictionary representing the runner cache.
+        """
 
     @staticmethod
     @abstractmethod
@@ -190,6 +199,12 @@ class DummyRunner(BaseRunner):
     Examples include:
       - A script that defines the app, decorates some tasks, routes them, and then finishes. Such a script does not plan to run anything itself but triggers tasks that will later run in actual runners.
     """
+
+    @property
+    def cache(self) -> dict:
+        if self._runner_cache is None:
+            self._runner_cache = {}
+        return self._runner_cache
 
     @staticmethod
     def mem_compatible() -> bool:

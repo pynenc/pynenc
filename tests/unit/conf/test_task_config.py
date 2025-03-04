@@ -26,6 +26,8 @@ class CustomException(Exception):
     registration_concurrency=ConcurrencyControlType.KEYS,
     key_arguments=("id",),
     on_diff_non_key_args_raise=True,
+    call_result_cache=False,
+    disable_cache_args=("*",),
 )
 def store_with_opt(id: int, value: int) -> None:
     del id, value

@@ -6,6 +6,7 @@ import pytest
 from _pytest.monkeypatch import MonkeyPatch
 
 from pynenc import Pynenc
+from pynenc.arg_cache.base_arg_cache import BaseArgCache
 from pynenc.broker.base_broker import BaseBroker
 from pynenc.orchestrator.base_orchestrator import BaseOrchestrator
 from pynenc.runner.base_runner import BaseRunner
@@ -24,6 +25,7 @@ if TYPE_CHECKING:
 AppComponents = namedtuple(
     "AppComponents",
     [
+        "arg_cache",
         "broker",
         "orchestrator",
         "runner",
@@ -39,7 +41,8 @@ def get_combination_id(combination: AppComponents) -> str:
         f"brk.{combination.broker.__name__.replace('Broker', '')}-"
         f"orc.{combination.orchestrator.__name__.replace('Orchestrator', '')}-"
         f"sbk.{combination.state_backend.__name__.replace('StateBackend', '')}-"
-        f"ser.{combination.serializer.__name__.replace('Serializer', '')}"
+        f"ser.{combination.serializer.__name__.replace('Serializer', '')}-"
+        f"arg.{combination.arg_cache.__name__.replace('ArgCache', '')}"
     )
 
 
@@ -68,6 +71,7 @@ def pytest_generate_tests(metafunc: "Metafunc") -> None:
         mem_compatible_runners_combinations = (
             AppComponents(*x)
             for x in product(
+                get_subclasses(BaseArgCache),
                 get_subclasses(BaseBroker),
                 get_subclasses(BaseOrchestrator),
                 get_runners(mem_compatible=True),
@@ -81,6 +85,7 @@ def pytest_generate_tests(metafunc: "Metafunc") -> None:
         not_mem_compatible_runner_combinations = (
             AppComponents(*x)
             for x in product(
+                get_subclasses(BaseArgCache, mem_cls=False),
                 get_subclasses(BaseBroker, mem_cls=False),
                 get_subclasses(BaseOrchestrator, mem_cls=False),
                 get_runners(mem_compatible=False),
