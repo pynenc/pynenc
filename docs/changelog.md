@@ -24,10 +24,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - `disable_cache_args`: Specify arguments to exclude from caching
 
 - Runner-level shared cache:
+
   - Process-safe managed dictionary for sharing data
   - Automatic fallback to local cache when runner isn't available
   - Shared storage across all invocations in same machine
   - Optimized for large serialized arguments
+
+- Configurable argument string representation:
+  - Multiple display modes (FULL, KEYS, TRUNCATED, HIDDEN)
+  - Configurable truncation length
+  - Security-focused option to hide argument values
+  - Per-application configuration control
 
 ### Changed
 

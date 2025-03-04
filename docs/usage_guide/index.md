@@ -279,6 +279,35 @@ By offering various configuration methods, Pynenc ensures flexibility and ease o
 
 Pynenc provides built-in support for common serialization formats like JSON and Pickle through its `JsonSerializer` and `PickleSerializer` classes. However, there might be scenarios where these standard serializers are not suitable for your specific needs, particularly when working with complex objects or requiring a different serialization strategy.
 
+### Creating Custom Serializers
+
+You can create a custom serializer to handle any specific requirements of your tasks. This could be necessary when dealing with complex data types that are not natively supported by JSON or Pickle, or if you need to integrate with external systems that use a different data format.
+
+To create a custom serializer, you need to subclass the `BaseSerializer` and implement the required serialization and deserialization methods. Here's a simplified example:
+
+```{code-block} python
+    from pynenc.serializers import BaseSerializer
+
+    class CustomSerializer(BaseSerializer):
+        def serialize(self, obj):
+            # Implement custom serialization logic
+            return serialized_obj
+
+        def deserialize(self, serialized_obj):
+            # Implement custom deserialization logic
+            return obj
+```
+
+### Configuring Your Custom Serializer
+
+Once your custom serializer is implemented, you can configure Pynenc to use it just like any other component:
+
+```{code-block} python
+    PYNENC__SERIALIZER_CLS="path.to.CustomSerializer"
+```
+
+This is just one way to set the configuration. Pynenc allows various methods to configure your application, including environment variables, config files, or directly in code. For more details on configuration options, refer to the {doc}`../configuration/index`.
+
 ## Use Case 9: Argument Caching
 
 Discover Pynenc's argument caching system, designed to optimize task execution by efficiently handling large serialized arguments. This feature is particularly valuable when working with substantial data objects that are frequently passed between distributed tasks.
@@ -319,32 +348,3 @@ local_cache_size = 1000   # Keep 1000 most recent entries
 This use case demonstrates how Pynenc's argument caching can significantly improve performance in distributed systems by reducing network traffic and serialization overhead.
 
 For a detailed guide and examples, see {doc}`./use_case_009_argument_caching`.
-
-### Creating Custom Serializers
-
-You can create a custom serializer to handle any specific requirements of your tasks. This could be necessary when dealing with complex data types that are not natively supported by JSON or Pickle, or if you need to integrate with external systems that use a different data format.
-
-To create a custom serializer, you need to subclass the `BaseSerializer` and implement the required serialization and deserialization methods. Here's a simplified example:
-
-```{code-block} python
-    from pynenc.serializers import BaseSerializer
-
-    class CustomSerializer(BaseSerializer):
-        def serialize(self, obj):
-            # Implement custom serialization logic
-            return serialized_obj
-
-        def deserialize(self, serialized_obj):
-            # Implement custom deserialization logic
-            return obj
-```
-
-### Configuring Your Custom Serializer
-
-Once your custom serializer is implemented, you can configure Pynenc to use it just like any other component:
-
-```{code-block} python
-    PYNENC__SERIALIZER_CLS="path.to.CustomSerializer"
-```
-
-This is just one way to set the configuration. Pynenc allows various methods to configure your application, including environment variables, config files, or directly in code. For more details on configuration options, refer to the {doc}`../configuration/index`.
