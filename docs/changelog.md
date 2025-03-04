@@ -41,6 +41,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Enhanced argument serialization with caching
 - Improved memory efficiency by sharing cache across processes
 - Optimized large argument handling in distributed tasks
+- Improved Redis broker efficiency using BLPOP with configurable timeout
+- Reduced CPU usage in message queue polling by eliminating continuous polling
 
 ### Documentation
 

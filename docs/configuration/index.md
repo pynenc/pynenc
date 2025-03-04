@@ -192,6 +192,22 @@ Different modes produce different output formats:
 
 This configuration helps balance logging verbosity with security and performance concerns.
 
+## Broker Configuration
+
+The broker component can be configured to optimize message queue performance and resource usage:
+
+```toml
+[tool.pynenc.broker]
+# Maximum time to block waiting for messages (in seconds)
+queue_timeout_sec = 0.1  # Default: 100ms
+```
+
+This timeout controls how long the broker waits for new messages using Redis BLPOP command, balancing between:
+
+- Immediate task processing (lower values)
+- Reduced CPU usage (higher values)
+- Runner responsiveness to other operations
+
 ## Extending Configuration
 
 Users can extend the configuration system by creating custom configuration classes that inherit from `ConfigBase`. This flexibility allows for the easy modification of specific parts of the configuration as necessary for each system.
