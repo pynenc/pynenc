@@ -4,6 +4,63 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.17] - 2025-03-04
+
+### Fixed
+
+- Handle broken pipe errors during MultiThreadRunner shutdown
+- Prevent crashes when cleaning up shared state after manager shutdown
+- Add safe removal of process state from manager dictionary
+
+### Added
+
+- Argument caching system for large serialized arguments:
+
+  - Configurable size threshold for caching (default 1KB)
+  - Multiple caching strategies: identity, hash, fingerprint, and content
+  - Storage implementations:
+    - Redis-based for distributed caching
+    - Memory-based for development/testing
+    - Disabled option for bypassing caching
+  - LRU cache with configurable size for local caches
+
+- New task configuration options:
+
+  - `call_result_cache`: Enable reuse of previous results
+  - `disable_cache_args`: Specify arguments to exclude from caching
+
+- Runner-level shared cache:
+
+  - Process-safe managed dictionary for sharing data
+  - Automatic fallback to local cache when runner isn't available
+  - Shared storage across all invocations in same machine
+  - Optimized for large serialized arguments
+
+- Configurable argument string representation:
+  - Multiple display modes (FULL, KEYS, TRUNCATED, HIDDEN)
+  - Configurable truncation length
+  - Security-focused option to hide argument values
+  - Per-application configuration control
+
+### Changed
+
+- Enhanced argument serialization with caching
+- Improved memory efficiency by sharing cache across processes
+- Optimized large argument handling in distributed tasks
+- Improved Redis broker efficiency using BLPOP with configurable timeout
+- Reduced CPU usage in message queue polling by eliminating continuous polling
+
+### Documentation
+
+- Added Use Case 9: Argument Caching guide with:
+  - Basic usage examples with numpy arrays
+  - Configuration options in pyproject.toml
+  - Cache control mechanisms per task
+  - Backend selection guidelines
+  - Performance optimization tips
+  - Cache sharing explanations
+  - LRU cache management details
+
 ## [0.0.16] - 2025-03-02
 
 ### Added

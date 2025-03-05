@@ -23,8 +23,14 @@ class ProcessRunner(BaseRunner):
     wait_invocation: dict["DistributedInvocation", set["DistributedInvocation"]]
     processes: dict["DistributedInvocation", Process]
     manager: Manager  # type: ignore
+    runner_cache: dict
 
     max_processes: int
+
+    @property
+    def cache(self) -> dict:
+        """Returns the cache for the ProcessRunner instance."""
+        return self.runner_cache
 
     @staticmethod
     def mem_compatible() -> bool:
@@ -79,6 +85,7 @@ class ProcessRunner(BaseRunner):
         self.logger.info("Starting ProcessRunner")
         self.manager = Manager()
         self.wait_invocation = self.manager.dict()  # type: ignore
+        self.runner_cache = self._runner_cache or self.manager.dict()  # type: ignore
         self.processes = {}
         self.max_processes = cpu_count()
 

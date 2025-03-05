@@ -36,6 +36,16 @@ class ThreadRunner(BaseRunner):
             config_filepath=self.app.config_filepath,
         )
 
+    @property
+    def cache(self) -> dict:
+        """
+        The cache for the ThreadRunner instance.
+        :return: A dictionary representing the cache for the ThreadRunner.
+        """
+        if not self._runner_cache:
+            self._runner_cache = {}
+        return self._runner_cache
+
     @staticmethod
     def mem_compatible() -> bool:
         """

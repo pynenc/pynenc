@@ -2,7 +2,7 @@
 
 ## Overview
 
-This guide explores the `auto_orchestration` sample, highlighting Pynenc's automatic orchestration capabilities in managing task dependencies. Through the use of a Fibonacci function, this example demonstrates how Pynenc intelligently schedules task execution based on the dependencies among tasks, ensuring that tasks are executed in the correct order and that dependent tasks wait for their prerequisites to complete.
+This guide explores the `auto_orchestration` sample, highlighting Pynenc's automatic orchestration capabilities in managing task dependencies. Through the use of a Fibonacci function, this example demonstrates how Pynenc schedules task execution based on the dependencies among tasks, ensuring that tasks are executed in the correct order and that dependent tasks wait for their prerequisites to complete.
 
 The full source code for this demonstration is available on GitHub: [auto_orchestration](https://github.com/pynenc/samples/tree/main/auto_orchestration).
 

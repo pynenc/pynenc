@@ -3,7 +3,11 @@ import inspect
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, Optional
 
+from pynenc.conf.config_pynenc import ArgumentPrintMode
+
 if TYPE_CHECKING:
+    from pynenc import Pynenc
+    from pynenc.conf.config_pynenc import ConfigPynenc
     from pynenc.types import Args, Func
 
 
@@ -19,8 +23,11 @@ class Arguments:
         Defaults to an empty dictionary if None is provided.
     """
 
-    def __init__(self, kwargs: Optional["Args"] = None) -> None:
+    def __init__(
+        self, kwargs: Optional["Args"] = None, *, app: Optional["Pynenc"] = None
+    ) -> None:
         self.kwargs: "Args" = kwargs or {}
+        self._app = app
 
     @classmethod
     def from_call(cls, func: "Func", *args: Any, **kwargs: Any) -> "Arguments":
@@ -62,8 +69,42 @@ class Arguments:
             return False
         return self.args_id == __value.args_id
 
+    def _format_value(self, conf: "ConfigPynenc", value: Any) -> str:
+        """Format a single argument value based on configuration."""
+        str_value = str(value)
+        if not conf.truncate_arguments_length:
+            return str_value
+        if len(str_value) <= conf.truncate_arguments_length:
+            return str_value
+        return f"{str_value[:conf.truncate_arguments_length]}..."
+
     def __str__(self) -> str:
-        return str(self.kwargs)
+        if not self._app:
+            # Fallback behavior when no app is available
+            return f"args({', '.join(f'{k}=...' for k in self.kwargs)})"
+        conf = self._app.conf
+
+        if not conf.print_arguments:
+            return "<arguments hidden>"
+
+        if not self.kwargs:
+            return "<no_args>"
+
+        mode = conf.argument_print_mode
+        if mode == ArgumentPrintMode.HIDDEN:
+            return "<arguments hidden>"
+
+        if mode == ArgumentPrintMode.KEYS:
+            return f"args({', '.join(self.kwargs.keys())})"
+
+        items = []
+        for k, v in self.kwargs.items():
+            if mode == ArgumentPrintMode.FULL:
+                items.append(f"{k}={v}")
+            else:  # TRUNCATED
+                items.append(f"{k}={self._format_value(conf, v)}")
+
+        return f"args({', '.join(items)})"
 
     def __repr__(self) -> str:
         return f"Arguments({self.kwargs})"

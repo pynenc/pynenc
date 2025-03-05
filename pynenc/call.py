@@ -49,8 +49,11 @@ class Call(Generic[Params, Result]):
 
         :return: A dictionary of serialized argument strings.
         """
+        disable_cache = "*" in self.task.conf.disable_cache_args
         return {
-            k: self.app.serializer.serialize(v)
+            k: self.app.arg_cache.serialize(
+                v, disable_cache or k in self.task.conf.disable_cache_args
+            )
             for k, v in self.arguments.kwargs.items()
         }
 
@@ -83,7 +86,7 @@ class Call(Generic[Params, Result]):
         """
         return Arguments(
             {
-                k: self.app.serializer.deserialize(v)
+                k: self.app.arg_cache.deserialize(v)
                 for k, v in serialized_arguments.items()
             }
         )
@@ -132,7 +135,7 @@ class Call(Generic[Params, Result]):
             task=Task.from_json(app, call_dict["task"]),
             arguments=Arguments(
                 {
-                    k: app.serializer.deserialize(v)
+                    k: app.arg_cache.deserialize(v)
                     for k, v in call_dict["arguments"].items()
                 }
             ),

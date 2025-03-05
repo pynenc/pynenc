@@ -29,6 +29,7 @@ class RedisQueue:
     def __init__(
         self, app: "Pynenc", client: redis.Redis, name: str, namespace: str = "queue"
     ):
+        self.app = app
         self.client = client
         self.key = Key(app.app_id, "broker")
 
@@ -47,13 +48,16 @@ class RedisQueue:
         """
         Receive a message from the Redis queue.
 
-        This method pops a message from the left end of the Redis list.
-        If a message is available, it is returned after decoding; otherwise, None is returned.
+        This method blocks for a configured timeout waiting for a message.
+        Uses BLPOP for efficient waiting instead of polling.
 
-        :return: The message from the queue, or None if the queue is empty.
+        :return: The message from the queue, or None if timeout is reached.
         """
-        if msg := self.client.lpop(self.key.default_queue()):
-            return msg.decode()
+        if msg := self.client.blpop(
+            self.key.default_queue(), timeout=self.app.broker.conf.queue_timeout_sec
+        ):
+            # blpop returns tuple of (key, value)
+            return msg[1].decode()
         return None
 
     def count_invocations(self) -> int:

@@ -13,6 +13,7 @@ This Usage Guide is designed to provide you with detailed instructions and pract
 ./use_case_004_auto_orchestration
 ./use_case_005_sync_unit_testing
 ./use_case_006_mem_unit_testing
+./use_case_009_argument_caching
 ```
 
 ## Getting Started with Pynenc
@@ -131,7 +132,7 @@ For a detailed guide and examples, see {doc}`./use_case_003_concurrency_control`
 
 ## Use Case 4: Automatic Orchestration
 
-Delve into the advanced features of Pynenc with the Automatic Orchestration use case, showcasing the library's ability to intelligently manage task dependencies. This scenario uses the well-known Fibonacci sequence to illustrate how Pynenc automatically orchestrates the execution of dependent tasks, ensuring that tasks are executed in the correct sequence without manual intervention.
+Delve into the advanced features of Pynenc with the Automatic Orchestration use case, showcasing the library's ability to manage task dependencies. This scenario uses the well-known Fibonacci sequence to illustrate how Pynenc automatically orchestrates the execution of dependent tasks, ensuring that tasks are executed in the correct sequence without manual intervention.
 
 ```python
 from pynenc import Pynenc
@@ -306,3 +307,44 @@ Once your custom serializer is implemented, you can configure Pynenc to use it j
 ```
 
 This is just one way to set the configuration. Pynenc allows various methods to configure your application, including environment variables, config files, or directly in code. For more details on configuration options, refer to the {doc}`../configuration/index`.
+
+## Use Case 9: Argument Caching
+
+Discover Pynenc's argument caching system, designed to optimize task execution by efficiently handling large serialized arguments. This feature is particularly valuable when working with substantial data objects that are frequently passed between distributed tasks.
+
+```python
+from pynenc import Pynenc
+import numpy as np
+
+app = Pynenc()
+
+@app.task
+def process_array(data: np.ndarray) -> float:
+    """Process a large numpy array with automatic argument caching."""
+    return float(data.mean())
+
+# Large arrays will be automatically cached based on size threshold
+large_array = np.random.rand(1000000)
+result = process_array(large_array)
+```
+
+The argument caching system offers several key features:
+
+- Automatic caching of large arguments based on configurable size thresholds
+- Multiple backend options (Redis for distributed, Memory for local development)
+- Process-safe shared caching through runner-level storage
+- Smart detection to prevent redundant serialization
+- Fine-grained control over caching behavior per task and argument
+- LRU cache management for optimal memory usage
+
+Configure the caching behavior through simple configuration settings:
+
+```toml
+[tool.pynenc.arg_cache]
+min_size_to_cache = 1024  # Cache arguments larger than 1KB
+local_cache_size = 1000   # Keep 1000 most recent entries
+```
+
+This use case demonstrates how Pynenc's argument caching can significantly improve performance in distributed systems by reducing network traffic and serialization overhead.
+
+For a detailed guide and examples, see {doc}`./use_case_009_argument_caching`.

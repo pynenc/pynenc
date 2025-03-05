@@ -31,12 +31,16 @@ class ProcessStatus(NamedTuple):
 
 
 def thread_runner_process_main(
-    app: "Pynenc", *, shared_status: dict[str, ProcessStatus], process_key: str
+    app: "Pynenc",
+    *,
+    runner_cache: dict,
+    shared_status: dict[str, ProcessStatus],
+    process_key: str,
 ) -> None:
     """
     Runs a ThreadRunner in a separate process.
     """
-    runner = ThreadRunner(app)
+    runner = ThreadRunner(app, runner_cache)
     # Replace the MultiThreadRunner with ThreadRunner in this process
     app.runner = runner
     runner._on_start()
@@ -71,6 +75,7 @@ class MultiThreadRunner(BaseRunner):
     # shared_status: Maps process key to ProcessStatus
     shared_status: dict[str, ProcessStatus]
     max_processes: int
+    runner_cache: dict
 
     @cached_property
     def conf(self) -> ConfigMultiThreadRunner:
@@ -78,6 +83,11 @@ class MultiThreadRunner(BaseRunner):
             config_values=self.app.config_values,
             config_filepath=self.app.config_filepath,
         )
+
+    @property
+    def cache(self) -> dict:
+        """Returns the cache for the ProcessRunner instance."""
+        return self.runner_cache
 
     @staticmethod
     def mem_compatible() -> bool:
@@ -99,6 +109,7 @@ class MultiThreadRunner(BaseRunner):
         self.logger.info("Starting MultiThreadRunner")
         self.manager = Manager()
         self.shared_status = self.manager.dict()  # type: ignore
+        self.runner_cache = self._runner_cache or self.manager.dict()  # type: ignore
         self.processes = {}
         self.max_processes = self.conf.max_processes or cpu_count()
         for _ in range(self.conf.min_processes):
@@ -108,6 +119,7 @@ class MultiThreadRunner(BaseRunner):
         process_key = f"trp-{time.time()}-{len(self.processes)}"
         args = {
             "app": self.app,
+            "runner_cache": self.runner_cache,
             "shared_status": self.shared_status,
             "process_key": process_key,
         }
@@ -130,6 +142,17 @@ class MultiThreadRunner(BaseRunner):
         self.manager.shutdown()  # type: ignore
         self.logger.info("MultiThreadRunner stopped")
 
+    def _safe_remove_shared_state(self, key: str) -> None:
+        """
+        Safely remove a process's shared state, handling manager shutdown cases.
+
+        :param str key: The process key to remove from shared state
+        """
+        try:
+            self.shared_status.pop(key, None)
+        except (EOFError, BrokenPipeError):
+            self.logger.debug(f"Manager already stopped while removing state for {key}")
+
     def _on_stop_runner_loop(self) -> None:
         """
         Internal method called after receiving a signal to stop the runner loop.
@@ -142,7 +165,7 @@ class MultiThreadRunner(BaseRunner):
                 proc.terminate()
                 proc.join()
                 self.processes.pop(key, None)
-                self.shared_status.pop(key, None)
+                self._safe_remove_shared_state(key)
                 self.logger.info(f"Terminated process {key} during loop stop")
         self.logger.info("MultiThreadRunner loop stopped")
 
@@ -153,7 +176,7 @@ class MultiThreadRunner(BaseRunner):
             self.logger.warning(f"Found {len(dead_keys)} dead processes to clean up")
             for key in dead_keys:
                 self.processes.pop(key, None)
-                self.shared_status.pop(key, None)
+                self._safe_remove_shared_state(key)
                 self.logger.info(f"Cleaned up dead process {key}")
 
     def _scale_up_processes(self) -> None:
@@ -202,7 +225,7 @@ class MultiThreadRunner(BaseRunner):
                 keys_to_remove.append(key)
         for key in keys_to_remove:
             self.processes.pop(key, None)
-            self.shared_status.pop(key, None)
+            self._safe_remove_shared_state(key)
 
     def runner_loop_iteration(self) -> None:
         # self._cleanup_dead_processes()

@@ -55,6 +55,8 @@ def options_deserializer(serialized_pairs: list[tuple[Any, Any]]) -> dict[str, A
             result[key] = ConcurrencyControlType(value)
         elif key == "key_arguments":
             result[key] = tuple(value)
+        elif key == "disable_cache_args":
+            result[key] = tuple(value)
         else:
             result[key] = value
     return result
@@ -136,6 +138,15 @@ class ConfigTask(ConfigPynencBase):
         but different non-key arguments is encountered. This option is used to handle
         concurrency at the key level.
 
+    :cvar ConfigField[bool] call_result_cache:
+        If set to True, enables caching for the task. This option is useful for tasks that
+        perform expensive computations and can benefit from caching results.
+
+    :cvar ConfigField[tuple[str, ...]] disable_cache_args:
+        Specifies arguments to exclude from caching. This option is useful for tasks that
+        should not cache results based on certain arguments.
+        It can be set to `("*",)` to disable caching for all arguments.
+
     Examples
     --------
     Using environment variables to configure tasks:
@@ -180,6 +191,8 @@ class ConfigTask(ConfigPynencBase):
     registration_concurrency = ConfigField(ConcurrencyControlType.DISABLED)
     key_arguments = DEFAULT_KEY_ARGS
     on_diff_non_key_args_raise = ConfigField(False)
+    call_result_cache = ConfigField(False)
+    disable_cache_args: ConfigField[tuple[str, ...]] = ConfigField(())
 
     def __init__(
         self,

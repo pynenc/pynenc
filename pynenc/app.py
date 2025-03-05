@@ -2,6 +2,7 @@ from functools import cached_property
 from logging import Logger
 from typing import TYPE_CHECKING, Any, Callable, Optional, Type, overload
 
+from pynenc.arg_cache.base_arg_cache import BaseArgCache
 from pynenc.broker.base_broker import BaseBroker
 from pynenc.conf.config_pynenc import ConfigPynenc
 from pynenc.conf.config_task import ConcurrencyControlType
@@ -97,6 +98,10 @@ class Pynenc:
     def serializer(self) -> BaseSerializer:
         return get_subclass(BaseSerializer, self.conf.serializer_cls)()  # type: ignore # mypy issue #4717
 
+    @cached_property
+    def arg_cache(self) -> BaseArgCache:
+        return get_subclass(BaseArgCache, self.conf.arg_cache_cls)(self)  # type: ignore # mypy issue #4717
+
     @property
     def runner(self) -> BaseRunner:
         if self._runner_instance is None:
@@ -112,6 +117,7 @@ class Pynenc:
         self.broker.purge()
         self.orchestrator.purge()
         self.state_backend.purge()
+        self.arg_cache.purge()
 
     @overload
     def task(
@@ -125,6 +131,8 @@ class Pynenc:
         registration_concurrency: Optional[ConcurrencyControlType] = None,
         key_arguments: Optional[tuple[str, ...]] = None,
         on_diff_non_key_args_raise: Optional[bool] = None,
+        call_result_cache: Optional[bool] = None,
+        disable_cache_args: Optional[tuple[str, ...]] = None,
     ) -> "Task":
         ...
 
@@ -140,6 +148,8 @@ class Pynenc:
         registration_concurrency: Optional[ConcurrencyControlType] = None,
         key_arguments: Optional[tuple[str, ...]] = None,
         on_diff_non_key_args_raise: Optional[bool] = None,
+        call_result_cache: Optional[bool] = None,
+        disable_cache_args: Optional[tuple[str, ...]] = None,
     ) -> Callable[["Func"], "Task"]:
         ...
 
@@ -154,6 +164,8 @@ class Pynenc:
         registration_concurrency: Optional[ConcurrencyControlType] = None,
         key_arguments: Optional[tuple[str, ...]] = None,
         on_diff_non_key_args_raise: Optional[bool] = None,
+        call_result_cache: Optional[bool] = None,
+        disable_cache_args: Optional[tuple[str, ...]] = None,
     ) -> "Task" | Callable[["Func"], "Task"]:
         """
         The task decorator converts the function into an instance of a BaseTask. It accepts any kind of options,
@@ -177,6 +189,11 @@ class Pynenc:
         :param Optional[bool] on_diff_non_key_args_raise:
             If True, raises an exception for task invocations with matching key arguments but
             different non-key arguments.
+        :param Optional[bool] call_result_cache:
+            If True, it will return the latest result of a Task with the same arguments if availble,
+            otherwise it will trigger a new invocation as expected.
+        :param Optional[tuple[str, ...]] disable_cache_args:
+            Arguments to exclude from caching, it will accept "*" to disable caching for all arguments.
 
         :return: A Task instance or a callable that when called returns a Task instance.
 
@@ -195,6 +212,8 @@ class Pynenc:
             "registration_concurrency": registration_concurrency,
             "key_arguments": key_arguments,
             "on_diff_non_key_args_raise": on_diff_non_key_args_raise,
+            "call_result_cache": call_result_cache,
+            "disable_cache_args": disable_cache_args,
         }
         options = {k: v for k, v in options.items() if v is not None}
 

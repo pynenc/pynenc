@@ -1,6 +1,28 @@
+from enum import StrEnum, auto
+
 from cistell import ConfigField
 
 from pynenc.conf.config_base import ConfigPynencBase
+
+
+class ArgumentPrintMode(StrEnum):
+    """
+    Controls how task arguments are displayed in logs.
+
+    :cvar FULL:
+        Show complete argument values.
+    :cvar KEYS:
+        Show only argument names.
+    :cvar TRUNCATED:
+        Show truncated argument values based on configured length.
+    :cvar HIDDEN:
+        Hide all argument values.
+    """
+
+    FULL = auto()
+    KEYS = auto()
+    TRUNCATED = auto()
+    HIDDEN = auto()
 
 
 class ConfigPynenc(ConfigPynencBase):
@@ -17,6 +39,8 @@ class ConfigPynenc(ConfigPynencBase):
         The state backend class to use.
     :cvar str serializer_cls:
         The serializer class to use.
+    :cvar str arg_cache_cls:
+        The argument cache class to use.
     :cvar str runner_cls:
         The runner class to use.
     :cvar bool dev_mode_force_sync_tasks:
@@ -26,6 +50,13 @@ class ConfigPynenc(ConfigPynencBase):
         See :class:`~pynenc.invocation.status.InvocationStatus` for more details.
     :cvar str logging_level:
         The logging level of the application ('info', 'warning', 'error', etc.).
+    :cvar bool print_arguments:
+        If True, prints task arguments in logs. Default False.
+    :cvar int truncate_arguments_length:
+        Maximum length for printed arguments. If 0, no truncation. Default 100.
+    :cvar ArgumentPrintMode argument_print_mode:
+        How to print arguments: FULL (all args), KEYS (only names),
+        TRUNCATED (truncated values), HIDDEN (no args). Default TRUNCATED.
     """
 
     app_id = ConfigField("pynenc")
@@ -33,7 +64,11 @@ class ConfigPynenc(ConfigPynencBase):
     broker_cls = ConfigField("MemBroker")
     state_backend_cls = ConfigField("MemStateBackend")
     serializer_cls = ConfigField("JsonSerializer")
+    arg_cache_cls = ConfigField("DisabledArgCache")
     runner_cls = ConfigField("DummyRunner")
     dev_mode_force_sync_tasks = ConfigField(False)
     max_pending_seconds = ConfigField(5.0)
     logging_level = ConfigField("info")
+    print_arguments = ConfigField(True)
+    truncate_arguments_length = ConfigField(32)
+    argument_print_mode = ConfigField(ArgumentPrintMode.TRUNCATED)

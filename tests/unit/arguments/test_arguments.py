@@ -39,11 +39,3 @@ def test_arguments_equality() -> None:
     assert args1 == args2
     assert args1 != args3
     assert args1 != "a string"
-
-
-def test_arguments_str_repr() -> None:
-    args = Arguments(kwargs={"a": 1, "b": 2})
-    str_repr = str(args)
-    repr_str = repr(args)
-    assert str_repr == "{'a': 1, 'b': 2}"
-    assert repr_str == "Arguments({'a': 1, 'b': 2})"

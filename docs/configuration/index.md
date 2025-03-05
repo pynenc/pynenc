@@ -136,6 +136,78 @@ The `ConfigTask` class provides specialized configurations for tasks within the 
       config = ConfigTask(task_id="module_name.my_task", config_filepath="path/to/config.yaml")
    ```
 
+## Configuring Argument Display
+
+Pynenc provides flexible configuration options for controlling how task arguments are displayed in logs. This is particularly useful for managing log verbosity and protecting sensitive information.
+
+```python
+from pynenc import Pynenc
+import pandas as pd
+
+app = Pynenc()
+
+@app.task
+def process_data(df: pd.DataFrame, threshold: float = 0.5) -> float:
+    return df['value'].mean()
+
+# Arguments will be displayed according to configuration
+result = process_data(large_df, threshold=0.75)
+```
+
+### Configuration Options
+
+Configure argument display in your `pyproject.toml`:
+
+```toml
+[tool.pynenc]
+# Enable/disable argument printing
+print_arguments = true
+
+# Maximum length for argument values (0 for no truncation)
+truncate_arguments_length = 32
+
+# Display mode: "FULL", "KEYS", "TRUNCATED", or "HIDDEN"
+argument_print_mode = "TRUNCATED"
+```
+
+### Display Modes
+
+Different modes produce different output formats:
+
+```python
+# FULL mode - Complete argument values
+# args(df=   col1  col2
+# 0    1    2
+# 1    3    4, threshold=0.75)
+
+# KEYS mode - Only argument names
+# args(df, threshold)
+
+# TRUNCATED mode - Truncated values
+# args(df=   col1  col2..., threshold=0.75)
+
+# HIDDEN mode
+# <arguments hidden>
+```
+
+This configuration helps balance logging verbosity with security and performance concerns.
+
+## Broker Configuration
+
+The broker component can be configured to optimize message queue performance and resource usage:
+
+```toml
+[tool.pynenc.broker]
+# Maximum time to block waiting for messages (in seconds)
+queue_timeout_sec = 0.1  # Default: 100ms
+```
+
+This timeout controls how long the broker waits for new messages using Redis BLPOP command, balancing between:
+
+- Immediate task processing (lower values)
+- Reduced CPU usage (higher values)
+- Runner responsiveness to other operations
+
 ## Extending Configuration
 
 Users can extend the configuration system by creating custom configuration classes that inherit from `ConfigBase`. This flexibility allows for the easy modification of specific parts of the configuration as necessary for each system.
