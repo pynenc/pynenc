@@ -11,12 +11,12 @@ from typing import TYPE_CHECKING, Any, Optional
 thread_local = threading.local()
 
 if TYPE_CHECKING:
+    from pynenc.invocation.conc_invocation import ConcurrentInvocation
     from pynenc.invocation.dist_invocation import DistributedInvocation
-    from pynenc.invocation.sync_invocation import SynchronousInvocation
 
 # invocation_context keeps the current invocation, so it can be referenced as a parent from any sub-invocation
 # - It is a dictionary with the format {app_id: invocation}
-sync_inv_context: dict[str, Optional["SynchronousInvocation"]] = {}
+sync_inv_context: dict[str, Optional["ConcurrentInvocation"]] = {}
 
 
 def get_dist_invocation_context(app_id: str) -> Optional["DistributedInvocation"]:

@@ -166,7 +166,7 @@ def test_get_invocations_to_run_atomicity(test_vars: Vars) -> None:
         # broker should not return the same invocation twice
         # but we may get a blocking invocatio and immediately after the same
         # invocation from the broker
-        app.broker.retrieve_invocation.side_effect = [  # type: ignore
+        app.broker.retrieve_invocation_mock.side_effect = [  # type: ignore
             test_vars.inv1,
             test_vars.inv1,
             test_vars.inv1,

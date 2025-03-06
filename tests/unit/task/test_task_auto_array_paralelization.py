@@ -3,7 +3,7 @@ from typing import Any
 import pytest
 
 from pynenc import Pynenc
-from pynenc.invocation import DistributedInvocationGroup, SynchronousInvocationGroup
+from pynenc.invocation import ConcurrentInvocationGroup, DistributedInvocationGroup
 
 _app = Pynenc()
 
@@ -43,7 +43,7 @@ def test_task_only_module_level(app: Pynenc) -> None:
             return x + y
 
 
-def test_sync_invocation_group(app: Pynenc) -> None:
+def test_conc_invocation_group(app: Pynenc) -> None:
     """
     Test that the Task will return a SyncResult if dev_mode_force_sync_tasks=True
     """
@@ -52,11 +52,11 @@ def test_sync_invocation_group(app: Pynenc) -> None:
     )  # re-instantiate the app, config os.environ is cached
     # app.conf.dev_mode_force_sync_tasks = True
     invocation_group = add.parallelize([(1, 1), add.args(1, 2), {"x": 2, "y": 3}])
-    assert isinstance(invocation_group, SynchronousInvocationGroup)
+    assert isinstance(invocation_group, ConcurrentInvocationGroup)
     assert list(invocation_group.results) == [2, 3, 5]
 
 
-def test_async_invocation(app: Pynenc) -> None:
+def test_aconc_invocation(app: Pynenc) -> None:
     """Test that the task will return an Async result"""
     app.conf.dev_mode_force_sync_tasks = False
     invocation_group = add.parallelize([(1, 1), add.args(1, 2), {"x": 2, "y": 3}])

@@ -175,9 +175,9 @@ class ProcessRunner(BaseRunner):
         )
         time.sleep(self.conf.runner_loop_sleep_time_sec)
 
-    def waiting_for_results(
+    def _waiting_for_results(
         self,
-        running_invocation: Optional["DistributedInvocation"],
+        running_invocation: "DistributedInvocation",
         result_invocations: list["DistributedInvocation"],
         runner_args: Optional[dict[str, Any]] = None,
     ) -> None:
@@ -188,11 +188,6 @@ class ProcessRunner(BaseRunner):
         :param result_invocations: A list of invocations whose results are being awaited.
         :param runner_args: Additional arguments required for the ProcessRunner.
         """
-        # called from subprocess memory space
-        if not running_invocation:
-            time.sleep(self.conf.invocation_wait_results_sleep_time_sec)
-            return
-
         self.app.orchestrator.set_invocation_status(
             running_invocation, InvocationStatus.PAUSED
         )

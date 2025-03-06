@@ -22,7 +22,7 @@ def test_route_task() -> None:
         Call(dummy_task, Arguments({"x": 0, "y": 0}))
     )
     assert isinstance(invocation, DistributedInvocation)
-    mock_base_app.broker.route_invocation.assert_called_once()
+    mock_base_app.broker.route_invocation_mock.assert_called_once()
 
 
 def test_base_broker_conf() -> None:

@@ -25,6 +25,9 @@ class ConcreteInvocation(BaseInvocation):
     def result(self) -> Any:
         raise NotImplementedError("Not implemented")
 
+    def async_result(self) -> Any:
+        raise NotImplementedError("Not implemented")
+
     @property
     def num_retries(self) -> Any:
         raise NotImplementedError("Not implemented")
@@ -33,6 +36,11 @@ class ConcreteInvocation(BaseInvocation):
 class ConcreteInvocationGroup(BaseInvocationGroup):
     @property
     def results(self) -> Any:
+        raise NotImplementedError("Not implemented")
+
+    async def async_results(self) -> Any:
+        if False:
+            yield  # type: ignore
         raise NotImplementedError("Not implemented")
 
 

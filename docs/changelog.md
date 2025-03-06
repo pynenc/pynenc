@@ -4,6 +4,50 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.18] - 2025-03-06
+
+### Added
+
+- **Full support for asynchronous task execution and result retrieval**:
+  - Introduced `async_result()` for **awaiting individual task results**.
+  - Introduced `async_results()` for **awaiting multiple task results in parallel**.
+  - Enabled **async group invocations** using `parallelize().async_results()`.
+
+### Tests
+
+- **New unit tests for async result handling**:
+
+  - Verified that `async_waiting_for_results()` correctly delegates to `_waiting_for_results()`.
+  - Ensured that external invocations in `DummyRunner` use `time.sleep()` as expected.
+  - Added tests for `async_result()` and `async_results()` behavior with **delayed and failing invocations**.
+
+- **New integration tests for async execution**:
+  - Full coverage of async task execution including:
+    - **Simple async tasks**
+    - **Async sleep-based tasks**
+    - **Tasks raising exceptions**
+    - **Tasks with async dependencies**
+    - **Cycle detection in async tasks**
+  - Group invocation tests verifying **async parallel execution**.
+
+### Changed
+
+- Optimized `async_result()` to **improve polling efficiency** and reduce unnecessary orchestrator calls.
+- Updated `async_waiting_for_results()` to **respect configurable sleep time** for better performance in distributed runners.
+
+- **Enhanced test isolation in `conftest.py`:**
+
+  - **Before**: Mocks were defined at the class level, leading to **state sharing** across tests.
+  - **Now**: Each mock method is encapsulated **within the instance**, preventing **unexpected state persistence** in parallel test runs.
+  - **Improved MockPynenc instantiation** to ensure each test gets **a fresh, isolated instance**.
+
+- **Renamed `SynchronousInvocation` to `ConcurrentInvocation`:**
+  - **Why?** The term _Synchronous_ was misleading since the class is designed for **concurrent execution**, not strictly _blocking synchronous_ execution.
+  - **What changed?**
+    - All references to `SynchronousInvocation` have been **replaced** with `ConcurrentInvocation`.
+    - Code, documentation, and tests **updated accordingly** to reflect the new naming.
+    - Ensured backward compatibility by **aliasing** `SynchronousInvocation` to `ConcurrentInvocation` (this will be removed in a future version).
+
 ## [0.0.17] - 2025-03-04
 
 ### Fixed

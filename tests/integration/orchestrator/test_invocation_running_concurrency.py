@@ -22,7 +22,7 @@ def test_no_concurrency_default(app: MockPynenc, task_sum: "Task") -> None:
     app.orchestrator.set_invocation_status(
         fake_running_invocation, status=InvocationStatus.RUNNING
     )
-    app.broker.retrieve_invocation.side_effect = [trying_to_run_invocation, None]
+    app.broker.retrieve_invocation_mock.side_effect = [trying_to_run_invocation, None]
     trying_to_run_invocation.task.conf.running_concurrency = (
         config_task.ConcurrencyControlType.DISABLED
     )
@@ -44,7 +44,7 @@ def test_running_concurrency_type_task(app: MockPynenc, task_sum: "Task") -> Non
         fake_running_invocation, status=InvocationStatus.RUNNING
     )
     # First it will return the invocation tryin to run
-    app.broker.retrieve_invocation.side_effect = [trying_to_run_invocation, None]
+    app.broker.retrieve_invocation_mock.side_effect = [trying_to_run_invocation, None]
     trying_to_run_invocation.task.conf.running_concurrency = (
         config_task.ConcurrencyControlType.TASK
     )

@@ -11,11 +11,11 @@ from pynenc.call import Call
 from pynenc.conf.config_task import ConfigTask
 from pynenc.exceptions import InvalidTaskOptionsError, RetryError
 from pynenc.invocation.base_invocation import BaseInvocation, BaseInvocationGroup
-from pynenc.invocation.dist_invocation import DistributedInvocationGroup
-from pynenc.invocation.sync_invocation import (
-    SynchronousInvocation,
-    SynchronousInvocationGroup,
+from pynenc.invocation.conc_invocation import (
+    ConcurrentInvocation,
+    ConcurrentInvocationGroup,
 )
+from pynenc.invocation.dist_invocation import DistributedInvocationGroup
 from pynenc.types import Func, Params, Result
 from pynenc.util.log import TaskLoggerAdapter
 
@@ -197,7 +197,7 @@ class Task(Generic[Params, Result]):
         :return: the invocation
         """
         if self.app.conf.dev_mode_force_sync_tasks:
-            return SynchronousInvocation(call=Call(self, arguments))
+            return ConcurrentInvocation(call=Call(self, arguments))
         return self.app.orchestrator.route_call(Call(self, arguments))
 
     def parallelize(
@@ -243,7 +243,7 @@ class Task(Generic[Params, Result]):
         """
         group_cls: type[BaseInvocationGroup]
         if self.app.conf.dev_mode_force_sync_tasks:
-            group_cls = SynchronousInvocationGroup
+            group_cls = ConcurrentInvocationGroup
         else:
             group_cls = DistributedInvocationGroup
 

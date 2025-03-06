@@ -13,7 +13,7 @@ from pynenc.runner.base_runner import BaseRunner
 from pynenc.serializer.base_serializer import BaseSerializer
 from pynenc.state_backend.base_state_backend import BaseStateBackend
 from tests import util
-from tests.integration.apps.combinations import tasks
+from tests.integration.apps.combinations import tasks, tasks_async
 
 if TYPE_CHECKING:
     from _pytest.fixtures import FixtureRequest
@@ -180,3 +180,33 @@ def task_sleep(app: Pynenc) -> "Task":
 def task_cpu_intensive_no_conc(app: Pynenc) -> "Task":
     tasks.cpu_intensive_no_conc.app = app
     return tasks.cpu_intensive_no_conc
+
+
+@pytest.fixture(scope="function")
+def task_async_add(app: Pynenc) -> "Task":
+    tasks_async.async_add.app = app
+    return tasks_async.async_add
+
+
+@pytest.fixture(scope="function")
+def task_async_get_text(app: Pynenc) -> "Task":
+    tasks_async.async_get_text.app = app
+    return tasks_async.async_get_text
+
+
+@pytest.fixture(scope="function")
+def task_async_get_upper(app: Pynenc) -> "Task":
+    tasks_async.async_get_upper.app = app
+    return tasks_async.async_get_upper
+
+
+@pytest.fixture(scope="function")
+def task_async_fail(app: Pynenc) -> "Task":
+    tasks_async.async_fail.app = app
+    return tasks_async.async_fail
+
+
+@pytest.fixture(scope="function")
+def task_async_sleep(app: Pynenc) -> "Task":
+    tasks_async.async_sleep_seconds.app = app
+    return tasks_async.async_sleep_seconds

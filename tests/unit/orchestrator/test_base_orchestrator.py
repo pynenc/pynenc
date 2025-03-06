@@ -1,5 +1,7 @@
 from unittest.mock import Mock, patch
 
+import pytest
+
 from pynenc.conf.config_task import ConcurrencyControlType
 from pynenc.exceptions import PendingInvocationLockError
 from pynenc.invocation import DistributedInvocation, InvocationStatus
@@ -23,10 +25,10 @@ def test_route_default() -> None:
     invocation = add(1, 3)
     assert isinstance(invocation, DistributedInvocation)
     # test that app.broker.route_invocation (MockBroker.route_invocation) has been called
-    mock_base_app.broker.route_invocation.assert_called_once()
+    mock_base_app.broker.route_invocation_mock.assert_called_once()
     # test that app.orchestrator.set_invocation_status (MockBaseOrchestrator.set_invocation_status)
     # has been called with (result, InvocationStatus.REGISTERED)
-    mock_base_app.orchestrator._set_invocation_status.assert_called_once_with(
+    mock_base_app.orchestrator._set_invocation_status_mock.assert_called_once_with(
         invocation, InvocationStatus.REGISTERED
     )
 
@@ -36,21 +38,36 @@ def add_single_inv(x: int, y: int) -> int:
     return x + y
 
 
-def test_registration_concurrency(mock_base_app: MockPynenc) -> None:
+def test_registration_concurrency(
+    mock_base_app: MockPynenc, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Test that the when `task.options.registration_concurrency` is set the orchestrator
     will only route the task if do not exists a Pending instance
     """
     # Get existing invocation doesn't find any pending match
-    mock_base_app.orchestrator.get_existing_invocations.return_value = iter([])
+    monkeypatch.setattr(
+        type(mock_base_app.orchestrator),
+        "get_existing_invocations",
+        lambda self, *args, **kwargs: iter([]),
+    )
+
     first_invocation = add_single_inv(1, 3)
+
     # Return previous as a pending match
-    mock_base_app.orchestrator.get_existing_invocations.return_value = iter(
-        [first_invocation]
+    monkeypatch.setattr(
+        type(mock_base_app.orchestrator),
+        "get_existing_invocations",
+        lambda self, *args, **kwargs: iter([first_invocation]),
     )
     next_invocation = add_single_inv(1, 3)
     assert first_invocation.invocation_id == next_invocation.invocation_id
+
     # Back to no match, generates a new invocation
-    mock_base_app.orchestrator.get_existing_invocations.return_value = iter([])
+    monkeypatch.setattr(
+        type(mock_base_app.orchestrator),
+        "get_existing_invocations",
+        lambda self, *args, **kwargs: iter([]),
+    )
     third_invocation = add_single_inv(1, 3)
     assert third_invocation.invocation_id != next_invocation.invocation_id
 
@@ -75,12 +92,12 @@ def test_running_concurrency_disabled(mock_base_app: MockPynenc) -> None:
     to_run_invocation = dummy_run_disable_concurrency()
     assert isinstance(to_run_invocation, DistributedInvocation)
     # If there's no invocation it can run
-    mock_base_app.orchestrator.get_existing_invocations.return_value = iter([])
+    mock_base_app.orchestrator._get_existing_invocations_mock.return_value = iter([])
     assert mock_base_app.orchestrator._is_authorize_by_concurrency_control(
         to_run_invocation, []
     )
     # but also if there's one running invocation
-    mock_base_app.orchestrator.get_existing_invocations.return_value = iter(
+    mock_base_app.orchestrator._get_existing_invocations_mock.return_value = iter(
         [running_invocation]
     )
     assert mock_base_app.orchestrator._is_authorize_by_concurrency_control(
@@ -102,13 +119,13 @@ def test_running_concurrency_task_control(mock_base_app: MockPynenc) -> None:
     running_invocation = dummy_run_task_concurrency()
     to_run_invocation = dummy_run_task_concurrency()
     # If there's no invocation it can run
-    mock_base_app.orchestrator.get_existing_invocations.return_value = iter([])
+    mock_base_app.orchestrator._get_existing_invocations_mock.return_value = iter([])
     assert isinstance(to_run_invocation, DistributedInvocation)
     assert mock_base_app.orchestrator.is_authorize_to_run_by_concurrency_control(
         to_run_invocation
     )
     # But if exists a running invocation of the same task it will return False
-    mock_base_app.orchestrator.get_existing_invocations.return_value = iter(
+    mock_base_app.orchestrator._get_existing_invocations_mock.return_value = iter(
         [running_invocation]
     )
     assert not mock_base_app.orchestrator.is_authorize_to_run_by_concurrency_control(
@@ -117,7 +134,7 @@ def test_running_concurrency_task_control(mock_base_app: MockPynenc) -> None:
 
 
 @patch(
-    "pynenc.orchestrator.base_orchestrator.BaseOrchestrator.is_authorize_to_run_by_concurrency_control"
+    "pynenc.orchestrator.base_orchestrator.BaseOrchestrator.is_candidate_to_run_by_concurrency_control"
 )
 @patch("pynenc.orchestrator.base_orchestrator.BaseOrchestrator._set_pending")
 def test_get_blocking_invocations_to_run(
@@ -129,7 +146,7 @@ def test_get_blocking_invocations_to_run(
     mock_invocation_3 = dummy_run_task_concurrency()
 
     # Mock method to return these invocations as blocking invocations
-    mock_base_app.orchestrator.blocking_control.get_blocking_invocations.return_value = iter(
+    mock_base_app.orchestrator.blocking_control_mock.get_blocking_invocations_mock.return_value = iter(
         [mock_invocation_1, mock_invocation_2, mock_invocation_3]
     )
 
@@ -163,7 +180,7 @@ def test_get_blocking_invocations_to_run_disabled(
     mock_invocation_1 = dummy_run_task_concurrency()
 
     # Mock method to return these invocations as blocking invocations
-    mock_base_app.orchestrator.blocking_control.get_blocking_invocations.return_value = iter(
+    mock_base_app.orchestrator.blocking_control_mock.get_blocking_invocations_mock.return_value = iter(
         [mock_invocation_1]
     )
 
@@ -188,7 +205,7 @@ def test_get_blocking_invocations_to_run_handles_lock(
     mock_invocation_1 = dummy_run_task_concurrency()
 
     # Mock method to return these invocations as blocking invocations
-    mock_base_app.orchestrator.blocking_control.get_blocking_invocations.return_value = iter(
+    mock_base_app.orchestrator.blocking_control_mock.get_blocking_invocations_mock.return_value = iter(
         [mock_invocation_1]
     )
 
@@ -221,4 +238,4 @@ def test_waiting_for_results_empty_invocations(mock_base_app: MockPynenc) -> Non
         mock_warning.assert_called_once()
 
         # Verify blocking_control.waiting_for_results was not called
-        mock_base_app.orchestrator.blocking_control.waiting_for_results.assert_not_called()
+        mock_base_app.orchestrator.blocking_control_mock.waiting_for_results_mock.assert_not_called()

@@ -233,7 +233,7 @@ class MultiThreadRunner(BaseRunner):
         # self._terminate_idle_processes()
         time.sleep(self.conf.runner_loop_sleep_time_sec)
 
-    def waiting_for_results(
+    def _waiting_for_results(
         self,
         running_invocation: Optional["DistributedInvocation"],
         result_invocations: list["DistributedInvocation"],
@@ -243,11 +243,7 @@ class MultiThreadRunner(BaseRunner):
         Handle waiting for results when called from outside any process.
         This happens when checking results from the main thread or test environment.
         """
-        del result_invocations, runner_args
-        if not running_invocation:
-            # Called from outside any process (e.g. tests), just sleep
-            time.sleep(self.conf.invocation_wait_results_sleep_time_sec)
-            return
+        del running_invocation, result_invocations, runner_args
         self.logger.warning(
             "waiting_for_results called on MultiThreadRunner from within a task. "
             "This should be handled by the ThreadRunner instance in the process."

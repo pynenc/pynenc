@@ -155,9 +155,9 @@ class ThreadRunner(BaseRunner):
         )
         time.sleep(self.conf.runner_loop_sleep_time_sec)
 
-    def waiting_for_results(
+    def _waiting_for_results(
         self,
-        running_invocation: Optional["DistributedInvocation"],
+        running_invocation: "DistributedInvocation",
         result_invocations: list["DistributedInvocation"],
         runner_args: Optional[dict[str, Any]] = None,
     ) -> None:
@@ -169,14 +169,6 @@ class ThreadRunner(BaseRunner):
         :param runner_args: Additional arguments required for the ThreadRunner.
         """
         del runner_args
-        if not running_invocation:
-            # running from outside this runner (user instantiate an app with this runner class,
-            # but ask for an invocation result outside of the runner processes)
-            self.logger.debug(
-                f"Waiting for {result_invocations=} from outside this runner"
-            )
-            time.sleep(self.conf.invocation_wait_results_sleep_time_sec)
-            return
         self.app.orchestrator.set_invocation_status(
             running_invocation, InvocationStatus.PAUSED
         )

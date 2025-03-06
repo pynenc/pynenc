@@ -7,7 +7,7 @@ import pytest
 from pynenc import Pynenc, Task
 from pynenc.conf.config_task import ConfigTask
 from pynenc.exceptions import RetryError
-from pynenc.invocation import DistributedInvocation, SynchronousInvocation
+from pynenc.invocation import ConcurrentInvocation, DistributedInvocation
 
 app = Pynenc(app_id="test_task")
 
@@ -38,7 +38,7 @@ def test_instanciate_task_with_args() -> None:
     assert add_with_max_retries.conf.max_retries == 2
 
 
-def test_sync_run_with_dev_mode_force_sync_invocation() -> None:
+def test_sync_run_with_dev_mode_force_conc_invocation() -> None:
     """
     Test that the Task will return a SyncResult if PYNENC_DEV_MODE_FORCE_SYNC_TASKS=True
     """
@@ -46,11 +46,11 @@ def test_sync_run_with_dev_mode_force_sync_invocation() -> None:
         add.app = Pynenc()  # re-instantiate the app, config os.environ is cached
         invocation = add(1, 2)
 
-    assert isinstance(invocation, SynchronousInvocation)
+    assert isinstance(invocation, ConcurrentInvocation)
     assert invocation.result == 3
 
 
-def test_async_invocation() -> None:
+def test_aconc_invocation() -> None:
     """Test that the task will return an Async result"""
     with patch.dict(os.environ, {"PYNENC__DEV_MODE_FORCE_SYNC_TASKS": ""}):
         add.app = Pynenc()  # re-instantiate the app, config os.environ is cached
@@ -100,7 +100,7 @@ def test_sync_run_retry() -> None:
         retry_once.app = Pynenc(app_id="test_sync_run_retry")
         invocation = retry_once()
 
-    assert isinstance(invocation, SynchronousInvocation)
+    assert isinstance(invocation, ConcurrentInvocation)
     assert retry_once.conf.max_retries == 1
     assert invocation.num_retries == 0
     assert invocation.result == 1
