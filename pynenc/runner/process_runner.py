@@ -139,6 +139,7 @@ class ProcessRunner(BaseRunner):
         for invocation in self.app.orchestrator.get_invocations_to_run(
             max_num_invocations=self.available_processes
         ):
+            invocation.app.runner = self
             process = Process(
                 target=invocation.run,
                 kwargs={"runner_args": self.runner_args},

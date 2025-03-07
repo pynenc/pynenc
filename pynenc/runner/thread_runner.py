@@ -121,6 +121,11 @@ class ThreadRunner(BaseRunner):
         )
 
         for invocation in invocations:
+            # Update the app's runner reference so that tasks running in this subprocess use the current ThreadRunner.
+            # When the MultiThreadRunner spawns a ThreadRunner, the tasks (which were decorated with the original
+            # MultiThreadRunner instance) still hold a reference to that parent runner. This assignment ensures that
+            # the invocation's app now points to the correct (ThreadRunner) instance.
+            invocation.app.runner = self
             thread = threading.Thread(target=invocation.run, daemon=True)
             thread.start()
             self.threads[invocation.invocation_id] = ThreadInfo(thread, invocation)

@@ -42,11 +42,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - **Improved MockPynenc instantiation** to ensure each test gets **a fresh, isolated instance**.
 
 - **Renamed `SynchronousInvocation` to `ConcurrentInvocation`:**
+
   - **Why?** The term _Synchronous_ was misleading since the class is designed for **concurrent execution**, not strictly _blocking synchronous_ execution.
   - **What changed?**
     - All references to `SynchronousInvocation` have been **replaced** with `ConcurrentInvocation`.
     - Code, documentation, and tests **updated accordingly** to reflect the new naming.
     - Ensured backward compatibility by **aliasing** `SynchronousInvocation` to `ConcurrentInvocation` (this will be removed in a future version).
+
+- **Fixed runner reference update in subprocesses:**
+  - When a MultiThreadRunner spawns a ThreadRunner in a subprocess, the ThreadRunner now explicitly resets `app.runner` to itself.
+  - This ensures that tasks executed within the subprocess use the correct runner instance, eliminating spurious warnings from `waiting_for_results`.
 
 ## [0.0.17] - 2025-03-04
 
