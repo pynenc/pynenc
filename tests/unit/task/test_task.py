@@ -148,3 +148,18 @@ def test_task_str() -> None:
 
 def test_task_repr() -> None:
     assert repr(example_task) == str(example_task)
+
+
+def test_task_getstate() -> None:
+    """Test that __getstate__ correctly serializes the task instance."""
+    task = example_task  # Use an existing task for testing
+
+    # Expected state should contain:
+    # - The associated Pynenc app
+    # - The serialized task JSON
+    expected_state = {
+        "app": task.app,
+        "task_json": task.to_json(),
+    }
+
+    assert task.__getstate__() == expected_state

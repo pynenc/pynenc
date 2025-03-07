@@ -114,3 +114,16 @@ async def test_distributed_async_result_wait_loop(
     # Now, calling async_result() should loop until status becomes final, then return 3.
     result = await invocation.async_result()
     assert result == 3
+
+
+def test_distributed_invocation_getstate() -> None:
+    """Test that __getstate__ correctly serializes the distributed invocation."""
+    invocation = add(1, 2)  # Create a sample invocation
+
+    # Expected state should contain all instance attributes
+    expected_state = invocation.__dict__.copy()
+    expected_state[
+        "invocation_id"
+    ] = invocation.invocation_id  # Ensure invocation_id is included
+
+    assert invocation.__getstate__() == expected_state
