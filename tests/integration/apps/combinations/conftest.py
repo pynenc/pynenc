@@ -1,6 +1,6 @@
 from collections import namedtuple
 from itertools import product
-from typing import TYPE_CHECKING, Optional, Type
+from typing import TYPE_CHECKING, Optional
 
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
@@ -59,7 +59,7 @@ def pytest_generate_tests(metafunc: "Metafunc") -> None:
             subclasses.append(c)
         return subclasses
 
-    def get_runners(mem_compatible: bool) -> list[Type[BaseRunner]]:
+    def get_runners(mem_compatible: bool) -> list[type[BaseRunner]]:
         return [
             r
             for r in get_subclasses(BaseRunner)
@@ -71,12 +71,12 @@ def pytest_generate_tests(metafunc: "Metafunc") -> None:
         mem_compatible_runners_combinations = (
             AppComponents(*x)
             for x in product(
-                get_subclasses(BaseArgCache),
-                get_subclasses(BaseBroker),
-                get_subclasses(BaseOrchestrator),
+                get_subclasses(BaseArgCache, mem_cls=True),
+                get_subclasses(BaseBroker, mem_cls=True),
+                get_subclasses(BaseOrchestrator, mem_cls=True),
                 get_runners(mem_compatible=True),
-                get_subclasses(BaseSerializer),
-                get_subclasses(BaseStateBackend),
+                get_subclasses(BaseSerializer, mem_cls=True),
+                get_subclasses(BaseStateBackend, mem_cls=True),
             )
         )
 
