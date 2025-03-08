@@ -164,3 +164,30 @@ def test_file_path_execution_fails(temp_app_file: str) -> None:
             assert "Exec failed" in str(
                 exc_info.value
             ), f"Expected 'Exec failed', got '{str(exc_info.value)}'"
+
+
+def test_file_path_with_nested_import(tmp_path: Path) -> None:
+    """Test loading a file with a nested import succeeds when project root is in sys.path."""
+    # Create a mock project structure: root/core/src/api/manta_backtest_3.py
+    core_dir = tmp_path / "core"
+    src_dir = core_dir / "src"
+    api_dir = src_dir / "api"
+    api_dir.mkdir(parents=True)
+
+    # Create a mock config_helpers.py
+    params_dir = core_dir / "params"
+    params_dir.mkdir()
+    config_file = params_dir / "config_helpers.py"
+    config_file.write_text("def load_settings(): return {'setting': 'value'}\n")
+
+    # Create manta_backtest_3.py with a nested import
+    app_file = api_dir / "manta_backtest_3.py"
+    app_file.write_text(
+        "from pynenc import Pynenc\n"
+        "from core.params.config_helpers import load_settings\n"
+        "app = Pynenc()\n"
+        "settings = load_settings()\n"
+    )
+
+    app_instance = find_app_instance(str(app_file))
+    assert isinstance(app_instance, Pynenc)

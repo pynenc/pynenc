@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Enabled **async group invocations** using `parallelize().async_results()`.
 
 - **File Path Support in `find_app_instance`**: Enhanced `pynenc.util.import_app.find_app_instance` to support loading a `Pynenc` instance from a file path (e.g., `path/to/app.py`) in addition to module paths. The function now detects file paths using `os.path.sep` or `.py` extension, loads the module with `spec_from_file_location`, and adjusts `sys.path` for relative imports.
+- **Enhanced `sys.path` Handling in `find_app_instance`**: For file paths, now adds the inferred project root (three levels up from the file) to `sys.path`, enabling nested imports (e.g., `from core.params.config_helpers import load_settings`) to resolve correctly, aligning with tools like Uvicorn.
 - **Comprehensive Tests for File Path Loading**: Added `tests/unit/util/test_import_app_filepath.py` with full test coverage for `find_app_instance` file path functionality, including:
   - Successful loading with and without `.py` extension.
   - Error handling for nonexistent files, invalid module specs, and missing `Pynenc` instances.

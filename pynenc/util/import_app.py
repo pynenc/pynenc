@@ -93,7 +93,8 @@ def find_pynenc_instance_in_module(module: types.ModuleType) -> Pynenc:
         attr = getattr(module, attr_name)
         if isinstance(attr, Pynenc):
             return attr
-    raise ValueError(f"No Pynenc app instance found in '{module.__name__}'")
+    module_name = getattr(module, "__name__", "unknown")
+    raise ValueError(f"No Pynenc app instance found in '{module_name}'")
 
 
 def find_app_instance(app_spec: str | None) -> Pynenc:
@@ -111,7 +112,7 @@ def find_app_instance(app_spec: str | None) -> Pynenc:
     # Normalize the input (remove .py if present)
     app_spec = app_spec.replace(".py", "")
 
-    # Check if it's a file path
+    # Check if it’s a file path
     if os.path.sep in app_spec or app_spec.endswith(".py"):
         file_path = os.path.abspath(
             app_spec if app_spec.endswith(".py") else f"{app_spec}.py"
@@ -119,19 +120,29 @@ def find_app_instance(app_spec: str | None) -> Pynenc:
         if not os.path.isfile(file_path):
             raise ValueError(f"File not found: {file_path}")
 
-        # Add the directory to sys.path to allow relative imports
+        # Add the project root (assuming 3 levels up from file: core/src/api -> project root)
+        project_root = os.path.abspath(
+            os.path.join(os.path.dirname(file_path), "../../..")
+        )
+        if project_root not in sys.path:
+            sys.path.insert(0, project_root)
         module_dir = os.path.dirname(file_path)
         if module_dir not in sys.path:
             sys.path.insert(0, module_dir)
 
-        # Create a module name from the file name
         module_name = os.path.basename(file_path).replace(".py", "")
         spec = spec_from_file_location(module_name, file_path)
         if spec is None or spec.loader is None:
             raise ValueError(f"Could not create module spec for {file_path}")
 
         module = module_from_spec(spec)
-        spec.loader.exec_module(module)
+        try:
+            spec.loader.exec_module(module)
+        except ModuleNotFoundError as e:
+            raise ModuleNotFoundError(
+                f"Failed to load '{file_path}' due to missing module: {str(e)}. "
+                f"Ensure all imports are valid. Current sys.path: {sys.path}"
+            ) from e
         return find_pynenc_instance_in_module(module)
     else:
         # Try to import as a module
