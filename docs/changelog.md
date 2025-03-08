@@ -50,8 +50,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
     - Ensured backward compatibility by **aliasing** `SynchronousInvocation` to `ConcurrentInvocation` (this will be removed in a future version).
 
 - **Fixed runner reference update in subprocesses:**
+
   - When a MultiThreadRunner spawns a ThreadRunner in a subprocess, the ThreadRunner now explicitly resets `app.runner` to itself.
   - This ensures that tasks executed within the subprocess use the correct runner instance, eliminating spurious warnings from `waiting_for_results`.
+
+- **Optimized `ThreadRunner` to poll local cache instead of pausing threads**:
+  - **Before**: Used `threading.Condition` to pause threads in `_waiting_for_results`, relying on Redis status checks and condition notifications.
+  - **Now**: Polls a local `OrderedDict` (`final_invocations`) to check for completed dependencies, reducing Redis queries and eliminating thread suspension overhead.
+  - **Details**:
+    - Removed `wait_conditions` and simplified `wait_invocation` to a `set` of collective dependencies.
+    - Introduced `final_invocations` with a max size of 10,000 entries, evicting oldest entries when full.
+    - Centralized status checks in `runner_loop_iteration`, populating the local cache and removing finalized invocations from `wait_invocation`.
+    - Updated `_waiting_for_results` to poll the cache with a configurable sleep time (`invocation_wait_results_sleep_time_sec`), resuming tasks when all dependencies are final.
+  - **Impact**: Improves performance by avoiding context switches, though it may slightly increase CPU usage due to polling. Memory is bounded by the cache size limit.
 
 ## [0.0.17] - 2025-03-04
 
