@@ -9,9 +9,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Added
 
 - **Full support for asynchronous task execution and result retrieval**:
+
   - Introduced `async_result()` for **awaiting individual task results**.
   - Introduced `async_results()` for **awaiting multiple task results in parallel**.
   - Enabled **async group invocations** using `parallelize().async_results()`.
+
+- **File Path Support in `find_app_instance`**: Enhanced `pynenc.util.import_app.find_app_instance` to support loading a `Pynenc` instance from a file path (e.g., `path/to/app.py`) in addition to module paths. The function now detects file paths using `os.path.sep` or `.py` extension, loads the module with `spec_from_file_location`, and adjusts `sys.path` for relative imports.
+- **Comprehensive Tests for File Path Loading**: Added `tests/unit/util/test_import_app_filepath.py` with full test coverage for `find_app_instance` file path functionality, including:
+  - Successful loading with and without `.py` extension.
+  - Error handling for nonexistent files, invalid module specs, and missing `Pynenc` instances.
+  - Support for imports from sibling files via `sys.path` modification.
+  - Type hints for static type checking with `mypy`.
+- **CLI Test for File Path Config**: Added `test_cli_show_config_with_file_path` to `tests/unit/cli/test_config_cli.py` to verify the CLI command `pynenc --app <file_path> show_config` loads and displays configuration from a file path.
 
 ### Tests
 

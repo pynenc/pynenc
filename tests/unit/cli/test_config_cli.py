@@ -1,6 +1,7 @@
 import argparse
 import os
 from io import StringIO
+from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
@@ -192,3 +193,24 @@ def test_show_config_command_with_invalid_app_instance() -> None:
     args = argparse.Namespace(app_instance=MagicMock(), app="dummy_app")
     with pytest.raises(TypeError):
         config_cli.show_config_command(args)
+
+
+@pytest.fixture
+def temp_app_file(tmp_path: Path) -> str:
+    """Create a temporary Python file with a Pynenc instance."""
+    file_path = tmp_path / "test_app.py"
+    file_path.write_text("from pynenc import Pynenc\napp = Pynenc()")
+    return str(file_path)
+
+
+def test_cli_show_config_with_file_path(temp_app_file: str) -> None:
+    """Test show_config command with a file path."""
+    with patch("sys.argv", ["pynenc", "--app", temp_app_file, "show_config"]):
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            main()
+
+    output = mock_stdout.getvalue()
+    assert "Showing configuration for Pynenc instance:" in output
+    assert f"location: {temp_app_file}" in output
+    assert "id: pynenc" in output
+    assert "Config ConfigPynenc:" in output

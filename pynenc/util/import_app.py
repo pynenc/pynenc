@@ -1,7 +1,9 @@
 import importlib
 import logging
 import os
+import sys
 import types
+from importlib.util import module_from_spec, spec_from_file_location
 
 from pynenc.app import Pynenc
 
@@ -94,21 +96,54 @@ def find_pynenc_instance_in_module(module: types.ModuleType) -> Pynenc:
     raise ValueError(f"No Pynenc app instance found in '{module.__name__}'")
 
 
-def find_app_instance(module_name: str | None) -> Pynenc:
+def find_app_instance(app_spec: str | None) -> Pynenc:
     """
-    Finds the Pynenc app instance in the specified module.
+    Find and load a Pynenc application instance from a module or file path.
 
-    :param str | None module_name: The name of the module.
+    :param str | None module_name: A string that can be a module path (e.g., 'core.src.api.manta_backtest_3')
+                  or a file path (e.g., 'core/src/api/manta_backtest_3.py').
     :return: The Pynenc app instance.
-    :raises ValueError: If no module name is provided.
+    :raises ValueError: If the app cannot be loaded or no Pynenc instance is found.
     """
-    if not module_name:
-        raise ValueError("No module name provided")
-    logging.debug(f"Attempting to find app instance in module: {module_name}")
+    if not app_spec:
+        raise ValueError("No application spec provided")
+    logging.debug(f"Attempting to find app instance for: {app_spec}")
+    # Normalize the input (remove .py if present)
+    app_spec = app_spec.replace(".py", "")
 
-    try:
-        module = importlib.import_module(module_name)
-    except ModuleNotFoundError:
-        module = import_module_as_file(module_name, ModuleNotFoundError())
+    # Check if it's a file path
+    if os.path.sep in app_spec or app_spec.endswith(".py"):
+        file_path = os.path.abspath(
+            app_spec if app_spec.endswith(".py") else f"{app_spec}.py"
+        )
+        if not os.path.isfile(file_path):
+            raise ValueError(f"File not found: {file_path}")
 
-    return find_pynenc_instance_in_module(module)
+        # Add the directory to sys.path to allow relative imports
+        module_dir = os.path.dirname(file_path)
+        if module_dir not in sys.path:
+            sys.path.insert(0, module_dir)
+
+        # Create a module name from the file name
+        module_name = os.path.basename(file_path).replace(".py", "")
+        spec = spec_from_file_location(module_name, file_path)
+        if spec is None or spec.loader is None:
+            raise ValueError(f"Could not create module spec for {file_path}")
+
+        module = module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return find_pynenc_instance_in_module(module)
+    else:
+        # Try to import as a module
+        try:
+            module = importlib.import_module(app_spec)
+        except ModuleNotFoundError:
+            try:
+                module = import_module_as_file(app_spec, ModuleNotFoundError())
+            except ModuleNotFoundError as e:
+                raise ValueError(
+                    f"Could not import module '{app_spec}'. Ensure it’s a valid module path "
+                    f"or provide a file path (e.g., 'path/to/manta_backtest_3.py').\n"
+                    f"Error: {str(e)}"
+                ) from e
+        return find_pynenc_instance_in_module(module)

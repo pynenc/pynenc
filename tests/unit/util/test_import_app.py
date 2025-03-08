@@ -19,8 +19,8 @@ def test_find_app_instance_success() -> None:
 
 def test_find_app_instance_no_module_name() -> None:
     with pytest.raises(ValueError) as exc_info:
-        import_app.find_app_instance(None)
-    assert "No module name provided" in str(exc_info.value)
+        import_app.find_app_instance(None)  # type: ignore
+    assert "No application spec provided" in str(exc_info.value)
 
 
 def test_find_app_instance_no_pynenc_instance() -> None:
