@@ -1,81 +1,95 @@
 import threading
 import time
+from typing import Any
 
 from pynenc import Pynenc
+from pynenc.runner.multi_thread_runner import MultiThreadRunner
 from tests.util import capture_logs  # your log capture helper
 
-# Define a configuration for using MultiThreadRunner (and other Redis components)
+# [Your config and app setup remains the same]
 config = {
     "serializer_cls": "JsonSerializer",
-    # DEV MODE disabled: use distributed runner
     "runner_cls": "MultiThreadRunner",
     "orchestrator_cls": "RedisOrchestrator",
     "broker_cls": "RedisBroker",
     "state_backend_cls": "RedisStateBackend",
-    # Tuning parameters
     "cycle_control": False,
     "blocking_control": False,
     "min_processes": 11,
     "runner_loop_sleep_time_sec": 0.01,
     "invocation_wait_results_sleep_time_sec": 0.01,
     "queue_timeout_sec": 1,
-    # Logging level
     "logging_level": "info",
 }
 
-# Instantiate the app with the provided configuration.
 app = Pynenc(config_values=config)
 
 
 @app.task
 def t_inner() -> str:
-    # Simulate some work
     time.sleep(0.01)
     return "inner"
 
 
 @app.task
 def t_middle() -> str:
-    # Simulate some work
-    time.sleep(0.1)
+    time.sleep(0.01)
     return f"middle -> {t_inner().result}"
 
 
 @app.task
 def t_outter() -> str:
-    # Call t_inner and return a combined string
     return f"outter -> {t_middle().result}"
 
 
-def test_no_waiting_warning_in_multithread_runner() -> None:
+def test_expected_warning_message(caplog: Any) -> None:
     """
-    This test verifies that when executing tasks with a MultiThreadRunner,
-    the waiting_for_results warning is not logged. Specifically, when a task is invoked
-    from within a runner process, there should be no log message like:
-    "waiting_for_results called on MultiThreadRunner from within a task. This should be handled by the ThreadRunner instance in the process."
+    Test that the warning message in MultiThreadRunner._waiting_for_results
+    matches the expected constant.
+    Uses caplog to capture logs.
+
+    So we know the following test will not raise a false positive
     """
-    # Start the runner in a separate thread.
+    runner = MultiThreadRunner(app)
+
+    with capture_logs(app.logger) as log_buffer:
+        runner._waiting_for_results(None, [], None)
+    log_output = log_buffer.getvalue()
+
+    expected_warning = MultiThreadRunner.WAITING_FOR_RESULTS_WARNING
+    assert (
+        expected_warning in log_output
+    ), f"Expected warning '{expected_warning}' not found in logs: {log_output}"
+
+
+def test_waiting_for_result_not_call_in_parent_class(capfd: Any) -> None:
+    """
+    Test that no 'waiting_for_results' warning appears in logs from any process.
+    Uses capfd to capture stdout/stderr, including subprocess logs.
+    """
+    # Start the runner in a separate thread
     runner_thread = threading.Thread(target=lambda: app.runner.run(), daemon=True)
     runner_thread.start()
 
-    # Capture logs during task execution.
-    with capture_logs(app.logger) as log_buffer:
-        # Execute the outer task, which depends on the inner task.
-        result = t_outter().result
+    # Execute the task
+    result = t_outter().result
 
-    # Verify that the result is as expected.
+    # Capture all output (stdout/stderr) from main thread and subprocesses
+    captured = capfd.readouterr()
+
+    # Verify the result
     assert result == "outter -> middle -> inner", f"Unexpected result: {result}"
 
-    # Get the captured log output.
-    log_output = log_buffer.getvalue()
+    # Combine stdout and stderr for log checking
+    all_output = captured.out + captured.err
 
-    # Assert that the warning message is NOT present in the logs.
+    # Check that the warning message is not present
     warning_text = (
         "waiting_for_results called on MultiThreadRunner from within a task. "
         "This should be handled by the ThreadRunner instance in the process."
     )
-    assert warning_text not in log_output, f"Warning found in logs: {log_output}"
+    assert warning_text not in all_output, f"Warning found in output: {all_output}"
 
-    # Cleanup: stop the runner and join the thread.
+    # Cleanup
     app.runner.stop_runner_loop()
     runner_thread.join(timeout=5)

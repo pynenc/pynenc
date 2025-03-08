@@ -2,6 +2,7 @@ from functools import cached_property
 from logging import Logger
 from typing import TYPE_CHECKING, Any, Callable, Optional, Type, overload
 
+from pynenc import context
 from pynenc.arg_cache.base_arg_cache import BaseArgCache
 from pynenc.broker.base_broker import BaseBroker
 from pynenc.conf.config_pynenc import ConfigPynenc
@@ -104,8 +105,26 @@ class Pynenc:
 
     @property
     def runner(self) -> BaseRunner:
+        """
+        Get the runner for this app, prioritizing thread/process-specific context.
+
+        First, it checks the thread-local context for a runner (via get_current_runner).
+        This is crucial in the MultiThreadRunner, where each process runs a ThreadRunner
+        and needs to use its own runner instance rather than the app's default.
+
+        If no context runner exists, it falls back to the
+        instance-level runner. This mechanism ensures correct runner isolation
+        across threads and processes.
+
+        :return: The runner instance for the current context or the app instance.
+        """
+        # Check if there's a runner in the context
+        if context_runner := context.get_current_runner(self.app_id):
+            return context_runner
+
+        # Fall back to instance-level runner
         if self._runner_instance is None:
-            self._runner_instance = get_subclass(BaseRunner, self.conf.runner_cls)(self)  # type: ignore # mypy issue #4717
+            self._runner_instance = get_subclass(BaseRunner, self.conf.runner_cls)(self)  # type: ignore
         return self._runner_instance
 
     @runner.setter

@@ -4,6 +4,7 @@ from functools import cached_property
 from multiprocessing import Manager, Process, cpu_count
 from typing import TYPE_CHECKING, Any, NamedTuple, Optional
 
+from pynenc import context
 from pynenc.conf.config_runner import ConfigMultiThreadRunner
 from pynenc.runner.base_runner import BaseRunner
 from pynenc.runner.thread_runner import ThreadRunner
@@ -38,11 +39,20 @@ def thread_runner_process_main(
     process_key: str,
 ) -> None:
     """
-    Runs a ThreadRunner in a separate process.
+    MultiThreadRunner manages multiple processes, each running a ThreadRunner.
+
+    Unlike ThreadRunner, which operates within a single process, MultiThreadRunner
+    spawns separate processes to distribute workload. The global context dictionary
+    (via context.py) is critical here because each process must maintain its own
+    ThreadRunner instance in its thread-local storage. This prevents conflicts
+    between processes and ensures that task executions within a process use the
+    correct runner. The context check is not typically needed in ThreadRunner alone,
+    as it operates in a single-threaded or single-process environment where the
+    instance-level runner suffices.
     """
     runner = ThreadRunner(app, runner_cache)
     # Replace the MultiThreadRunner with ThreadRunner in this process
-    app.runner = runner
+    context.set_current_runner(app.app_id, runner)
     runner._on_start()
     app.logger.info(f"ThreadRunner process {process_key} started")
     try:
@@ -69,6 +79,11 @@ class MultiThreadRunner(BaseRunner):
     MultiThreadRunner spawns separate processes, each running a ThreadRunner.
     It scales processes based on pending invocations and terminates those that remain idle.
     """
+
+    WAITING_FOR_RESULTS_WARNING = (
+        "waiting_for_results called on MultiThreadRunner from within a task. "
+        "This should be handled by the ThreadRunner instance in the process."
+    )
 
     processes: dict[str, Process]
     manager: Manager  # type: ignore
@@ -240,11 +255,11 @@ class MultiThreadRunner(BaseRunner):
         runner_args: Optional[dict[str, Any]] = None,
     ) -> None:
         """
-        Handle waiting for results when called from outside any process.
-        This happens when checking results from the main thread or test environment.
+        Handle waiting for results when called outside a process context.
+
+        This method warns if called directly on MultiThreadRunner, as result waiting
+        should occur within a ThreadRunner process, which uses the context-set runner.
+        The global context ensures each process handles its own results correctly.
         """
         del running_invocation, result_invocations, runner_args
-        self.logger.warning(
-            "waiting_for_results called on MultiThreadRunner from within a task. "
-            "This should be handled by the ThreadRunner instance in the process."
-        )
+        self.logger.warning(self.WAITING_FOR_RESULTS_WARNING)
