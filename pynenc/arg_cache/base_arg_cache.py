@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from pynenc.app import Pynenc
 
 
-class RunnerCacheKeys(StrEnum):
+class ArgCacheKeys(StrEnum):
     """Keys used in runner cache."""
 
     ARG_CACHE_ID = auto()
@@ -61,16 +61,16 @@ class BaseArgCache(ABC):
                 self._warned_local = True
 
         # Initialize sections only if they don't exist
-        for key in RunnerCacheKeys:
+        for key in ArgCacheKeys:
             if key.value not in cache:
                 cache[key.value] = {}
 
-    def _get_cache(self, key: RunnerCacheKeys) -> dict:
+    def _get_cache(self, key: ArgCacheKeys) -> dict:
         """
         Get the appropriate cache dictionary.
         Ensures caches are initialized.
 
-        :param RunnerCacheKeys key: The cache section to access
+        :param ArgCacheKeys key: The cache section to access
         :return: The cache dictionary to use
         """
         try:
@@ -81,27 +81,27 @@ class BaseArgCache(ABC):
     @property
     def _obj_id_cache(self) -> dict[int, str]:
         """Object ID cache with fallback."""
-        return self._get_cache(RunnerCacheKeys.ARG_CACHE_ID)
+        return self._get_cache(ArgCacheKeys.ARG_CACHE_ID)
 
     @property
     def _hash_cache(self) -> dict[int, str]:
         """Hash cache with fallback."""
-        return self._get_cache(RunnerCacheKeys.ARG_CACHE_HASH)
+        return self._get_cache(ArgCacheKeys.ARG_CACHE_HASH)
 
     @property
     def _fingerprint_cache(self) -> dict[tuple[str, int], str]:
         """Fingerprint cache with fallback."""
-        return self._get_cache(RunnerCacheKeys.ARG_CACHE_FINGERPRINT)
+        return self._get_cache(ArgCacheKeys.ARG_CACHE_FINGERPRINT)
 
     @property
     def _key_cache(self) -> dict[str, str]:
         """Key cache with fallback."""
-        return self._get_cache(RunnerCacheKeys.ARG_CACHE_KEY)
+        return self._get_cache(ArgCacheKeys.ARG_CACHE_KEY)
 
     @property
     def _deserialized_cache(self) -> dict[str, Any]:
         """Deserialized object cache with fallback."""
-        return self._get_cache(RunnerCacheKeys.ARG_CACHE_DESERIALIZED)
+        return self._get_cache(ArgCacheKeys.ARG_CACHE_DESERIALIZED)
 
     @cached_property
     def conf(self) -> ConfigArgCache:
@@ -286,7 +286,7 @@ class BaseArgCache(ABC):
         """
         try:
             # Clear all sections in the cache (either runner or local)
-            for key in RunnerCacheKeys:
+            for key in ArgCacheKeys:
                 cache = self._get_cache(key)
                 if cache:
                     cache.clear()
