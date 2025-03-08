@@ -74,7 +74,6 @@ class ThreadRunner(BaseRunner):
         self.max_threads = self.conf.max_threads or multiprocessing.cpu_count()
         self.waiting_threads = 0
         self.final_invocations = OrderedDict()
-        self._max_final_size = 10000
 
     def _on_stop(self) -> None:
         """
@@ -140,7 +139,7 @@ class ThreadRunner(BaseRunner):
                 self.logger.debug(f"{invocation=} on final {invocation.status=}")
 
         # Clean up final_invocations if over size limit
-        while len(self.final_invocations) > self._max_final_size:
+        while len(self.final_invocations) > self.conf.final_invocation_cache_size:
             old_inv, _ = self.final_invocations.popitem(last=False)  # Remove oldest
             self.logger.debug(f"Evicted old final invocation {old_inv.invocation_id}")
 
