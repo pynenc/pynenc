@@ -45,6 +45,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Optimized `async_result()` to **improve polling efficiency** and reduce unnecessary orchestrator calls.
 - Updated `async_waiting_for_results()` to **respect configurable sleep time** for better performance in distributed runners.
 
+- Improved ThreadRunner error handling:
+  - Wrapped thread creation in `runner_loop_iteration()` in try/except; on failure (RuntimeError), the offending invocation is requeued via `reroute_invocations`.
+  - Enhanced cleanup of finished threads in the `available_threads` property by joining and removing them.
+  - Clarified the use of `daemon=True` for threads (daemon threads won’t block process exit).
+  - Slight adjustments to `_waiting_for_results` to continue polling the local final cache for dependency resolution.
+
+### Tests
+
 - **Enhanced test isolation in `conftest.py`:**
 
   - **Before**: Mocks were defined at the class level, leading to **state sharing** across tests.
@@ -58,6 +66,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
     - All references to `SynchronousInvocation` have been **replaced** with `ConcurrentInvocation`.
     - Code, documentation, and tests **updated accordingly** to reflect the new naming.
     - Ensured backward compatibility by **aliasing** `SynchronousInvocation` to `ConcurrentInvocation` (this will be removed in a future version).
+
+- Added a unit test (`test_thread_start_failure`) that forces thread creation to fail and verifies that the invocation is correctly rerouted.
+- Updated integration tests to cover asynchronous task execution, waiting, failure, dependency, and parallel performance.
 
 - **Fixed runner reference update in subprocesses:**
 

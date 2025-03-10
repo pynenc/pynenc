@@ -80,7 +80,7 @@ class ThreadRunner(BaseRunner):
         Internal method called when the ThreadRunner stops.
         Joins all running threads and updates their invocation statuses.
         """
-        # kill all the running threads and change invocation status to retry
+        # Join all running threads and mark their invocations for retry.
         for thread_info in self.threads.values():
             thread_info.thread.join()
             self.app.orchestrator.set_invocation_status(
@@ -91,20 +91,25 @@ class ThreadRunner(BaseRunner):
         """
         Internal method called after receiving a signal to stop the runner loop.
         """
-        # No specific actions needed for stopping the runner loop in ThreadRunner
+        pass
 
     @property
     def available_threads(self) -> int:
         """
         Returns the number of available thread slots for new invocations.
+        Joins finished threads so they no longer count against the limit.
         :return: An integer representing available thread slots.
         """
-        self.threads = {k: v for k, v in self.threads.items() if v.thread.is_alive()}
-        # do not consider waiting threads
-        # in testing with only one thread available and only one worker
-        # the waiting threads will prevent to run the invocation that will unlock
-        # the invocations waiting in these threads
-        return self.max_parallel_slots - len(self.threads)  # - self.waiting_threads
+        # Rebuild the threads dictionary by joining finished threads.
+        alive_threads = {}
+        for k, thread_info in self.threads.items():
+            if thread_info.thread.is_alive():
+                alive_threads[k] = thread_info
+            else:
+                thread_info.thread.join()
+        self.threads = alive_threads
+        # Do not count waiting threads.
+        return self.max_parallel_slots - len(self.threads)
 
     def runner_loop_iteration(self) -> None:
         """
@@ -120,10 +125,16 @@ class ThreadRunner(BaseRunner):
         )
 
         for invocation in invocations:
-            thread = threading.Thread(target=invocation.run, daemon=True)
-            thread.start()
-            self.threads[invocation.invocation_id] = ThreadInfo(thread, invocation)
-            self.logger.info(f"Running {invocation=} on {thread=}")
+            try:
+                thread = threading.Thread(target=invocation.run, daemon=True)
+                thread.start()
+                self.threads[invocation.invocation_id] = ThreadInfo(thread, invocation)
+                self.logger.info(f"Running {invocation=} on {thread=}")
+            except RuntimeError as e:
+                self.logger.error(
+                    f"Failed to start thread for {invocation.invocation_id}: {e}"
+                )
+                self.app.orchestrator.reroute_invocations({invocation})
 
         # Check waiting conditions
         waiting_count = len(self.wait_invocation)
