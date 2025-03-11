@@ -107,3 +107,15 @@ class ConfigMultiThreadRunner(ConfigThreadRunner):
     max_processes = ConfigField(0)
     idle_timeout_process_sec = ConfigField(4)
     enforce_max_processes = ConfigField(False)
+
+
+class ConfigPersistentProcessRunner(ConfigThreadRunner):
+    """Specific Configuration for the PersistentProcessRunner
+
+    :cvar ConfigField[int] num_processes:
+        Number number of processes that the runner can handle. This setting determines the number of processes
+        that the runner will spawn to execute Tasks. It is used to enforce the number of processes created.
+        default: 0 will set the max_processes to multiprocessing.cpu_count()
+    """
+
+    num_processes = ConfigField(0)

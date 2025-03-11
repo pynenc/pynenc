@@ -23,6 +23,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Type hints for static type checking with `mypy`.
 - **CLI Test for File Path Config**: Added `test_cli_show_config_with_file_path` to `tests/unit/cli/test_config_cli.py` to verify the CLI command `pynenc --app <file_path> show_config` loads and displays configuration from a file path.
 
+- **PersistentProcessRunner**:
+  - Introduced a new runner that maintains a fixed pool of persistent worker processes which continuously poll for invocations and execute them sequentially.
+  - Workers receive shared communication arguments (via a managed dictionary passed in `runner_args`) to report waiting states, allowing the parent process to signal processes with SIGSTOP/SIGCONT.
+  - This design reduces process startup overhead under heavy load and provides a more celery-like worker model for CPU-bound tasks.
+
 ### Tests
 
 - **New unit tests for async result handling**:
@@ -46,10 +51,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Updated `async_waiting_for_results()` to **respect configurable sleep time** for better performance in distributed runners.
 
 - Improved ThreadRunner error handling:
+
   - Wrapped thread creation in `runner_loop_iteration()` in try/except; on failure (RuntimeError), the offending invocation is requeued via `reroute_invocations`.
   - Enhanced cleanup of finished threads in the `available_threads` property by joining and removing them.
   - Clarified the use of `daemon=True` for threads (daemon threads won’t block process exit).
   - Slight adjustments to `_waiting_for_results` to continue polling the local final cache for dependency resolution.
+
+- Updated ProcessRunner and MultiThreadRunner integration to support retrieving a shared cache when uninitialized.
+- Improved argument cache purge logic to handle Manager.dict() shutdown cases gracefully.
 
 ### Tests
 

@@ -152,17 +152,18 @@ class ProcessRunner(BaseRunner):
             if process.pid:
                 self.processes[invocation] = process
             else:
-                ...
-                # TODO if for mypy, the process should have a pid after start, otherwise it should raise an exception
-        self.logger.debug("runer loop - check waiting invocations pending results")
+                # Optionally, raise an exception or log error if process.pid is not available.
+                raise RunnerError("Failed to start process: PID not available")
+        self.logger.debug("runner loop - check waiting invocations pending results")
         for invocation in list(self.wait_invocation.keys()):
             is_final = invocation.status.is_final()
             for waiting_invocation in self.wait_invocation[invocation]:
-                if pid := self.processes[waiting_invocation].pid:
+                pid = self.processes.get(waiting_invocation)
+                if pid and pid.pid:
                     if is_final:
-                        os.kill(pid, signal.SIGCONT)
+                        os.kill(pid.pid, signal.SIGCONT)
                     else:
-                        os.kill(pid, signal.SIGSTOP)
+                        os.kill(pid.pid, signal.SIGSTOP)
             if is_final:
                 waiting_invocations = self.wait_invocation.pop(invocation)
                 self.logger.info(

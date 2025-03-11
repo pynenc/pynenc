@@ -101,8 +101,10 @@ class MultiThreadRunner(BaseRunner):
 
     @property
     def cache(self) -> dict:
-        """Returns the cache for the ProcessRunner instance."""
-        return self.runner_cache
+        """Returns the shared cache for all processes."""
+        if hasattr(self, "runner_cache"):
+            return self.runner_cache
+        return self._runner_cache or {}
 
     @staticmethod
     def mem_compatible() -> bool:
@@ -171,17 +173,22 @@ class MultiThreadRunner(BaseRunner):
     def _on_stop_runner_loop(self) -> None:
         """
         Internal method called after receiving a signal to stop the runner loop.
-        Clears the wait_invocation dictionary.
         """
         self.logger.info("Stopping MultiThreadRunner loop")
         # Terminate all processes immediately
         for key, proc in list(self.processes.items()):
-            if proc.is_alive():
-                proc.terminate()
-                proc.join()
-                self.processes.pop(key, None)
-                self._safe_remove_shared_state(key)
-                self.logger.info(f"Terminated process {key} during loop stop")
+            try:
+                if proc.is_alive():
+                    proc.terminate()
+                    proc.join()
+                    self.processes.pop(key, None)
+                    self._safe_remove_shared_state(key)
+                    self.logger.info(f"Terminated process {key} during loop stop")
+            except AssertionError:
+                # We're trying to check a non-child process (likely ourselves)
+                self.logger.info(
+                    f"Skipping process {key} termination - not a child process"
+                )
         self.logger.info("MultiThreadRunner loop stopped")
 
     def _cleanup_dead_processes(self) -> None:

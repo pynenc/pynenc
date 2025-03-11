@@ -291,7 +291,9 @@ class DistributedInvocationGroup(
                 self.app.orchestrator.waiting_for_results(
                     parent_invocation, waiting_invocations
                 )
-            self.app.runner.waiting_for_results(parent_invocation, waiting_invocations)
+            self.app.runner.waiting_for_results(
+                parent_invocation, waiting_invocations, context.runner_args
+            )
 
     async def async_results(self) -> AsyncGenerator[Result, None]:
         waiting_invocations = self.invocations.copy()
@@ -311,7 +313,7 @@ class DistributedInvocationGroup(
                     parent_invocation, waiting_invocations
                 )
             await self.app.runner.async_waiting_for_results(
-                parent_invocation, waiting_invocations
+                parent_invocation, waiting_invocations, context.runner_args
             )
 
 

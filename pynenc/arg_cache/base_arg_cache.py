@@ -283,21 +283,32 @@ class BaseArgCache(ABC):
         Clear all cached arguments.
 
         Should clear both the in-memory caches and the storage backend.
+        Handles cases where the runner cache is a Manager.dict() that might be shut down.
         """
         try:
             # Clear all sections in the cache (either runner or local)
             for key in ArgCacheKeys:
-                cache = self._get_cache(key)
-                if cache:
-                    cache.clear()
-        except (BrokenPipeError, EOFError):
-            # If runner is already stopped, the managed dict might be closed
-            self.app.logger.warning(
-                "Could not clear runner cache - runner might be already stopped"
-            )
+                try:
+                    cache = self._get_cache(key)
+                    if isinstance(
+                        cache, dict
+                    ):  # Check if it's a valid dict-like object
+                        cache.clear()
+                except (AttributeError, KeyError):
+                    self.app.logger.debug(f"Nothing to purge on {key=}")
+                except (BrokenPipeError, EOFError, ValueError):
+                    # Handle cases where Manager.dict() is closed or inaccessible
+                    self.app.logger.debug(
+                        f"Could not clear runner cache section {key} - manager might be shut down"
+                    )
+        except Exception as e:
+            self.app.logger.warning(f"Unexpected error clearing runner cache: {e}")
         finally:
             # Clear backend storage
-            self._purge()
+            try:
+                self._purge()
+            except Exception as e:
+                self.app.logger.warning(f"Failed to purge backend storage: {e}")
 
     @abstractmethod
     def _store(self, key: str, value: str) -> None:
