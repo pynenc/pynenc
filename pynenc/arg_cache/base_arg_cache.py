@@ -76,6 +76,8 @@ class BaseArgCache(ABC):
         try:
             return self.app.runner.cache[key.value]
         except (AttributeError, KeyError):
+            if key.value not in self._local_caches:
+                self._local_caches[key.value] = {}
             return self._local_caches[key.value]
 
     @property

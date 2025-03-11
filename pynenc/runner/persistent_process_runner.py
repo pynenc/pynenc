@@ -68,9 +68,7 @@ class PersistentProcessRunner(BaseRunner):
     @property
     def cache(self) -> dict:
         """Returns the shared cache for all processes."""
-        if hasattr(self, "runner_cache"):
-            return self.runner_cache
-        return self._runner_cache or {}
+        return self.runner_cache
 
     @staticmethod
     def mem_compatible() -> bool:
