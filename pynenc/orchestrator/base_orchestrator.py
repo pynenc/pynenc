@@ -609,10 +609,14 @@ class BaseOrchestrator(ABC):
         :return: The newly created `DistributedInvocation` for the call.
         :rtype: DistributedInvocation[Params, Result]
         """
+        self.app.logger.info(f"routing a new call {call.call_id} invocation")
         parent_invocation = context.get_dist_invocation_context(self.app.app_id)
         new_invocation = DistributedInvocation(call, parent_invocation)
         self.set_invocation_status(new_invocation, InvocationStatus.REGISTERED)
         self.app.broker.route_invocation(new_invocation)
+        self.app.logger.info(
+            f"routed call {call.call_id} with invocation {new_invocation.invocation_id}"
+        )
         return new_invocation
 
     def route_call(self, call: "Call") -> "DistributedInvocation[Params, Result]":

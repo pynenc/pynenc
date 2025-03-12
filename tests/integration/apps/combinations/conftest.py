@@ -183,6 +183,12 @@ def task_cpu_intensive_no_conc(app: Pynenc) -> "Task":
 
 
 @pytest.fixture(scope="function")
+def task_distribute_cpu_work(app: Pynenc) -> "Task":
+    tasks.distribute_cpu_work.app = app
+    return tasks.distribute_cpu_work
+
+
+@pytest.fixture(scope="function")
 def task_async_add(app: Pynenc) -> "Task":
     tasks_async.async_add.app = app
     return tasks_async.async_add

@@ -167,8 +167,11 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
                 self.app.orchestrator.set_invocation_exception(self, ex)
                 raise ex
             self.app.orchestrator.set_invocation_retry(self, ex)
-            self.task.logger.warning("Retrying invocation")
+            self.task.logger.warning(
+                f"Invocation {self.invocation_id} marked for retry {ex=}"
+            )
         except Exception as ex:
+            self.app.logger.exception(f"Invocation {self.invocation_id} exception")
             self.app.orchestrator.set_invocation_exception(self, ex)
             raise ex
         finally:
@@ -197,6 +200,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             for the task to complete.
         ```
         """
+        self.app.logger.info(f"ini waiting for invocation {self.invocation_id} result")
         if not self.status.is_final():
             self.app.orchestrator.waiting_for_results(self.parent_invocation, [self])
 
@@ -204,6 +208,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             self.app.runner.waiting_for_results(
                 self.parent_invocation, [self], context.runner_args
             )
+        self.app.logger.info(f"end waiting for invocation {self.invocation_id} result")
         return self.get_final_result()
 
     async def async_result(self) -> Result:

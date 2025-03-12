@@ -50,7 +50,7 @@ def thread_runner_process_main(
     as it operates in a single-threaded or single-process environment where the
     instance-level runner suffices.
     """
-    runner = ThreadRunner(app, runner_cache)
+    runner = ThreadRunner(app, runner_cache, process_key)
     # Replace the MultiThreadRunner with ThreadRunner in this process
     context.set_current_runner(app.app_id, runner)
     runner._on_start()

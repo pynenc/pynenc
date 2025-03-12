@@ -97,3 +97,22 @@ def cpu_intensive_no_conc(iterations: int) -> float:
     arr[0] = counter % 100
 
     return process_time() - start_time
+
+
+@mock_app.task(running_concurrency=ConcurrencyControlType.DISABLED)
+def distribute_cpu_work(total_iterations: int, num_sub_tasks: int) -> list[float]:
+    """Distribute CPU-intensive work into sub-tasks and parallelize."""
+    chunk_size = max(1, total_iterations // num_sub_tasks)
+    chunks = [(chunk_size,) for _ in range(num_sub_tasks - 1)] + [
+        (total_iterations - chunk_size * (num_sub_tasks - 1),)
+    ]
+    app = distribute_cpu_work.app
+    app.logger.info(
+        f"Split {total_iterations} iterations into {num_sub_tasks} sub-tasks"
+    )
+
+    invocation_group = cpu_intensive_no_conc.parallelize(chunks)
+    results = {}
+    for i, chunk_result in enumerate(invocation_group.results):
+        results[f"chunk_{i}"] = chunk_result
+    return list(results.values())

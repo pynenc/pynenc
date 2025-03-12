@@ -22,6 +22,7 @@ def test_run(mock_base_app: "MockPynenc") -> None:
     # Create a thread to run the loop
     thread = threading.Thread(target=run_in_thread, daemon=True)
     thread.start()
+    time.sleep(0.1)
     mock_base_app.runner.stop_runner_loop()
     thread.join()
     mock_base_app.runner._on_start_mock.assert_called_once()

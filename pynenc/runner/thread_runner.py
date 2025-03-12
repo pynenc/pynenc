@@ -126,6 +126,9 @@ class ThreadRunner(BaseRunner):
 
         for invocation in invocations:
             try:
+                self.app.logger.info(
+                    f"{self.runner_id} starting invocation:{invocation.invocation_id}"
+                )
                 thread = threading.Thread(target=invocation.run, daemon=True)
                 thread.start()
                 self.threads[invocation.invocation_id] = ThreadInfo(thread, invocation)

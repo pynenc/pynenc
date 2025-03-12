@@ -1,4 +1,5 @@
 import os
+import signal
 import time
 from functools import cached_property
 from multiprocessing import Manager, Process
@@ -9,19 +10,27 @@ from pynenc.conf.config_runner import ConfigPersistentProcessRunner
 from pynenc.runner.base_runner import BaseRunner
 
 if TYPE_CHECKING:
+    from multiprocessing.synchronize import Event
+
     from pynenc.app import Pynenc
     from pynenc.invocation.dist_invocation import DistributedInvocation
 
 
 def persistent_process_main(
-    app: "Pynenc", *, process_key: str, runner_cache: dict
+    app: "Pynenc", *, process_key: str, runner_cache: dict, stop_event: "Event"
 ) -> None:
     """Main function for persistent process that executes invocations sequentially."""
     app.logger.info(f"Persistent process {process_key} started with PID {os.getpid()}")
     app.runner._runner_cache = runner_cache
     context.set_current_runner(app.app_id, app.runner)
+
+    def handle_terminate(signum: int, frame: Any) -> None:
+        app.logger.info(f"Process {process_key} received SIGTERM, setting stop event")
+        stop_event.set()
+
+    signal.signal(signal.SIGTERM, handle_terminate)  # Handle SIGTERM gracefully
     try:
-        while True:
+        while not stop_event.is_set():
             invocations = list(
                 app.orchestrator.get_invocations_to_run(max_num_invocations=1)
             )
@@ -31,8 +40,8 @@ def persistent_process_main(
 
             invocation = invocations[0]
             invocation_id = invocation.invocation_id
-            app.logger.debug(
-                f"Process {process_key} running invocation {invocation_id}"
+            app.logger.info(
+                f"{process_key} starting invocation:{invocation.invocation_id}"
             )
 
             try:
@@ -43,20 +52,20 @@ def persistent_process_main(
         app.logger.info(f"Process {process_key} received KeyboardInterrupt, exiting")
     except Exception as e:
         app.logger.exception(f"Process {process_key} error: {e}")
+    finally:
+        app.logger.info(f"Process {process_key} shutting down")
 
 
 class PersistentProcessRunner(BaseRunner):
     """
     PersistentProcessRunner maintains a fixed number of processes that continuously run tasks.
-
-    Each process executes invocations sequentially from the queue. When a process fails,
-    it's automatically restarted to maintain the configured number of processes.
     """
 
     processes: dict[str, Process]
     manager: Manager  # type: ignore
     runner_cache: dict
     num_processes: int
+    stop_event: "Event"
 
     @cached_property
     def conf(self) -> ConfigPersistentProcessRunner:
@@ -97,6 +106,7 @@ class PersistentProcessRunner(BaseRunner):
         self._process_id_counter: int = 0
         self.manager = Manager()
         self.runner_cache = self._runner_cache or self.manager.dict()  # type: ignore
+        self.stop_event = self.manager.Event()  # type: ignore
         for _ in range(self.num_processes):
             self._spawn_persistent_process()
 
@@ -107,6 +117,7 @@ class PersistentProcessRunner(BaseRunner):
             "app": self.app,
             "process_key": process_key,
             "runner_cache": self.runner_cache,
+            "stop_event": self.stop_event,
         }
         p = Process(target=persistent_process_main, kwargs=args, daemon=True)
         try:
@@ -122,6 +133,7 @@ class PersistentProcessRunner(BaseRunner):
 
     def _terminate_all_processes(self) -> None:
         """Terminates all running processes with graceful shutdown attempt."""
+        self.stop_event.set()  # Signal all processes to stop
         for key, process in list(self.processes.items()):
             if process.is_alive():
                 process.terminate()

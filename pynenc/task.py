@@ -241,6 +241,7 @@ class Task(Generic[Params, Result]):
         # prints [2, 3, 5]
         ```
         """
+        self.logger.info(f"parallelizing {self.task_id}")
         group_cls: type[BaseInvocationGroup]
         if self.app.conf.dev_mode_force_sync_tasks:
             group_cls = ConcurrentInvocationGroup
@@ -258,4 +259,7 @@ class Task(Generic[Params, Result]):
         for params in param_iter:
             if invocation := self._call(get_args(params)):
                 invocations.append(invocation)
+        self.logger.info(
+            f"parallelized {self.task_id} with {len(invocations)} invocations"
+        )
         return group_cls(self, invocations)

@@ -43,12 +43,18 @@ class BaseRunner(ABC):
       * For an asyncio worker, it runs several tasks in one processor, and the value should wait with async.
     """
 
-    def __init__(self, app: "Pynenc", runner_cache: Optional[dict] = None) -> None:
+    def __init__(
+        self,
+        app: "Pynenc",
+        runner_cache: Optional[dict] = None,
+        extra_id: Optional[str] = None,
+    ) -> None:
         self.app = app
         self.app.runner = self
         self.running = False
         self.logger = RunnerLogAdapter(self.app.logger, self.runner_id)
         self._runner_cache = runner_cache
+        self.extra_id = extra_id
 
     @cached_property
     def runner_id(self) -> str:
@@ -56,9 +62,10 @@ class BaseRunner(ABC):
         Unique identifier for the runner instance.
         :return: A string representing the unique identifier of the runner.
         """
-        hostname = socket.gethostname()
-        pid = os.getpid()
-        return f"{self.__class__.__name__}({hostname}-{pid})"
+        _runner_id = f"{self.__class__.__name__}({socket.gethostname()}-{os.getpid()})"
+        if extra := getattr(self, "extra_id", None):
+            return _runner_id + f"[{extra}]"
+        return _runner_id
 
     @cached_property
     def conf(self) -> ConfigRunner:
@@ -101,6 +108,7 @@ class BaseRunner(ABC):
 
     def on_start(self) -> None:
         """This method is called when the runner starts"""
+        self.app.logger.info(f"Starting runner {self.runner_id}")
         if threading.current_thread() is threading.main_thread():
             signal.signal(signal.SIGINT, self.stop_runner_loop)
             signal.signal(signal.SIGTERM, self.stop_runner_loop)
@@ -119,6 +127,7 @@ class BaseRunner(ABC):
 
     def on_stop(self) -> None:
         """This method is called when the runner stops"""
+        self.app.logger.info(f"Stopping runner {self.runner_id}")
         self.running = False
         self.logger.info("Stopping runner...")
         self._on_stop()
@@ -193,7 +202,7 @@ class BaseRunner(ABC):
         if not running_invocation:
             # running from outside this runner (user instantiate an app with this runner class,
             # but ask for an invocation result outside of the runner processes)
-            self.logger.debug(
+            self.app.logger.debug(
                 f"Waiting for {result_invocations=} from outside this runner"
             )
             time.sleep(self.conf.invocation_wait_results_sleep_time_sec)
