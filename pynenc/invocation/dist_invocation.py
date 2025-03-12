@@ -296,6 +296,7 @@ class DistributedInvocationGroup(
                 self.app.orchestrator.waiting_for_results(
                     parent_invocation, waiting_invocations
                 )
+                notified_orchestrator = True
             self.app.runner.waiting_for_results(
                 parent_invocation, waiting_invocations, context.runner_args
             )
@@ -317,6 +318,7 @@ class DistributedInvocationGroup(
                 self.app.orchestrator.waiting_for_results(
                     parent_invocation, waiting_invocations
                 )
+                notified_orchestrator = True
             await self.app.runner.async_waiting_for_results(
                 parent_invocation, waiting_invocations, context.runner_args
             )

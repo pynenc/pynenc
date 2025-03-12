@@ -182,3 +182,49 @@ def test_get_invocations_to_run_atomicity(test_vars: Vars) -> None:
             future2 = executor.submit(run_get_invocations_to_run, app)
         # Check that never returns the same invocation
         assert future1.result() != future2.result()
+
+
+def test_get_invocations_to_run_max_limit(test_vars: Vars) -> None:
+    """
+    Test that get_invocations_to_run respects max_num_invocations, yielding at most that many invocations,
+    even if multiple blocking invocations are available.
+    """
+    app = test_vars.app
+
+    # Set up two blocking invocations
+    app.orchestrator.set_invocation_status(test_vars.inv1, InvocationStatus.REGISTERED)
+    app.orchestrator.set_invocation_status(test_vars.inv2, InvocationStatus.REGISTERED)
+    app.orchestrator.set_invocation_status(test_vars.inv3, InvocationStatus.REGISTERED)
+
+    # Broker will return invocations in order
+    app.broker.retrieve_invocation_mock.side_effect = [  # type: ignore
+        test_vars.inv1,
+        test_vars.inv2,
+        test_vars.inv3,
+        None,  # broker will stop returning invocations
+    ]
+
+    # Notify that inv1 is waiting in inv2 and inv3
+    app.orchestrator.waiting_for_results(
+        test_vars.inv1, [test_vars.inv2, test_vars.inv3]
+    )
+
+    # Get one invocation to run
+    invocations = list(app.orchestrator.get_invocations_to_run(1))
+
+    # Check only 1 invocation retrieved
+    assert len(invocations) == 1, f"Expected 1 invocation, got {len(invocations)}"
+
+    # Check the invocation is from the blocking ones
+    assert invocations[0].invocation_id in {
+        test_vars.inv2.invocation_id,
+        test_vars.inv3.invocation_id,
+    }
+
+    # Verify only one got set to PENDING
+    pending_count = sum(
+        1
+        for inv in [test_vars.inv1, test_vars.inv2]
+        if app.orchestrator.get_invocation_status(inv) == InvocationStatus.PENDING
+    )
+    assert pending_count == 1, f"Expected 1 invocation PENDING, got {pending_count}"

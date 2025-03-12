@@ -122,6 +122,7 @@ class ProcessRunner(BaseRunner):
         """
         for invocation in list(self.processes.keys()):
             if not self.processes[invocation].is_alive():
+                self.processes[invocation].join()
                 del self.processes[invocation]
         # discount waiting processes, they should do nothing
         # until the blocking invocation is finished
@@ -145,6 +146,9 @@ class ProcessRunner(BaseRunner):
                 kwargs={"runner_args": self.runner_args},
                 daemon=True,
             )
+            self.app.logger.info(
+                f"{self.runner_id} starting invocation:{invocation.invocation_id}"
+            )
             process.start()
             self.logger.debug(
                 f"Running invocation {invocation.invocation_id} on {process.pid=}"
@@ -157,7 +161,7 @@ class ProcessRunner(BaseRunner):
         self.logger.debug("runner loop - check waiting invocations pending results")
         for invocation in list(self.wait_invocation.keys()):
             is_final = invocation.status.is_final()
-            for waiting_invocation in self.wait_invocation[invocation]:
+            for waiting_invocation in self.wait_invocation.get(invocation, []):
                 pid = self.processes.get(waiting_invocation)
                 if pid and pid.pid:
                     if is_final:
@@ -165,7 +169,7 @@ class ProcessRunner(BaseRunner):
                     else:
                         os.kill(pid.pid, signal.SIGSTOP)
             if is_final:
-                waiting_invocations = self.wait_invocation.pop(invocation)
+                waiting_invocations = self.wait_invocation.pop(invocation, set())
                 self.logger.info(
                     f"{invocation=} on final {invocation.status=}, resuming {waiting_invocations=}"
                 )

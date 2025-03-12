@@ -1,7 +1,7 @@
 import multiprocessing
 import threading
 from dataclasses import dataclass
-from time import perf_counter
+from time import perf_counter, sleep
 from typing import TYPE_CHECKING, NamedTuple
 
 import pytest
@@ -46,8 +46,8 @@ def get_test_config(app: "Pynenc") -> PerformanceTestConfig:
             expected_min_parallelization=0.5,
         )
     else:
-        # MultiThread runner - start one ThreadRunner per process
-        # It can handler more tasks with minimal overloading
+        # MultiThread and PersistentProcess runners
+        # These should reach highest levels of parallelism
         return PerformanceTestConfig(
             iterations=300_000,
             num_tasks=multiprocessing.cpu_count() * 10,
@@ -83,12 +83,13 @@ def run_performance_test(
 
     # Parallel test
     start_time = perf_counter()
-    invocations = [task(iterations=config.iterations) for _ in range(config.num_tasks)]
+    invocations = [task(config.iterations, i) for i in range(config.num_tasks)]
     individual_times = [inv.result for inv in invocations]
     total_time = perf_counter() - start_time
 
     # Cleanup
     app.runner.stop_runner_loop()
+    sleep(0.5)
     thread.join(timeout=5)
 
     return PerformanceResults(individual_times, total_time, calibration)

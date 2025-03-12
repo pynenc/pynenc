@@ -191,6 +191,9 @@ class RedisBlockingControl(BaseBlockingControl):
         :param DistributedInvocation waiter: The invocation that is waiting.
         :param DistributedInvocation waiteds: A list of invocations that the waiter is waiting for.
         """
+        self.app.logger.info(  # TODO REMOVE
+            f"waiting_for_results {waiter.invocation_id} --> {[i.invocation_id for i in waiteds]}"
+        )
         waited_invocation_ids = []
         for waited in waiteds:
             waited_invocation_ids.append(waited.invocation_id)
@@ -260,6 +263,8 @@ class RedisBlockingControl(BaseBlockingControl):
                     ).is_available_for_run():
                         max_num_invocations -= 1
                         yield invocation
+                if max_num_invocations == 0:
+                    break
 
 
 class StatusNotFound(Exception):

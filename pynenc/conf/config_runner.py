@@ -106,7 +106,7 @@ class ConfigMultiThreadRunner(ConfigThreadRunner):
     min_processes = ConfigField(1)
     max_processes = ConfigField(0)
     idle_timeout_process_sec = ConfigField(4)
-    enforce_max_processes = ConfigField(False)
+    enforce_max_processes = ConfigField(True)
 
 
 class ConfigPersistentProcessRunner(ConfigThreadRunner):

@@ -54,7 +54,7 @@ class BaseArgCache(ABC):
             cache = self._local_caches
             self._using_local = True
             if not self._warned_local:
-                self.app.logger.warning(
+                self.app.logger.debug(
                     "Runner cache not initialized. Using local cache. "
                     "This is expected if running outside a Pynenc runner context."
                 )

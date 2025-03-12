@@ -52,20 +52,27 @@ class BaseRunner(ABC):
         self.app = app
         self.app.runner = self
         self.running = False
-        self.logger = RunnerLogAdapter(self.app.logger, self.runner_id)
         self._runner_cache = runner_cache
-        self.extra_id = extra_id
+        self._extra_id = extra_id
+        self._host_proc_id = (
+            f"{self.__class__.__name__}({socket.gethostname()}-{os.getpid()})"
+        )
+        self._runner_id = self._host_proc_id
+        if extra_id:
+            self._runner_id = self._host_proc_id + f"[{extra_id}]"
+        self.logger = RunnerLogAdapter(self.app.logger, self._runner_id)
 
-    @cached_property
+    def set_extra_id(self, extra_id: str) -> None:
+        self._runner_id = self._host_proc_id + f"[{extra_id}]"
+        self.logger = RunnerLogAdapter(self.app.logger, self._runner_id)
+
+    @property
     def runner_id(self) -> str:
         """
         Unique identifier for the runner instance.
         :return: A string representing the unique identifier of the runner.
         """
-        _runner_id = f"{self.__class__.__name__}({socket.gethostname()}-{os.getpid()})"
-        if extra := getattr(self, "extra_id", None):
-            return _runner_id + f"[{extra}]"
-        return _runner_id
+        return self._runner_id
 
     @cached_property
     def conf(self) -> ConfigRunner:

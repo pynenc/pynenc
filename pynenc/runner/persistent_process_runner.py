@@ -22,6 +22,7 @@ def persistent_process_main(
     """Main function for persistent process that executes invocations sequentially."""
     app.logger.info(f"Persistent process {process_key} started with PID {os.getpid()}")
     app.runner._runner_cache = runner_cache
+    app.runner.set_extra_id(process_key)
     context.set_current_runner(app.app_id, app.runner)
 
     def handle_terminate(signum: int, frame: Any) -> None:
@@ -37,7 +38,6 @@ def persistent_process_main(
             if not invocations:
                 time.sleep(app.runner.conf.runner_loop_sleep_time_sec)
                 continue
-
             invocation = invocations[0]
             invocation_id = invocation.invocation_id
             app.logger.info(
@@ -112,6 +112,8 @@ class PersistentProcessRunner(BaseRunner):
 
     def _spawn_persistent_process(self) -> str:
         """Spawns a new persistent process and returns its key."""
+        if not self.running:
+            raise RuntimeError("Trying to spawn new process after stoppint loop")
         process_key = self._generate_process_key()
         args = {
             "app": self.app,

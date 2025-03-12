@@ -37,6 +37,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Added tests for `async_result()` and `async_results()` behavior with **delayed and failing invocations**.
 
 - **New integration tests for async execution**:
+
   - Full coverage of async task execution including:
     - **Simple async tasks**
     - **Async sleep-based tasks**
@@ -44,23 +45,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
     - **Tasks with async dependencies**
     - **Cycle detection in async tasks**
   - Group invocation tests verifying **async parallel execution**.
-
-### Changed
-
-- Optimized `async_result()` to **improve polling efficiency** and reduce unnecessary orchestrator calls.
-- Updated `async_waiting_for_results()` to **respect configurable sleep time** for better performance in distributed runners.
-
-- Improved ThreadRunner error handling:
-
-  - Wrapped thread creation in `runner_loop_iteration()` in try/except; on failure (RuntimeError), the offending invocation is requeued via `reroute_invocations`.
-  - Enhanced cleanup of finished threads in the `available_threads` property by joining and removing them.
-  - Clarified the use of `daemon=True` for threads (daemon threads won’t block process exit).
-  - Slight adjustments to `_waiting_for_results` to continue polling the local final cache for dependency resolution.
-
-- Updated ProcessRunner and MultiThreadRunner integration to support retrieving a shared cache when uninitialized.
-- Improved argument cache purge logic to handle Manager.dict() shutdown cases gracefully.
-
-### Tests
 
 - **Enhanced test isolation in `conftest.py`:**
 
@@ -78,11 +62,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Added a unit test (`test_thread_start_failure`) that forces thread creation to fail and verifies that the invocation is correctly rerouted.
 - Updated integration tests to cover asynchronous task execution, waiting, failure, dependency, and parallel performance.
+- Added comprehensive performance tests to measure and validate task distribution efficiency.
+- Implemented specific tests for the orchestrator's task acquisition mechanism.
+- Added dedicated tests for the blocking control functionality to ensure proper invocation limits.
+- Benchmarked runner performance under various load conditions.
 
-- **Fixed runner reference update in subprocesses:**
+### Changed
 
-  - When a MultiThreadRunner spawns a ThreadRunner in a subprocess, the ThreadRunner now explicitly resets `app.runner` to itself.
-  - This ensures that tasks executed within the subprocess use the correct runner instance, eliminating spurious warnings from `waiting_for_results`.
+- Optimized `async_result()` to **improve polling efficiency** and reduce unnecessary orchestrator calls.
+- Updated `async_waiting_for_results()` to **respect configurable sleep time** for better performance in distributed runners.
+
+- Improved ThreadRunner error handling:
+
+  - Wrapped thread creation in `runner_loop_iteration()` in try/except; on failure (RuntimeError), the offending invocation is requeued via `reroute_invocations`.
+  - Enhanced cleanup of finished threads in the `available_threads` property by joining and removing them.
+  - Clarified the use of `daemon=True` for threads (daemon threads won’t block process exit).
+  - Slight adjustments to `_waiting_for_results` to continue polling the local final cache for dependency resolution.
+
+- Updated ProcessRunner and MultiThreadRunner integration to support retrieving a shared cache when uninitialized.
+- Improved argument cache purge logic to handle Manager.dict() shutdown cases gracefully.
 
 - **Optimized `ThreadRunner` to poll local cache instead of pausing threads**:
   - **Before**: Used `threading.Condition` to pause threads in `_waiting_for_results`, relying on Redis status checks and condition notifications.
@@ -93,6 +91,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
     - Centralized status checks in `runner_loop_iteration`, populating the local cache and removing finalized invocations from `wait_invocation`.
     - Updated `_waiting_for_results` to poll the cache with a configurable sleep time (`invocation_wait_results_sleep_time_sec`), resuming tasks when all dependencies are final.
   - **Impact**: Improves performance by avoiding context switches, though it may slightly increase CPU usage due to polling. Memory is bounded by the cache size limit.
+
+### Fixed
+
+- **RedisOrchestrator Blocking Control**: Fixed an issue where the orchestrator was processing more invocations than requested, causing some runners to receive tasks they weren't executing. This improves resource allocation and prevents task queue overflow.
+
+- **Fixed runner reference update in subprocesses:**
+
+  - When a MultiThreadRunner spawns a ThreadRunner in a subprocess, the ThreadRunner now explicitly resets `app.runner` to itself.
+  - This ensures that tasks executed within the subprocess use the correct runner instance, eliminating spurious warnings from `waiting_for_results`.
 
 ## [0.0.17] - 2025-03-04
 
