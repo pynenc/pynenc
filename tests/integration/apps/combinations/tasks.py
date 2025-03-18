@@ -110,7 +110,7 @@ def cpu_intensive_no_conc(iterations: int, call_id: int = 0) -> float:
 @mock_app.task(running_concurrency=ConcurrencyControlType.DISABLED)
 def distribute_cpu_work(total_iterations: int, num_sub_tasks: int) -> list[float]:
     """Distribute CPU-intensive work into sub-tasks and parallelize."""
-    invocation_id = cpu_intensive_no_conc.invocation.invocation_id
+    invocation_id = distribute_cpu_work.invocation.invocation_id
     distribute_cpu_work.app.logger.info(
         f"INI distribute_cpu_work {total_iterations=} {num_sub_tasks=} {invocation_id=}"
     )
