@@ -195,22 +195,17 @@ def test_show_config_command_with_invalid_app_instance() -> None:
         config_cli.show_config_command(args)
 
 
-@pytest.fixture
-def temp_app_file(tmp_path: Path) -> str:
-    """Create a temporary Python file with a Pynenc instance."""
-    file_path = tmp_path / "some_app.py"
-    file_path.write_text("from pynenc import Pynenc\napp = Pynenc()")
-    return str(file_path)
+SOME_APP_PATH = str(Path(__file__).parent / "some_app.py")
 
 
-def test_cli_show_config_with_file_path(temp_app_file: str) -> None:
+def test_cli_show_config_with_file_path() -> None:
     """Test show_config command with a file path."""
-    with patch("sys.argv", ["pynenc", "--app", temp_app_file, "show_config"]):
+    with patch("sys.argv", ["pynenc", "--app", SOME_APP_PATH, "show_config"]):
         with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
             main()
 
     output = mock_stdout.getvalue()
     assert "Showing configuration for Pynenc instance:" in output
-    assert f"location: {temp_app_file}" in output
+    assert f"location: {SOME_APP_PATH}" in output
     assert "id: pynenc" in output
     assert "Config ConfigPynenc:" in output
