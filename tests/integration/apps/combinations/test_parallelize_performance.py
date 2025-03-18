@@ -1,4 +1,5 @@
 import multiprocessing
+import os
 import threading
 from dataclasses import dataclass
 from time import perf_counter
@@ -86,6 +87,8 @@ def test_distributed_cpu_work_performance(
     """Test the performance of distribute_cpu_work using parallelize with a CPU multiplier."""
     # Skip if insufficient CPU cores
     cpu_count = multiprocessing.cpu_count()
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        pytest.skip("Skipping test to run in GitHub")
     if cpu_count < MIN_CPUS_FOR_PERFORMANCE_TEST:
         pytest.skip(
             f"Need at least {MIN_CPUS_FOR_PERFORMANCE_TEST} CPUs (found {cpu_count})"
