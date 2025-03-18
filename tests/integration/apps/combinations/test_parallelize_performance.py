@@ -92,7 +92,7 @@ def test_distributed_cpu_work_performance(
         pytest.skip(
             f"Need at least {MIN_CPUS_FOR_PERFORMANCE_TEST} CPUs (found {cpu_count})"
         )
-
+    app.logger.info(f"Testing with {cpu_count} CPUs")
     app.conf.logging_level = "info"
 
     # Define test configuration dynamically
