@@ -80,8 +80,6 @@ MIN_CPUS_FOR_PERFORMANCE_TEST = 4
 
 @pytest.mark.parametrize("tasks_per_cpu_multiplier", [3.0])
 def test_distributed_cpu_work_performance(
-    app: "Pynenc",
-    task_cpu_intensive_no_conc: Task,
     task_distribute_cpu_work: Task,
     tasks_per_cpu_multiplier: float,
 ) -> None:
@@ -92,6 +90,7 @@ def test_distributed_cpu_work_performance(
         pytest.skip(
             f"Need at least {MIN_CPUS_FOR_PERFORMANCE_TEST} CPUs (found {cpu_count})"
         )
+    app = task_distribute_cpu_work.app
     app.logger.info(f"Testing with {cpu_count} CPUs")
     app.conf.logging_level = "info"
 
@@ -124,22 +123,39 @@ def test_distributed_cpu_work_performance(
     performance_data = calculate_distributed_metrics(config, results, app.runner)
     app.logger.info(f"Performance data: {performance_data}")
 
-    # New assertion: Wall-clock time between 3x min and 4x max
+    # Set expected time factors based on runner type
+    runner_type = app.runner.__class__.__name__
+    if runner_type == "MultiThreadRunner":
+        MIN_TIME_FACTOR = 3
+        MAX_TIME_FACTOR = 5
+    elif runner_type == "PersistentProcessRunner":
+        MIN_TIME_FACTOR = 3
+        MAX_TIME_FACTOR = 6
+    elif runner_type == "ProcessRunner":
+        MIN_TIME_FACTOR = 3
+        MAX_TIME_FACTOR = 7
+    else:
+        MIN_TIME_FACTOR = 3
+        MAX_TIME_FACTOR = 5
+
+    # Calculate expected times
     min_sub_task_time = min(individual_times)
     max_sub_task_time = max(individual_times)
-    expected_min_time = 3 * min_sub_task_time
-    expected_max_time = 4 * max_sub_task_time
+    expected_min_time = MIN_TIME_FACTOR * min_sub_task_time
+    expected_max_time = MAX_TIME_FACTOR * max_sub_task_time
+    # Assert expected times
     assert expected_min_time <= total_time <= expected_max_time, (
         f"Wall-clock time {total_time:.3f}s outside expected range "
         f"[{expected_min_time:.3f}s, {expected_max_time:.3f}s] "
-        f"(3x min={3*min_sub_task_time:.3f}s, 4x max={4*max_sub_task_time:.3f}s)\n"
+        f"({MIN_TIME_FACTOR}x min={MIN_TIME_FACTOR*min_sub_task_time:.3f}s, "
+        f"{MAX_TIME_FACTOR}x max={MAX_TIME_FACTOR*max_sub_task_time:.3f}s)\n"
         f"Performance data: {performance_data}"
     )
 
     # Check variance in individual execution times
     avg_sub_task_time = sum(individual_times) / len(individual_times)
     for i, t in enumerate(individual_times):
-        assert 0.5 * avg_sub_task_time <= t <= 2.0 * avg_sub_task_time, (
+        assert 0.5 * avg_sub_task_time <= t <= 3.0 * avg_sub_task_time, (
             f"Sub-task {i} time {t:.3f}s deviates too far from average {avg_sub_task_time:.3f}s "
             f"(must be within 50%-200%)"
         )

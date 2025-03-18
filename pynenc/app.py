@@ -1,6 +1,6 @@
 from functools import cached_property
 from logging import Logger
-from typing import TYPE_CHECKING, Any, Callable, Optional, Type, overload
+from typing import TYPE_CHECKING, Any, Callable, Optional, overload
 
 from pynenc import context
 from pynenc.arg_cache.base_arg_cache import BaseArgCache
@@ -144,7 +144,7 @@ class Pynenc:
         func: "Func",
         *,
         auto_parallel_batch_size: Optional[int] = None,
-        retry_for: Optional[tuple[Type[Exception], ...]] = None,
+        retry_for: Optional[tuple[type[Exception], ...]] = None,
         max_retries: Optional[int] = None,
         running_concurrency: Optional[ConcurrencyControlType] = None,
         registration_concurrency: Optional[ConcurrencyControlType] = None,
@@ -161,7 +161,7 @@ class Pynenc:
         func: None = None,
         *,
         auto_parallel_batch_size: Optional[int] = None,
-        retry_for: Optional[tuple[Type[Exception], ...]] = None,
+        retry_for: Optional[tuple[type[Exception], ...]] = None,
         max_retries: Optional[int] = None,
         running_concurrency: Optional[ConcurrencyControlType] = None,
         registration_concurrency: Optional[ConcurrencyControlType] = None,
@@ -177,7 +177,7 @@ class Pynenc:
         func: Optional["Func"] = None,
         *,
         auto_parallel_batch_size: Optional[int] = None,
-        retry_for: Optional[tuple[Type[Exception], ...]] = None,
+        retry_for: Optional[tuple[type[Exception], ...]] = None,
         max_retries: Optional[int] = None,
         running_concurrency: Optional[ConcurrencyControlType] = None,
         registration_concurrency: Optional[ConcurrencyControlType] = None,

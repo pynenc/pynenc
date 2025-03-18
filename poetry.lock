@@ -302,13 +302,13 @@ files = [
 
 [[package]]
 name = "cistell"
-version = "0.0.3"
+version = "0.0.7"
 description = "Configuration library for pynenc and piceli projects"
 optional = false
 python-versions = ">=3.11.6"
 files = [
-    {file = "cistell-0.0.3-py3-none-any.whl", hash = "sha256:2e0ed8481d59f743fb5887d709d13f3f4f498f67ad8c3035eb432485b77188b5"},
-    {file = "cistell-0.0.3.tar.gz", hash = "sha256:ca3c52aa8060f37d2c03438de55353cf12801983ee81bdf5b375e063c7265b8f"},
+    {file = "cistell-0.0.7-py3-none-any.whl", hash = "sha256:94441f3843fae55e7b2f5adf6ba3e05cb62fa4013a97686dbbfc1e72d48f4f5b"},
+    {file = "cistell-0.0.7.tar.gz", hash = "sha256:b99b0ee87741f6c70544b20ed0ca988abce29be65956765d16b1e5317b5e1d9d"},
 ]
 
 [package.dependencies]
@@ -1445,4 +1445,4 @@ test = ["covdefaults (>=2.3)", "coverage (>=7.2.7)", "coverage-enable-subprocess
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.11.6"
-content-hash = "97a9c83d8dff1b73ceae977b6a2ba7b088b6b8cda60cf378471d843abefcbc0f"
+content-hash = "c757b0a3d8274564c70e60b641180485fdf0129344139330dfd8ca91ed9c01a5"

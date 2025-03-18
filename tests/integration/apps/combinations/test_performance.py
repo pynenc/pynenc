@@ -68,9 +68,10 @@ class PerformanceResults(NamedTuple):
 
 
 def run_performance_test(
-    app: "Pynenc", task: Task, config: PerformanceTestConfig
+    task: Task, config: PerformanceTestConfig
 ) -> PerformanceResults:
     """Execute performance test with given configuration."""
+    app = task.app
     # Start runner
     thread = threading.Thread(target=lambda: app.runner.run(), daemon=True)
     thread.start()
@@ -124,7 +125,7 @@ def calculate_performance_metrics(
 MIN_CPUS_FOR_PERFORMANCE_TEST = 4
 
 
-def test_parallel_performance(app: "Pynenc", task_cpu_intensive_no_conc: Task) -> None:
+def test_parallel_performance(task_cpu_intensive_no_conc: Task) -> None:
     """Test performance characteristics of different runners."""
     # Skip test if running on a single CPU (CI environments)
     cpu_count = multiprocessing.cpu_count()
@@ -133,10 +134,10 @@ def test_parallel_performance(app: "Pynenc", task_cpu_intensive_no_conc: Task) -
             f"Performance tests require at least {MIN_CPUS_FOR_PERFORMANCE_TEST} CPU cores "
             f"(found {cpu_count})"
         )
-
+    app = task_cpu_intensive_no_conc.app
     app.conf.logging_level = "info"
     config = get_test_config(app)
-    results = run_performance_test(app, task_cpu_intensive_no_conc, config)
+    results = run_performance_test(task_cpu_intensive_no_conc, config)
 
     # Calculate metrics
     performance_data = calculate_performance_metrics(
