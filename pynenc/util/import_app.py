@@ -101,8 +101,8 @@ def find_app_instance(app_spec: str | None) -> Pynenc:
     """
     Find and load a Pynenc application instance from a module or file path.
 
-    :param str | None module_name: A string that can be a module path (e.g., 'core.src.api.manta_backtest_3')
-                  or a file path (e.g., 'core/src/api/manta_backtest_3.py').
+    :param str | None module_name: A string that can be a module path (e.g., 'core.src.api.backtes')
+                  or a file path (e.g., 'core/src/api/backtes.py').
     :return: The Pynenc app instance.
     :raises ValueError: If the app cannot be loaded or no Pynenc instance is found.
     """
@@ -154,7 +154,7 @@ def find_app_instance(app_spec: str | None) -> Pynenc:
             except ModuleNotFoundError as e:
                 raise ValueError(
                     f"Could not import module '{app_spec}'. Ensure it’s a valid module path "
-                    f"or provide a file path (e.g., 'path/to/manta_backtest_3.py').\n"
+                    f"or provide a file path (e.g., 'path/to/backtes.py').\n"
                     f"Error: {str(e)}"
                 ) from e
         return find_pynenc_instance_in_module(module)

@@ -31,8 +31,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Pynenc Command Line Interface")
     parser.add_argument(
         "--app",
-        help="Specify the application module (e.g., 'core.src.api.manta_backtest_3') "
-        "or file path (e.g., 'core/src/api/manta_backtest_3.py')",
+        help="Specify the application module (e.g., 'core.src.api.backtes') "
+        "or file path (e.g., 'core/src/api/backtes.py')",
         required=True,
     )
     parser.add_argument(
