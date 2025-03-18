@@ -19,7 +19,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **Comprehensive Tests for File Path Loading**: Added `tests/unit/util/test_import_app_filepath.py` with full test coverage for `find_app_instance` file path functionality, including:
   - Successful loading with and without `.py` extension.
   - Error handling for nonexistent files, invalid module specs, and missing `Pynenc` instances.
-  - Support for imports from sibling files via `sys.path` modification.
   - Type hints for static type checking with `mypy`.
 - **CLI Test for File Path Config**: Added `test_cli_show_config_with_file_path` to `tests/unit/cli/test_config_cli.py` to verify the CLI command `pynenc --app <file_path> show_config` loads and displays configuration from a file path.
 
