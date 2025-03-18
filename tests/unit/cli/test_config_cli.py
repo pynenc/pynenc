@@ -198,7 +198,7 @@ def test_show_config_command_with_invalid_app_instance() -> None:
 @pytest.fixture
 def temp_app_file(tmp_path: Path) -> str:
     """Create a temporary Python file with a Pynenc instance."""
-    file_path = tmp_path / "test_app.py"
+    file_path = tmp_path / "some_app.py"
     file_path.write_text("from pynenc import Pynenc\napp = Pynenc()")
     return str(file_path)
 
