@@ -50,12 +50,21 @@ class ConfigThreadRunner(ConfigRunner):
         Maximum number of threads that the runner can handle. This setting determines the maximum number of threads
         that the runner can spawn to execute tasks. It is used to limit the number of threads created by the runner.
         default: 0 will set the max_threads to multiprocessing.cpu_count()
+
+    :cvar ConfigField[int] final_invocation_cache_size:
+        Maximum number of final invocation entries stored in the runner's local cache (`final_invocations`).
+        This cache tracks completed invocations to avoid repeated Redis queries, and when the size exceeds
+        this limit, the oldest entries are evicted to maintain bounded memory usage. A larger value reduces
+        database pressure but increases memory consumption, while a smaller value saves memory at the cost
+        of more frequent status checks.
+        Default: 10,000.
     """
 
     invocation_wait_results_sleep_time_sec = ConfigField(0.01)
     runner_loop_sleep_time_sec = ConfigField(0.01)
     min_threads = ConfigField(1)
     max_threads = ConfigField(0)
+    final_invocation_cache_size = ConfigField(10000)
 
 
 class ConfigMultiThreadRunner(ConfigThreadRunner):
@@ -97,4 +106,16 @@ class ConfigMultiThreadRunner(ConfigThreadRunner):
     min_processes = ConfigField(1)
     max_processes = ConfigField(0)
     idle_timeout_process_sec = ConfigField(4)
-    enforce_max_processes = ConfigField(False)
+    enforce_max_processes = ConfigField(True)
+
+
+class ConfigPersistentProcessRunner(ConfigThreadRunner):
+    """Specific Configuration for the PersistentProcessRunner
+
+    :cvar ConfigField[int] num_processes:
+        Number number of processes that the runner can handle. This setting determines the number of processes
+        that the runner will spawn to execute Tasks. It is used to enforce the number of processes created.
+        default: 0 will set the max_processes to multiprocessing.cpu_count()
+    """
+
+    num_processes = ConfigField(0)

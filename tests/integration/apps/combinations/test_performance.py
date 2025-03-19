@@ -1,7 +1,7 @@
 import multiprocessing
 import threading
 from dataclasses import dataclass
-from time import perf_counter
+from time import perf_counter, sleep
 from typing import TYPE_CHECKING, NamedTuple
 
 import pytest
@@ -46,8 +46,8 @@ def get_test_config(app: "Pynenc") -> PerformanceTestConfig:
             expected_min_parallelization=0.5,
         )
     else:
-        # MultiThread runner - start one ThreadRunner per process
-        # It can handler more tasks with minimal overloading
+        # MultiThread and PersistentProcess runners
+        # These should reach highest levels of parallelism
         return PerformanceTestConfig(
             iterations=300_000,
             num_tasks=multiprocessing.cpu_count() * 10,
@@ -68,9 +68,10 @@ class PerformanceResults(NamedTuple):
 
 
 def run_performance_test(
-    app: "Pynenc", task: Task, config: PerformanceTestConfig
+    task: Task, config: PerformanceTestConfig
 ) -> PerformanceResults:
     """Execute performance test with given configuration."""
+    app = task.app
     # Start runner
     thread = threading.Thread(target=lambda: app.runner.run(), daemon=True)
     thread.start()
@@ -83,12 +84,13 @@ def run_performance_test(
 
     # Parallel test
     start_time = perf_counter()
-    invocations = [task(iterations=config.iterations) for _ in range(config.num_tasks)]
+    invocations = [task(config.iterations, i) for i in range(config.num_tasks)]
     individual_times = [inv.result for inv in invocations]
     total_time = perf_counter() - start_time
 
     # Cleanup
     app.runner.stop_runner_loop()
+    sleep(0.5)
     thread.join(timeout=5)
 
     return PerformanceResults(individual_times, total_time, calibration)
@@ -123,7 +125,7 @@ def calculate_performance_metrics(
 MIN_CPUS_FOR_PERFORMANCE_TEST = 4
 
 
-def test_parallel_performance(app: "Pynenc", task_cpu_intensive_no_conc: Task) -> None:
+def test_parallel_performance(task_cpu_intensive_no_conc: Task) -> None:
     """Test performance characteristics of different runners."""
     # Skip test if running on a single CPU (CI environments)
     cpu_count = multiprocessing.cpu_count()
@@ -132,10 +134,10 @@ def test_parallel_performance(app: "Pynenc", task_cpu_intensive_no_conc: Task) -
             f"Performance tests require at least {MIN_CPUS_FOR_PERFORMANCE_TEST} CPU cores "
             f"(found {cpu_count})"
         )
-
+    app = task_cpu_intensive_no_conc.app
     app.conf.logging_level = "info"
     config = get_test_config(app)
-    results = run_performance_test(app, task_cpu_intensive_no_conc, config)
+    results = run_performance_test(task_cpu_intensive_no_conc, config)
 
     # Calculate metrics
     performance_data = calculate_performance_metrics(
@@ -168,96 +170,3 @@ def test_parallel_performance(app: "Pynenc", task_cpu_intensive_no_conc: Task) -
             f"and num_tasks={performance_data['num_tasks']}\n"
             f"Performance data: {performance_data}"
         )
-
-
-# def test_parallel_performance(app: "Pynenc", task_cpu_intensive_no_conc: Task) -> None:
-#     app.conf.logging_level = "info"
-
-#     # Start runner
-#     def run_in_thread() -> None:
-#         # if isinstance(app.runner.conf, ConfigMultiThreadRunner):
-#         #     app.runner.conf.min_processes = 10
-#         #     app.runner.conf.max_threads = 1
-#         app.runner.run()
-
-#     thread = threading.Thread(target=run_in_thread, daemon=True)
-#     thread.start()
-
-#     # First run a single task to calibrate
-#     iterations = 600_000
-#     calibration = task_cpu_intensive_no_conc(iterations=iterations).result
-#     app.logger.info(f"Calibration: {calibration:.3f}s for {iterations} iterations")
-
-#     # Now run the parallel test
-#     if app.runner.mem_compatible():
-#         # Mem tasks run sequentially (GIL), do not trigger many of them
-#         iterations = 600_000
-#         num_tasks = 5
-#         expected_min = 0.7
-#         expected_max = 1.3
-#     elif isinstance(app.runner, ProcessRunner):
-#         # Subprocesses runner starts a Task per process, we limit tasks to CPU count
-#         # to avoid overloading the system and the overhead of starting too many processes
-#         iterations = 10_000_000
-#         num_tasks = multiprocessing.cpu_count()
-#         expected_min_parallelization = 0.5
-#     else:
-#         # MultiThreadRunner can handle more tasks, as it creates a ThreadRunner per process
-#         # It will avoid the overhead of starting too many processes
-#         iterations = 600_000
-#         num_tasks = multiprocessing.cpu_count() * 10
-#         expected_min_parallelization = 0.95
-#     invocations = []
-
-#     # Launch all tasks and measure total time
-#     start_time = perf_counter()
-#     for _ in range(num_tasks):
-#         invocations.append(task_cpu_intensive_no_conc(iterations=iterations))
-
-#     # Collect all execution times
-#     individual_times = [inv.result for inv in invocations]
-#     total_execution_time = perf_counter() - start_time
-
-#     # Stop runner
-#     app.runner.stop_runner_loop()
-#     thread.join(timeout=5)
-
-#     avg_task_time = sum(individual_times) / len(individual_times)
-#     total_cpu_time = sum(individual_times)
-#     calibration_parallelization_factor = (
-#         calibration * num_tasks
-#     ) / total_execution_time
-#     parallelization_factor = total_cpu_time / total_execution_time
-#     # Use app.runner.max_parallel_slots instead of cpu_count
-#     max_parallel_slots = app.runner.max_parallel_slots
-
-#     # Performance metrics for assertion messages
-#     performance_data = {
-#         "num_tasks": num_tasks,
-#         "calibration_time": f"{calibration:.3f}s",
-#         "avg_task_time": f"{avg_task_time:.3f}s",
-#         "total_cpu_time": f"{total_cpu_time:.3f}s",
-#         "wall_clock_time": f"{total_execution_time:.3f}s",
-#         "parallelization_factor": f"{parallelization_factor:.2f}x",
-#         "calibration_parallelization_factor": f"{calibration_parallelization_factor:.2f}x",
-#         "max_parallel_slots": max_parallel_slots,
-#         "runner_type": app.runner.__class__.__name__,
-#         "mem_compatible": app.runner.mem_compatible(),
-#         "individual_task_times": [f"{t:.3f}s" for t in individual_times],
-#     }
-
-#     if app.runner.mem_compatible():
-#         # For thread runner, expect nearly sequential execution
-#         # total_cpu_time ≈ total_execution_time (parallelization factor ≈ 1)
-#         assert expected_min <= calibration_parallelization_factor <= expected_max, (
-#             f"Thread runner {calibration_parallelization_factor=:.2f}x outside expected range "
-#             f"[{expected_min}-{expected_max}].\nPerformance data: {performance_data}"
-#         )
-#     else:
-#         # For process runner, expect parallel execution
-#         # total_cpu_time ≈ total_execution_time * cpu_count
-#         assert parallelization_factor >= expected_min_parallelization, (
-#             f"Process runner parallelization factor {parallelization_factor:.2f}x below minimum expected "
-#             f"{expected_min_parallelization:.2f}x with {max_parallel_slots=} and {num_tasks=} "
-#             f"\nPerformance data: {performance_data}"
-#         )

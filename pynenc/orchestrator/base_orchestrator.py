@@ -519,10 +519,16 @@ class BaseOrchestrator(ABC):
         """
         for blocking_invocation in self.get_blocking_invocations(max_num_invocations):
             if not self.is_candidate_to_run_by_concurrency_control(blocking_invocation):
+                self.app.runner.logger.warning(  # TODO REMOVE
+                    f"DISCARDING blocking invocation to run {blocking_invocation=}"
+                )
                 continue
             blocking_invocation_ids.add(blocking_invocation.invocation_id)
             try:
                 self._set_pending(blocking_invocation)
+                self.app.runner.logger.info(  # TODO REMOVE
+                    f"Obtained blocking invocation to run {blocking_invocation=}"
+                )
                 yield blocking_invocation
             except PendingInvocationLockError:
                 continue
@@ -544,19 +550,35 @@ class BaseOrchestrator(ABC):
         """
         while missing_invocations > 0:
             if invocation := self.app.broker.retrieve_invocation():
+                self.app.runner.logger.info(  # TODO REMOVE
+                    f"Obtained broker invocation CANDIDATE to run {invocation=}"
+                )
                 if invocation.invocation_id not in blocking_invocation_ids:
-                    if self.get_invocation_status(invocation).is_available_for_run():
+                    invocation_status = self.get_invocation_status(invocation)
+                    if invocation_status.is_available_for_run():
                         if not self.is_candidate_to_run_by_concurrency_control(
                             invocation
                         ):
                             invocations_to_reroute.add(invocation)
                             continue
-                        missing_invocations -= 1
                         try:
                             self._set_pending(invocation)
+                            missing_invocations -= 1
+                            self.app.runner.logger.info(
+                                f"YIELDING broker invocation to run {invocation=}"
+                            )
                             yield invocation
                         except PendingInvocationLockError:
+                            # invocations_to_reroute.add(invocation)
                             continue
+                    else:
+                        self.app.runner.logger.warning(  # TODO REMOVE
+                            f"Ignoring broker invocation to run {invocation=} because {invocation_status=}"
+                        )
+                else:
+                    self.app.runner.logger.warning(  # TODO REMOVE
+                        f"Ignoring broker invocation to run {invocation=} because is in {blocking_invocation_ids=} is not available to run"
+                    )
             else:
                 break
 
@@ -609,10 +631,14 @@ class BaseOrchestrator(ABC):
         :return: The newly created `DistributedInvocation` for the call.
         :rtype: DistributedInvocation[Params, Result]
         """
+        self.app.logger.info(f"routing a new call {call.call_id} invocation")
         parent_invocation = context.get_dist_invocation_context(self.app.app_id)
         new_invocation = DistributedInvocation(call, parent_invocation)
         self.set_invocation_status(new_invocation, InvocationStatus.REGISTERED)
         self.app.broker.route_invocation(new_invocation)
+        self.app.logger.info(
+            f"routed call {call.call_id} with invocation {new_invocation.invocation_id}"
+        )
         return new_invocation
 
     def route_call(self, call: "Call") -> "DistributedInvocation[Params, Result]":

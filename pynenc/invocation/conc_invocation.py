@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+from collections.abc import AsyncGenerator, Iterator
 from functools import cached_property
-from typing import TYPE_CHECKING, Iterator
+from typing import TYPE_CHECKING
 
 from pynenc import context
 from pynenc.exceptions import PynencError
@@ -14,7 +16,7 @@ if TYPE_CHECKING:
     from ..call import Call
 
 
-class SynchronousInvocation(BaseInvocation[Params, Result]):
+class ConcurrentInvocation(BaseInvocation[Params, Result]):
     """
     A synchronous implementation of a task invocation.
 
@@ -78,6 +80,10 @@ class SynchronousInvocation(BaseInvocation[Params, Result]):
         finally:
             context.sync_inv_context[self.app.app_id] = previous_invocation_context
 
+    async def async_result(self) -> Result:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, lambda: self.result)
+
     @property
     def num_retries(self) -> int:
         """
@@ -89,25 +95,25 @@ class SynchronousInvocation(BaseInvocation[Params, Result]):
         return self._num_retries
 
     def to_json(self) -> str:
-        raise PynencError("SynchronousInvocation cannot be serialized")
+        raise PynencError("ConcurrentInvocation cannot be serialized")
 
     @classmethod
-    def from_json(cls, app: Pynenc, serialized: str) -> SynchronousInvocation:
+    def from_json(cls, app: Pynenc, serialized: str) -> ConcurrentInvocation:
         del app, serialized
-        raise PynencError("SynchronousInvocation cannot be deserialized")
+        raise PynencError("ConcurrentInvocation cannot be deserialized")
 
 
-class SynchronousInvocationGroup(
-    BaseInvocationGroup[Params, Result, SynchronousInvocation]
+class ConcurrentInvocationGroup(
+    BaseInvocationGroup[Params, Result, ConcurrentInvocation]
 ):
     """
     A group of synchronous invocations for a specific task.
 
-    This class extends `BaseInvocationGroup` to handle groups of `SynchronousInvocation` instances.
+    This class extends `BaseInvocationGroup` to handle groups of `ConcurrentInvocation` instances.
     It is designed for scenarios where multiple synchronous invocations of a task are managed or processed together.
 
     :param Task task: The task associated with these invocations.
-    :param list[SynchronousInvocation] invocations: A list of synchronous invocations.
+    :param list[ConcurrentInvocation] invocations: A list of synchronous invocations.
 
     ```{danger}
         Use only for testing purposes where distributed processing is not required.
@@ -119,7 +125,7 @@ class SynchronousInvocationGroup(
         """
         An iterator over the results of the invocations in the group.
 
-        This property method iterates over the `SynchronousInvocation` instances in the group,
+        This property method iterates over the `ConcurrentInvocation` instances in the group,
         yielding the result of each invocation.
 
         :return: An iterator over the results of each invocation in the group.
@@ -127,3 +133,16 @@ class SynchronousInvocationGroup(
         """
         for invocation in self.invocations:
             yield invocation.result
+
+    async def async_results(self) -> AsyncGenerator[Result, None]:
+        """
+        An async iterator over the results of the invocations in the group.
+
+        This method asynchronously iterates over the `ConcurrentInvocation` instances,
+        yielding the result of each invocation using their async_result method.
+
+        :return: An async iterator over the results of each invocation in the group.
+        :rtype: AsyncIterator[Result]
+        """
+        for invocation in self.invocations:
+            yield await invocation.async_result()

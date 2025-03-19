@@ -34,7 +34,7 @@ def test_get_blocking_invocations(invocations: tuple) -> None:
     # graph.add_invocation_call(invocation1, invocation2)
     graph.waiting_for_results(invocation0, [invocation1])
 
-    invocation0.app.orchestrator.get_invocation_status.return_value = (
+    invocation0.app.orchestrator._get_invocation_status_mock.return_value = (
         InvocationStatus.REGISTERED
     )
 

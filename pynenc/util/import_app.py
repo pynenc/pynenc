@@ -1,7 +1,9 @@
 import importlib
 import logging
 import os
+import sys
 import types
+from importlib.util import module_from_spec, spec_from_file_location
 
 from pynenc.app import Pynenc
 
@@ -91,24 +93,68 @@ def find_pynenc_instance_in_module(module: types.ModuleType) -> Pynenc:
         attr = getattr(module, attr_name)
         if isinstance(attr, Pynenc):
             return attr
-    raise ValueError(f"No Pynenc app instance found in '{module.__name__}'")
+    module_name = getattr(module, "__name__", "unknown")
+    raise ValueError(f"No Pynenc app instance found in '{module_name}'")
 
 
-def find_app_instance(module_name: str | None) -> Pynenc:
+def find_app_instance(app_spec: str | None) -> Pynenc:
     """
-    Finds the Pynenc app instance in the specified module.
+    Find and load a Pynenc application instance from a module or file path.
 
-    :param str | None module_name: The name of the module.
+    :param str | None module_name: A string that can be a module path (e.g., 'core.src.api.backtes')
+                  or a file path (e.g., 'core/src/api/backtes.py').
     :return: The Pynenc app instance.
-    :raises ValueError: If no module name is provided.
+    :raises ValueError: If the app cannot be loaded or no Pynenc instance is found.
     """
-    if not module_name:
-        raise ValueError("No module name provided")
-    logging.debug(f"Attempting to find app instance in module: {module_name}")
+    if not app_spec:
+        raise ValueError("No application spec provided")
+    logging.debug(f"Attempting to find app instance for: {app_spec}")
+    # Normalize the input (remove .py if present)
+    app_spec = app_spec.replace(".py", "")
 
-    try:
-        module = importlib.import_module(module_name)
-    except ModuleNotFoundError:
-        module = import_module_as_file(module_name, ModuleNotFoundError())
+    # Check if it’s a file path
+    if os.path.sep in app_spec or app_spec.endswith(".py"):
+        file_path = os.path.abspath(
+            app_spec if app_spec.endswith(".py") else f"{app_spec}.py"
+        )
+        if not os.path.isfile(file_path):
+            raise ValueError(f"File not found: {file_path}")
 
-    return find_pynenc_instance_in_module(module)
+        # Add the project root (assuming 3 levels up from file: core/src/api -> project root)
+        project_root = os.path.abspath(
+            os.path.join(os.path.dirname(file_path), "../../..")
+        )
+        if project_root not in sys.path:
+            sys.path.insert(0, project_root)
+        module_dir = os.path.dirname(file_path)
+        if module_dir not in sys.path:
+            sys.path.insert(0, module_dir)
+
+        module_name = os.path.basename(file_path).replace(".py", "")
+        spec = spec_from_file_location(module_name, file_path)
+        if spec is None or spec.loader is None:
+            raise ValueError(f"Could not create module spec for {file_path}")
+
+        module = module_from_spec(spec)
+        try:
+            spec.loader.exec_module(module)
+        except ModuleNotFoundError as e:
+            raise ModuleNotFoundError(
+                f"Failed to load '{file_path}' due to missing module: {str(e)}. "
+                f"Ensure all imports are valid. Current sys.path: {sys.path}"
+            ) from e
+        return find_pynenc_instance_in_module(module)
+    else:
+        # Try to import as a module
+        try:
+            module = importlib.import_module(app_spec)
+        except ModuleNotFoundError:
+            try:
+                module = import_module_as_file(app_spec, ModuleNotFoundError())
+            except ModuleNotFoundError as e:
+                raise ValueError(
+                    f"Could not import module '{app_spec}'. Ensure it’s a valid module path "
+                    f"or provide a file path (e.g., 'path/to/backtes.py').\n"
+                    f"Error: {str(e)}"
+                ) from e
+        return find_pynenc_instance_in_module(module)

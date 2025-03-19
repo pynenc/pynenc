@@ -2,7 +2,7 @@ import pytest
 
 from pynenc.call import Call
 from pynenc.exceptions import PynencError, RetryError
-from pynenc.invocation import InvocationStatus, SynchronousInvocation
+from pynenc.invocation import ConcurrentInvocation, InvocationStatus
 from tests.conftest import MockPynenc
 
 app = MockPynenc()
@@ -16,7 +16,7 @@ def add(x: int, y: int) -> int:
 
 def test_distributed_invocation_instantiation() -> None:
     invocation = add(1, 2)
-    assert isinstance(invocation, SynchronousInvocation)
+    assert isinstance(invocation, ConcurrentInvocation)
     assert isinstance(invocation.call, Call)
 
 
@@ -62,4 +62,28 @@ def test_exception() -> None:
     invocation = raise_exception()
     with pytest.raises(RuntimeError, match="Test exception"):
         _ = invocation.result
+    assert invocation.status == InvocationStatus.FAILED
+
+
+@pytest.mark.asyncio
+async def test_async_result_success() -> None:
+    invocation = add(1, 2)
+    result = await invocation.async_result()
+    assert result == 3
+    assert invocation.status == InvocationStatus.SUCCESS
+
+
+@pytest.mark.asyncio
+async def test_async_result_retry() -> None:
+    invocation = retry()
+    with pytest.raises(RetryError, match="Test retry"):
+        await invocation.async_result()
+    assert invocation.status == InvocationStatus.FAILED
+
+
+@pytest.mark.asyncio
+async def test_async_result_exception() -> None:
+    invocation = raise_exception()
+    with pytest.raises(RuntimeError, match="Test exception"):
+        await invocation.async_result()
     assert invocation.status == InvocationStatus.FAILED

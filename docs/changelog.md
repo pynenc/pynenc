@@ -4,6 +4,102 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.18] - 2025-03-06
+
+### Added
+
+- **Full support for asynchronous task execution and result retrieval**:
+
+  - Introduced `async_result()` for **awaiting individual task results**.
+  - Introduced `async_results()` for **awaiting multiple task results in parallel**.
+  - Enabled **async group invocations** using `parallelize().async_results()`.
+
+- **File Path Support in `find_app_instance`**: Enhanced `pynenc.util.import_app.find_app_instance` to support loading a `Pynenc` instance from a file path (e.g., `path/to/app.py`) in addition to module paths. The function now detects file paths using `os.path.sep` or `.py` extension, loads the module with `spec_from_file_location`, and adjusts `sys.path` for relative imports.
+- **Enhanced `sys.path` Handling in `find_app_instance`**: For file paths, now adds the inferred project root (three levels up from the file) to `sys.path`, enabling nested imports (e.g., `from core.params.config_helpers import load_settings`) to resolve correctly, aligning with tools like Uvicorn.
+- **Comprehensive Tests for File Path Loading**: Added `tests/unit/util/test_import_app_filepath.py` with full test coverage for `find_app_instance` file path functionality, including:
+  - Successful loading with and without `.py` extension.
+  - Error handling for nonexistent files, invalid module specs, and missing `Pynenc` instances.
+  - Type hints for static type checking with `mypy`.
+- **CLI Test for File Path Config**: Added `test_cli_show_config_with_file_path` to `tests/unit/cli/test_config_cli.py` to verify the CLI command `pynenc --app <file_path> show_config` loads and displays configuration from a file path.
+
+- **PersistentProcessRunner**:
+  - Introduced a new runner that maintains a fixed pool of persistent worker processes which continuously poll for invocations and execute them sequentially.
+  - Workers receive shared communication arguments (via a managed dictionary passed in `runner_args`) to report waiting states, allowing the parent process to signal processes with SIGSTOP/SIGCONT.
+  - This design reduces process startup overhead under heavy load and provides a more celery-like worker model for CPU-bound tasks.
+
+### Tests
+
+- **New unit tests for async result handling**:
+
+  - Verified that `async_waiting_for_results()` correctly delegates to `_waiting_for_results()`.
+  - Ensured that external invocations in `DummyRunner` use `time.sleep()` as expected.
+  - Added tests for `async_result()` and `async_results()` behavior with **delayed and failing invocations**.
+
+- **New integration tests for async execution**:
+
+  - Full coverage of async task execution including:
+    - **Simple async tasks**
+    - **Async sleep-based tasks**
+    - **Tasks raising exceptions**
+    - **Tasks with async dependencies**
+    - **Cycle detection in async tasks**
+  - Group invocation tests verifying **async parallel execution**.
+
+- **Enhanced test isolation in `conftest.py`:**
+
+  - **Before**: Mocks were defined at the class level, leading to **state sharing** across tests.
+  - **Now**: Each mock method is encapsulated **within the instance**, preventing **unexpected state persistence** in parallel test runs.
+  - **Improved MockPynenc instantiation** to ensure each test gets **a fresh, isolated instance**.
+
+- **Renamed `SynchronousInvocation` to `ConcurrentInvocation`:**
+
+  - **Why?** The term _Synchronous_ was misleading since the class is designed for **concurrent execution**, not strictly _blocking synchronous_ execution.
+  - **What changed?**
+    - All references to `SynchronousInvocation` have been **replaced** with `ConcurrentInvocation`.
+    - Code, documentation, and tests **updated accordingly** to reflect the new naming.
+    - Ensured backward compatibility by **aliasing** `SynchronousInvocation` to `ConcurrentInvocation` (this will be removed in a future version).
+
+- Added a unit test (`test_thread_start_failure`) that forces thread creation to fail and verifies that the invocation is correctly rerouted.
+- Updated integration tests to cover asynchronous task execution, waiting, failure, dependency, and parallel performance.
+- Added comprehensive performance tests to measure and validate task distribution efficiency.
+- Implemented specific tests for the orchestrator's task acquisition mechanism.
+- Added dedicated tests for the blocking control functionality to ensure proper invocation limits.
+- Benchmarked runner performance under various load conditions.
+
+### Changed
+
+- Optimized `async_result()` to **improve polling efficiency** and reduce unnecessary orchestrator calls.
+- Updated `async_waiting_for_results()` to **respect configurable sleep time** for better performance in distributed runners.
+
+- Improved ThreadRunner error handling:
+
+  - Wrapped thread creation in `runner_loop_iteration()` in try/except; on failure (RuntimeError), the offending invocation is requeued via `reroute_invocations`.
+  - Enhanced cleanup of finished threads in the `available_threads` property by joining and removing them.
+  - Clarified the use of `daemon=True` for threads (daemon threads won’t block process exit).
+  - Slight adjustments to `_waiting_for_results` to continue polling the local final cache for dependency resolution.
+
+- Updated ProcessRunner and MultiThreadRunner integration to support retrieving a shared cache when uninitialized.
+- Improved argument cache purge logic to handle Manager.dict() shutdown cases gracefully.
+
+- **Optimized `ThreadRunner` to poll local cache instead of pausing threads**:
+  - **Before**: Used `threading.Condition` to pause threads in `_waiting_for_results`, relying on Redis status checks and condition notifications.
+  - **Now**: Polls a local `OrderedDict` (`final_invocations`) to check for completed dependencies, reducing Redis queries and eliminating thread suspension overhead.
+  - **Details**:
+    - Removed `wait_conditions` and simplified `wait_invocation` to a `set` of collective dependencies.
+    - Introduced `final_invocations` with a max size of 10,000 entries, evicting oldest entries when full.
+    - Centralized status checks in `runner_loop_iteration`, populating the local cache and removing finalized invocations from `wait_invocation`.
+    - Updated `_waiting_for_results` to poll the cache with a configurable sleep time (`invocation_wait_results_sleep_time_sec`), resuming tasks when all dependencies are final.
+  - **Impact**: Improves performance by avoiding context switches, though it may slightly increase CPU usage due to polling. Memory is bounded by the cache size limit.
+
+### Fixed
+
+- **RedisOrchestrator Blocking Control**: Fixed an issue where the orchestrator was processing more invocations than requested, causing some runners to receive tasks they weren't executing. This improves resource allocation and prevents task queue overflow.
+
+- **Fixed runner reference update in subprocesses:**
+
+  - When a MultiThreadRunner spawns a ThreadRunner in a subprocess, the ThreadRunner now explicitly resets `app.runner` to itself.
+  - This ensures that tasks executed within the subprocess use the correct runner instance, eliminating spurious warnings from `waiting_for_results`.
+
 ## [0.0.17] - 2025-03-04
 
 ### Fixed

@@ -1,7 +1,7 @@
 import multiprocessing
 import threading
 import time
-from collections import defaultdict
+from collections import OrderedDict
 from functools import cached_property
 from typing import Any, NamedTuple, Optional
 
@@ -23,11 +23,11 @@ class ThreadRunner(BaseRunner):
     This runner is suitable for I/O-bound tasks and scenarios where shared memory between tasks is required.
     """
 
-    wait_conditions: dict["DistributedInvocation", threading.Condition]
-    wait_invocation: dict["DistributedInvocation", set["DistributedInvocation"]]
+    wait_invocation: set["DistributedInvocation"]
     threads: dict[str, ThreadInfo]
     max_threads: int
     waiting_threads: int
+    final_invocations: "OrderedDict[DistributedInvocation, None]"
 
     @cached_property
     def conf(self) -> ConfigThreadRunner:
@@ -67,21 +67,20 @@ class ThreadRunner(BaseRunner):
     def _on_start(self) -> None:
         """
         Internal method called when the ThreadRunner starts.
-        Initializes the data structures for managing invocations and threads.
+        Initializes the data infrastructures for managing invocations and threads.
         """
-        # Initialize thread list and condition dictionary
-        self.wait_conditions = defaultdict(threading.Condition)
-        self.wait_invocation = defaultdict(set)
+        self.wait_invocation = set()
         self.threads = {}
         self.max_threads = self.conf.max_threads or multiprocessing.cpu_count()
         self.waiting_threads = 0
+        self.final_invocations = OrderedDict()
 
     def _on_stop(self) -> None:
         """
         Internal method called when the ThreadRunner stops.
         Joins all running threads and updates their invocation statuses.
         """
-        # kill all the running threads and change invocation status to retry
+        # Join all running threads and mark their invocations for retry.
         for thread_info in self.threads.values():
             thread_info.thread.join()
             self.app.orchestrator.set_invocation_status(
@@ -92,20 +91,25 @@ class ThreadRunner(BaseRunner):
         """
         Internal method called after receiving a signal to stop the runner loop.
         """
-        # No specific actions needed for stopping the runner loop in ThreadRunner
+        pass
 
     @property
     def available_threads(self) -> int:
         """
         Returns the number of available thread slots for new invocations.
+        Joins finished threads so they no longer count against the limit.
         :return: An integer representing available thread slots.
         """
-        self.threads = {k: v for k, v in self.threads.items() if v.thread.is_alive()}
-        # do not consider waiting threads
-        # in testing with only one thread available and only one worker
-        # the waiting threads will prevent to run the invocation that will unlock
-        # the invocations waiting in these threads
-        return self.max_parallel_slots - len(self.threads)  # - self.waiting_threads
+        # Rebuild the threads dictionary by joining finished threads.
+        alive_threads = {}
+        for k, thread_info in self.threads.items():
+            if thread_info.thread.is_alive():
+                alive_threads[k] = thread_info
+            else:
+                thread_info.thread.join()
+        self.threads = alive_threads
+        # Do not count waiting threads.
+        return self.max_parallel_slots - len(self.threads)
 
     def runner_loop_iteration(self) -> None:
         """
@@ -121,73 +125,82 @@ class ThreadRunner(BaseRunner):
         )
 
         for invocation in invocations:
-            thread = threading.Thread(target=invocation.run, daemon=True)
-            thread.start()
-            self.threads[invocation.invocation_id] = ThreadInfo(thread, invocation)
-            self.logger.info(f"Running {invocation=} on {thread=}")
+            try:
+                self.app.logger.info(
+                    f"{self.runner_id} starting invocation:{invocation.invocation_id}"
+                )
+                thread = threading.Thread(target=invocation.run, daemon=True)
+                thread.start()
+                self.threads[invocation.invocation_id] = ThreadInfo(thread, invocation)
+                self.logger.info(f"Running {invocation=} on {thread=}")
+            except RuntimeError as e:
+                self.logger.error(
+                    f"Failed to start thread for {invocation.invocation_id}: {e}"
+                )
+                self.app.orchestrator.reroute_invocations({invocation})
 
         # Check waiting conditions
-        waiting_count = len(self.wait_conditions)
+        waiting_count = len(self.wait_invocation)
         self.logger.debug(f"Checking {waiting_count} waiting conditions")
 
-        for invocation in list(self.wait_conditions):
+        for invocation in list(self.wait_invocation):
             self.logger.debug(
                 f"Checking invocation {invocation.invocation_id} status={invocation.status}"
             )
             if invocation.status.is_final():
-                # Notify all waiting threads to continue
-                with self.wait_conditions[invocation]:
-                    self.wait_conditions[invocation].notify_all()
-                self.wait_conditions.pop(invocation)
-                # Set all waiting invocations status to running
-                waiting_invocations = self.wait_invocation.pop(invocation)
-                self.app.orchestrator.set_invocations_status(
-                    list(waiting_invocations), InvocationStatus.RUNNING
-                )
-                self.waiting_threads -= len(waiting_invocations)
-                self.logger.debug(
-                    f"{invocation=} on final {invocation.status=}, "
-                    f"resuming {waiting_invocations=}"
-                )
+                self.final_invocations[invocation] = None  # Add to ordered set
+                self.wait_invocation.remove(invocation)
+                self.logger.debug(f"{invocation=} on final {invocation.status=}")
+
+        # Clean up final_invocations if over size limit
+        while len(self.final_invocations) > self.conf.final_invocation_cache_size:
+            old_inv, _ = self.final_invocations.popitem(last=False)  # Remove oldest
+            self.logger.debug(f"Evicted old final invocation {old_inv.invocation_id}")
 
         self.logger.debug(
             f"Finished loop iteration, sleeping for {self.conf.runner_loop_sleep_time_sec}s"
         )
         time.sleep(self.conf.runner_loop_sleep_time_sec)
 
-    def waiting_for_results(
+    def _waiting_for_results(
         self,
-        running_invocation: Optional["DistributedInvocation"],
+        running_invocation: "DistributedInvocation",
         result_invocations: list["DistributedInvocation"],
         runner_args: Optional[dict[str, Any]] = None,
     ) -> None:
         """
-        Handles invocations that are waiting for results from other invocations.
-        Pauses the current thread and registers it to wait for the results of specified invocations.
+        Handles invocations waiting for results by polling a local final cache instead of pausing threads.
+
         :param running_invocation: The invocation that is waiting for results.
         :param result_invocations: A list of invocations whose results are being awaited.
         :param runner_args: Additional arguments required for the ThreadRunner.
         """
         del runner_args
-        if not running_invocation:
-            # running from outside this runner (user instantiate an app with this runner class,
-            # but ask for an invocation result outside of the runner processes)
-            self.logger.debug(
-                f"Waiting for {result_invocations=} from outside this runner"
-            )
-            time.sleep(self.conf.invocation_wait_results_sleep_time_sec)
-            return
         self.app.orchestrator.set_invocation_status(
             running_invocation, InvocationStatus.PAUSED
         )
         self.logger.debug(
             f"Pausing invocation {running_invocation.invocation_id} is waiting for others to finish"
         )
-        for result_invocation in result_invocations:
-            self.wait_invocation[result_invocation].add(running_invocation)
-            self.waiting_threads += 1
-            with self.wait_conditions[result_invocation]:
-                self.logger.debug(
-                    f"Invocation {running_invocation.invocation_id} is waiting for invocation {result_invocation.invocation_id} to finish"
-                )
-                self.wait_conditions[result_invocation].wait()
+
+        # Register dependencies collectively
+        self.wait_invocation.update(result_invocations)
+        self.waiting_threads += 1
+
+        # Poll final_invocations cache until all results are ready
+        while not all(
+            result_inv in self.final_invocations for result_inv in result_invocations
+        ):
+            self.logger.debug(
+                f"Polling for {running_invocation.invocation_id} waiting on {len(result_invocations)} results"
+            )
+            time.sleep(self.conf.invocation_wait_results_sleep_time_sec)
+
+        # All results are final, resume
+        self.waiting_threads -= 1
+        self.logger.debug(
+            f"Resuming {running_invocation.invocation_id}, all results final"
+        )
+        self.app.orchestrator.set_invocation_status(
+            running_invocation, InvocationStatus.RUNNING
+        )

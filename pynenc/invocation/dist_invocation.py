@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncGenerator, Iterator
 from dataclasses import dataclass
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Iterator
+from typing import TYPE_CHECKING, Any
 
 from pynenc import context, exceptions
 from pynenc.arguments import Arguments
@@ -11,6 +12,7 @@ from pynenc.call import Call
 from pynenc.invocation.base_invocation import BaseInvocation, BaseInvocationGroup
 from pynenc.invocation.status import InvocationStatus
 from pynenc.types import Params, Result
+from pynenc.util.asyncio_helper import run_task_sync
 
 if TYPE_CHECKING:
     from ..app import Pynenc
@@ -28,7 +30,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
 
     :param Call[Params, Result] call:
         Inherits the `call` attribute from `BaseInvocation`, representing the specific task call that this invocation executes.
-    :param Optional[DistributedInvocation] parent_invocation:
+    :param DistributedInvocation | None parent_invocation:
         A reference to a parent invocation, if this invocation is part of a nested call structure.
         This attribute is used to maintain the invocation hierarchy in complex task workflows.
     :param Optional[str] _invocation_id:
@@ -124,7 +126,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         and updating the task's state in the orchestrator. It manages the invocation context and communicates with
         the orchestrator to set the invocation's run state and result.
 
-        :param Optional[dict[str, Any]] runner_args:
+        :param dict[str, Any] | None runner_args:
             Optional arguments passed from/to the runner. These arguments can be used for synchronization
             in subprocesses or other runner-specific tasks. Default is None.
 
@@ -156,7 +158,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             ):
                 self.app.orchestrator.reroute_invocations({self})
             self.app.orchestrator.set_invocation_run(self.parent_invocation, self)
-            result = self.task.func(**self.arguments.kwargs)
+            result = run_task_sync(self.task.func, **self.arguments.kwargs)
             self.app.orchestrator.set_invocation_result(self, result)
             self.task.logger.info(f"Invocation {self.invocation_id} finished")
         except self.task.retriable_exceptions as ex:
@@ -165,8 +167,11 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
                 self.app.orchestrator.set_invocation_exception(self, ex)
                 raise ex
             self.app.orchestrator.set_invocation_retry(self, ex)
-            self.task.logger.warning("Retrying invocation")
+            self.task.logger.warning(
+                f"Invocation {self.invocation_id} marked for retry {ex=}"
+            )
         except Exception as ex:
+            self.app.logger.exception(f"Invocation {self.invocation_id} exception")
             self.app.orchestrator.set_invocation_exception(self, ex)
             raise ex
         finally:
@@ -195,11 +200,23 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             for the task to complete.
         ```
         """
+        self.app.logger.info(f"ini waiting for invocation {self.invocation_id} result")
         if not self.status.is_final():
             self.app.orchestrator.waiting_for_results(self.parent_invocation, [self])
 
         while not self.status.is_final():
             self.app.runner.waiting_for_results(
+                self.parent_invocation, [self], context.runner_args
+            )
+        self.app.logger.info(f"end waiting for invocation {self.invocation_id} result")
+        return self.get_final_result()
+
+    async def async_result(self) -> Result:
+        # Assuming an async_waiting_for_results will be implemented in the runner:
+        if not self.status.is_final():
+            self.app.orchestrator.waiting_for_results(self.parent_invocation, [self])
+        while not self.status.is_final():
+            await self.app.runner.async_waiting_for_results(
                 self.parent_invocation, [self], context.runner_args
             )
         return self.get_final_result()
@@ -279,7 +296,32 @@ class DistributedInvocationGroup(
                 self.app.orchestrator.waiting_for_results(
                     parent_invocation, waiting_invocations
                 )
-            self.app.runner.waiting_for_results(parent_invocation, waiting_invocations)
+                notified_orchestrator = True
+            self.app.runner.waiting_for_results(
+                parent_invocation, waiting_invocations, context.runner_args
+            )
+
+    async def async_results(self) -> AsyncGenerator[Result, None]:
+        waiting_invocations = self.invocations.copy()
+        if not waiting_invocations:
+            return
+        parent_invocation = waiting_invocations[0].parent_invocation
+        notified_orchestrator = False
+        while waiting_invocations:
+            for invocation in waiting_invocations:
+                if invocation.status.is_final():
+                    waiting_invocations.remove(invocation)
+                    yield invocation.result
+            if not waiting_invocations:
+                break
+            if not notified_orchestrator:
+                self.app.orchestrator.waiting_for_results(
+                    parent_invocation, waiting_invocations
+                )
+                notified_orchestrator = True
+            await self.app.runner.async_waiting_for_results(
+                parent_invocation, waiting_invocations, context.runner_args
+            )
 
 
 @dataclass(frozen=True)

@@ -30,13 +30,13 @@ def test_cache_large_argument() -> None:
     assert arg_cache.is_cache_key(key)
 
     # Check it was stored
-    arg_cache._store.assert_called_once()
+    arg_cache._store_mock.assert_called_once()
 
     # Deserialize should retrieve from cache
     result = arg_cache.deserialize(key)
     assert result == large_data
     # No need to call _retrive as exists in data cache
-    arg_cache._retrieve.assert_not_called()
+    arg_cache._retrieve_mock.assert_not_called()
 
 
 def test_skip_small_argument() -> None:
@@ -51,7 +51,7 @@ def test_skip_small_argument() -> None:
     assert not arg_cache.is_cache_key(result)
 
     # Check storage wasn't called
-    arg_cache._store.assert_not_called()
+    arg_cache._store_mock.assert_not_called()
 
 
 def test_disable_cache_flag() -> None:
@@ -66,7 +66,7 @@ def test_disable_cache_flag() -> None:
     assert not arg_cache.is_cache_key(result)
 
     # Check storage wasn't called
-    arg_cache._store.assert_not_called()
+    arg_cache._store_mock.assert_not_called()
 
 
 def test_cache_key_format() -> None:
@@ -99,7 +99,7 @@ def test_purge() -> None:
     assert len(arg_cache._deserialized_cache) == 0
 
     # Check backend purge was called
-    arg_cache._purge.assert_called_once()
+    arg_cache._purge_mock.assert_called_once()
 
 
 def test_cache_miss_handling() -> None:
@@ -107,7 +107,7 @@ def test_cache_miss_handling() -> None:
     arg_cache = MockArgCache(app=mock_base_app)
 
     # Set up mock to raise KeyError
-    arg_cache._retrieve.side_effect = Exception("Abort on _retrieve call")
+    arg_cache._retrieve_mock.side_effect = Exception("Abort on _retrieve call")
 
     # Try to deserialize non-existent key
     non_existent_key = f"{ReservedKeys.ARG_CACHE.value}:nonexistent"
@@ -115,4 +115,4 @@ def test_cache_miss_handling() -> None:
         arg_cache.deserialize(non_existent_key)
 
     # Verify _retrieve was called with the key
-    arg_cache._retrieve.assert_called_once_with(non_existent_key)
+    arg_cache._retrieve_mock.assert_called_once_with(non_existent_key)

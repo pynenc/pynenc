@@ -1,5 +1,6 @@
 import argparse
 import logging
+import sys
 
 from pynenc.cli.config_cli import add_config_subparser
 from pynenc.cli.namespace import PynencCLINamespace
@@ -29,7 +30,10 @@ def main() -> None:
     """
     parser = argparse.ArgumentParser(description="Pynenc Command Line Interface")
     parser.add_argument(
-        "--app", help="Specify the application module and name", required=True
+        "--app",
+        help="Specify the application module (e.g., 'core.src.api.backtes') "
+        "or file path (e.g., 'core/src/api/backtes.py')",
+        required=True,
     )
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Increase output verbosity"
@@ -50,12 +54,16 @@ def main() -> None:
     log_level = logging.DEBUG if args.verbose else logging.WARNING
     logging.basicConfig(level=log_level, format="%(levelname)s: %(message)s")
 
-    # Import the app instance
-    app_instance = find_app_instance(args.app)
-    args.app_instance = app_instance  # Add app_instance to args
-
-    # Execute the appropriate function based on the subcommand
-    args.func(args)
+    try:
+        app_instance = find_app_instance(args.app)
+        args.app_instance = app_instance
+        args.func(args)
+    except ValueError as e:
+        logging.error(f"Failed to load application: {str(e)}")
+        sys.exit(1)
+    except Exception as e:
+        logging.error(f"An unexpected error occurred: {str(e)}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

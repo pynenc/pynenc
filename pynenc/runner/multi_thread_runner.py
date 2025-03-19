@@ -4,6 +4,7 @@ from functools import cached_property
 from multiprocessing import Manager, Process, cpu_count
 from typing import TYPE_CHECKING, Any, NamedTuple, Optional
 
+from pynenc import context
 from pynenc.conf.config_runner import ConfigMultiThreadRunner
 from pynenc.runner.base_runner import BaseRunner
 from pynenc.runner.thread_runner import ThreadRunner
@@ -38,11 +39,20 @@ def thread_runner_process_main(
     process_key: str,
 ) -> None:
     """
-    Runs a ThreadRunner in a separate process.
+    MultiThreadRunner manages multiple processes, each running a ThreadRunner.
+
+    Unlike ThreadRunner, which operates within a single process, MultiThreadRunner
+    spawns separate processes to distribute workload. The global context dictionary
+    (via context.py) is critical here because each process must maintain its own
+    ThreadRunner instance in its thread-local storage. This prevents conflicts
+    between processes and ensures that task executions within a process use the
+    correct runner. The context check is not typically needed in ThreadRunner alone,
+    as it operates in a single-threaded or single-process environment where the
+    instance-level runner suffices.
     """
-    runner = ThreadRunner(app, runner_cache)
+    runner = ThreadRunner(app, runner_cache, process_key)
     # Replace the MultiThreadRunner with ThreadRunner in this process
-    app.runner = runner
+    context.set_current_runner(app.app_id, runner)
     runner._on_start()
     app.logger.info(f"ThreadRunner process {process_key} started")
     try:
@@ -70,6 +80,11 @@ class MultiThreadRunner(BaseRunner):
     It scales processes based on pending invocations and terminates those that remain idle.
     """
 
+    WAITING_FOR_RESULTS_WARNING = (
+        "waiting_for_results called on MultiThreadRunner from within a task. "
+        "This should be handled by the ThreadRunner instance in the process."
+    )
+
     processes: dict[str, Process]
     manager: Manager  # type: ignore
     # shared_status: Maps process key to ProcessStatus
@@ -86,7 +101,7 @@ class MultiThreadRunner(BaseRunner):
 
     @property
     def cache(self) -> dict:
-        """Returns the cache for the ProcessRunner instance."""
+        """Returns the shared cache for all processes."""
         return self.runner_cache
 
     @staticmethod
@@ -156,17 +171,22 @@ class MultiThreadRunner(BaseRunner):
     def _on_stop_runner_loop(self) -> None:
         """
         Internal method called after receiving a signal to stop the runner loop.
-        Clears the wait_invocation dictionary.
         """
         self.logger.info("Stopping MultiThreadRunner loop")
         # Terminate all processes immediately
         for key, proc in list(self.processes.items()):
-            if proc.is_alive():
-                proc.terminate()
-                proc.join()
-                self.processes.pop(key, None)
-                self._safe_remove_shared_state(key)
-                self.logger.info(f"Terminated process {key} during loop stop")
+            try:
+                if proc.is_alive():
+                    proc.terminate()
+                    proc.join()
+                    self.processes.pop(key, None)
+                    self._safe_remove_shared_state(key)
+                    self.logger.info(f"Terminated process {key} during loop stop")
+            except AssertionError:
+                # We're trying to check a non-child process (likely ourselves)
+                self.logger.info(
+                    f"Skipping process {key} termination - not a child process"
+                )
         self.logger.info("MultiThreadRunner loop stopped")
 
     def _cleanup_dead_processes(self) -> None:
@@ -233,22 +253,18 @@ class MultiThreadRunner(BaseRunner):
         # self._terminate_idle_processes()
         time.sleep(self.conf.runner_loop_sleep_time_sec)
 
-    def waiting_for_results(
+    def _waiting_for_results(
         self,
         running_invocation: Optional["DistributedInvocation"],
         result_invocations: list["DistributedInvocation"],
         runner_args: Optional[dict[str, Any]] = None,
     ) -> None:
         """
-        Handle waiting for results when called from outside any process.
-        This happens when checking results from the main thread or test environment.
+        Handle waiting for results when called outside a process context.
+
+        This method warns if called directly on MultiThreadRunner, as result waiting
+        should occur within a ThreadRunner process, which uses the context-set runner.
+        The global context ensures each process handles its own results correctly.
         """
-        del result_invocations, runner_args
-        if not running_invocation:
-            # Called from outside any process (e.g. tests), just sleep
-            time.sleep(self.conf.invocation_wait_results_sleep_time_sec)
-            return
-        self.logger.warning(
-            "waiting_for_results called on MultiThreadRunner from within a task. "
-            "This should be handled by the ThreadRunner instance in the process."
-        )
+        del running_invocation, result_invocations, runner_args
+        self.logger.warning(self.WAITING_FOR_RESULTS_WARNING)

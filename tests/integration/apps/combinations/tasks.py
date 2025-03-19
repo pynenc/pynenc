@@ -1,4 +1,4 @@
-from time import sleep
+from time import process_time, sleep
 from typing import Any
 
 from pynenc import Pynenc
@@ -58,11 +58,15 @@ def sleep_seconds(seconds: int) -> bool:
 
 
 @mock_app.task(running_concurrency=ConcurrencyControlType.DISABLED)
-def cpu_intensive_no_conc(iterations: int) -> float:
+def cpu_intensive_no_conc(iterations: int, call_id: int = 0) -> float:
     """CPU intensive task that measures its own execution time.
     Returns the elapsed time in seconds."""
     import array
-    from time import process_time  # More precise than time()
+
+    invocation_id = cpu_intensive_no_conc.invocation.invocation_id
+    cpu_intensive_no_conc.app.logger.info(
+        f"INI cpu_intensive_no_conc {iterations=} {call_id=} {invocation_id=}"
+    )
 
     start_time = process_time()
 
@@ -96,4 +100,36 @@ def cpu_intensive_no_conc(iterations: int) -> float:
     # Use counter at the end to prevent compiler optimization
     arr[0] = counter % 100
 
-    return process_time() - start_time
+    elapsed = process_time() - start_time
+    cpu_intensive_no_conc.app.logger.info(
+        f"END  cpu_intensive_no_conc {iterations=} {call_id=} {invocation_id=} {elapsed=}"
+    )
+    return elapsed
+
+
+@mock_app.task(running_concurrency=ConcurrencyControlType.DISABLED)
+def distribute_cpu_work(total_iterations: int, num_sub_tasks: int) -> list[float]:
+    """Distribute CPU-intensive work into sub-tasks and parallelize."""
+    invocation_id = distribute_cpu_work.invocation.invocation_id
+    distribute_cpu_work.app.logger.info(
+        f"INI distribute_cpu_work {total_iterations=} {num_sub_tasks=} {invocation_id=}"
+    )
+    start_time = process_time()
+    chunk_size = max(1, total_iterations // num_sub_tasks)
+    chunks = [(chunk_size, i) for i in range(num_sub_tasks - 1)] + [
+        (total_iterations - chunk_size * (num_sub_tasks - 1),)
+    ]
+    app = distribute_cpu_work.app
+    app.logger.info(
+        f"Split {total_iterations} iterations into {num_sub_tasks} sub-tasks"
+    )
+
+    invocation_group = cpu_intensive_no_conc.parallelize(chunks)
+    results = {}
+    for i, chunk_result in enumerate(invocation_group.results):
+        results[f"chunk_{i}"] = chunk_result
+    elapsed = process_time() - start_time
+    distribute_cpu_work.app.logger.info(
+        f"END distribute_cpu_work {total_iterations=} {num_sub_tasks=} {invocation_id=} {elapsed=}"
+    )
+    return list(results.values())

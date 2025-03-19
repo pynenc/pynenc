@@ -32,8 +32,9 @@ def test_get_final_invocations() -> None:
     invocation_group: DistributedInvocationGroup = DistributedInvocationGroup(
         task=add, invocations=[invocation0, invocation1]
     )
-    app.orchestrator.get_invocation_status.return_value = InvocationStatus.SUCCESS
-    app.state_backend._get_result.return_value = -13
+    app.orchestrator._get_invocation_status_mock.return_value = InvocationStatus.SUCCESS
+    app.state_backend._get_result_mock.return_value = -13
+    # Both invocations are final so results should be yielded immediately.
     assert list(invocation_group.results) == [-13, -13]
 
 
@@ -45,12 +46,17 @@ def test_get_pending_results() -> None:
     invocation_group: DistributedInvocationGroup = DistributedInvocationGroup(
         task=add, invocations=[invocation0, invocation1]
     )
-    app.orchestrator.get_invocation_status.return_value = InvocationStatus.PENDING
-    # it should raise an exception
-    app.runner.waiting_for_results.side_effect = Exception("Abort waiting loop")
-    # check it raises the exception
+    # Force pending status for both invocations.
+    app.orchestrator._get_invocation_status_mock.return_value = InvocationStatus.PENDING
+    # Patch waiting methods: orchestrator.waiting_for_results and runner.waiting_for_results.
+    app.orchestrator.waiting_for_results = MagicMock()  # type: ignore
+    app.runner.waiting_for_results = MagicMock(  # type: ignore
+        side_effect=Exception("Abort waiting loop")
+    )
+    # When we try to evaluate the results iterator, the runner's waiting_for_results should raise.
     with pytest.raises(Exception, match="Abort waiting loop"):
         list(invocation_group.results)
-    app.orchestrator.blocking_control.waiting_for_results.assert_called_once_with(
+    # Verify that the orchestrator waiting method was called once with the parent's value and the original list.
+    app.orchestrator.waiting_for_results.assert_called_once_with(
         invocation0.parent_invocation, [invocation0, invocation1]
     )

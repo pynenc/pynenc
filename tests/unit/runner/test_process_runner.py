@@ -87,11 +87,15 @@ def test_runner_loop_iteration_pause_waiting_invocations(
     app.orchestrator.get_invocations_to_run = Mock(return_value=[])  # type: ignore
     with patch("os.kill") as mock_kill:
         # test that is the result_inv is still running, the waiting_inv is paused
-        app.orchestrator.get_invocation_status.return_value = InvocationStatus.RUNNING
+        app.orchestrator._get_invocation_status_mock.return_value = (
+            InvocationStatus.RUNNING
+        )
         runner.runner_loop_iteration()
         mock_kill.assert_called_with(ANY, signal.SIGSTOP)
         # test that is the result_inv is finished, the waiting_inv is resumed
-        app.orchestrator.get_invocation_status.return_value = InvocationStatus.SUCCESS
+        app.orchestrator._get_invocation_status_mock.return_value = (
+            InvocationStatus.SUCCESS
+        )
         runner.runner_loop_iteration()
         mock_kill.assert_called_with(ANY, signal.SIGCONT)
 

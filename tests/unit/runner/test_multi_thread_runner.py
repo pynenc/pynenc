@@ -27,7 +27,7 @@ class TestConfig(ConfigMultiThreadRunner):
 def app() -> MockPynenc:
     app = MockPynenc()
     # Override broker's count_invocations for our tests
-    app.broker.count_invocations.return_value = 0
+    app.broker.count_invocations_mock.return_value = 0
     return app
 
 
@@ -97,7 +97,7 @@ def test_scale_up_processes_with_pending_tasks(
     multi_thread_runner: MultiThreadRunner,
 ) -> None:
     # Set pending tasks count in the mocked broker
-    multi_thread_runner.app.broker.count_invocations.return_value = 5  # type: ignore
+    multi_thread_runner.app.broker.count_invocations_mock.return_value = 5  # type: ignore
     multi_thread_runner.max_processes = 4
 
     with patch.object(
@@ -210,7 +210,7 @@ def test_scale_up_processes_based_on_queue(
     # Configure runner
     multi_thread_runner.conf.enforce_max_processes = False
     multi_thread_runner.max_processes = 4
-    multi_thread_runner.app.broker.count_invocations.return_value = 3  # type: ignore
+    multi_thread_runner.app.broker.count_invocations_mock.return_value = 3  # type: ignore
 
     with patch.object(
         multi_thread_runner, "_spawn_thread_runner_process"

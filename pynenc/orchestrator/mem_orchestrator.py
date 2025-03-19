@@ -193,7 +193,8 @@ class MemBlockingControl(BaseBlockingControl):
         :return: An iterator over invocations that are blocking others (older firsts).
         :rtype: Iterator[DistributedInvocation[Params, Result]]
         """
-        for inv_id in self.waited_by:
+        # Create a snapshot of the keys to avoid mutation during iteration
+        for inv_id in list(self.waited_by.keys()):
             if inv_id not in self.waiting_for:
                 if self.app.orchestrator.get_invocation_status(
                     self.invocations[inv_id]

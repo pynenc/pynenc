@@ -11,12 +11,15 @@ from typing import TYPE_CHECKING, Any, Optional
 thread_local = threading.local()
 
 if TYPE_CHECKING:
+    from pynenc.invocation.conc_invocation import ConcurrentInvocation
     from pynenc.invocation.dist_invocation import DistributedInvocation
-    from pynenc.invocation.sync_invocation import SynchronousInvocation
+    from pynenc.runner.base_runner import BaseRunner
 
 # invocation_context keeps the current invocation, so it can be referenced as a parent from any sub-invocation
 # - It is a dictionary with the format {app_id: invocation}
-sync_inv_context: dict[str, Optional["SynchronousInvocation"]] = {}
+sync_inv_context: dict[str, Optional["ConcurrentInvocation"]] = {}
+# Global runner dictionary keyed by app_id
+_current_runner: dict[str, "BaseRunner"] = {}
 
 
 def get_dist_invocation_context(app_id: str) -> Optional["DistributedInvocation"]:
@@ -45,6 +48,35 @@ def swap_dist_invocation_context(
     return previous_invocation
 
 
-# runner_args keeps the arguments passed from the runner to a distributed invocation:
-# - this is necessary for parent-subprocess communication on ProcessRunner
+# Runner arguments passed from the runner to a distributed invocation.
 runner_args: Optional[dict[str, Any]] = None
+
+
+def get_current_runner(app_id: str) -> Optional["BaseRunner"]:
+    """
+    Retrieve the current runner for the given app_id from thread-local storage.
+
+    This function allows each thread or process to access its own runner instance,
+    which is critical in multi-process environments like MultiThreadRunner where
+    each process runs a ThreadRunner and needs to reference its own runner instance
+    without conflicting with others.
+
+    :param app_id: The application identifier.
+    :return: The current runner instance if set in the current thread/process, else None.
+    """
+    return _current_runner.get(app_id)
+
+
+def set_current_runner(app_id: str, runner: "BaseRunner") -> None:
+    """
+    Set the current runner for the given app_id in thread-local storage.
+
+    This is used to associate a runner with the current thread or process context,
+    enabling isolated execution environments. It's particularly essential for
+    MultiThreadRunner, where each spawned process needs to set its own ThreadRunner
+    to avoid cross-process interference.
+
+    :param app_id: The application identifier.
+    :param runner: The runner instance to set.
+    """
+    _current_runner[app_id] = runner

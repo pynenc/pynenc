@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import uuid
 from abc import ABC, abstractmethod
+from collections.abc import AsyncGenerator, Iterator
 from dataclasses import dataclass
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Generic, Iterator, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from pynenc.call import Call
 from pynenc.types import Params, Result
@@ -37,7 +38,7 @@ class BaseInvocation(ABC, Generic[Params, Result]):
 
     The `BaseInvocation` class serves as a template for two key types of invocations:
     - `DistributedInvocation`: The primary invocation type used in the system for distributed execution.
-    - `SynchronousInvocation`: Used for local execution, primarily in testing environments without a runner.
+    - `ConcurrentInvocation`: Used for local execution, primarily in testing environments without a runner.
 
     ```{important}
     Sync invocations cannot be used in production environments, only for testing in sync mode.
@@ -100,6 +101,10 @@ class BaseInvocation(ABC, Generic[Params, Result]):
     def result(self) -> Result:
         """"""
 
+    @abstractmethod
+    async def async_result(self) -> Result:
+        """"""
+
     @property
     @abstractmethod
     def num_retries(self) -> int:
@@ -128,7 +133,7 @@ class BaseInvocationGroup(ABC, Generic[Params, Result, T]):
 
     This class is designed to aggregate a collection of invocations, each represented by a `BaseInvocation` or its subclasses. It is useful in scenarios where multiple invocations of a task need to be managed or processed together.
 
-    Subclasses of `BaseInvocationGroup`, such as `SynchronousInvocationGroup` and `DistributedInvocationGroup`, provide specific implementations for synchronous and distributed environments, respectively.
+    Subclasses of `BaseInvocationGroup`, such as `ConcurrentInvocationGroup` and `DistributedInvocationGroup`, provide specific implementations for synchronous and distributed environments, respectively.
 
     :param Task task: The task associated with the invocations.
     :param list[BaseInvocation] invocations: A list of invocations, each an instance of a `BaseInvocation` subclass.
@@ -151,4 +156,16 @@ class BaseInvocationGroup(ABC, Generic[Params, Result, T]):
         Provide an iterator over the results.
 
         :return Iterator[Result]: An iterator over the results of the invocations.
+        """
+
+    @abstractmethod
+    def async_results(self) -> AsyncGenerator[Result, None]:
+        """
+        An async iterator over the results of the invocations in the group.
+
+        This method asynchronously iterates over the `ConcurrentInvocation` instances,
+        yielding the result of each invocation using their async_result method.
+
+        :return: An async iterator over the results of each invocation in the group.
+        :rtype: AsyncIterator[Result]
         """

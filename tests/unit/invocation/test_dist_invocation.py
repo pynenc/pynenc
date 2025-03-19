@@ -1,3 +1,5 @@
+import asyncio
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -30,7 +32,9 @@ def test_distributed_invocation_to_and_fromjson() -> None:
 
 def test_get_final_result_exception_not_final() -> None:
     invocation: DistributedInvocation = add(1, 2)  # type: ignore
-    app.orchestrator.get_invocation_status.return_value = InvocationStatus.REGISTERED
+    app.orchestrator._get_invocation_status_mock.return_value = (
+        InvocationStatus.REGISTERED
+    )
     # Test that it will raise an exception if the invocation is not finished
     with pytest.raises(InvocationError):
         invocation.get_final_result()
@@ -42,7 +46,7 @@ def retry() -> int:
 
 
 def test_max_retries() -> None:
-    app.orchestrator.get_invocation_retries.return_value = 1
+    app.orchestrator._get_invocation_retries_mock.return_value = 1
     invocation: DistributedInvocation = retry()  # type: ignore
 
     with capture_logs(app.logger) as log_buffer:
@@ -66,3 +70,60 @@ def test_reroute_on_running_control() -> None:
         invocation.run()
         mock_is_authorized.assert_called_once()
         mock_reroute_invocations.assert_called_once_with({invocation})
+
+
+app2 = MockPynenc()
+
+
+@app2.task
+def add2(x: int, y: int) -> int:
+    return x + y
+
+
+@pytest.mark.asyncio
+async def test_distributed_async_result_wait_loop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mock_base_app = add2.app
+    # Create an invocation using the add task (which returns a DistributedInvocation)
+    invocation: DistributedInvocation = add2(1, 2)  # type: ignore
+
+    # Simulate status changes: first RUNNING then SUCCESS.
+    statuses = [InvocationStatus.RUNNING, InvocationStatus.SUCCESS]
+
+    def status_side_effect(inv: Any) -> InvocationStatus:
+        return statuses.pop(0) if statuses else InvocationStatus.SUCCESS
+
+    mock_base_app.orchestrator._get_invocation_status_mock.side_effect = (  # type: ignore
+        status_side_effect
+    )
+
+    # Patch get_final_result to return a fixed value (e.g. 3)
+    monkeypatch.setattr(type(invocation), "get_final_result", lambda self: 3)
+
+    # Patch runner.async_waiting_for_results to simulate a short wait
+    async def fake_async_waiting(
+        parent: Any, invs: Any, runner_args: Any = None
+    ) -> None:
+        await asyncio.sleep(0.01)
+
+    monkeypatch.setattr(
+        mock_base_app.runner, "async_waiting_for_results", fake_async_waiting
+    )
+
+    # Now, calling async_result() should loop until status becomes final, then return 3.
+    result = await invocation.async_result()
+    assert result == 3
+
+
+def test_distributed_invocation_getstate() -> None:
+    """Test that __getstate__ correctly serializes the distributed invocation."""
+    invocation = add(1, 2)  # Create a sample invocation
+
+    # Expected state should contain all instance attributes
+    expected_state = invocation.__dict__.copy()
+    expected_state[
+        "invocation_id"
+    ] = invocation.invocation_id  # Ensure invocation_id is included
+
+    assert invocation.__getstate__() == expected_state

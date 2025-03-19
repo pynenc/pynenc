@@ -122,6 +122,7 @@ class ProcessRunner(BaseRunner):
         """
         for invocation in list(self.processes.keys()):
             if not self.processes[invocation].is_alive():
+                self.processes[invocation].join()
                 del self.processes[invocation]
         # discount waiting processes, they should do nothing
         # until the blocking invocation is finished
@@ -139,10 +140,14 @@ class ProcessRunner(BaseRunner):
         for invocation in self.app.orchestrator.get_invocations_to_run(
             max_num_invocations=self.available_processes
         ):
+            invocation.app.runner = self
             process = Process(
                 target=invocation.run,
                 kwargs={"runner_args": self.runner_args},
                 daemon=True,
+            )
+            self.app.logger.info(
+                f"{self.runner_id} starting invocation:{invocation.invocation_id}"
             )
             process.start()
             self.logger.debug(
@@ -151,19 +156,20 @@ class ProcessRunner(BaseRunner):
             if process.pid:
                 self.processes[invocation] = process
             else:
-                ...
-                # TODO if for mypy, the process should have a pid after start, otherwise it should raise an exception
-        self.logger.debug("runer loop - check waiting invocations pending results")
+                # Optionally, raise an exception or log error if process.pid is not available.
+                raise RunnerError("Failed to start process: PID not available")
+        self.logger.debug("runner loop - check waiting invocations pending results")
         for invocation in list(self.wait_invocation.keys()):
             is_final = invocation.status.is_final()
-            for waiting_invocation in self.wait_invocation[invocation]:
-                if pid := self.processes[waiting_invocation].pid:
+            for waiting_invocation in self.wait_invocation.get(invocation, []):
+                pid = self.processes.get(waiting_invocation)
+                if pid and pid.pid:
                     if is_final:
-                        os.kill(pid, signal.SIGCONT)
+                        os.kill(pid.pid, signal.SIGCONT)
                     else:
-                        os.kill(pid, signal.SIGSTOP)
+                        os.kill(pid.pid, signal.SIGSTOP)
             if is_final:
-                waiting_invocations = self.wait_invocation.pop(invocation)
+                waiting_invocations = self.wait_invocation.pop(invocation, set())
                 self.logger.info(
                     f"{invocation=} on final {invocation.status=}, resuming {waiting_invocations=}"
                 )
@@ -175,9 +181,9 @@ class ProcessRunner(BaseRunner):
         )
         time.sleep(self.conf.runner_loop_sleep_time_sec)
 
-    def waiting_for_results(
+    def _waiting_for_results(
         self,
-        running_invocation: Optional["DistributedInvocation"],
+        running_invocation: "DistributedInvocation",
         result_invocations: list["DistributedInvocation"],
         runner_args: Optional[dict[str, Any]] = None,
     ) -> None:
@@ -188,11 +194,6 @@ class ProcessRunner(BaseRunner):
         :param result_invocations: A list of invocations whose results are being awaited.
         :param runner_args: Additional arguments required for the ProcessRunner.
         """
-        # called from subprocess memory space
-        if not running_invocation:
-            time.sleep(self.conf.invocation_wait_results_sleep_time_sec)
-            return
-
         self.app.orchestrator.set_invocation_status(
             running_invocation, InvocationStatus.PAUSED
         )

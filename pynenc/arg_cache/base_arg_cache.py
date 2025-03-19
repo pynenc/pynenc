@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from pynenc.app import Pynenc
 
 
-class RunnerCacheKeys(StrEnum):
+class ArgCacheKeys(StrEnum):
     """Keys used in runner cache."""
 
     ARG_CACHE_ID = auto()
@@ -54,54 +54,56 @@ class BaseArgCache(ABC):
             cache = self._local_caches
             self._using_local = True
             if not self._warned_local:
-                self.app.logger.warning(
+                self.app.logger.debug(
                     "Runner cache not initialized. Using local cache. "
                     "This is expected if running outside a Pynenc runner context."
                 )
                 self._warned_local = True
 
         # Initialize sections only if they don't exist
-        for key in RunnerCacheKeys:
+        for key in ArgCacheKeys:
             if key.value not in cache:
                 cache[key.value] = {}
 
-    def _get_cache(self, key: RunnerCacheKeys) -> dict:
+    def _get_cache(self, key: ArgCacheKeys) -> dict:
         """
         Get the appropriate cache dictionary.
         Ensures caches are initialized.
 
-        :param RunnerCacheKeys key: The cache section to access
+        :param ArgCacheKeys key: The cache section to access
         :return: The cache dictionary to use
         """
         try:
             return self.app.runner.cache[key.value]
         except (AttributeError, KeyError):
+            if key.value not in self._local_caches:
+                self._local_caches[key.value] = {}
             return self._local_caches[key.value]
 
     @property
     def _obj_id_cache(self) -> dict[int, str]:
         """Object ID cache with fallback."""
-        return self._get_cache(RunnerCacheKeys.ARG_CACHE_ID)
+        return self._get_cache(ArgCacheKeys.ARG_CACHE_ID)
 
     @property
     def _hash_cache(self) -> dict[int, str]:
         """Hash cache with fallback."""
-        return self._get_cache(RunnerCacheKeys.ARG_CACHE_HASH)
+        return self._get_cache(ArgCacheKeys.ARG_CACHE_HASH)
 
     @property
     def _fingerprint_cache(self) -> dict[tuple[str, int], str]:
         """Fingerprint cache with fallback."""
-        return self._get_cache(RunnerCacheKeys.ARG_CACHE_FINGERPRINT)
+        return self._get_cache(ArgCacheKeys.ARG_CACHE_FINGERPRINT)
 
     @property
     def _key_cache(self) -> dict[str, str]:
         """Key cache with fallback."""
-        return self._get_cache(RunnerCacheKeys.ARG_CACHE_KEY)
+        return self._get_cache(ArgCacheKeys.ARG_CACHE_KEY)
 
     @property
     def _deserialized_cache(self) -> dict[str, Any]:
         """Deserialized object cache with fallback."""
-        return self._get_cache(RunnerCacheKeys.ARG_CACHE_DESERIALIZED)
+        return self._get_cache(ArgCacheKeys.ARG_CACHE_DESERIALIZED)
 
     @cached_property
     def conf(self) -> ConfigArgCache:
@@ -283,21 +285,32 @@ class BaseArgCache(ABC):
         Clear all cached arguments.
 
         Should clear both the in-memory caches and the storage backend.
+        Handles cases where the runner cache is a Manager.dict() that might be shut down.
         """
         try:
             # Clear all sections in the cache (either runner or local)
-            for key in RunnerCacheKeys:
-                cache = self._get_cache(key)
-                if cache:
-                    cache.clear()
-        except (BrokenPipeError, EOFError):
-            # If runner is already stopped, the managed dict might be closed
-            self.app.logger.warning(
-                "Could not clear runner cache - runner might be already stopped"
-            )
+            for key in ArgCacheKeys:
+                try:
+                    cache = self._get_cache(key)
+                    if isinstance(
+                        cache, dict
+                    ):  # Check if it's a valid dict-like object
+                        cache.clear()
+                except (AttributeError, KeyError):
+                    self.app.logger.debug(f"Nothing to purge on {key=}")
+                except (BrokenPipeError, EOFError, ValueError):
+                    # Handle cases where Manager.dict() is closed or inaccessible
+                    self.app.logger.debug(
+                        f"Could not clear runner cache section {key} - manager might be shut down"
+                    )
+        except Exception as e:
+            self.app.logger.warning(f"Unexpected error clearing runner cache: {e}")
         finally:
             # Clear backend storage
-            self._purge()
+            try:
+                self._purge()
+            except Exception as e:
+                self.app.logger.warning(f"Failed to purge backend storage: {e}")
 
     @abstractmethod
     def _store(self, key: str, value: str) -> None:
