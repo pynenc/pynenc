@@ -149,7 +149,11 @@ class Task(Generic[Params, Result]):
         module = importlib.import_module(module_name)
         function = getattr(module, function_name)
         options = ConfigTask.options_from_json(task_dict["options"])
-        return task_id, function.func, options
+        # Check if the function is a Task (from @task) or a plain function (from @direct_task)
+        if isinstance(function, Task):
+            return task_id, function.func, options
+        # For direct_task, return the function itself
+        return task_id, function.__inner_function__, options  # type: ignore
 
     @classmethod
     def from_json(cls, app: Pynenc, serialized: str) -> Task:

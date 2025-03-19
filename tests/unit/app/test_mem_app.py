@@ -150,3 +150,30 @@ def test_run_retry(app: Pynenc) -> None:
     assert invocation.num_retries == 0
     assert invocation.result == 1
     assert invocation.num_retries == 1
+
+
+def test_pynenc_getstate_setstate() -> None:
+    """
+    Test the serialization and deserialization of the Pynenc instance via __getstate__ and __setstate__.
+    """
+    app = Pynenc(
+        app_id="test_app",
+        config_values={"runner_cls": "ThreadRunner"},
+    )
+
+    state = app.__getstate__()
+    expected_state = {
+        "app_id": "test_app",
+        "config_values": {"runner_cls": "ThreadRunner"},
+        "config_filepath": None,
+        "reporting": None,
+    }
+    assert state == expected_state
+
+    # Now test setstate by creating a new app and applying the state
+    new_app = Pynenc()
+    new_app.__setstate__(state)
+
+    assert new_app.app_id == "test_app"
+    assert new_app.config_values == {"runner_cls": "ThreadRunner"}
+    assert new_app._runner_instance is None  # should reset runner instance

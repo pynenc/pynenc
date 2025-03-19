@@ -1,6 +1,8 @@
-from functools import cached_property
+import asyncio
+from collections.abc import Iterable
+from functools import cached_property, wraps
 from logging import Logger
-from typing import TYPE_CHECKING, Any, Callable, Optional, overload
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union, overload
 
 from pynenc import context
 from pynenc.arg_cache.base_arg_cache import BaseArgCache
@@ -16,7 +18,15 @@ from pynenc.util.log import create_logger
 from pynenc.util.subclasses import get_subclass
 
 if TYPE_CHECKING:
-    from pynenc.types import Func, Params, Result
+    from pynenc.arguments import Arguments
+    from pynenc.invocation import BaseInvocationGroup
+    from pynenc.types import Args, Func, Params, Result
+
+    # Type for the parallel function that generates arguments for parallel processing
+    ParallelFunc = Callable[[Args], Iterable[Union[tuple, dict, Arguments]]]
+
+    # Type for the aggregation function that combines results
+    AggregateFunc = Callable[[Iterable[Result]], Result]
 
 
 class Pynenc:
@@ -246,3 +256,204 @@ class Pynenc:
         if func is None:
             return init_task
         return init_task(func)
+
+    @overload
+    def direct_task(
+        self,
+        func: "Func",
+        *,
+        parallel_func: Optional["ParallelFunc"] = None,
+        aggregate_func: Optional["AggregateFunc"] = None,
+        auto_parallel_batch_size: Optional[int] = None,
+        retry_for: Optional[tuple[type[Exception], ...]] = None,
+        max_retries: Optional[int] = None,
+        running_concurrency: Optional[ConcurrencyControlType] = None,
+        registration_concurrency: Optional[ConcurrencyControlType] = None,
+        key_arguments: Optional[tuple[str, ...]] = None,
+        on_diff_non_key_args_raise: Optional[bool] = None,
+        call_result_cache: Optional[bool] = None,
+        disable_cache_args: Optional[tuple[str, ...]] = None,
+    ) -> "Func":
+        ...
+
+    @overload
+    def direct_task(
+        self,
+        func: "Func[Params, Result]",
+        *,
+        parallel_func: Optional["ParallelFunc"] = None,
+        aggregate_func: Optional["AggregateFunc"] = None,
+        auto_parallel_batch_size: Optional[int] = None,
+        retry_for: Optional[tuple[type[Exception], ...]] = None,
+        max_retries: Optional[int] = None,
+        running_concurrency: Optional[ConcurrencyControlType] = None,
+        registration_concurrency: Optional[ConcurrencyControlType] = None,
+        key_arguments: Optional[tuple[str, ...]] = None,
+        on_diff_non_key_args_raise: Optional[bool] = None,
+        call_result_cache: Optional[bool] = None,
+        disable_cache_args: Optional[tuple[str, ...]] = None,
+    ) -> "Func[Params, Result]":
+        ...
+
+    @overload
+    def direct_task(
+        self,
+        func: None = None,
+        *,
+        parallel_func: Optional["ParallelFunc"] = None,
+        aggregate_func: Optional["AggregateFunc"] = None,
+        auto_parallel_batch_size: Optional[int] = None,
+        retry_for: Optional[tuple[type[Exception], ...]] = None,
+        max_retries: Optional[int] = None,
+        running_concurrency: Optional[ConcurrencyControlType] = None,
+        registration_concurrency: Optional[ConcurrencyControlType] = None,
+        key_arguments: Optional[tuple[str, ...]] = None,
+        on_diff_non_key_args_raise: Optional[bool] = None,
+        call_result_cache: Optional[bool] = None,
+        disable_cache_args: Optional[tuple[str, ...]] = None,
+    ) -> Callable[["Func[Params, Result]"], "Func[Params, Result]"]:
+        ...
+
+    def direct_task(
+        self,
+        func: Optional["Func[Params, Result]"] = None,
+        *,
+        parallel_func: Optional["ParallelFunc"] = None,
+        aggregate_func: Optional["AggregateFunc"] = None,
+        auto_parallel_batch_size: Optional[int] = None,
+        retry_for: Optional[tuple[type[Exception], ...]] = None,
+        max_retries: Optional[int] = None,
+        running_concurrency: Optional[ConcurrencyControlType] = None,
+        registration_concurrency: Optional[ConcurrencyControlType] = None,
+        key_arguments: Optional[tuple[str, ...]] = None,
+        on_diff_non_key_args_raise: Optional[bool] = None,
+        call_result_cache: Optional[bool] = None,
+        disable_cache_args: Optional[tuple[str, ...]] = None,
+    ) -> (
+        "Func[Params, Result]"
+        | Callable[["Func[Params, Result]"], "Func[Params, Result]"]
+    ):
+        """
+        Create a task that directly returns its result rather than returning an invocation.
+
+        This decorator maintains the original function's behavior:
+        - For synchronous functions, it waits for the result and returns it directly
+        - For async functions, it returns an awaitable that resolves to the result
+
+        It also supports parallel execution via the parallel_func parameter, which takes a function
+        that generates arguments for parallel processing, and aggregate_func, which combines the results.
+
+        :param Optional[Func] func:
+            The function to be converted into a Task instance that returns results directly.
+        :param Optional[ParallelFunc] parallel_func:
+            Function that takes a dict of key arguments and returns an iterable of arguments for parallel execution.
+        :param Optional[AggregateFunc] aggregate_func:
+            Function that takes a list of results and aggregates them into a single result.
+        :param Optional[int] auto_parallel_batch_size:
+            If set to 0, auto parallelization is disabled. If greater than 0, tasks with iterable
+            arguments are automatically split into chunks.
+        :param Optional[Tuple[Exception, ...]] retry_for:
+            Exceptions for which the task should be retried.
+        :param Optional[int] max_retries:
+            The maximum number of retries for a task.
+        :param Optional[ConcurrencyControlType] running_concurrency:
+            Controls the concurrency behavior of the task.
+        :param Optional[ConcurrencyControlType] registration_concurrency:
+            Manages task registration concurrency.
+        :param Optional[Tuple[str, ...]] key_arguments:
+            Key arguments for concurrency control.
+        :param Optional[bool] on_diff_non_key_args_raise:
+            If True, raises an exception for task invocations with matching key arguments but
+            different non-key arguments.
+        :param Optional[bool] call_result_cache:
+            If True, it will return the latest result of a Task with the same arguments if available,
+            otherwise it will trigger a new invocation as expected.
+        :param Optional[tuple[str, ...]] disable_cache_args:
+            Arguments to exclude from caching, it will accept "*" to disable caching for all arguments.
+
+        :return: A function that behaves like the original but is backed by a distributed task system.
+
+        :example:
+        ```python
+        @app.direct_task(max_retries=3)
+        def my_func(x, y):
+            return x + y
+
+        # This will return the result directly
+        result = my_func(1, 2)  # Returns 3
+
+        # With parallel execution
+        @app.direct_task(
+            parallel_func=lambda _: [(i, i+1) for i in range(5)],
+            aggregate_func=sum
+        )
+        def add_parallel(x, y):
+            return x + y
+
+        result = add_parallel(0, 0)  # Returns sum of all parallel results
+        ```
+        """
+
+        def _parallelize(
+            task: Task, *args: "Params.args", **kwargs: "Params.kwargs"
+        ) -> "BaseInvocationGroup":
+            parsed_args = task.args(*args, **kwargs).kwargs
+            return task.parallelize(parallel_func(parsed_args))  # type: ignore
+
+        def _aggregate_results(results: Iterable["Result"]) -> "Result":
+            if aggregate_func is not None:
+                return aggregate_func(results)
+            # TODO try to infer aggregate function from the type
+            # eg. list.concat, dict.update, etc...
+            raise ValueError("Aggregation function required for parallel execution")
+
+        def decorator(func: "Func[Params, Result]") -> "Func[Params, Result]":
+            task_options = {
+                "auto_parallel_batch_size": auto_parallel_batch_size,
+                "retry_for": retry_for,
+                "max_retries": max_retries,
+                "running_concurrency": running_concurrency,
+                "registration_concurrency": registration_concurrency,
+                "key_arguments": key_arguments,
+                "on_diff_non_key_args_raise": on_diff_non_key_args_raise,
+                "call_result_cache": call_result_cache,
+                "disable_cache_args": disable_cache_args,
+            }
+            task_options = {k: v for k, v in task_options.items() if v is not None}
+            task = self.task(func, **task_options)  # type: ignore
+            is_async = asyncio.iscoroutinefunction(func)
+
+            if is_async:
+
+                @wraps(func)
+                async def async_wrapper(
+                    *args: "Params.args", **kwargs: "Params.kwargs"
+                ) -> "Result":
+                    if parallel_func:
+                        invocation_group = _parallelize(task, *args, **kwargs)
+                        results = [
+                            result async for result in invocation_group.async_results()
+                        ]
+                        return _aggregate_results(results)
+                    return await task(*args, **kwargs).async_result()
+
+                # Attach the original function as an attribute
+                async_wrapper.__inner_function__ = func  # type: ignore
+                return async_wrapper  # type: ignore
+
+            @wraps(func)
+            def sync_wrapper(
+                *args: "Params.args", **kwargs: "Params.kwargs"
+            ) -> "Result":
+                if parallel_func:
+                    invocation_group = _parallelize(task, *args, **kwargs)
+                    return _aggregate_results(invocation_group.results)
+                return task(*args, **kwargs).result
+
+            # Attach the original function as an attribute
+            sync_wrapper.__inner_function__ = func  # type: ignore
+            return sync_wrapper
+
+        if func is None:
+            return decorator
+        return decorator(func)

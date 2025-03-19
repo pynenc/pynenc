@@ -1327,13 +1327,13 @@ test = ["pytest"]
 
 [[package]]
 name = "types-cffi"
-version = "1.16.0.20250318"
+version = "1.17.0.20250319"
 description = "Typing stubs for cffi"
 optional = false
 python-versions = ">=3.9"
 files = [
-    {file = "types_cffi-1.16.0.20250318-py3-none-any.whl", hash = "sha256:1be00aa4274c8d5595ed96648db8fa4de06a1fa8e53c408b94b90b7215fe03ff"},
-    {file = "types_cffi-1.16.0.20250318.tar.gz", hash = "sha256:ccaed0d3c4110ee232b301bc550b7cfac51520dd1c6b0a48fe06307ba4cc0e4e"},
+    {file = "types_cffi-1.17.0.20250319-py3-none-any.whl", hash = "sha256:5e95f0f10d3f2fd0a8a0a10f6b8b1e0e6ff47796ad2fdd4302b5e514b64d6af4"},
+    {file = "types_cffi-1.17.0.20250319.tar.gz", hash = "sha256:66b0656818e5363f136a0a361f28e41330b55f83d390b14c6bf56026f57b3603"},
 ]
 
 [package.dependencies]
