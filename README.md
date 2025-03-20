@@ -62,6 +62,8 @@ Pynenc addresses the complex challenges of task management in distributed enviro
 
 - **Modularity and Extensibility**: Pynenc is built with modularity at its core, supporting various components such as orchestrators, brokers, state backends, runners, and serializers. Currently compatible with Redis and a development/test mode using an in-memory synchronous version, Pynenc is designed to be extensible. Future plans include support for additional databases, queues, and services, enabling easy customization and adaptation to different operational needs and environments.
 
+- **Direct Task Execution**: Use `@app.direct_task` for tasks that return results directly instead of invocations.
+
 ## Installation
 
 Installing Pynenc is a simple process that can be done using pip. Just run the following command in your terminal:
@@ -89,6 +91,10 @@ To get started with Pynenc, here's a simple example that demonstrates the creati
    def add(x: int, y: int) -> int:
        add.logger.info(f"{add.task_id=} Adding {x} + {y}")
        return x + y
+
+   @app.direct_task
+   def direct_add(x: int, y: int) -> int:
+       return x + y
    ```
 
 2. **Start Your Runner or Run Synchronously:**
@@ -110,8 +116,11 @@ To get started with Pynenc, here's a simple example that demonstrates the creati
 3. **Execute the Task:**
 
    ```python
-   result = add(1, 2).result
-   print(result)  # This will output the result of 1 + 2
+    # Standard task (returns invocation)
+    result = add(1, 2).result  # 3
+
+    # Direct task (returns result directly)
+    direct_result = direct_add(1, 2)  # 3
    ```
 
 For a complete guide on how to set up and run pynenc, visit our [samples library](https://github.com/pynenc/samples).

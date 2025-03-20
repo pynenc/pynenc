@@ -29,6 +29,10 @@ To get a quick feel of Pynenc, here's a basic example of creating and executing 
    def add(x: int, y: int) -> int:
        add.logger.info(f"{add.task_id=} Adding {x} + {y}")
        return x + y
+
+   @app.direct_task
+   def direct_add(x: int, y: int) -> int:
+       return x + y
    ```
 
 2. **Start Your Runner or Run Synchronously:**
@@ -52,6 +56,8 @@ To get a quick feel of Pynenc, here's a basic example of creating and executing 
    ```python
    result = add(1, 2).result
    print(result)  # This will output the result of 1 + 2
+
+   print(direct_add(1, 2))  # Directly waits for result
    ```
 
 For a more comprehensive guide on setting up and running this example, visit our [Basic Redis Example on GitHub](https://github.com/pynenc/samples/tree/main/basic_redis_example).
