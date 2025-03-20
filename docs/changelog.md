@@ -40,6 +40,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - This fix ensures that `direct_task` and `task` decorators work seamlessly with async tasks in development environments (when `dev_mode_force_sync_tasks` is enabled), aligning its behavior with `DistributedInvocation`.
 
 - Increased test coverage for `pynenc.util.import_app`.
+- Increased test coverage for `pynenc.runner.persistent_process_runner`.
 
 ### Fixed
 
