@@ -4,6 +4,50 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.19] - 2025-03-19
+
+### Added
+
+- **New `direct_task` Decorator**:
+  - Introduced a new decorator `direct_task` in `Pynenc` that wraps the existing `task` decorator to provide a simpler interface for task execution.
+  - Unlike `task`, which returns an invocation object, `direct_task` returns the result directly:
+    - For synchronous functions, it waits and returns the result immediately.
+    - For async functions, it returns an awaitable that resolves to the result.
+  - Supports parallel execution with optional `parallel_func` (generates arguments for parallel tasks) and `aggregate_func` (combines results into a single value).
+  - Inherits all options from `task` (e.g., `max_retries`, `retry_for`, `call_result_cache`), ensuring full compatibility with existing task configuration.
+  - Example usage:
+
+```python
+    @app.direct_task
+    def add(x, y):
+        return x + y
+    result = add(1, 2)  # Returns 3 directly
+
+    @app.direct_task(parallel_func=lambda _: [(i, i+1) for i in range(5)], aggregate_func=sum)
+    async def parallel_add(x, y):
+    return x + y
+    result = await parallel_add(0, 0)  # Returns 25 (sum of parallel results)
+```
+
+- **Comprehensive Tests for `direct_task`**:
+- Added a new test file `tests/unit/task/test_direct_task.py` with full coverage for the `direct_task` decorator.
+
+### Changed
+
+- **Enhanced `ConcurrentInvocation` to Support Async Tasks**:
+- Updated the `run` method in `ConcurrentInvocation` to use `run_task_sync`.
+- Previously, async tasks were called directly without awaiting, returning a coroutine object. Now, `run_task_sync` detects async functions and runs them in a new event loop, ensuring the result is returned correctly.
+- This fix ensures that `direct_task` and `task` decorators work seamlessly with async tasks in development environments (when `dev_mode_force_sync_tasks` is enabled), aligning its behavior with `DistributedInvocation`.
+
+- Increased test coverage for `pynenc.util.import_app`.
+- Increased test coverage for `pynenc.runner.persistent_process_runner`.
+
+### Fixed
+
+- **Corrected Async Task Execution in `ConcurrentInvocation`**:
+- Fixed an issue where async tasks in a `ConcurrentInvocation` (used in dev mode) returned coroutine objects instead of results, breaking the `direct_task` decorator's promise of direct result return.
+- The fix ensures compatibility with both sync and async tasks, improving reliability in test and development scenarios.
+
 ## [0.0.18] - 2025-03-06
 
 ### Added

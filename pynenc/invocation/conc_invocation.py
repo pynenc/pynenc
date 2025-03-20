@@ -10,6 +10,7 @@ from pynenc.exceptions import PynencError
 from pynenc.invocation.base_invocation import BaseInvocation, BaseInvocationGroup
 from pynenc.invocation.status import InvocationStatus
 from pynenc.types import Params, Result
+from pynenc.util.asyncio_helper import run_task_sync
 
 if TYPE_CHECKING:
     from ..app import Pynenc
@@ -61,7 +62,7 @@ class ConcurrentInvocation(BaseInvocation[Params, Result]):
             self.task.logger.info(f"Sync Invocation {self.invocation_id} started")
             self._status = InvocationStatus.RUNNING
             context.sync_inv_context[self.app.app_id] = self
-            result = self.task.func(**self.arguments.kwargs)
+            result = run_task_sync(self.task.func, **self.arguments.kwargs)
             self._status = InvocationStatus.SUCCESS
             self.task.logger.info(f"Sync Invocation {self.invocation_id} finished")
             return result
