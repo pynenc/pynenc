@@ -1,3 +1,4 @@
+import logging
 from io import StringIO
 from unittest.mock import patch
 
@@ -48,3 +49,47 @@ def test_cli_with_app() -> None:
         if "error: the following arguments are required" in line:
             assert "--app" not in line
             assert "command" in line
+
+
+def test_cli_value_error() -> None:
+    """Test CLI handles ValueError from find_app_instance"""
+    with patch("sys.argv", ["pynenc", "--app", "nonexistent.app", "runner", "start"]):
+        with patch("pynenc.cli.main_cli.find_app_instance") as mock_find_app:
+            mock_find_app.side_effect = ValueError("Invalid application module")
+            log_capture = StringIO()
+            handler = logging.StreamHandler(log_capture)
+            logging.getLogger().addHandler(handler)
+            try:
+                with pytest.raises(SystemExit) as e:
+                    main()
+                assert e.value.code == 1
+                output = log_capture.getvalue()
+                # Adjust expectation based on default WARNING level format
+                assert (
+                    "Failed to load application: Invalid application module" in output
+                )
+            finally:
+                logging.getLogger().removeHandler(handler)
+
+
+def test_cli_unexpected_exception() -> None:
+    """Test CLI handles unexpected Exception from func execution"""
+    with patch(
+        "sys.argv",
+        ["pynenc", "--app", "tests.unit.cli.test_main_cli.app", "runner", "start"],
+    ):
+        with patch("pynenc.cli.main_cli.find_app_instance", return_value=app):
+            # Mock the actual start_runner_command function
+            with patch("pynenc.cli.runner_cli.start_runner_command") as mock_runner:
+                mock_runner.side_effect = Exception("Unexpected error")
+                log_capture = StringIO()
+                handler = logging.StreamHandler(log_capture)
+                logging.getLogger().addHandler(handler)
+                try:
+                    with pytest.raises(SystemExit) as e:
+                        main()
+                    assert e.value.code == 1
+                    output = log_capture.getvalue()
+                    assert "An unexpected error occurred: Unexpected error" in output
+                finally:
+                    logging.getLogger().removeHandler(handler)
