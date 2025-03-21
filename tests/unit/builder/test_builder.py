@@ -103,22 +103,22 @@ def test_arg_cache_modes() -> None:
     )
     assert app_redis.conf.arg_cache_cls == "RedisArgCache"
     assert isinstance(app_redis.arg_cache, RedisArgCache)
-    assert app_redis.conf.min_size_to_cache == 1024  # Default value
-    assert app_redis.conf.local_cache_size == 1024  # Default value
+    assert app_redis.arg_cache.conf.min_size_to_cache == 1024  # Default value
+    assert app_redis.arg_cache.conf.local_cache_size == 1024  # Default value
 
     # Memory arg cache
     app_memory = PynencBuilder().arg_cache(mode="memory").build()
     assert app_memory.conf.arg_cache_cls == "MemArgCache"
     assert isinstance(app_memory.arg_cache, MemArgCache)
-    assert app_memory.conf.min_size_to_cache == 1024  # Default value
-    assert app_memory.conf.local_cache_size == 1024  # Default value
+    assert app_memory.arg_cache.conf.min_size_to_cache == 1024  # Default value
+    assert app_memory.arg_cache.conf.local_cache_size == 1024  # Default value
 
     # Disabled arg cache
     app_disabled = PynencBuilder().arg_cache(mode="disabled").build()
     assert app_disabled.conf.arg_cache_cls == "DisabledArgCache"
     assert isinstance(app_disabled.arg_cache, DisabledArgCache)
-    assert app_disabled.conf.min_size_to_cache == 1024  # Default value
-    assert app_disabled.conf.local_cache_size == 1024  # Default value
+    assert app_disabled.arg_cache.conf.min_size_to_cache == 1024  # Default value
+    assert app_disabled.arg_cache.conf.local_cache_size == 1024  # Default value
 
 
 def test_arg_cache_custom_config() -> None:
