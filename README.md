@@ -54,7 +54,7 @@ Pynenc addresses the complex challenges of task management in distributed enviro
 
   This structured approach to concurrency management in Pynenc allows for precise control over task execution, ensuring efficient handling of tasks without overloading the system and adhering to specified constraints.
 
-- **Flexible Configuration with `PynencBuilder`**: A fluent builder interface allows users to configure apps programmatically, including Redis vs memory mode, runners, logging levels, concurrency control, and argument formatting.
+- **Flexible Configuration with `PynencBuilder`**: A builder interface allows users to configure apps programmatically, including Redis vs memory mode, runners, logging levels, concurrency control, and argument formatting.
 
 - **Automatic Task Prioritization**: Pynenc prioritizes tasks by simply counting the number of dependencies each task has. The task with the most dependencies is selected first.
 

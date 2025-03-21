@@ -97,7 +97,10 @@ class PynencBuilder:
         return self
 
     def arg_cache(
-        self, mode: Literal["redis", "memory", "disabled"] = "redis"
+        self,
+        mode: Literal["redis", "memory", "disabled"] = "redis",
+        min_size_to_cache: int = 1024,  # Default from ConfigArgCache
+        local_cache_size: int = 1024,  # Default from ConfigArgCache
     ) -> "PynencBuilder":
         """
         Configure argument caching behavior.
@@ -106,8 +109,16 @@ class PynencBuilder:
             "redis": Use Redis for argument caching (requires redis() to be called)
             "memory": Use in-memory argument caching (for testing/development)
             "disabled": Disable argument caching completely
+        :param int min_size_to_cache:
+            Minimum string length (in characters) required to cache an argument.
+            Arguments smaller than this size will be passed directly.
+            Default is 1024 characters (roughly 1KB).
+        :param int local_cache_size:
+            Maximum number of items to cache locally.
+            Default is 1024.
 
         :return: The builder instance for method chaining.
+        :raises ValueError: If "redis" mode is selected without prior redis() configuration
         """
         if mode == "disabled":
             self._config["arg_cache_cls"] = self._DISABLED_ARG_CACHE
@@ -120,6 +131,11 @@ class PynencBuilder:
                 raise ValueError(
                     "Redis arg cache requires redis configuration. Call redis() first."
                 )
+
+        # Set the cache configuration values
+        self._config["min_size_to_cache"] = min_size_to_cache
+        self._config["local_cache_size"] = local_cache_size
+
         return self
 
     def multi_thread_runner(
@@ -288,7 +304,7 @@ class PynencBuilder:
         self,
         cycle_control: bool = False,
         blocking_control: bool = False,
-        queue_timeout_sec: float = 0.001,
+        queue_timeout_sec: float = 0.1,
     ) -> "PynencBuilder":
         """
         Configure task control parameters.
@@ -346,7 +362,9 @@ class PynencBuilder:
         registration_concurrency: Optional[Union[str, ConcurrencyControlType]] = None,
     ) -> "PynencBuilder":
         """
-        Configure concurrency control behaviors for tasks.
+        Configure concurrency control default behaviors for all tasks.
+        A task can override these settings by specifying the concurrency control
+        mode in the task decorator.
 
         Concurrency control determines how tasks are scheduled and executed when
         multiple instances of the same task are invoked concurrently.
