@@ -2,38 +2,38 @@
 
 ## Overview
 
-This guide provides a detailed look at the `concurrency_control` sample, showcasing the use of concurrency control mechanisms within Pynenc for task processing. This example demonstrates how to manage task execution using different concurrency controls, ensuring tasks are executed according to specific concurrency requirements.
+This guide provides a detailed look at the `concurrency_control` sample, showcasing concurrency control mechanisms within Pynenc for task processing. It demonstrates how tasks can be managed and executed according to specific concurrency requirements.
 
-The full source code for this demonstration is available on GitHub: [concurrency_control](https://github.com/pynenc/samples/tree/main/concurrency_control).
+The full source code is available on GitHub: [concurrency_control](https://github.com/pynenc/samples/tree/main/concurrency_control).
 
 ## Scenario
 
-The scenario covers various aspects of concurrency control, including disabling concurrency for task registration and execution, and enforcing task-level concurrency control for registration and running events. It's designed to help understand how Pynenc can be configured to handle concurrency in task processing.
+This example explores various concurrency control methods, including disabling concurrency for task registration and execution, and enforcing task-level concurrency control during registration and runtime. It illustrates configuring Pynenc for handling concurrency effectively.
 
 ## Setup
 
 ### Requirements
 
 - Python 3.11 or higher.
-- Pynenc library installed.
+- Installed Pynenc library.
 
 ### Project Files
 
 - `tasks.py`: Defines tasks with different concurrency control settings.
-- `sample.py`: Script to demonstrate the effects of concurrency control on task execution.
+- `sample.py`: Demonstrates how concurrency control settings impact task execution.
 
 ## Demonstration
 
 ### Defining Tasks with Concurrency Control
 
-In `tasks.py`, we define several tasks with different concurrency control settings:
+In `tasks.py`, tasks are defined with concurrency control settings. You can specify concurrency directly per task or globally using `PynencBuilder`.
 
-- `get_own_invocation_id` shows a task without concurrency control, allowing multiple invocations.
-- `get_own_invocation_id_registration_concurrency` uses `TASK` level registration concurrency, limiting to a single task registration.
-- `sleep_without_running_concurrency` and `sleep_with_running_concurrency` illustrate the effects of disabling and enabling running concurrency control, respectively.
+#### Option 1: Direct Initialization (Task-Specific Controls)
 
 ```python
 from pynenc import Pynenc, ConcurrencyControlType
+from typing import NamedTuple
+import time
 
 app = Pynenc()
 
@@ -62,15 +62,63 @@ def sleep_with_running_concurrency(seconds: float) -> SleepResult:
     return SleepResult(start=start, end=time.time())
 ```
 
-These tasks are designed to illustrate how registration concurrency control affects task execution and invocation ID generation.
+#### Option 2: Using PynencBuilder (Default Concurrency Controls)
 
-### Executing Tasks with Different Concurrency Controls
+Alternatively, use `PynencBuilder` to configure default concurrency controls for all tasks, with the option to override them individually. This builder configuration can coexist with other configuration methods such as `pyproject.toml`, environment variables, YAML, and JSON.
 
-The `sample.py` script demonstrates the execution and effects of concurrency control settings on tasks:
+```python
+from pynenc import Pynenc, ConcurrencyControlType
+from pynenc.builder import PynencBuilder
+from typing import NamedTuple
+import time
 
-#### `run_without_concurrency_control()`
+app = (
+    PynencBuilder()
+    .concurrency_control(
+        running_concurrency=ConcurrencyControlType.DISABLED,  # Default running concurrency
+        registration_concurrency=ConcurrencyControlType.DISABLED  # Default registration concurrency
+    )
+    .build()
+)
 
-Shows the behavior of task execution without any concurrency control, where each call to the task generates a new invocation ID.
+@app.task  # Inherits DISABLED concurrency for both running and registration
+def get_own_invocation_id() -> str:
+    return get_own_invocation_id.invocation.invocation_id
+
+@app.task(registration_concurrency=ConcurrencyControlType.TASK)  # Overrides default registration concurrency
+def get_own_invocation_id_registration_concurrency() -> str:
+    return get_own_invocation_id_registration_concurrency.invocation.invocation_id
+
+class SleepResult(NamedTuple):
+    start: float
+    end: float
+
+@app.task  # Inherits DISABLED running concurrency
+def sleep_without_running_concurrency(seconds: float) -> SleepResult:
+    start = time.time()
+    time.sleep(seconds)
+    return SleepResult(start=start, end=time.time())
+
+@app.task(running_concurrency=ConcurrencyControlType.TASK)  # Overrides default running concurrency
+def sleep_with_running_concurrency(seconds: float) -> SleepResult:
+    start = time.time()
+    time.sleep(seconds)
+    return SleepResult(start=start, end=time.time())
+```
+
+- `get_own_invocation_id` uses default (`DISABLED`) concurrency.
+- `get_own_invocation_id_registration_concurrency` explicitly overrides default registration concurrency to `TASK`.
+- `sleep_without_running_concurrency` and `sleep_with_running_concurrency` highlight inherited versus overridden concurrency controls for running tasks.
+
+Using `PynencBuilder.concurrency_control()`, you define global defaults easily, applying consistency across tasks while retaining flexibility.
+
+### Executing Tasks with Concurrency Controls
+
+The `sample.py` script demonstrates how concurrency settings influence task execution:
+
+#### Running Without Concurrency Control
+
+Illustrates execution without enforced concurrency, creating separate invocation IDs per call.
 
 ```python
 def run_without_concurrency_control() -> None:
@@ -78,24 +126,24 @@ def run_without_concurrency_control() -> None:
     logger.info(f"Invocation ids: " + ", ".join(i.invocation_id for i in invocations))
 ```
 
-#### `run_with_registration_concurrency_control()`
+#### Running with Registration Concurrency Control
 
-Demonstrates task-level registration concurrency control, where multiple task calls result in a single routed invocation, illustrating the `TASK` level concurrency control for task registration.
+Demonstrates that registration concurrency control (`TASK`) routes multiple calls to a single invocation.
 
 ```python
 def run_with_registration_concurrency_control() -> None:
     invocations = [tasks.get_own_invocation_id_registration_concurrency() for _ in range(3)]
-    logger.info(f"Unique invocation_id: {set(invocation_ids)}")
+    unique_invocation_ids = set(i.invocation_id for i in invocations)
+    logger.info(f"Unique invocation_id: {unique_invocation_ids}")
 ```
 
-#### `run_with_running_concurrency_control()`
+#### Running with Execution (Running) Concurrency Control
 
-Explores the effects of running concurrency control on task execution, contrasting tasks executed with and without running concurrency control to highlight the differences in parallel versus sequential execution.
+Demonstrates the difference between parallel and sequential execution based on running concurrency settings.
 
 ```python
 def run_with_running_concurrency_control() -> None:
-    ...
-    # check that without control runs in parallel
+    # Without concurrency control: parallel execution
     no_control_invocations = [
         tasks.sleep_without_running_concurrency(0.1) for _ in range(10)
     ]
@@ -103,18 +151,17 @@ def run_with_running_concurrency_control() -> None:
     if not any_run_in_parallel(no_control_results):
         raise ValueError(f"Expected parallel execution, got {no_control_results}")
 
-    # check that with control does not run in parallel
+    # With concurrency control: sequential execution
     controlled_invocations = [
         tasks.sleep_with_running_concurrency(0.1) for _ in range(10)
     ]
     controlled_results = [i.result for i in controlled_invocations]
     if any_run_in_parallel(controlled_results):
         raise ValueError(f"Expected sequential execution, got {controlled_results}")
-    ...
 ```
 
-Each section of this guide aims to provide a clear understanding of how concurrency control can be implemented and managed within Pynenc, offering insights into practical applications of these features.
+Each demonstration section aims to clearly illustrate how different concurrency configurations affect task execution within Pynenc.
 
 ## Conclusion
 
-The `concurrency_control` sample serves as an introduction to using concurrency control features in Pynenc. By exploring different settings and their impact on task execution, developers can gain insights into how to effectively manage task concurrency in their applications.
+The `concurrency_control` sample introduces concurrency management within Pynenc clearly and practically. By using task-specific settings or global defaults via `PynencBuilder`, developers gain powerful and flexible options for controlling concurrent task execution.

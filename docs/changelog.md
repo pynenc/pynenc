@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.20] - 2025-03-21
+
+### Added
+
+- **New `PynencBuilder` for Enhanced Configuration**:
+  - Introduced a fluent, chainable builder pattern for configuring Pynenc applications, replacing direct `Pynenc()` instantiation in examples and documentation.
+  - Supports configuration of Redis/memory backends via `redis(url, db)` and `memory()`.
+  - Offers multiple runner types: `multi_thread_runner(min_threads, max_threads, enforce_max_processes)`, `persistent_process_runner(num_processes)`, `thread_runner(min_threads, max_threads)`, `process_runner()`, and `dummy_runner()`.
+  - Configures serializers with `serializer(name)` supporting shortnames (`json`, `pickle`) and full class names.
+  - Adds fine-grained argument logging control with `hide_arguments()`, `show_argument_keys()`, `show_full_arguments()`, and `show_truncated_arguments(truncate_length=32)`, underpinned by `argument_print_mode(mode, truncate_length)`.
+  - Enhances concurrency management with `concurrency_control(running_concurrency, registration_concurrency)`, accepting both strings and `ConcurrencyControlType` enums.
+  - Includes additional utilities: `dev_mode(force_sync_tasks)`, `logging_level(level)`, `runner_tuning(...)`, `task_control(...)`, `max_pending_seconds(seconds)`, and `custom_config(**kwargs)`.
+  - Validates memory component compatibility with runners via `_validate_memory_compatibility()`.
+  - Comprehensive test suite covering all builder methods, including edge cases and enum validations.
+
 ## [0.0.19] - 2025-03-19
 
 ### Added
