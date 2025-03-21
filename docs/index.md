@@ -31,6 +31,7 @@ license
 - Automatic Task Pausing
 - Cycle Detection
 - Modularity and Extensibility
+- Flexible Configuration Builder
 
 For more details on these features, refer to the {doc}`usage_guide/index`.
 
@@ -77,5 +78,3 @@ Need help or want to discuss Pynenc? Check out our [GitHub Issues](https://githu
 ## License
 
 Pynenc is released under the MIT License. For more information, see {doc}`license`.
-
-<!-- The 'Indices and tables' section is typically specific to Sphinx and RST, and may not be directly applicable or necessary in Markdown. -->
