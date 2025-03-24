@@ -38,6 +38,12 @@
               <a class="nav-link" href="/orchestrator">Orchestrator</a>
             </li>
             <li class="nav-item">
+              <a class="nav-link" href="/state-backend">State Backend</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="/arg-cache">Arg Cache</a>
+            </li>
+            <li class="nav-item">
               <a class="nav-link" href="/invocations">Invocations</a>
             </li>
             <li class="nav-item">
@@ -65,6 +71,16 @@
                 your Pynenc application.
               </p>
               <p>Currently monitoring app: <strong>{{ app_id }}</strong></p>
+              <div class="mt-3">
+                <button
+                  class="btn btn-danger"
+                  hx-post="/purge"
+                  hx-confirm="⚠️ WARNING: This will purge ALL data from the broker, orchestrator, state backend, and argument cache. This operation cannot be undone! Continue?"
+                  hx-swap="outerHTML"
+                >
+                  Purge All Application Data
+                </button>
+              </div>
             </div>
           </div>
         </div>

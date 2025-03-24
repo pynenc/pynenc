@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from pynenc.invocation.status import InvocationStatus
 from pynmon.app import get_pynenc_instance, templates
@@ -88,3 +88,21 @@ async def refresh_orchestrator(request: Request) -> HTMLResponse:
             "blocking_invocations": blocking_invocations,
         },
     )
+
+
+@router.post("/auto-purge", response_class=JSONResponse)
+async def auto_purge_orchestrator() -> JSONResponse:
+    """Run auto-purge on the orchestrator."""
+    app = get_pynenc_instance()
+
+    try:
+        # Perform purge operation
+        app.orchestrator.purge()
+        return JSONResponse(
+            {"success": True, "message": "Auto-purge completed successfully."}
+        )
+    except Exception as e:
+        return JSONResponse(
+            {"success": False, "message": f"Error during auto-purge: {str(e)}"},
+            status_code=500,
+        )

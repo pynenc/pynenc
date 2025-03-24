@@ -3,7 +3,7 @@ from typing import Optional
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
 from pynenc.app import Pynenc
@@ -42,10 +42,43 @@ async def root(request: Request) -> HTMLResponse:
     )
 
 
+@app.post("/purge")
+async def purge_all() -> JSONResponse:
+    """Purge all data from the app (broker, orchestrator, state backend, arg cache)."""
+    if not pynenc_instance:
+        raise HTTPException(
+            status_code=500,
+            detail="No Pynenc application is configured for monitoring.",
+        )
+
+    try:
+        # Use the app's purge method which purges all components
+        pynenc_instance.purge()
+        return JSONResponse(
+            {
+                "success": True,
+                "message": "All application data has been purged successfully.",
+            }
+        )
+    except Exception as e:
+        return JSONResponse(
+            {"success": False, "message": f"Error while purging: {str(e)}"},
+            status_code=500,
+        )
+
+
 def setup_routes() -> None:
     """Set up all route modules."""
     # Import view modules only when needed to avoid circular imports
-    from pynmon.views import broker, calls, invocations, orchestrator, tasks
+    from pynmon.views import (
+        arg_cache,
+        broker,
+        calls,
+        invocations,
+        orchestrator,
+        state_backend,
+        tasks,
+    )
 
     # Register the routes
     app.include_router(broker.router)
@@ -53,6 +86,8 @@ def setup_routes() -> None:
     app.include_router(invocations.router)
     app.include_router(tasks.router)
     app.include_router(calls.router)
+    app.include_router(state_backend.router)
+    app.include_router(arg_cache.router)
 
 
 def start_monitor(

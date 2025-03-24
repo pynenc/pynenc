@@ -1,0 +1,56 @@
+{% extends "base.html" %} {% block content %}
+<div class="row">
+  <div class="col-12">
+    <div class="card">
+      <div
+        class="card-header d-flex justify-content-between align-items-center"
+      >
+        <span>Argument Cache Information</span>
+      </div>
+      <div class="card-body">
+        <h5>App ID: {{ app_id }}</h5>
+        <h6>Argument Cache Type: {{ arg_cache_info.type }}</h6>
+
+        <div class="row mt-3">
+          <div class="col-md-6">
+            <div class="card">
+              <div class="card-header">Configuration</div>
+              <div class="card-body">
+                <ul class="list-group">
+                  <li class="list-group-item d-flex justify-content-between">
+                    <span>Type:</span>
+                    <span>{{ arg_cache_info.type }}</span>
+                  </li>
+                  <li class="list-group-item d-flex justify-content-between">
+                    <span>Minimum Size to Cache:</span>
+                    <span class="badge bg-info"
+                      >{{ arg_cache_info.min_size_to_cache }} bytes</span
+                    >
+                  </li>
+                  <li class="list-group-item d-flex justify-content-between">
+                    <span>Local Cache Size:</span>
+                    <span class="badge bg-info"
+                      >{{ arg_cache_info.local_cache_size }} entries</span
+                    >
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-3 d-flex justify-content-center">
+          <button
+            class="btn btn-danger"
+            hx-post="/arg-cache/purge"
+            hx-confirm="This will purge all cached arguments. This operation cannot be undone! Continue?"
+            hx-swap="outerHTML"
+          >
+            Purge Argument Cache
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
