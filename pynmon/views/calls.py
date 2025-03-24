@@ -148,13 +148,14 @@ async def process_call_detail(
     """
     app = get_pynenc_instance()
 
-    if not call_id:
+    if not call_id or call_id.strip() == "":
+        logger.warning(f"Missing call_id in {request_source} request")
         return templates.TemplateResponse(
             "shared/error.html",
             {
                 "request": request,
                 "title": "Missing Call ID",
-                "message": "No call_id provided",
+                "message": "No call_id was provided. Please check the URL and try again.",
             },
             status_code=400,
         )
