@@ -86,6 +86,179 @@ async def invocations_list(
     )
 
 
+@router.get("/timeline", response_class=HTMLResponse)
+async def invocations_timeline(
+    request: Request,
+    time_range: str = "1h",
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    task_id: Optional[str] = None,
+    show_relationships: bool = False,
+    limit: int = 100,
+) -> HTMLResponse:
+    """Display a visual timeline of invocations with filters."""
+    app = get_pynenc_instance()
+    logger.info(f"Generating invocation timeline with time_range={time_range}")
+    start_time = time.time()
+
+    try:
+        # Calculate time range based on selection
+        now = datetime.now()
+        start_datetime = None
+        end_datetime = now
+
+        if time_range == "custom" and start_date and end_date:
+            try:
+                start_datetime = datetime.fromisoformat(start_date)
+                end_datetime = datetime.fromisoformat(end_date)
+            except ValueError:
+                logger.warning(f"Invalid date format: {start_date} - {end_date}")
+                # Fall back to last hour
+                start_datetime = now - timedelta(hours=1)
+        else:
+            # Parse time range
+            if time_range == "15m":
+                start_datetime = now - timedelta(minutes=15)
+            elif time_range == "1h":
+                start_datetime = now - timedelta(hours=1)
+            elif time_range == "3h":
+                start_datetime = now - timedelta(hours=3)
+            elif time_range == "12h":
+                start_datetime = now - timedelta(hours=12)
+            elif time_range == "1d":
+                start_datetime = now - timedelta(days=1)
+            elif time_range == "3d":
+                start_datetime = now - timedelta(days=3)
+            elif time_range == "1w":
+                start_datetime = now - timedelta(weeks=1)
+            else:
+                # Default to last hour
+                start_datetime = now - timedelta(hours=1)
+
+        # Get all invocations across all tasks or specific task
+        all_invocations = []
+        tasks_to_check = []
+
+        if task_id:
+            task = app.get_task(task_id)
+            if task:
+                tasks_to_check = [task]
+        else:
+            tasks_to_check = list(app.tasks.values())
+
+        # Get invocations from selected tasks
+        for task in tasks_to_check:
+            invocations = list(app.orchestrator.get_existing_invocations(task=task))
+            all_invocations.extend(invocations)
+
+            # Limit the number to avoid overloading the browser
+            if len(all_invocations) >= limit:
+                all_invocations = all_invocations[:limit]
+                break
+
+        # Filter invocations based on time
+        filtered_invocations = []
+        for invocation in all_invocations:
+            # Try to get history for the invocation
+            history = app.state_backend.get_history(invocation)
+
+            if not history:
+                # Skip invocations with no history
+                continue
+
+            # Sort history by timestamp
+            sorted_history = sorted(history, key=lambda entry: entry.timestamp)
+
+            # Get start time (first entry)
+            invocation_start_time = sorted_history[0].timestamp
+
+            # Skip if outside our time range
+            if (
+                invocation_start_time < start_datetime
+                or invocation_start_time > end_datetime
+            ):
+                continue
+
+            # Get end time (last entry if in final state)
+            invocation_end_time = None
+            if sorted_history[-1].status and sorted_history[-1].status.is_final():
+                invocation_end_time = sorted_history[-1].timestamp
+
+            # Find parent invocation if it exists
+            parent_id = None
+            if show_relationships and invocation.parent_invocation:
+                parent_id = invocation.parent_invocation.invocation_id
+
+            # Add to filtered list
+            filtered_invocations.append(
+                {
+                    "invocation_id": invocation.invocation_id,
+                    "task_id": invocation.task.task_id,
+                    "status": invocation.status.name,
+                    "start_time": invocation_start_time.isoformat(),
+                    "end_time": invocation_end_time.isoformat()
+                    if invocation_end_time
+                    else None,
+                    "parent_id": parent_id,
+                }
+            )
+
+        # Sort by start time
+        def get_start_time(inv: dict) -> str:
+            # Ensure we always return a comparable string
+            start_time = inv.get("start_time")
+            return start_time if isinstance(start_time, str) else ""
+
+        # Sort by start time, safely handling None values
+        filtered_invocations.sort(key=get_start_time)
+
+        # Prepare timeline data for JavaScript
+        timeline_data = {
+            "invocations": filtered_invocations,
+            "start_time": start_datetime.isoformat(),
+            "end_time": end_datetime.isoformat(),
+        }
+
+        # Get all available task IDs for the dropdown
+        all_task_ids = list(app.tasks.keys())
+
+        logger.info(f"Rendering timeline with {len(filtered_invocations)} invocations")
+        return templates.TemplateResponse(
+            "invocations/timeline.html",
+            {
+                "request": request,
+                "title": "Invocations Timeline",
+                "app_id": app.app_id,
+                "invocations": filtered_invocations,
+                "timeline_data": json.dumps(timeline_data),
+                "all_task_ids": all_task_ids,
+                "current_filters": {
+                    "time_range": time_range,
+                    "start_date": start_date or "",
+                    "end_date": end_date or "",
+                    "task_id": task_id or "",
+                    "show_relationships": show_relationships,
+                    "limit": limit,
+                },
+            },
+        )
+    except Exception as e:
+        logger.error(f"Error generating timeline: {str(e)}")
+        logger.error(traceback.format_exc())
+        return templates.TemplateResponse(
+            "shared/error.html",
+            {
+                "request": request,
+                "title": "Error",
+                "message": f"An error occurred while generating the timeline: {str(e)}",
+            },
+            status_code=500,
+        )
+    finally:
+        elapsed = time.time() - start_time
+        logger.info(f"invocations_timeline completed in {elapsed:.2f} seconds")
+
+
 @router.get("/{invocation_id}", response_class=HTMLResponse)
 async def invocation_detail(request: Request, invocation_id: str) -> HTMLResponse:
     """Display detailed information about a specific invocation."""
@@ -265,176 +438,3 @@ async def invocation_detail(request: Request, invocation_id: str) -> HTMLRespons
     finally:
         elapsed = time.time() - start_time
         logger.info(f"invocation_detail completed in {elapsed:.2f} seconds")
-
-
-@router.get("/timeline", response_class=HTMLResponse)
-async def invocations_timeline(
-    request: Request,
-    time_range: str = "1h",
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    task_id: Optional[str] = None,
-    show_relationships: bool = False,
-    limit: int = 100,
-) -> HTMLResponse:
-    """Display a visual timeline of invocations with filters."""
-    app = get_pynenc_instance()
-    logger.info(f"Generating invocation timeline with time_range={time_range}")
-    start_time = time.time()
-
-    try:
-        # Calculate time range based on selection
-        now = datetime.now()
-        start_datetime = None
-        end_datetime = now
-
-        if time_range == "custom" and start_date and end_date:
-            try:
-                start_datetime = datetime.fromisoformat(start_date)
-                end_datetime = datetime.fromisoformat(end_date)
-            except ValueError:
-                logger.warning(f"Invalid date format: {start_date} - {end_date}")
-                # Fall back to last hour
-                start_datetime = now - timedelta(hours=1)
-        else:
-            # Parse time range
-            if time_range == "15m":
-                start_datetime = now - timedelta(minutes=15)
-            elif time_range == "1h":
-                start_datetime = now - timedelta(hours=1)
-            elif time_range == "3h":
-                start_datetime = now - timedelta(hours=3)
-            elif time_range == "12h":
-                start_datetime = now - timedelta(hours=12)
-            elif time_range == "1d":
-                start_datetime = now - timedelta(days=1)
-            elif time_range == "3d":
-                start_datetime = now - timedelta(days=3)
-            elif time_range == "1w":
-                start_datetime = now - timedelta(weeks=1)
-            else:
-                # Default to last hour
-                start_datetime = now - timedelta(hours=1)
-
-        # Get all invocations across all tasks or specific task
-        all_invocations = []
-        tasks_to_check = []
-
-        if task_id:
-            task = app.get_task(task_id)
-            if task:
-                tasks_to_check = [task]
-        else:
-            tasks_to_check = list(app.tasks.values())
-
-        # Get invocations from selected tasks
-        for task in tasks_to_check:
-            invocations = list(app.orchestrator.get_existing_invocations(task=task))
-            all_invocations.extend(invocations)
-
-            # Limit the number to avoid overloading the browser
-            if len(all_invocations) >= limit:
-                all_invocations = all_invocations[:limit]
-                break
-
-        # Filter invocations based on time
-        filtered_invocations = []
-        for invocation in all_invocations:
-            # Try to get history for the invocation
-            history = app.state_backend.get_history(invocation)
-
-            if not history:
-                # Skip invocations with no history
-                continue
-
-            # Sort history by timestamp
-            sorted_history = sorted(history, key=lambda entry: entry.timestamp)
-
-            # Get start time (first entry)
-            invocation_start_time = sorted_history[0].timestamp
-
-            # Skip if outside our time range
-            if (
-                invocation_start_time < start_datetime
-                or invocation_start_time > end_datetime
-            ):
-                continue
-
-            # Get end time (last entry if in final state)
-            invocation_end_time = None
-            if sorted_history[-1].status and sorted_history[-1].status.is_final():
-                invocation_end_time = sorted_history[-1].timestamp
-
-            # Find parent invocation if it exists
-            parent_id = None
-            if show_relationships and invocation.parent_invocation:
-                parent_id = invocation.parent_invocation.invocation_id
-
-            # Add to filtered list
-            filtered_invocations.append(
-                {
-                    "invocation_id": invocation.invocation_id,
-                    "task_id": invocation.task.task_id,
-                    "status": invocation.status.name,
-                    "start_time": invocation_start_time.isoformat(),
-                    "end_time": invocation_end_time.isoformat()
-                    if invocation_end_time
-                    else None,
-                    "parent_id": parent_id,
-                }
-            )
-
-        # Sort by start time
-        def get_start_time(inv: dict) -> str:
-            # Ensure we always return a comparable string
-            start_time = inv.get("start_time")
-            return start_time if isinstance(start_time, str) else ""
-
-        # Sort by start time, safely handling None values
-        filtered_invocations.sort(key=get_start_time)
-
-        # Prepare timeline data for JavaScript
-        timeline_data = {
-            "invocations": filtered_invocations,
-            "start_time": start_datetime.isoformat(),
-            "end_time": end_datetime.isoformat(),
-        }
-
-        # Get all available task IDs for the dropdown
-        all_task_ids = list(app.tasks.keys())
-
-        logger.info(f"Rendering timeline with {len(filtered_invocations)} invocations")
-        return templates.TemplateResponse(
-            "invocations/timeline.html",
-            {
-                "request": request,
-                "title": "Invocations Timeline",
-                "app_id": app.app_id,
-                "invocations": filtered_invocations,
-                "timeline_data": json.dumps(timeline_data),
-                "all_task_ids": all_task_ids,
-                "current_filters": {
-                    "time_range": time_range,
-                    "start_date": start_date or "",
-                    "end_date": end_date or "",
-                    "task_id": task_id or "",
-                    "show_relationships": show_relationships,
-                    "limit": limit,
-                },
-            },
-        )
-    except Exception as e:
-        logger.error(f"Error generating timeline: {str(e)}")
-        logger.error(traceback.format_exc())
-        return templates.TemplateResponse(
-            "shared/error.html",
-            {
-                "request": request,
-                "title": "Error",
-                "message": f"An error occurred while generating the timeline: {str(e)}",
-            },
-            status_code=500,
-        )
-    finally:
-        elapsed = time.time() - start_time
-        logger.info(f"invocations_timeline completed in {elapsed:.2f} seconds")
