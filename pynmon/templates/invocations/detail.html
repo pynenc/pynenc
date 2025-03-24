@@ -72,13 +72,10 @@
                       <th>Completed At:</th>
                       <td>{{ completed_at }}</td>
                     </tr>
+                    {% endif %} {% if duration %}
                     <tr>
                       <th>Duration:</th>
-                      <td>
-                        {% set duration = (completed_at|to_datetime -
-                        created_at|to_datetime).total_seconds() %} {{
-                        "%.2f"|format(duration) }} seconds
-                      </td>
+                      <td>{{ duration }}</td>
                     </tr>
                     {% endif %}
                   </tbody>

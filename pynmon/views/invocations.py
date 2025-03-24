@@ -1,5 +1,6 @@
 import logging
 import time
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Request
@@ -201,11 +202,25 @@ async def invocation_detail(request: Request, invocation_id: str) -> HTMLRespons
         completed_at = None
 
         if formatted_history:
-            created_at = formatted_history[0]["timestamp"]
+            try:
+                created_at = formatted_history[0]["timestamp"]
 
-            # Check if the last entry is a terminal state
-            if formatted_history[-1]["status"] in ["SUCCESS", "FAILED"]:
-                completed_at = formatted_history[-1]["timestamp"]
+                # Check if the last entry is a terminal state
+                if formatted_history[-1]["status"] in ["SUCCESS", "FAILED"]:
+                    completed_at = formatted_history[-1]["timestamp"]
+            except (IndexError, KeyError) as e:
+                logger.warning(f"Error processing history timestamps: {str(e)}")
+
+        duration_seconds = None
+        if created_at and completed_at:
+            try:
+                dt_created = datetime.fromisoformat(created_at)
+                dt_completed = datetime.fromisoformat(completed_at)
+                duration_seconds = (dt_completed - dt_created).total_seconds()
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Error calculating duration: {str(e)}")
+
+        # Then in the template context:
 
         logger.info(
             f"Rendering invocation detail template in {time.time() - start_time:.2f}s"
@@ -226,7 +241,9 @@ async def invocation_detail(request: Request, invocation_id: str) -> HTMLRespons
                 "serialized_arguments": call.serialized_arguments,
                 "created_at": created_at,
                 "completed_at": completed_at,
-                "duration": None,  # Will be calculated in template
+                "duration": f"{duration_seconds:.2f} seconds"
+                if duration_seconds is not None
+                else None,
             },
         )
     except Exception as e:
