@@ -91,7 +91,7 @@ class Pynenc:
             "config_values": self.config_values,
             "config_filepath": self.config_filepath,
             "reporting": self.reporting,
-            "tasks": self._tasks,
+            # "tasks": self._tasks,
         }
 
     def __setstate__(self, state: dict) -> None:
@@ -101,7 +101,7 @@ class Pynenc:
         self.config_values = state["config_values"]
         self.config_filepath = state["config_filepath"]
         self.reporting = state["reporting"]
-        self._tasks = state.get("tasks", {})
+        # self._tasks = state.get("tasks", {})
         self._runner_instance = None
 
     @cached_property
