@@ -132,9 +132,20 @@ def create_task_info(task: "Task") -> TaskInfo:
     }
 
 
-@router.get("/{call_id:path}", response_class=HTMLResponse)
-async def call_detail(request: Request, call_id: str) -> HTMLResponse:
-    """Display detailed information about a specific call and its invocations."""
+async def process_call_detail(
+    request: Request, call_id: str, request_source: str
+) -> HTMLResponse:
+    """
+    Process a call detail request regardless of how the call_id was provided.
+
+    Args:
+        request: The FastAPI request object
+        call_id: The ID of the call to display
+        request_source: A string indicating the source of the request (for logging)
+
+    Returns:
+        HTML response with call details or error page
+    """
     app = get_pynenc_instance()
 
     if not call_id:
@@ -143,12 +154,12 @@ async def call_detail(request: Request, call_id: str) -> HTMLResponse:
             {
                 "request": request,
                 "title": "Missing Call ID",
-                "message": "No call_id provided in query parameters",
+                "message": "No call_id provided",
             },
             status_code=400,
         )
 
-    logger.info(f"Looking for call with ID: {call_id}")
+    logger.info(f"Looking for call with ID ({request_source}): {call_id}")
     start_time = time.time()
 
     try:
@@ -193,7 +204,7 @@ async def call_detail(request: Request, call_id: str) -> HTMLResponse:
             },
         )
     except Exception as e:
-        logger.error(f"Unexpected error in call_detail: {str(e)}")
+        logger.error(f"Unexpected error in call_detail ({request_source}): {str(e)}")
         logger.error(traceback.format_exc())
         return templates.TemplateResponse(
             "shared/error.html",
@@ -206,4 +217,19 @@ async def call_detail(request: Request, call_id: str) -> HTMLResponse:
         )
     finally:
         elapsed = time.time() - start_time
-        logger.info(f"call_detail completed in {elapsed:.2f} seconds")
+        logger.info(
+            f"call_detail ({request_source}) completed in {elapsed:.2f} seconds"
+        )
+
+
+@router.get("/{call_id:path}", response_class=HTMLResponse)
+async def call_detail(request: Request, call_id: str) -> HTMLResponse:
+    """Display detailed information about a specific call via path parameter."""
+    return await process_call_detail(request, call_id, "path param")
+
+
+@router.get("/", response_class=HTMLResponse)
+async def call_detail_by_query(request: Request) -> HTMLResponse:
+    """Display detailed information about a specific call via query parameter."""
+    call_id = request.query_params.get("call_id", "")
+    return await process_call_detail(request, call_id, "query param")
