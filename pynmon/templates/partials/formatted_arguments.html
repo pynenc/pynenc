@@ -1,0 +1,71 @@
+<div class="card">
+  <div class="card-body p-2">
+    {% if args is mapping %}
+    <div class="arguments-list">
+      {% for key, value in args.items() %}
+      <div class="argument-item mb-2">
+        <div class="d-flex justify-content-between argument-header">
+          <strong class="argument-key">{{ key }}</strong>
+          {% if value is mapping or value is string and value.startswith('{') or
+          value is string and value.startswith('[') %}
+          <button
+            class="btn btn-sm btn-outline-secondary"
+            data-bs-toggle="collapse"
+            data-bs-target="#arg-value-{{ id_prefix }}-{{ loop.index }}"
+          >
+            Toggle
+          </button>
+          {% endif %}
+        </div>
+
+        {% if value is mapping or value is string and value.startswith('{') or
+        value is string and value.startswith('[') %}
+        <div
+          class="collapse mt-1"
+          id="arg-value-{{ id_prefix }}-{{ loop.index }}"
+        >
+          <div class="card">
+            <div class="card-body p-2 bg-light">
+              <pre class="m-0 argument-value"><code>{{ value }}</code></pre>
+            </div>
+          </div>
+        </div>
+        {% else %}
+        <div class="mt-1 ps-3 text-muted argument-simple-value">
+          {{ value }}
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <pre class="m-0"><code>{{ args }}</code></pre>
+    {% endif %}
+  </div>
+</div>
+
+<style>
+  .arguments-list {
+    max-height: 400px;
+    overflow-y: auto;
+  }
+  .argument-item {
+    border-bottom: 1px solid #eee;
+    padding-bottom: 8px;
+  }
+  .argument-item:last-child {
+    border-bottom: none;
+  }
+  .argument-header {
+    padding: 4px 0;
+  }
+  .argument-key {
+    color: #007bff;
+  }
+  .argument-value,
+  .argument-simple-value {
+    font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+      "Courier New", monospace;
+    font-size: 0.875em;
+  }
+</style>

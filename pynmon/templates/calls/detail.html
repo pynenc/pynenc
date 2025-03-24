@@ -64,39 +64,11 @@
                   Expand/Collapse
                 </button>
               </div>
-              <!-- Update this part of the template -->
               <div class="card-body collapse show" id="arguments-section">
                 <div class="mb-3">
                   <label class="form-label">Argument Values</label>
-                  <div class="list-group">
-                    {% for key, value in formatted_args.items() %}
-                    <div class="list-group-item">
-                      <div
-                        class="d-flex justify-content-between align-items-center"
-                      >
-                        <strong>{{ key }}</strong>
-                        <button
-                          class="btn btn-sm btn-outline-secondary"
-                          data-bs-toggle="collapse"
-                          data-bs-target="#arg-{{ loop.index }}"
-                        >
-                          Toggle Value
-                        </button>
-                      </div>
-                      <div class="collapse mt-2" id="arg-{{ loop.index }}">
-                        <div class="card">
-                          <div class="card-body p-2">
-                            <pre
-                              class="m-0 small"
-                            ><code>{{ value }}</code></pre>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    {% else %}
-                    <div class="list-group-item text-muted">No arguments</div>
-                    {% endfor %}
-                  </div>
+                  {% with args=formatted_args, id_prefix='call-args' %} {%
+                  include "partials/formatted_arguments.html" %} {% endwith %}
                 </div>
 
                 <!-- Only show this if there are arguments -->

@@ -129,9 +129,9 @@
             <div class="card">
               <div class="card-header">Arguments</div>
               <div class="card-body">
-                <pre
-                  class="border p-3 bg-light"
-                ><code>{{ serialized_arguments }}</code></pre>
+                {% with args=serialized_arguments, id_prefix='invocation-args'
+                %} {% include "partials/formatted_arguments.html" %} {% endwith
+                %}
               </div>
             </div>
           </div>

@@ -114,20 +114,14 @@
                         </td>
                         <td>
                           {% if call and call.serialized_arguments %}
-                          <button
-                            class="btn btn-sm btn-outline-secondary"
-                            data-bs-toggle="collapse"
-                            data-bs-target="#args-{{ loop.index }}"
-                          >
-                            View
-                          </button>
-                          {% else %}
-                          <button
-                            class="btn btn-sm btn-outline-secondary"
-                            disabled
-                          >
-                            No Args
-                          </button>
+                          <tr class="collapse" id="args-{{ loop.index }}">
+                            <td colspan="3">
+                              {% with args=call.serialized_arguments,
+                              id_prefix='task-call-' + loop.index|string %} {%
+                              include "partials/formatted_arguments.html" %} {%
+                              endwith %}
+                            </td>
+                          </tr>
                           {% endif %}
                         </td>
                         <td>
