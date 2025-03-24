@@ -1,0 +1,79 @@
+{% extends "base.html" %} {% block content %}
+<div class="row">
+  <div class="col-12">
+    <div class="card">
+      <div
+        class="card-header d-flex justify-content-between align-items-center"
+      >
+        <span>Tasks</span>
+        <button
+          class="btn btn-sm btn-outline-primary"
+          hx-get="/tasks"
+          hx-target="#tasks-content"
+          hx-swap="innerHTML"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            fill="currentColor"
+            class="bi bi-arrow-clockwise"
+            viewBox="0 0 16 16"
+          >
+            <path
+              fill-rule="evenodd"
+              d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"
+            />
+            <path
+              d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"
+            />
+          </svg>
+          Refresh
+        </button>
+      </div>
+      <div class="card-body">
+        <h5>App ID: {{ app_id }}</h5>
+
+        <div id="tasks-content">
+          {% if tasks %}
+          <div class="table-responsive">
+            <table class="table table-hover">
+              <thead>
+                <tr>
+                  <th>Task ID</th>
+                  <th>Module</th>
+                  <th>Function</th>
+                  <th>Concurrency Control</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for task in tasks %}
+                <tr>
+                  <td>
+                    <a href="/tasks/{{ task.task_id }}"> {{ task.task_id }} </a>
+                  </td>
+                  <td>{{ task.module }}</td>
+                  <td>{{ task.func_qualname }}</td>
+                  <td>{{ task.conf.registration_concurrency.name }}</td>
+                  <td>
+                    <a
+                      href="/tasks/{{ task.task_id }}"
+                      class="btn btn-sm btn-primary"
+                      >Details</a
+                    >
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <div class="alert alert-info">No tasks found.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

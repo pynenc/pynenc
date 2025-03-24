@@ -59,11 +59,30 @@ class Pynenc:
         self.config_filepath = config_filepath
         self.reporting = None
         self._runner_instance: Optional[BaseRunner] = None
+        self._tasks: dict[str, Task] = {}
         self.logger.info(f"Initialized Pynenc app with id {self.app_id}")
 
     @property
     def app_id(self) -> str:
         return self._app_id or self.conf.app_id
+
+    @property
+    def tasks(self) -> dict[str, Task]:
+        """
+        Get the dictionary of registered tasks.
+
+        :return: A dictionary mapping task_id to Task instances.
+        """
+        return self._tasks
+
+    def get_task(self, task_id: str) -> Optional[Task]:
+        """
+        Get a task by its ID.
+
+        :param task_id: The ID of the task to retrieve.
+        :return: The Task instance if found, None otherwise.
+        """
+        return self._tasks.get(task_id)
 
     def __getstate__(self) -> dict:
         # Return state as a dictionary and a secondary value as a tuple
@@ -72,6 +91,7 @@ class Pynenc:
             "config_values": self.config_values,
             "config_filepath": self.config_filepath,
             "reporting": self.reporting,
+            "tasks": self._tasks,
         }
 
     def __setstate__(self, state: dict) -> None:
@@ -81,6 +101,7 @@ class Pynenc:
         self.config_values = state["config_values"]
         self.config_filepath = state["config_filepath"]
         self.reporting = state["reporting"]
+        self._tasks = state.get("tasks", {})
         self._runner_instance = None
 
     @cached_property
@@ -251,7 +272,9 @@ class Pynenc:
                 raise ValueError(
                     "Decorated function must be defined at the module level."
                 )
-            return Task(self, _func, options)
+            task: Task = Task(self, _func, options)
+            self._tasks[task.task_id] = task
+            return task
 
         if func is None:
             return init_task

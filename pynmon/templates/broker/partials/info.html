@@ -1,0 +1,63 @@
+<div class="row mt-3">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header">Broker Configuration</div>
+      <div class="card-body">
+        <table class="table">
+          <tbody>
+            <tr>
+              <th>Type:</th>
+              <td>{{ broker_info.type }}</td>
+            </tr>
+            <tr>
+              <th>Pending Invocations:</th>
+              <td>
+                <span
+                  class="badge {% if broker_info.pending_count > 0 %}bg-warning{% else %}bg-success{% endif %}"
+                >
+                  {{ broker_info.pending_count }}
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="d-grid gap-2 mt-3">
+          <button
+            class="btn btn-danger"
+            hx-post="/broker/purge"
+            hx-confirm="Are you sure you want to purge all pending invocations?"
+          >
+            Purge Queue
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header">Queue Status</div>
+      <div class="card-body">
+        <div class="d-flex justify-content-center align-items-center p-4">
+          <div class="text-center">
+            <h1
+              class="display-4 {% if broker_info.pending_count > 0 %}text-warning{% else %}text-success{% endif %}"
+            >
+              {{ broker_info.pending_count }}
+            </h1>
+            <p class="lead">Pending Invocations</p>
+
+            {% if broker_info.pending_count > 0 %}
+            <a href="/broker/queue" class="btn btn-primary mt-2">
+              View Queue Details
+            </a>
+            {% else %}
+            <span class="text-muted">Queue is empty</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

@@ -3,6 +3,7 @@ import logging
 import sys
 
 from pynenc.cli.config_cli import add_config_subparser
+from pynenc.cli.monitor_cli import add_monitor_subparser
 from pynenc.cli.namespace import PynencCLINamespace
 from pynenc.cli.runner_cli import add_runner_subparser
 from pynenc.util.import_app import find_app_instance
@@ -45,6 +46,7 @@ def main() -> None:
     # Add subparsers for different commands
     add_runner_subparser(subparsers)
     add_config_subparser(subparsers)
+    add_monitor_subparser(subparsers)
 
     # Parse the arguments into custom namespace PynencCLINamespace
     args = PynencCLINamespace()

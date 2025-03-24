@@ -1,0 +1,139 @@
+{% extends "base.html" %} {% block content %}
+<div class="row">
+  <div class="col-12">
+    <div class="card">
+      <div
+        class="card-header d-flex justify-content-between align-items-center"
+      >
+        <span>Task Details</span>
+        <a href="/tasks" class="btn btn-sm btn-outline-secondary">
+          Back to Tasks
+        </a>
+      </div>
+      <div class="card-body">
+        <h5>Task ID: {{ task.task_id }}</h5>
+
+        <div class="row mt-3">
+          <div class="col-md-6">
+            <div class="card">
+              <div class="card-header">Basic Information</div>
+              <div class="card-body">
+                <table class="table">
+                  <tbody>
+                    <tr>
+                      <th>Module:</th>
+                      <td>{{ task.module }}</td>
+                    </tr>
+                    <tr>
+                      <th>Function:</th>
+                      <td>{{ task.func_qualname }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-6">
+            <div class="card">
+              <div class="card-header">Configuration</div>
+              <div class="card-body">
+                <table class="table">
+                  <tbody>
+                    <tr>
+                      <th>Concurrency Control:</th>
+                      <td>{{ task_config.registration_concurrency }}</td>
+                    </tr>
+                    <tr>
+                      <th>Key Arguments:</th>
+                      <td>
+                        {{ task_config.key_arguments|join(', ') or 'None' }}
+                      </td>
+                    </tr>
+                    <tr>
+                      <th>Disable Cache Args:</th>
+                      <td>
+                        {{ task_config.disable_cache_args|join(', ') or 'None'
+                        }}
+                      </td>
+                    </tr>
+                    <tr>
+                      <th>Retry Times:</th>
+                      <td>{{ task_config.retry_times }}</td>
+                    </tr>
+                    <tr>
+                      <th>Retry Delay:</th>
+                      <td>{{ task_config.retry_delay_sec }} seconds</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row mt-3">
+          <div class="col-12">
+            <div class="card">
+              <div class="card-header">Active Calls ({{ calls|length }})</div>
+              <div class="card-body">
+                {% if calls %}
+                <div class="table-responsive">
+                  <table class="table table-hover">
+                    <thead>
+                      <tr>
+                        <th>Call ID</th>
+                        <th>Arguments</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for call in calls %}
+                      <tr>
+                        <td>
+                          <a href="/calls/{{ call.call_id }}">
+                            {{ call.call_id.split('#')[-1][:8] }}...
+                          </a>
+                        </td>
+                        <td>
+                          <button
+                            class="btn btn-sm btn-outline-secondary"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#args-{{ loop.index }}"
+                          >
+                            View
+                          </button>
+                        </td>
+                        <td>
+                          <a
+                            href="/calls/{{ call.call_id }}"
+                            class="btn btn-sm btn-primary"
+                            >Details</a
+                          >
+                        </td>
+                      </tr>
+                      <tr class="collapse" id="args-{{ loop.index }}">
+                        <td colspan="3">
+                          <div class="card card-body">
+                            <pre
+                              class="m-0"
+                            ><code>{{ call.serialized_arguments }}</code></pre>
+                          </div>
+                        </td>
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+                {% else %}
+                <p class="text-muted">No active calls for this task.</p>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

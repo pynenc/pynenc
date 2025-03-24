@@ -5,6 +5,8 @@ import redis
 if TYPE_CHECKING:
     from pynenc.invocation.status import InvocationStatus
 
+PYNENC_KEY_PREFIX = "__pynenc__"
+
 
 def sanitize_for_redis(s: str) -> str:
     """
@@ -42,7 +44,7 @@ class Key:
             prefix += ":"
         if app_id:
             prefix = f"{app_id}:{prefix}"
-        self.prefix = f"__pynenc__:{prefix}"
+        self.prefix = f"{PYNENC_KEY_PREFIX}:{prefix}"
 
     def invocation(self, invocation_id: str) -> str:
         return f"{self.prefix}invocation:{invocation_id}"

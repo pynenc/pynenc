@@ -4,6 +4,40 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.21] - 2025-03-24
+
+### Added
+
+- **New Web-Based Monitoring System**:
+
+  - Introduced a comprehensive web interface for monitoring Pynenc applications.
+  - Provides real-time visibility into tasks, invocations, calls, orchestration, and broker status.
+  - Detailed views for task configuration, invocation history, arguments, and results.
+  - Status-based filtering for invocations with color-coded indicators.
+  - Interactive dashboard with HTMX-powered dynamic updates.
+
+- **CLI Monitor Command**:
+
+  - Added `pynenc monitor` subcommand to start the monitoring web application.
+  - Automatic dependency checking to ensure required packages are installed.
+
+- **Task Registry and Lookup**:
+
+  - Added `app.tasks` property to access all registered tasks in a Pynenc application.
+  - Implemented `app.get_task(task_id)` method for efficient task lookup by ID.
+  - Tasks are now automatically registered when decorated with `@app.task`.
+  - Serialization support for task registry to maintain state across process boundaries.
+
+- **Enhanced PynencBuilder**:
+
+  - Added missing `app_id()` method to PynencBuilder for more complete configuration options.
+  - Improved documentation and example usage in method docstrings.
+
+- **Optional Dependencies**:
+  - Added monitoring extras to package dependencies for easier installation.
+  - Web monitoring functionality requires additional dependencies: fastapi, jinja2, uvicorn, and python-multipart.
+  - These can be installed via `pip install pynenc[monitor]` or `poetry install --with monitor`.
+
 ## [0.0.20] - 2025-03-21
 
 ### Added

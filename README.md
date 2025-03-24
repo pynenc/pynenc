@@ -66,12 +66,20 @@ Pynenc addresses the complex challenges of task management in distributed enviro
 
 - **Direct Task Execution**: Use `@app.direct_task` for tasks that return results directly instead of invocations.
 
+- **Monitoring**: Includes a built-in monitoring web application for real-time task execution insights.
+
 ## Installation
 
 Installing Pynenc is a simple process that can be done using pip. Just run the following command in your terminal:
 
 ```bash
 pip install pynenc
+```
+
+Include optional monitoring web app:
+
+```bash
+pip install pynenc[monitor]
 ```
 
 This command will download and install Pynenc along with its dependencies. Once the installation is complete, you can start using Pynenc in your Python projects.
@@ -126,6 +134,14 @@ To get started with Pynenc, here's a simple example that demonstrates the creati
    ```
 
 For a complete guide on how to set up and run pynenc, visit our [samples library](https://github.com/pynenc/samples).
+
+## Running the Monitor
+
+It always requires a `Pynenc` app defined in your codebase:
+
+```bash
+pynenc --app your_app_module monitor --host 127.0.0.1 --port 8000
+```
 
 ## Requirements
 

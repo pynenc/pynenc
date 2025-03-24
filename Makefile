@@ -4,8 +4,8 @@
 PYTHON_VERSION := 3.11.7
 
 install:
-	@echo "Installing dependencies via Poetry..."
-	poetry install --no-interaction
+	@echo "Installing dependencies via Poetry with monitor extra..."
+	poetry install --no-interaction -E monitor
 
 install-pre-commit: install
 	@echo "Installing pre-commit hooks..."

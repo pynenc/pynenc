@@ -44,6 +44,26 @@ def test_custom_app_id() -> None:
     assert app.app_id == app_id
 
 
+def test_app_id() -> None:
+    """Test setting the application ID directly with app_id method."""
+    test_id = "test.application.id"
+    app = PynencBuilder().app_id(test_id).build()
+
+    assert app.app_id == test_id
+    assert app.conf.app_id == test_id
+
+
+def test_app_id_method_vs_custom_config() -> None:
+    """Test that app_id() and custom_config(app_id=) produce identical results."""
+    test_id = "test.app.id"
+
+    app1 = PynencBuilder().app_id(test_id).build()
+    app2 = PynencBuilder().custom_config(app_id=test_id).build()
+
+    assert app1.app_id == app2.app_id
+    assert app1.conf.app_id == app2.conf.app_id
+
+
 def test_redis_components() -> None:
     """Test that redis() correctly configures Redis components"""
     redis_url = "redis://localhost:6379"

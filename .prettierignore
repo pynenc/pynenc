@@ -1,0 +1,2 @@
+# Ignore problematic Jinja2 templates
+pynmon/templates/invocations/list.html
