@@ -1,8 +1,9 @@
 import pickle
 import threading
 from collections import OrderedDict, defaultdict, deque
+from collections.abc import Iterator
 from time import time
-from typing import TYPE_CHECKING, Any, Generic, Iterator
+from typing import TYPE_CHECKING, Any, Generic, Optional
 
 from pynenc.exceptions import CycleDetectedError, PendingInvocationLockError
 from pynenc.invocation.status import InvocationStatus
@@ -264,6 +265,10 @@ class TaskInvocationCache(Generic[Result]):
             matched_ids.update(self.status_index[status])
         return matched_ids
 
+    def get_invocation(self, invocation_id: str) -> Optional["DistributedInvocation"]:
+        """Retrieves an invocation by its ID."""
+        return self.invocations.get(invocation_id)
+
     def get_invocations(
         self,
         key_arguments: dict[str, str] | None,
@@ -475,6 +480,13 @@ class MemOrchestrator(BaseOrchestrator):
         return self.cache[task.task_id].get_invocations(
             key_serialized_arguments, statuses
         )
+
+    def get_invocation(self, invocation_id: str) -> Optional["DistributedInvocation"]:
+        """Retrieves an invocation by its ID."""
+        for task_cache in self.cache.values():
+            if invocation := task_cache.get_invocation(invocation_id):
+                return invocation
+        return None
 
     def _set_invocation_status(
         self,

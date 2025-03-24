@@ -130,6 +130,19 @@ class BaseOrchestrator(ABC):
         """
 
     @abstractmethod
+    def get_invocation(self, invocation_id: str) -> Optional["DistributedInvocation"]:
+        """
+        Retrieves a specific invocation by its ID.
+
+        This method provides a direct way to access an invocation without filtering through all invocations,
+        which can be much more efficient when the invocation ID is known.
+
+        :param str invocation_id: The ID of the invocation to retrieve.
+        :return: The invocation if found, None otherwise.
+        :rtype: Optional[DistributedInvocation]
+        """
+
+    @abstractmethod
     def _set_invocation_status(
         self,
         invocation: "DistributedInvocation[Params, Result]",

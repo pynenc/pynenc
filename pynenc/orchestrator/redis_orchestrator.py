@@ -292,6 +292,17 @@ class TaskRedisCache:
         """
         self.key.purge(self.client)
 
+    def get_invocation(self, invocation_id: str) -> Optional["DistributedInvocation"]:
+        """
+        Get a specific invocation by its ID.
+
+        :param str invocation_id: The ID of the invocation to retrieve.
+        :return: The invocation if found, None otherwise.
+        """
+        if inv_json := self.client.get(self.key.invocation(invocation_id)):
+            return DistributedInvocation.from_json(self.app, inv_json.decode())
+        return None
+
     def set_status(
         self,
         invocation: "DistributedInvocation[Params, Result]",
@@ -547,6 +558,9 @@ class RedisOrchestrator(BaseOrchestrator):
         return self.redis_cache.get_invocations(
             task.task_id, key_serialized_arguments, statuses
         )
+
+    def get_invocation(self, invocation_id: str) -> Optional["DistributedInvocation"]:
+        return self.redis_cache.get_invocation(invocation_id)
 
     def _set_invocation_status(
         self,

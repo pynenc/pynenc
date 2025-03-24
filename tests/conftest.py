@@ -58,6 +58,7 @@ class MockBaseOrchestrator(BaseOrchestrator):
     def __init__(self, app: "Pynenc") -> None:
         super().__init__(app)
         self._get_existing_invocations_mock = MagicMock()
+        self._get_invocation_mock = MagicMock()
         self._set_invocation_status_mock = MagicMock()
         self._set_invocation_pending_status_mock = MagicMock()
         self._get_invocation_status_mock = MagicMock()
@@ -71,6 +72,9 @@ class MockBaseOrchestrator(BaseOrchestrator):
 
     def get_existing_invocations(self, *args: Any, **kwargs: Any) -> Any:
         return self._get_existing_invocations_mock(*args, **kwargs)
+
+    def get_invocation(self, *args: Any, **kwargs: Any) -> Any:
+        return self._get_invocation_mock(*args, **kwargs)
 
     def _set_invocation_status(self, *args: Any, **kwargs: Any) -> Any:
         return self._set_invocation_status_mock(*args, **kwargs)

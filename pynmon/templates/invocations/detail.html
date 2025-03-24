@@ -63,6 +63,24 @@
                         {% endif %}
                       </td>
                     </tr>
+                    <tr>
+                      <th>Created At:</th>
+                      <td>{{ created_at }}</td>
+                    </tr>
+                    {% if completed_at %}
+                    <tr>
+                      <th>Completed At:</th>
+                      <td>{{ completed_at }}</td>
+                    </tr>
+                    <tr>
+                      <th>Duration:</th>
+                      <td>
+                        {% set duration = (completed_at|to_datetime -
+                        created_at|to_datetime).total_seconds() %} {{
+                        "%.2f"|format(duration) }} seconds
+                      </td>
+                    </tr>
+                    {% endif %}
                   </tbody>
                 </table>
               </div>
@@ -93,11 +111,11 @@
                     </tr>
                     <tr>
                       <th>Task Module:</th>
-                      <td>{{ task.module }}</td>
+                      <td>{{ task_extra.module }}</td>
                     </tr>
                     <tr>
                       <th>Task Function:</th>
-                      <td>{{ task.func_qualname }}</td>
+                      <td>{{ task_extra.func_qualname }}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -138,35 +156,34 @@
           </div>
         </div>
 
+        <!-- New section for history timeline -->
         <div class="row mt-3">
           <div class="col-12">
             <div class="card">
-              <div class="card-header">History</div>
+              <div class="card-header">Status Timeline</div>
               <div class="card-body">
                 {% if history %}
-                <div class="table-responsive">
-                  <table class="table table-sm">
-                    <thead>
-                      <tr>
-                        <th>Timestamp</th>
-                        <th>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {% for entry in history %}
-                      <tr>
-                        <td>{{ entry.timestamp }}</td>
-                        <td>
-                          <span
-                            class="badge {% if entry.status == 'SUCCESS' %}bg-success {% elif entry.status == 'FAILED' %}bg-danger {% elif entry.status == 'RUNNING' %}bg-primary {% elif entry.status == 'PENDING' %}bg-warning {% elif entry.status == 'PAUSED' %}bg-info {% elif entry.status == 'RETRY' %}bg-secondary {% else %}bg-dark{% endif %}"
-                          >
-                            {{ entry.status }}
-                          </span>
-                        </td>
-                      </tr>
-                      {% endfor %}
-                    </tbody>
-                  </table>
+                <div class="timeline">
+                  {% for entry in history %}
+                  <div class="timeline-item">
+                    <div
+                      class="timeline-marker {% if entry.status == 'SUCCESS' %}bg-success{% elif entry.status == 'FAILED' %}bg-danger{% elif entry.status == 'RUNNING' %}bg-primary{% elif entry.status == 'PENDING' %}bg-warning{% elif entry.status == 'PAUSED' %}bg-info{% elif entry.status == 'RETRY' %}bg-secondary{% else %}bg-dark{% endif %}"
+                    ></div>
+                    <div class="timeline-content">
+                      <h5 class="timeline-title">
+                        <span
+                          class="badge {% if entry.status == 'SUCCESS' %}bg-success{% elif entry.status == 'FAILED' %}bg-danger{% elif entry.status == 'RUNNING' %}bg-primary{% elif entry.status == 'PENDING' %}bg-warning{% elif entry.status == 'PAUSED' %}bg-info{% elif entry.status == 'RETRY' %}bg-secondary{% else %}bg-dark{% endif %}"
+                        >
+                          {{ entry.status }}
+                        </span>
+                      </h5>
+                      <p class="timeline-date">{{ entry.timestamp }}</p>
+                      {% if entry.execution_context %}
+                      <p class="timeline-text">{{ entry.execution_context }}</p>
+                      {% endif %}
+                    </div>
+                  </div>
+                  {% endfor %}
                 </div>
                 {% else %}
                 <p class="text-muted">No history available.</p>
@@ -179,4 +196,52 @@
     </div>
   </div>
 </div>
+
+<style>
+  /* Timeline styling */
+  .timeline {
+    position: relative;
+    padding-left: 40px;
+    margin-bottom: 20px;
+  }
+
+  .timeline:before {
+    content: "";
+    position: absolute;
+    left: 15px;
+    top: 0;
+    height: 100%;
+    width: 2px;
+    background: #e9ecef;
+  }
+
+  .timeline-item {
+    position: relative;
+    margin-bottom: 20px;
+  }
+
+  .timeline-marker {
+    position: absolute;
+    left: -35px;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    top: 0;
+  }
+
+  .timeline-content {
+    padding-bottom: 10px;
+  }
+
+  .timeline-title {
+    margin-top: 0;
+    font-size: 16px;
+  }
+
+  .timeline-date {
+    color: #6c757d;
+    font-size: 14px;
+    margin-bottom: 0.5rem;
+  }
+</style>
 {% endblock %}
