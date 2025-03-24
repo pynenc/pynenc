@@ -100,6 +100,15 @@ async def task_detail(request: Request, task_id: str) -> HTMLResponse:
             logger.error(traceback.format_exc())
             # Continue with whatever calls we found so far
 
+        # Add some computed/helper properties for the template
+        task_extra = {
+            "module": task.func.__module__,
+            "func_qualname": task.func.__qualname__,
+            "retry_for": [
+                e.__name__ for e in task.conf.retry_for
+            ],  # Format the exception names for display
+        }
+
         logger.info(f"Rendering template with {len(calls)} calls")
         return templates.TemplateResponse(
             "tasks/detail.html",
@@ -108,13 +117,7 @@ async def task_detail(request: Request, task_id: str) -> HTMLResponse:
                 "title": f"Task {task_id}",
                 "app_id": app.app_id,
                 "task": task,
-                "task_config": {
-                    "registration_concurrency": task.conf.registration_concurrency.name,
-                    "key_arguments": task.conf.key_arguments,
-                    "disable_cache_args": task.conf.disable_cache_args,
-                    "retry_times": task.conf.retry_times,
-                    "retry_delay_sec": task.conf.retry_delay_sec,
-                },
+                "task_extra": task_extra,
                 "calls": calls,
             },
         )

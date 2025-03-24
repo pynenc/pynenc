@@ -22,11 +22,11 @@
                   <tbody>
                     <tr>
                       <th>Module:</th>
-                      <td>{{ task.module }}</td>
+                      <td>{{ task_extra.module }}</td>
                     </tr>
                     <tr>
                       <th>Function:</th>
-                      <td>{{ task.func_qualname }}</td>
+                      <td>{{ task_extra.func_qualname }}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -41,29 +41,40 @@
                 <table class="table">
                   <tbody>
                     <tr>
-                      <th>Concurrency Control:</th>
-                      <td>{{ task_config.registration_concurrency }}</td>
+                      <th>Registration Concurrency:</th>
+                      <td>{{ task.conf.registration_concurrency.name }}</td>
+                    </tr>
+                    <tr>
+                      <th>Running Concurrency:</th>
+                      <td>{{ task.conf.running_concurrency.name }}</td>
                     </tr>
                     <tr>
                       <th>Key Arguments:</th>
                       <td>
-                        {{ task_config.key_arguments|join(', ') or 'None' }}
+                        {{ task.conf.key_arguments|join(', ') or 'None' }}
                       </td>
+                    </tr>
+                    <tr>
+                      <th>Max Retries:</th>
+                      <td>{{ task.conf.max_retries }}</td>
+                    </tr>
+                    <tr>
+                      <th>Retry For Exceptions:</th>
+                      <td>{{ task_extra.retry_for|join(', ') }}</td>
+                    </tr>
+                    <tr>
+                      <th>Auto Parallel Batch Size:</th>
+                      <td>{{ task.conf.auto_parallel_batch_size }}</td>
+                    </tr>
+                    <tr>
+                      <th>Call Result Cache:</th>
+                      <td>{{ task.conf.call_result_cache }}</td>
                     </tr>
                     <tr>
                       <th>Disable Cache Args:</th>
                       <td>
-                        {{ task_config.disable_cache_args|join(', ') or 'None'
-                        }}
+                        {{ task.conf.disable_cache_args|join(', ') or 'None' }}
                       </td>
-                    </tr>
-                    <tr>
-                      <th>Retry Times:</th>
-                      <td>{{ task_config.retry_times }}</td>
-                    </tr>
-                    <tr>
-                      <th>Retry Delay:</th>
-                      <td>{{ task_config.retry_delay_sec }} seconds</td>
                     </tr>
                   </tbody>
                 </table>
