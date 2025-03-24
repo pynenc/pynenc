@@ -1,5 +1,3 @@
-from typing import Dict
-
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
@@ -22,6 +20,24 @@ async def orchestrator_view(request: Request) -> HTMLResponse:
         "auto_purge_hours": app.orchestrator.conf.auto_final_invocation_purge_hours,
     }
 
+    # Get statistics on invocations by status
+    status_counts: dict[str, int] = {}
+
+    # Initialize all status counts to 0
+    for status in InvocationStatus:
+        status_counts[status.name] = 0
+
+    # Iterate through all tasks and count invocations by status
+    for task in app.tasks.values():
+        for status in InvocationStatus:
+            count = sum(
+                1
+                for _ in app.orchestrator.get_existing_invocations(
+                    task=task, statuses=[status]
+                )
+            )
+            status_counts[status.name] += count
+
     # Get any blocking invocations (limit to 10 for display)
     blocking_invocations = list(app.orchestrator.get_blocking_invocations(10))
 
@@ -33,6 +49,7 @@ async def orchestrator_view(request: Request) -> HTMLResponse:
             "app_id": app.app_id,
             "orchestrator_info": orchestrator_info,
             "blocking_invocations": blocking_invocations,
+            "status_counts": status_counts,  # Add status_counts here
         },
     )
 
@@ -43,7 +60,7 @@ async def refresh_orchestrator(request: Request) -> HTMLResponse:
     app = get_pynenc_instance()
 
     # Get statistics on invocations by status
-    status_counts: Dict[str, int] = {}
+    status_counts: dict[str, int] = {}
 
     # Initialize all status counts to 0
     for status in InvocationStatus:
