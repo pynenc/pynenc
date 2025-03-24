@@ -98,15 +98,22 @@
                         <th>Actions</th>
                       </tr>
                     </thead>
+                    <!-- Replace the entire <tbody> section with this updated version -->
                     <tbody>
                       {% for call in calls %}
                       <tr>
                         <td>
+                          {% if call and call.call_id %}
                           <a href="/calls/{{ call.call_id }}">
-                            {{ call.call_id.split('#')[-1][:8] }}...
+                            {{ call.call_id.split('#')[-1][:8] if '#' in
+                            call.call_id else call.call_id[:8] }}...
                           </a>
+                          {% else %}
+                          <span class="text-muted">Invalid ID</span>
+                          {% endif %}
                         </td>
                         <td>
+                          {% if call and call.serialized_arguments %}
                           <button
                             class="btn btn-sm btn-outline-secondary"
                             data-bs-toggle="collapse"
@@ -114,15 +121,30 @@
                           >
                             View
                           </button>
+                          {% else %}
+                          <button
+                            class="btn btn-sm btn-outline-secondary"
+                            disabled
+                          >
+                            No Args
+                          </button>
+                          {% endif %}
                         </td>
                         <td>
+                          {% if call and call.call_id %}
                           <a
                             href="/calls/{{ call.call_id }}"
                             class="btn btn-sm btn-primary"
                             >Details</a
                           >
+                          {% else %}
+                          <button class="btn btn-sm btn-secondary" disabled>
+                            Details
+                          </button>
+                          {% endif %}
                         </td>
                       </tr>
+                      {% if call and call.serialized_arguments %}
                       <tr class="collapse" id="args-{{ loop.index }}">
                         <td colspan="3">
                           <div class="card card-body">
@@ -132,7 +154,7 @@
                           </div>
                         </td>
                       </tr>
-                      {% endfor %}
+                      {% endif %} {% endfor %}
                     </tbody>
                   </table>
                 </div>

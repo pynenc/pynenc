@@ -64,37 +64,44 @@
                   Expand/Collapse
                 </button>
               </div>
+              <!-- Update this part of the template -->
               <div class="card-body collapse show" id="arguments-section">
                 <div class="mb-3">
-                  <label class="form-label">Argument Keys</label>
-                  <ul class="list-group">
-                    {% for key in serialized_arguments.keys() %}
-                    <li
-                      class="list-group-item d-flex justify-content-between align-items-center"
-                    >
-                      {{ key }}
-                      <button
-                        class="btn btn-sm btn-link"
-                        data-bs-toggle="collapse"
-                        data-bs-target="#arg-{{ loop.index }}"
+                  <label class="form-label">Argument Values</label>
+                  <div class="list-group">
+                    {% for key, value in formatted_args.items() %}
+                    <div class="list-group-item">
+                      <div
+                        class="d-flex justify-content-between align-items-center"
                       >
-                        View Value
-                      </button>
-                    </li>
-                    <div class="collapse" id="arg-{{ loop.index }}">
-                      <div class="card card-body mb-2">
-                        <pre
-                          class="m-0 small"
-                        ><code>{{ serialized_arguments[key] }}</code></pre>
+                        <strong>{{ key }}</strong>
+                        <button
+                          class="btn btn-sm btn-outline-secondary"
+                          data-bs-toggle="collapse"
+                          data-bs-target="#arg-{{ loop.index }}"
+                        >
+                          Toggle Value
+                        </button>
+                      </div>
+                      <div class="collapse mt-2" id="arg-{{ loop.index }}">
+                        <div class="card">
+                          <div class="card-body p-2">
+                            <pre
+                              class="m-0 small"
+                            ><code>{{ value }}</code></pre>
+                          </div>
+                        </div>
                       </div>
                     </div>
                     {% else %}
-                    <li class="list-group-item text-muted">No arguments</li>
+                    <div class="list-group-item text-muted">No arguments</div>
                     {% endfor %}
-                  </ul>
+                  </div>
                 </div>
 
-                <div class="d-grid gap-2">
+                <!-- Only show this if there are arguments -->
+                {% if formatted_args %}
+                <div class="d-grid gap-2 mt-3">
                   <button
                     class="btn btn-outline-primary"
                     data-bs-toggle="collapse"
@@ -111,6 +118,7 @@
                     ><code>{{ serialized_arguments }}</code></pre>
                   </div>
                 </div>
+                {% endif %}
               </div>
             </div>
           </div>
