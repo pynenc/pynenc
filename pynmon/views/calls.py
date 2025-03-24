@@ -46,22 +46,52 @@ def find_call_and_invocations(
     target_call = None
     target_task = None
 
+    # Log startup info
+    task_count = len(app.tasks)
+    logger.info(f"Starting search for call ID: {call_id} across {task_count} tasks")
+
     # Search through all tasks to find a matching call
-    for task in app.tasks.values():
-        if time.time() - start_time > timeout:
-            logger.warning("Timeout reached when searching for call")
+    for i, task in enumerate(app.tasks.values()):
+        # Check for timeout at the beginning of each task iteration
+        elapsed = time.time() - start_time
+        if elapsed > timeout:
+            logger.warning(
+                f"Timeout reached after {elapsed:.2f}s when searching for call (checked {i}/{task_count} tasks)"
+            )
             break
 
-        logger.debug(f"Searching in task: {task.task_id}")
+        logger.debug(f"Searching in task [{i+1}/{task_count}]: {task.task_id}")
         try:
+            # Get a count of invocations for this task
+            invocation_count = 0
+            matches_found = 0
+
+            # Use a separate timeout for each task to prevent one slow task from consuming all the time
+            task_timeout = min(3.0, timeout - elapsed)  # Max 3 seconds per task
+            task_start = time.time()
+
             # Compare the call.call_id (not invocation.call_id)
             for invocation in app.orchestrator.get_existing_invocations(task=task):
+                invocation_count += 1
+
+                # Check timeout for each invocation batch (every 10 invocations)
+                if (
+                    invocation_count % 10 == 0
+                    and time.time() - task_start > task_timeout
+                ):
+                    logger.warning(
+                        f"Task timeout reached after checking {invocation_count} invocations for task {task.task_id}"
+                    )
+                    break
+
+                # Check if this invocation has the call we're looking for
                 if (
                     hasattr(invocation, "call")
                     and invocation.call
                     and hasattr(invocation.call, "call_id")
                     and invocation.call.call_id == call_id
                 ):
+                    matches_found += 1
                     logger.debug(
                         f"Found matching invocation: {invocation.invocation_id}"
                     )
@@ -71,9 +101,25 @@ def find_call_and_invocations(
                         target_call = invocation.call
                         target_task = task
                         logger.info(f"Found call in task: {task.task_id}")
+
+            # Log summary for this task
+            logger.debug(
+                f"Checked {invocation_count} invocations in task {task.task_id}, found {matches_found} matches"
+            )
+
         except Exception as e:
             logger.error(f"Error searching in task {task.task_id}: {str(e)}")
+            logger.error(traceback.format_exc())
             continue
+
+    # Log summary information
+    elapsed = time.time() - start_time
+    if target_call:
+        logger.info(
+            f"Successfully found call {call_id} in {elapsed:.2f}s with {len(invocations)} related invocations"
+        )
+    else:
+        logger.warning(f"Failed to find call {call_id} after {elapsed:.2f}s")
 
     return target_call, target_task, invocations
 
@@ -226,11 +272,24 @@ async def process_call_detail(
 @router.get("/", response_class=HTMLResponse)
 async def call_detail_by_query(request: Request) -> HTMLResponse:
     """Display detailed information about a specific call via query parameter."""
-    call_id = request.query_params.get("call_id", "")
-    logger.debug(f"call_detail_by_query called with URL: {request.url}")
-    logger.debug(f"Query params: {request.query_params}")
-    logger.debug(f"Extracted call_id: {call_id}")
-    return await process_call_detail(request, call_id, "query param")
+    try:
+        call_id = request.query_params.get("call_id", "")
+        logger.info(f"Call detail by query requested for: {call_id}")
+        logger.debug(f"Query params: {dict(request.query_params)}")
+
+        return await process_call_detail(request, call_id, "query param")
+    except Exception as e:
+        logger.error(f"Unhandled exception in call_detail_by_query: {str(e)}")
+        logger.error(traceback.format_exc())
+        return templates.TemplateResponse(
+            "shared/error.html",
+            {
+                "request": request,
+                "title": "Unexpected Error",
+                "message": f"An unexpected error occurred: {str(e)}",
+            },
+            status_code=500,
+        )
 
 
 @router.get("/{call_id:path}", response_class=HTMLResponse)

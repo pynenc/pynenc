@@ -9,7 +9,7 @@ from fastapi.templating import Jinja2Templates
 from pynenc.app import Pynenc
 
 # Initialize FastAPI app
-app = FastAPI(title="Pynenc Monitor", redirect_slashes=False)
+app = FastAPI(title="Pynenc Monitor")
 
 # Set up Jinja2 templates
 templates_dir = Path(__file__).parent / "templates"
