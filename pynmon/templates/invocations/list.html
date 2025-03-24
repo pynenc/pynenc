@@ -87,7 +87,7 @@
                                         </a>
                                     </td>
                                     <td>
-                                        <a href="/calls?call_id={{ invocation.call_id|urlencode }}">
+                                        <a href="/calls/?call_id={{ invocation.call_id|urlencode }}">
                                           {{ invocation.call_id.split('#')[-1][:8] if '#' in invocation.call_id else invocation.call_id[:8] }}...
                                         </a>
                                       </td>
