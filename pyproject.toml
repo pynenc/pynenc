@@ -16,6 +16,10 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: System :: Distributed Computing",
 ]
+packages = [
+    { include = "pynenc" },
+    { include = "pynmon" }
+]
 
 
 [tool.poetry.scripts]

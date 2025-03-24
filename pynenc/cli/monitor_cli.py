@@ -32,7 +32,14 @@ def start_monitor_command(args: PynencCLINamespace) -> None:
         sys.exit(1)
 
     # Import the app module only when dependencies are confirmed to exist
-    from pynmon.app import start_monitor
+    try:
+        from pynmon.app import start_monitor
+    except ImportError:
+        print(
+            "Error: Monitoring features are not available. Please install pynenc with monitoring extras:"
+        )
+        print("pip install pynenc[monitor]")
+        sys.exit(1)
 
     # Start the monitor with the provided app instance
     if not hasattr(args, "app_instance") or not args.app_instance:
