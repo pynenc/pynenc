@@ -223,14 +223,22 @@ async def process_call_detail(
         )
 
 
-@router.get("/{call_id:path}", response_class=HTMLResponse)
-async def call_detail(request: Request, call_id: str) -> HTMLResponse:
-    """Display detailed information about a specific call via path parameter."""
-    return await process_call_detail(request, call_id, "path param")
-
-
 @router.get("/", response_class=HTMLResponse)
 async def call_detail_by_query(request: Request) -> HTMLResponse:
     """Display detailed information about a specific call via query parameter."""
     call_id = request.query_params.get("call_id", "")
+    logger.debug(f"call_detail_by_query called with URL: {request.url}")
+    logger.debug(f"Query params: {request.query_params}")
+    logger.debug(f"Extracted call_id: {call_id}")
     return await process_call_detail(request, call_id, "query param")
+
+
+@router.get("/{call_id:path}", response_class=HTMLResponse)
+async def call_detail(request: Request, call_id: str) -> HTMLResponse:
+    """Display detailed information about a specific call via path parameter."""
+    # Check if this is accidentally a query param request
+    if call_id == "" and "call_id" in request.query_params:
+        # Redirect to the query param handler
+        return await call_detail_by_query(request)
+
+    return await process_call_detail(request, call_id, "path param")
