@@ -87,10 +87,10 @@
                                         </a>
                                     </td>
                                     <td>
-                                        <a href="/calls/{{ invocation.call_id }}">
-                                            {{ invocation.call_id.split('#')[-1][:8] }}...
+                                        <a href="/calls?call_id={{ invocation.call_id|urlencode }}">
+                                          {{ invocation.call_id.split('#')[-1][:8] if '#' in invocation.call_id else invocation.call_id[:8] }}...
                                         </a>
-                                    </td>
+                                      </td>
                                     <td>
                                         <span class="badge
                                             {% if invocation.status.name == 'SUCCESS' %}bg-success

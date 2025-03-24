@@ -132,10 +132,22 @@ def create_task_info(task: "Task") -> TaskInfo:
     }
 
 
-@router.get("/{call_id}", response_class=HTMLResponse)
+@router.get("/{call_id:path}", response_class=HTMLResponse)
 async def call_detail(request: Request, call_id: str) -> HTMLResponse:
     """Display detailed information about a specific call and its invocations."""
     app = get_pynenc_instance()
+
+    if not call_id:
+        return templates.TemplateResponse(
+            "shared/error.html",
+            {
+                "request": request,
+                "title": "Missing Call ID",
+                "message": "No call_id provided in query parameters",
+            },
+            status_code=400,
+        )
+
     logger.info(f"Looking for call with ID: {call_id}")
     start_time = time.time()
 

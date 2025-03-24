@@ -98,13 +98,12 @@
                         <th>Actions</th>
                       </tr>
                     </thead>
-                    <!-- Replace the entire <tbody> section with this updated version -->
                     <tbody>
                       {% for call in calls %}
                       <tr>
                         <td>
                           {% if call and call.call_id %}
-                          <a href="/calls/{{ call.call_id }}">
+                          <a href="/calls?call_id={{ call.call_id|urlencode }}">
                             {{ call.call_id.split('#')[-1][:8] if '#' in
                             call.call_id else call.call_id[:8] }}...
                           </a>
@@ -114,20 +113,21 @@
                         </td>
                         <td>
                           {% if call and call.serialized_arguments %}
-                          <tr class="collapse" id="args-{{ loop.index }}">
-                            <td colspan="3">
-                              {% with args=call.serialized_arguments,
-                              id_prefix='task-call-' + loop.index|string %} {%
-                              include "partials/formatted_arguments.html" %} {%
-                              endwith %}
-                            </td>
-                          </tr>
+                          <button
+                            class="btn btn-sm btn-outline-secondary"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#args-{{ loop.index }}"
+                          >
+                            View
+                          </button>
+                          {% else %}
+                          <span class="text-muted">No arguments</span>
                           {% endif %}
                         </td>
                         <td>
                           {% if call and call.call_id %}
                           <a
-                            href="/calls/{{ call.call_id }}"
+                            href="/calls?call_id={{ call.call_id|urlencode }}"
                             class="btn btn-sm btn-primary"
                             >Details</a
                           >
@@ -141,11 +141,9 @@
                       {% if call and call.serialized_arguments %}
                       <tr class="collapse" id="args-{{ loop.index }}">
                         <td colspan="3">
-                          <div class="card card-body">
-                            <pre
-                              class="m-0"
-                            ><code>{{ call.serialized_arguments }}</code></pre>
-                          </div>
+                          {% with args=call.serialized_arguments,
+                          id_prefix='task-call-'~loop.index %} {% include
+                          "partials/formatted_arguments.html" %} {% endwith %}
                         </td>
                       </tr>
                       {% endif %} {% endfor %}
