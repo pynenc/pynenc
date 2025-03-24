@@ -1,0 +1,303 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Invocations Timeline</span>
+        <div>
+          <a href="/invocations" class="btn btn-sm btn-outline-secondary">
+            View Invocations List
+          </a>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="row mb-3">
+          <div class="col-md-12">
+            <div class="card">
+              <div class="card-header">
+                <h5 class="mb-0">Filters</h5>
+              </div>
+              <div class="card-body">
+                <form id="timelineFilterForm" method="get" class="row g-3">
+                  <div class="col-md-4">
+                    <label for="timeRange" class="form-label">Time Range</label>
+                    <select class="form-select" id="timeRange" name="time_range">
+                      <option value="15m" {% if current_filters.time_range == '15m' %}selected{% endif %}>Last 15 minutes</option>
+                      <option value="1h" {% if current_filters.time_range == '1h' %}selected{% endif %}>Last hour</option>
+                      <option value="3h" {% if current_filters.time_range == '3h' %}selected{% endif %}>Last 3 hours</option>
+                      <option value="12h" {% if current_filters.time_range == '12h' %}selected{% endif %}>Last 12 hours</option>
+                      <option value="1d" {% if current_filters.time_range == '1d' %}selected{% endif %}>Last day</option>
+                      <option value="3d" {% if current_filters.time_range == '3d' %}selected{% endif %}>Last 3 days</option>
+                      <option value="1w" {% if current_filters.time_range == '1w' %}selected{% endif %}>Last week</option>
+                      <option value="custom" {% if current_filters.time_range == 'custom' %}selected{% endif %}>Custom range</option>
+                    </select>
+                  </div>
+
+                  <div class="col-md-4" id="customDateRangeContainer" style="display: {% if current_filters.time_range == 'custom' %}block{% else %}none{% endif %};">
+                    <div class="row">
+                      <div class="col-md-6">
+                        <label for="startDate" class="form-label">Start Date</label>
+                        <input type="datetime-local" class="form-control" id="startDate" name="start_date" value="{{ current_filters.start_date }}">
+                      </div>
+                      <div class="col-md-6">
+                        <label for="endDate" class="form-label">End Date</label>
+                        <input type="datetime-local" class="form-control" id="endDate" name="end_date" value="{{ current_filters.end_date }}">
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="col-md-4">
+                    <label for="taskId" class="form-label">Task</label>
+                    <select class="form-select" id="taskId" name="task_id">
+                      <option value="">All Tasks</option>
+                      {% for task_id in all_task_ids %}
+                      <option value="{{ task_id }}" {% if current_filters.task_id == task_id %}selected{% endif %}>{{ task_id }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+
+                  <div class="col-md-4">
+                    <label for="showRelationships" class="form-label">Show Relationships</label>
+                    <div class="form-check form-switch mt-2">
+                      <input class="form-check-input" type="checkbox" id="showRelationships" name="show_relationships" {% if current_filters.show_relationships %}checked{% endif %}>
+                      <label class="form-check-label" for="showRelationships">Show parent-child relationships</label>
+                    </div>
+                  </div>
+
+                  <div class="col-md-4">
+                    <label for="limit" class="form-label">Max Invocations</label>
+                    <input type="number" class="form-control" id="limit" name="limit" min="10" max="500" value="{{ current_filters.limit }}">
+                  </div>
+
+                  <div class="col-md-4 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary">Apply Filters</button>
+                    <a href="/invocations/timeline" class="btn btn-outline-secondary ms-2">Reset</a>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="col-md-12">
+            <div class="card">
+              <div class="card-header">
+                <h5 class="mb-0">Timeline Visualization</h5>
+              </div>
+              <div class="card-body">
+                {% if invocations %}
+                <div id="invocationTimeline" style="height: 600px;"></div>
+                {% else %}
+                <p class="text-muted">No invocations found with the selected filters.</p>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if invocations %}
+<script src="https://cdn.jsdelivr.net/npm/plotly.js@2.20.0/dist/plotly.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  // Show/hide custom date range based on selection
+  document.getElementById('timeRange').addEventListener('change', function() {
+    document.getElementById('customDateRangeContainer').style.display =
+      this.value === 'custom' ? 'block' : 'none';
+  });
+
+  // Timeline data
+  const timelineData = {{ timeline_data|safe }};
+
+  // Prepare data for Plotly
+  const traces = [];
+
+  // Invocation bars
+  const taskColors = {};
+  let colorIndex = 0;
+  const colorPalette = [
+    '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+    '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
+  ];
+
+  // Create mapping of tasks to colors
+  timelineData.invocations.forEach(inv => {
+    if (!taskColors[inv.task_id]) {
+      taskColors[inv.task_id] = colorPalette[colorIndex % colorPalette.length];
+      colorIndex++;
+    }
+  });
+
+  // Create bars for each invocation
+  const invocationTrace = {
+    x: [],
+    y: [],
+    base: [],
+    ids: [],
+    text: [],
+    orientation: 'h',
+    type: 'bar',
+    hoverinfo: 'text',
+    marker: {
+      color: [],
+      line: {
+        color: [],
+        width: 1
+      }
+    }
+  };
+
+  // Track indices for parent-child relationships
+  const invocationsMap = {};
+
+  timelineData.invocations.forEach((inv, index) => {
+    invocationsMap[inv.invocation_id] = index;
+
+    let duration = 60000; // Default 1 minute if we only have start time
+    if (inv.end_time) {
+      duration = new Date(inv.end_time) - new Date(inv.start_time);
+    }
+
+    invocationTrace.x.push(duration);
+    invocationTrace.base.push(new Date(inv.start_time));
+    invocationTrace.y.push(index);
+    invocationTrace.ids.push(inv.invocation_id);
+
+    // Set color based on status
+    let statusColor;
+    switch(inv.status) {
+      case 'SUCCESS': statusColor = '#28a745'; break;
+      case 'FAILED': statusColor = '#dc3545'; break;
+      case 'RUNNING': statusColor = '#007bff'; break;
+      case 'PENDING': statusColor = '#ffc107'; break;
+      case 'RETRY': statusColor = '#6c757d'; break;
+      case 'PAUSED': statusColor = '#17a2b8'; break;
+      default: statusColor = '#343a40';
+    }
+
+    invocationTrace.marker.color.push(statusColor);
+    invocationTrace.marker.line.color.push(taskColors[inv.task_id]);
+
+    // Create hover text
+    invocationTrace.text.push(
+      `ID: ${inv.invocation_id.substring(0, 8)}...<br>` +
+      `Task: ${inv.task_id}<br>` +
+      `Status: ${inv.status}<br>` +
+      `Start: ${new Date(inv.start_time).toLocaleString()}<br>` +
+      (inv.end_time ? `End: ${new Date(inv.end_time).toLocaleString()}<br>` : '') +
+      (inv.end_time ? `Duration: ${(duration / 1000).toFixed(2)}s` : 'Still running') +
+      (inv.parent_id ? `<br>Parent: ${inv.parent_id.substring(0, 8)}...` : '')
+    );
+  });
+
+  traces.push(invocationTrace);
+
+  // If showing relationships, add arrows
+  if ({{ 'true' if current_filters.show_relationships else 'false' }}) {
+    const arrows = [];
+
+    timelineData.invocations.forEach((inv, index) => {
+      if (inv.parent_id && invocationsMap.hasOwnProperty(inv.parent_id)) {
+        const parentIndex = invocationsMap[inv.parent_id];
+        const parentInv = timelineData.invocations[parentIndex];
+
+        // Create arrow from parent to child
+        arrows.push({
+          type: 'layout',
+          x: [new Date(parentInv.start_time), new Date(inv.start_time)],
+          y: [parentIndex, index],
+          xref: 'x',
+          yref: 'y',
+          axref: 'x',
+          ayref: 'y',
+          line: {
+            color: 'rgb(100, 100, 100)',
+            width: 1
+          },
+          arrowhead: 2,
+          arrowsize: 1,
+          arrowwidth: 1,
+          arrowcolor: 'rgb(100, 100, 100)'
+        });
+      }
+    });
+
+    // Prepare layout with shapes for arrows
+    var layout = {
+      title: 'Invocation Timeline',
+      xaxis: {
+        title: 'Time',
+        type: 'date',
+        range: [timelineData.start_time, timelineData.end_time]
+      },
+      yaxis: {
+        title: 'Invocations',
+        autorange: 'reversed',
+        tickmode: 'array',
+        tickvals: timelineData.invocations.map((_, i) => i),
+        ticktext: timelineData.invocations.map(inv => `${inv.invocation_id.substring(0, 8)}...`)
+      },
+      showlegend: false,
+      shapes: arrows
+    };
+  } else {
+    var layout = {
+      title: 'Invocation Timeline',
+      xaxis: {
+        title: 'Time',
+        type: 'date',
+        range: [timelineData.start_time, timelineData.end_time]
+      },
+      yaxis: {
+        title: 'Invocations',
+        autorange: 'reversed',
+        tickmode: 'array',
+        tickvals: timelineData.invocations.map((_, i) => i),
+        ticktext: timelineData.invocations.map(inv => `${inv.invocation_id.substring(0, 8)}...`)
+      },
+      showlegend: false
+    };
+  }
+
+  // Create the plot
+  Plotly.newPlot('invocationTimeline', traces, layout, {
+    responsive: true,
+    modeBarButtonsToRemove: ['lasso2d', 'select2d'],
+    modeBarButtonsToAdd: [{
+      name: 'Show Details',
+      icon: Plotly.Icons.pencil,
+      click: function(gd) {
+        var points = gd.calcdata[0];
+        var pointIndex = null;
+        if (points && points.length) {
+          if (gd._hoverdata && gd._hoverdata.length) {
+            const pt = gd._hoverdata[0];
+            pointIndex = pt.pointIndex;
+          }
+        }
+
+        if (pointIndex !== null) {
+          const invocationId = timelineData.invocations[pointIndex].invocation_id;
+          window.location.href = `/invocations/${invocationId}`;
+        }
+      }
+    }]
+  });
+
+  // Make bars clickable
+  document.getElementById('invocationTimeline').on('plotly_click', function(data) {
+    if (data.points.length) {
+      const pointIndex = data.points[0].pointIndex;
+      const invocationId = timelineData.invocations[pointIndex].invocation_id;
+      window.location.href = `/invocations/${invocationId}`;
+    }
+  });
+});
+</script>
+{% endif %}
+{% endblock %}
