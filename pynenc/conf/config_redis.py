@@ -37,6 +37,26 @@ class ConfigRedis(ConfigPynencBase):
         empty string, indicating that no URL is provided.
         If specified will override all other connection parameters.
 
+    :cvar ConfigField[float] socket_timeout:
+        Timeout in seconds for socket operations. Defines how long to wait for data
+        to be returned from an established connection before timing out. Defaults to 5.0
+        seconds to prevent operations from hanging indefinitely.
+
+    :cvar ConfigField[float] socket_connect_timeout:
+        Timeout in seconds for socket connection establishment. Controls how long to
+        wait when initially connecting to the Redis server before failing. Defaults to 5.0
+        seconds to ensure connections are established in a reasonable timeframe.
+
+    :cvar ConfigField[int] health_check_interval:
+        Interval in seconds between automatic health checks to detect disconnected clients.
+        Redis will periodically check if the connection is still alive. Defaults to 30
+        seconds, providing a balance between responsiveness and overhead.
+
+    :cvar ConfigField[int] max_connection_attempts:
+        Maximum number of connection attempts before giving up. When a connection fails,
+        the system will retry this many times before raising an error. Defaults to 3
+        attempts, allowing for transient network issues while preventing excessive delays.
+
     Example usage of the `ConfigRedis` class involves initializing it with specific
     values for host, port, and database, or relying on the defaults for a standard
     Redis setup.
@@ -48,3 +68,9 @@ class ConfigRedis(ConfigPynencBase):
     redis_port = ConfigField(6379)
     redis_db = ConfigField(0)
     redis_url = ConfigField("")
+
+    # Connection management settings
+    socket_timeout = ConfigField(5.0)
+    socket_connect_timeout = ConfigField(5.0)
+    health_check_interval = ConfigField(30)
+    max_connection_attempts = ConfigField(3)

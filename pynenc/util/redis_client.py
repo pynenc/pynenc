@@ -1,6 +1,7 @@
 import redis
 
 from pynenc.conf.config_redis import ConfigRedis
+from pynenc.util.redis_connection_manager import get_redis_connection_manager
 
 
 def get_redis_client(conf: ConfigRedis) -> redis.Redis:
@@ -10,18 +11,12 @@ def get_redis_client(conf: ConfigRedis) -> redis.Redis:
     If redis_url is specified, creates client from URL.
     Otherwise, creates client using individual connection parameters.
     Empty username/password strings are treated as None.
+    Uses the connection manager to provide more robust connections
+    with automatic reconnection capabilities.
 
     :param ConfigRedis conf: Redis configuration object
     :return: Configured Redis client instance
     :raises redis.ConnectionError: If connection fails
     """
-    if conf.redis_url:
-        return redis.Redis.from_url(conf.redis_url)
-
-    return redis.Redis(
-        host=conf.redis_host,
-        port=conf.redis_port,
-        db=conf.redis_db,
-        username=None if not conf.redis_username else conf.redis_username,
-        password=None if not conf.redis_password else conf.redis_password,
-    )
+    connection_manager = get_redis_connection_manager(conf)
+    return connection_manager.client

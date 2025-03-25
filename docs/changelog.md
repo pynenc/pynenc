@@ -34,9 +34,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Improved documentation and example usage in method docstrings.
 
 - **Optional Dependencies**:
+
   - Added monitoring extras to package dependencies for easier installation.
   - Web monitoring functionality requires additional dependencies: fastapi, jinja2, uvicorn, and python-multipart.
   - These can be installed via `pip install pynenc[monitor]` or `poetry install --with monitor`.
+
+- **Enhanced Redis Connection Management**:
+  - Added robust connection handling with automatic reconnection capability
+  - Implemented configurable retry mechanism with exponential backoff
+  - Added socket timeouts and health check intervals for connection stability
+  - Created connection manager that properly handles connection resets and errors
+  - Improved resilience against "Connection reset by peer" errors
+
+### Changed
+
+- **Redis Configuration Parameters**:
+  - Added new configuration options: `socket_timeout`, `socket_connect_timeout`,
+    `health_check_interval`, and `max_connection_attempts`
+  - Enhanced docstrings with detailed parameter descriptions
+  - Existing Redis connections now use connection pooling and health checks by default
+
+### Fixed
+
+- Fixed issue with Redis connections being reset during high traffic periods
+- Improved error handling in views to gracefully handle connection failures
+- Added timeouts to prevent operations from hanging indefinitely on connection issues
 
 ## [0.0.20] - 2025-03-21
 
