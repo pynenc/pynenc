@@ -3,7 +3,7 @@ import threading
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -32,7 +32,9 @@ class InvocationHistory:
     """
 
     invocation_id: str
-    _timestamp: datetime = field(init=False, default_factory=lambda: datetime.utcnow())
+    _timestamp: datetime = field(
+        init=False, default_factory=lambda: datetime.now(timezone.utc)
+    )
     status: Optional["InvocationStatus"] = None
     execution_context: Optional[Any] = None  # Todo on Runners
 

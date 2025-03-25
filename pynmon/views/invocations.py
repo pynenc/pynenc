@@ -2,7 +2,7 @@ import json
 import logging
 import time
 import traceback
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Request
@@ -102,21 +102,27 @@ async def invocations_timeline(
     start_time = time.time()
 
     try:
-        # Calculate time range based on selection
-        now = datetime.now()
+        # Calculate time range based on selection - USING UTC TIME
+        now = datetime.now(timezone.utc)  # Use UTC time to match invocation timestamps
         start_datetime = None
         end_datetime = now
 
         if time_range == "custom" and start_date and end_date:
             try:
+                # Parse custom dates and convert to UTC if they don't have timezone info
                 start_datetime = datetime.fromisoformat(start_date)
+                if start_datetime.tzinfo is None:
+                    start_datetime = start_datetime.replace(tzinfo=timezone.utc)
+
                 end_datetime = datetime.fromisoformat(end_date)
+                if end_datetime.tzinfo is None:
+                    end_datetime = end_datetime.replace(tzinfo=timezone.utc)
             except ValueError:
                 logger.warning(f"Invalid date format: {start_date} - {end_date}")
                 # Fall back to last hour
                 start_datetime = now - timedelta(hours=1)
         else:
-            # Parse time range
+            # Parse time range - using UTC time
             if time_range == "15m":
                 start_datetime = now - timedelta(minutes=15)
             elif time_range == "1h":
@@ -135,6 +141,10 @@ async def invocations_timeline(
                 # Default to last hour
                 start_datetime = now - timedelta(hours=1)
 
+        logger.info(
+            f"Using time range: {start_datetime.isoformat()} to {end_datetime.isoformat()}"
+        )
+
         # Get all invocations across all tasks or specific task
         all_invocations = []
         tasks_to_check = []
@@ -147,6 +157,7 @@ async def invocations_timeline(
             tasks_to_check = list(app.tasks.values())
 
         # Get invocations from selected tasks
+        logger.info(f"Fetching invocations from {len(tasks_to_check)} tasks")
         for task in tasks_to_check:
             invocations = list(app.orchestrator.get_existing_invocations(task=task))
             all_invocations.extend(invocations)
@@ -156,6 +167,8 @@ async def invocations_timeline(
                 all_invocations = all_invocations[:limit]
                 break
 
+        logger.info(f"Found {len(all_invocations)} invocations before time filtering")
+
         # Filter invocations based on time
         filtered_invocations = []
         for invocation in all_invocations:
@@ -164,6 +177,9 @@ async def invocations_timeline(
 
             if not history:
                 # Skip invocations with no history
+                logger.debug(
+                    f"Invocation {invocation.invocation_id} has no history, skipping"
+                )
                 continue
 
             # Sort history by timestamp
@@ -172,11 +188,20 @@ async def invocations_timeline(
             # Get start time (first entry)
             invocation_start_time = sorted_history[0].timestamp
 
-            # Skip if outside our time range
+            # Add debug logging
+            logger.debug(
+                f"Invocation {invocation.invocation_id} start time: {invocation_start_time.isoformat()}, "
+                f"filter range: {start_datetime.isoformat()} to {end_datetime.isoformat()}"
+            )
+
+            # Skip if outside our time range - use proper timezone-aware comparison
             if (
                 invocation_start_time < start_datetime
                 or invocation_start_time > end_datetime
             ):
+                logger.debug(
+                    f"Invocation {invocation.invocation_id} outside time range, skipping"
+                )
                 continue
 
             # Get end time (last entry if in final state)
@@ -212,6 +237,10 @@ async def invocations_timeline(
         # Sort by start time, safely handling None values
         filtered_invocations.sort(key=get_start_time)
 
+        logger.info(
+            f"After time filtering: {len(filtered_invocations)} invocations match criteria"
+        )
+
         # Prepare timeline data for JavaScript
         timeline_data = {
             "invocations": filtered_invocations,
@@ -232,6 +261,8 @@ async def invocations_timeline(
                 "invocations": filtered_invocations,
                 "timeline_data": json.dumps(timeline_data),
                 "all_task_ids": all_task_ids,
+                "start_datetime": start_datetime,
+                "end_datetime": end_datetime,
                 "current_filters": {
                     "time_range": time_range,
                     "start_date": start_date or "",
@@ -243,7 +274,7 @@ async def invocations_timeline(
             },
         )
     except Exception as e:
-        logger.error(f"Error generating timeline: {str(e)}")
+        logger.error(f"Error in invocations_timeline: {str(e)}")
         logger.error(traceback.format_exc())
         return templates.TemplateResponse(
             "shared/error.html",
