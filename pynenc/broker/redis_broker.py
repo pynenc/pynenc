@@ -44,6 +44,20 @@ class RedisQueue:
         """
         self.client.rpush(self.key.default_queue(), message)
 
+    def send_messages_batch(self, messages: list[str]) -> None:
+        """
+        Send multiple messages to the Redis queue in a single operation.
+
+        This method uses a Redis pipeline to send multiple messages to the queue
+        in a single operation, which can improve performance when routing multiple invocations.
+
+        :param list[str] messages: The list of messages to be queued.
+        """
+        with self.client.pipeline() as pipe:
+            for message in messages:
+                pipe.rpush(self.key.default_queue(), message)
+            pipe.execute()
+
     def receive_message(self) -> Optional[str]:
         """
         Receive a message from the Redis queue.
@@ -113,6 +127,18 @@ class RedisBroker(BaseBroker):
         :param DistributedInvocation invocation: The invocation to be queued.
         """
         self.queue.send_message(invocation.to_json())
+
+    def route_invocations(self, invocations: list[DistributedInvocation]) -> None:
+        """
+        Routes multiple invocations at once using Redis pipeline for better performance.
+
+        :param list[DistributedInvocation] invocations: The invocations to be routed.
+        """
+        if not invocations:
+            return
+
+        messages = [invocation.to_json() for invocation in invocations]
+        self.queue.send_messages_batch(messages)
 
     def retrieve_invocation(self) -> Optional["DistributedInvocation"]:
         """

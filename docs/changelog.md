@@ -40,19 +40,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - These can be installed via `pip install pynenc[monitor]` or `poetry install --with monitor`.
 
 - **Enhanced Redis Connection Management**:
+
   - Added robust connection handling with automatic reconnection capability
   - Implemented configurable retry mechanism with exponential backoff
   - Added socket timeouts and health check intervals for connection stability
   - Created connection manager that properly handles connection resets and errors
   - Improved resilience against "Connection reset by peer" errors
 
+- **Batch Processing for Task Parallelization**:
+  - Added batch processing for `parallelize()` operations
+  - Implemented batch routing in orchestrator via new `route_calls()` method
+  - Added Redis pipeline-based batch operations for significant performance improvements
+  - Added configurable `parallel_batch_size` for tuning performance
+  - Reduced Redis network operations when parallelizing many tasks
+  - Optimized registration and routing of large numbers of tasks
+  - Added modular batch processing throughout the stack (broker, orchestrator, state backend)
+  - Improved performance for high-volume task creation
+
 ### Changed
 
 - **Redis Configuration Parameters**:
+
   - Added new configuration options: `socket_timeout`, `socket_connect_timeout`,
     `health_check_interval`, and `max_connection_attempts`
   - Enhanced docstrings with detailed parameter descriptions
   - Existing Redis connections now use connection pooling and health checks by default
+
+- **Task Parallelization Performance**:
+  - Improve task parallelization to use batch processing when possible
+  - Optimized Redis operations to minimize network round-trips during task parallelization
 
 ### Fixed
 

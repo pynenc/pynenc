@@ -495,6 +495,18 @@ class MemOrchestrator(BaseOrchestrator):
     ) -> None:
         self.cache[invocation.task.task_id].set_status(invocation, status)
 
+    def _set_invocations_status(
+        self, invocations: list["DistributedInvocation"], status: InvocationStatus
+    ) -> None:
+        """
+        Set the status of multiple invocations at once.
+
+        :param list[DistributedInvocation] invocations: The invocations to update.
+        :param InvocationStatus status: The status to set.
+        """
+        for invocation in invocations:
+            self.cache[invocation.task.task_id].set_status(invocation, status)
+
     def _set_invocation_pending_status(
         self, invocation: "DistributedInvocation[Params, Result]"
     ) -> None:

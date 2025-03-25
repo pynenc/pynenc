@@ -303,33 +303,94 @@ class TaskRedisCache:
             return DistributedInvocation.from_json(self.app, inv_json.decode())
         return None
 
+    def _set_status(
+        self,
+        invocation: "DistributedInvocation[Params, Result]",
+        status: "InvocationStatus",
+        previous_status: Optional["InvocationStatus"],
+        pipeline: redis.client.Pipeline,
+    ) -> None:
+        """
+        Inner method to set the status of a single invocation using a provided pipeline.
+
+        :param DistributedInvocation invocation: The invocation to update.
+        :param InvocationStatus status: The new status to set.
+        :param redis.client.Pipeline pipeline: The Redis pipeline to use for commands.
+        """
+        task_id = invocation.task.task_id
+        invocation_id = invocation.invocation_id
+
+        if previous_status is not None:
+            # already exists in Redis, remove from previous status
+            pipeline.srem(self.key.status(task_id, previous_status), invocation_id)
+        else:
+            # New invocation, initialize in Redis
+            for arg, val in invocation.serialized_arguments.items():
+                pipeline.sadd(self.key.args(task_id, arg, val), invocation_id)
+            pipeline.set(self.key.invocation(invocation_id), invocation.to_json())
+            pipeline.sadd(self.key.task(task_id), invocation_id)
+
+        # Set new status
+        pipeline.sadd(self.key.status(task_id, status), invocation_id)
+        pipeline.set(self.key.invocation_status(invocation_id), status.value)
+
+        # Clean up pending status if applicable
+        if status != InvocationStatus.PENDING:
+            pipeline.delete(self.key.pending_timer(invocation_id))
+            pipeline.delete(self.key.previous_status(invocation_id))
+
     def set_status(
         self,
         invocation: "DistributedInvocation[Params, Result]",
         status: "InvocationStatus",
     ) -> None:
         """
-        Set the status of an invocation in Redis.
+        Set the status of a single invocation in Redis, optionally using a provided pipeline.
 
-        :param DistributedInvocation invocation: The invocation to be updated.
-        :param InvocationStatus status: The new status of the invocation.
+        :param DistributedInvocation invocation: The invocation to update.
+        :param InvocationStatus status: The new status to set.
+        :param Optional[redis.client.Pipeline] pipeline: Optional Redis pipeline; if None, creates and executes one.
         """
-        task_id = invocation.task.task_id
-        invocation_id = invocation.invocation_id
+        pipeline = self.client.pipeline(transaction=False)
         try:
             previous_status = self._get_invocation_status(invocation.invocation_id)
-            # already exists in Redis, remove from previous status
-            self.client.srem(self.key.status(task_id, previous_status), invocation_id)
         except StatusNotFound:
-            # new invocation, init invocation in Redis
-            for arg, val in invocation.serialized_arguments.items():
-                self.client.sadd(self.key.args(task_id, arg, val), invocation_id)
-            self.client.set(self.key.invocation(invocation_id), invocation.to_json())
-            self.client.sadd(self.key.task(task_id), invocation_id)
-        self.client.sadd(self.key.status(task_id, status), invocation_id)
-        self.client.set(self.key.invocation_status(invocation_id), status.value)
-        if status != InvocationStatus.PENDING:
-            self.clean_pending_status(invocation)
+            previous_status = None
+        self._set_status(invocation, status, previous_status, pipeline)
+        pipeline.execute()
+
+    def set_batch_status(
+        self,
+        invocations: list["DistributedInvocation[Params, Result]"],
+        status: "InvocationStatus",
+    ) -> None:
+        """
+        Set the status of multiple invocations at once using a Redis pipeline.
+
+        :param list[DistributedInvocation] invocations: The invocations to update.
+        :param InvocationStatus status: The status to set.
+        """
+        if not invocations:
+            return
+
+        invocation_ids = [inv.invocation_id for inv in invocations]
+        status_keys = [self.key.invocation_status(inv_id) for inv_id in invocation_ids]
+        statuses = self.client.mget(status_keys)  # Single round-trip
+
+        # Map statuses to invocations (None if not found)
+        previous_statuses = {
+            inv.invocation_id: InvocationStatus(status.decode()) if status else None
+            for inv, status in zip(invocations, statuses)
+        }
+
+        with self.client.pipeline(transaction=False) as pipe:
+            for invocation in invocations:
+                prev_status = previous_statuses.get(invocation.invocation_id)
+                self._set_status(invocation, status, prev_status, pipe)
+            pipe.execute()
+            self.app.logger.debug(
+                f"Batch set status of {len(invocations)} invocations to {status}"
+            )
 
     def set_pending_status(
         self, invocation: "DistributedInvocation[Params, Result]"
@@ -569,6 +630,20 @@ class RedisOrchestrator(BaseOrchestrator):
     ) -> None:
         self.redis_cache.set_status(invocation, status)
         self.app.logger.debug(f"Set status of invocation {invocation} to {status}")
+
+    def _set_invocations_status(
+        self, invocations: list[DistributedInvocation], status: InvocationStatus
+    ) -> None:
+        """
+        Set the status of multiple invocations at once using Redis pipeline.
+
+        :param list[DistributedInvocation] invocations: The invocations to update.
+        :param InvocationStatus status: The status to set.
+        """
+        if not invocations:
+            return
+        self.redis_cache.set_batch_status(invocations, status)
+        self.app.logger.debug(f"Set status of invocations {invocations} to {status}")
 
     def _set_invocation_pending_status(
         self, invocation: "DistributedInvocation"

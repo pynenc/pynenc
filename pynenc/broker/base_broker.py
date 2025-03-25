@@ -74,6 +74,20 @@ class BaseBroker(ABC):
         """
 
     @abstractmethod
+    def route_invocations(self, invocations: list[DistributedInvocation]) -> None:
+        """
+        Routes multiple invocations at once.
+
+        This method is used for batch processing of invocations to improve performance
+        when parallelizing large numbers of tasks.
+
+        Default implementation sequentially routes each invocation. Subclasses can
+        override this with more efficient batch processing implementations.
+
+        :param list[DistributedInvocation] invocations: The invocations to be routed.
+        """
+
+    @abstractmethod
     def retrieve_invocation(self) -> Optional[DistributedInvocation]:
         """
         Method to retrieve a distributed invocation.

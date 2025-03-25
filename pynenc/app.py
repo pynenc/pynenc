@@ -174,7 +174,7 @@ class Pynenc:
         self,
         func: "Func",
         *,
-        auto_parallel_batch_size: Optional[int] = None,
+        parallel_batch_size: Optional[int] = None,
         retry_for: Optional[tuple[type[Exception], ...]] = None,
         max_retries: Optional[int] = None,
         running_concurrency: Optional[ConcurrencyControlType] = None,
@@ -191,7 +191,7 @@ class Pynenc:
         self,
         func: None = None,
         *,
-        auto_parallel_batch_size: Optional[int] = None,
+        parallel_batch_size: Optional[int] = None,
         retry_for: Optional[tuple[type[Exception], ...]] = None,
         max_retries: Optional[int] = None,
         running_concurrency: Optional[ConcurrencyControlType] = None,
@@ -207,7 +207,7 @@ class Pynenc:
         self,
         func: Optional["Func"] = None,
         *,
-        auto_parallel_batch_size: Optional[int] = None,
+        parallel_batch_size: Optional[int] = None,
         retry_for: Optional[tuple[type[Exception], ...]] = None,
         max_retries: Optional[int] = None,
         running_concurrency: Optional[ConcurrencyControlType] = None,
@@ -223,7 +223,7 @@ class Pynenc:
 
         :param Optional[Callable] func:
             The function to be converted into a Task instance.
-        :param Optional[int] auto_parallel_batch_size:
+        :param Optional[int] parallel_batch_size:
             If set to 0, auto parallelization is disabled. If greater than 0, tasks with iterable
             arguments are automatically split into chunks.
         :param Optional[Tuple[Exception, ...]] retry_for:
@@ -249,13 +249,13 @@ class Pynenc:
 
         :example:
         ```python
-        @app.task(auto_parallel_batch_size=10, max_retries=3)
+        @app.task(parallel_batch_size=10, max_retries=3)
         def my_func(x, y):
             return x + y
         ```
         """
         options = {
-            "auto_parallel_batch_size": auto_parallel_batch_size,
+            "parallel_batch_size": parallel_batch_size,
             "retry_for": retry_for,
             "max_retries": max_retries,
             "running_concurrency": running_concurrency,
@@ -287,7 +287,7 @@ class Pynenc:
         *,
         parallel_func: Optional["ParallelFunc"] = None,
         aggregate_func: Optional["AggregateFunc"] = None,
-        auto_parallel_batch_size: Optional[int] = None,
+        parallel_batch_size: Optional[int] = None,
         retry_for: Optional[tuple[type[Exception], ...]] = None,
         max_retries: Optional[int] = None,
         running_concurrency: Optional[ConcurrencyControlType] = None,
@@ -306,7 +306,7 @@ class Pynenc:
         *,
         parallel_func: Optional["ParallelFunc"] = None,
         aggregate_func: Optional["AggregateFunc"] = None,
-        auto_parallel_batch_size: Optional[int] = None,
+        parallel_batch_size: Optional[int] = None,
         retry_for: Optional[tuple[type[Exception], ...]] = None,
         max_retries: Optional[int] = None,
         running_concurrency: Optional[ConcurrencyControlType] = None,
@@ -325,7 +325,7 @@ class Pynenc:
         *,
         parallel_func: Optional["ParallelFunc"] = None,
         aggregate_func: Optional["AggregateFunc"] = None,
-        auto_parallel_batch_size: Optional[int] = None,
+        parallel_batch_size: Optional[int] = None,
         retry_for: Optional[tuple[type[Exception], ...]] = None,
         max_retries: Optional[int] = None,
         running_concurrency: Optional[ConcurrencyControlType] = None,
@@ -343,7 +343,7 @@ class Pynenc:
         *,
         parallel_func: Optional["ParallelFunc"] = None,
         aggregate_func: Optional["AggregateFunc"] = None,
-        auto_parallel_batch_size: Optional[int] = None,
+        parallel_batch_size: Optional[int] = None,
         retry_for: Optional[tuple[type[Exception], ...]] = None,
         max_retries: Optional[int] = None,
         running_concurrency: Optional[ConcurrencyControlType] = None,
@@ -372,7 +372,7 @@ class Pynenc:
             Function that takes a dict of key arguments and returns an iterable of arguments for parallel execution.
         :param Optional[AggregateFunc] aggregate_func:
             Function that takes a list of results and aggregates them into a single result.
-        :param Optional[int] auto_parallel_batch_size:
+        :param Optional[int] parallel_batch_size:
             If set to 0, auto parallelization is disabled. If greater than 0, tasks with iterable
             arguments are automatically split into chunks.
         :param Optional[Tuple[Exception, ...]] retry_for:
@@ -432,7 +432,7 @@ class Pynenc:
 
         def decorator(func: "Func[Params, Result]") -> "Func[Params, Result]":
             task_options = {
-                "auto_parallel_batch_size": auto_parallel_batch_size,
+                "parallel_batch_size": parallel_batch_size,
                 "retry_for": retry_for,
                 "max_retries": max_retries,
                 "running_concurrency": running_concurrency,

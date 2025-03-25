@@ -8,6 +8,7 @@ from pynenc.conf.config_task import ConcurrencyControlType
 from pynenc.exceptions import (
     InvocationConcurrencyWithDifferentArgumentsError,
     PendingInvocationLockError,
+    TaskParallelProcessingError,
 )
 from pynenc.invocation.dist_invocation import DistributedInvocation, ReusedInvocation
 from pynenc.invocation.status import InvocationStatus
@@ -153,6 +154,20 @@ class BaseOrchestrator(ABC):
 
         :param DistributedInvocation[Params, Result] invocation: The invocation to update.
         :param InvocationStatus status: The new status to set for the invocation.
+        """
+
+    @abstractmethod
+    def _set_invocations_status(
+        self, invocations: list[DistributedInvocation], status: InvocationStatus
+    ) -> None:
+        """
+        Set the status of multiple invocations at once.
+
+        Default implementation sets status for each invocation sequentially.
+        Subclasses should override this with more efficient batch implementations.
+
+        :param list[DistributedInvocation] invocations: The invocations to update.
+        :param InvocationStatus status: The status to set.
         """
 
     @abstractmethod
@@ -717,3 +732,37 @@ class BaseOrchestrator(ABC):
                 existing_invocation=invocation, new_call=call
             )
         return ReusedInvocation.from_existing(invocation, call.arguments)
+
+    def route_calls(
+        self, calls: list["Call"]
+    ) -> list["DistributedInvocation[Params, Result]"]:
+        """
+        Routes multiple calls at once for improved performance.
+
+        This method is specifically for batch processing tasks with disabled concurrency control.
+
+        :param list[Call] calls: The calls to be routed.
+        :return: The list of routed invocations.
+        :raises BatchProcessingError: If concurrency control is enabled for any of the calls.
+        """
+        if not calls:
+            self.app.logger.debug("No calls to route")
+            return []
+
+        if (
+            calls[0].task.conf.registration_concurrency
+            != ConcurrencyControlType.DISABLED
+        ):
+            raise TaskParallelProcessingError(
+                calls[0].task.task_id,
+                "Batch processing is only supported with ConcurrencyControlType.DISABLED",
+            )
+
+        parent_invocation = context.get_dist_invocation_context(self.app.app_id)
+        invocations: list["DistributedInvocation[Params, Result]"] = [
+            DistributedInvocation(call, parent_invocation=parent_invocation)
+            for call in calls
+        ]
+        self._set_invocations_status(invocations, InvocationStatus.REGISTERED)
+        self.app.broker.route_invocations(invocations)
+        return invocations

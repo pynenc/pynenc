@@ -125,7 +125,7 @@ async def test_direct_task_async_with_dev_mode_force_sync() -> None:
 
 
 @app.direct_task(
-    auto_parallel_batch_size=10,
+    parallel_batch_size=10,
     retry_for=(ValueError,),
     max_retries=3,
     call_result_cache=True,

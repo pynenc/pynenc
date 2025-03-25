@@ -2,20 +2,25 @@ from __future__ import annotations
 
 import importlib
 import json
+import time
+from collections.abc import Iterable
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Generic, Iterable
+from typing import TYPE_CHECKING, Any, Generic, cast
 
 from pynenc import context
 from pynenc.arguments import Arguments
 from pynenc.call import Call
-from pynenc.conf.config_task import ConfigTask
+from pynenc.conf.config_task import ConcurrencyControlType, ConfigTask
 from pynenc.exceptions import InvalidTaskOptionsError, RetryError
 from pynenc.invocation.base_invocation import BaseInvocation, BaseInvocationGroup
 from pynenc.invocation.conc_invocation import (
     ConcurrentInvocation,
     ConcurrentInvocationGroup,
 )
-from pynenc.invocation.dist_invocation import DistributedInvocationGroup
+from pynenc.invocation.dist_invocation import (
+    DistributedInvocation,
+    DistributedInvocationGroup,
+)
 from pynenc.types import Func, Params, Result
 from pynenc.util.log import TaskLoggerAdapter
 
@@ -246,11 +251,30 @@ class Task(Generic[Params, Result]):
         ```
         """
         self.logger.info(f"parallelizing {self.task_id}")
+
+        # Determine which invocation group class to use
         group_cls: type[BaseInvocationGroup]
         if self.app.conf.dev_mode_force_sync_tasks:
             group_cls = ConcurrentInvocationGroup
         else:
             group_cls = DistributedInvocationGroup
+
+        all_args = self._prepare_arguments(param_iter)
+        invocations = self._distribute_calls_args(all_args)
+        self.logger.info(
+            f"parallelized {self.task_id} with {len(invocations)} invocations"
+        )
+        return group_cls(self, invocations)
+
+    def _prepare_arguments(
+        self, param_iter: Iterable[tuple | dict | Arguments]
+    ) -> list[Arguments]:
+        """
+        Convert various parameter formats to a list of Arguments objects.
+
+        :param Iterable[tuple | dict | Arguments] param_iter: An iterable of parameters
+        :return: A list of Arguments objects
+        """
 
         def get_args(params: tuple | dict | Arguments) -> Arguments:
             if isinstance(params, tuple):
@@ -259,11 +283,70 @@ class Task(Generic[Params, Result]):
                 return self.args(**params)
             return params
 
+        return list(map(get_args, param_iter))
+
+    def _distribute_calls_args(
+        self, arg_list: list[Arguments]
+    ) -> list[BaseInvocation[Params, Result]]:
+        """
+        Process a list of Arguments objects, either in batch or individually.
+
+        :param list[Arguments] arg_list: The arguments to process
+        :return: A list of created invocations
+        """
+        invocations: list[BaseInvocation[Params, Result]] = []
+
+        # Determine if batch processing is appropriate
+        if (
+            not self.app.conf.dev_mode_force_sync_tasks
+            and self.conf.registration_concurrency == ConcurrencyControlType.DISABLED
+            and len(arg_list) > 1
+            and self.conf.parallel_batch_size > 0
+        ):
+            batch_invocations = self._call_batch(arg_list)
+            invocations = cast(list[BaseInvocation[Params, Result]], batch_invocations)
+        else:
+            # Process arguments individually
+            for args in arg_list:
+                if invocation := self._call(args):
+                    invocations.append(invocation)
+
+        return invocations
+
+    def _call_batch(
+        self, arg_list: list[Arguments]
+    ) -> list[DistributedInvocation[Params, Result]]:
+        """
+        Process multiple task calls in batches for better performance.
+
+        :param list[Arguments] arg_list: The arguments to process in batches
+        :return: A list of created invocations
+        """
         invocations = []
-        for params in param_iter:
-            if invocation := self._call(get_args(params)):
-                invocations.append(invocation)
-        self.logger.info(
-            f"parallelized {self.task_id} with {len(invocations)} invocations"
-        )
-        return group_cls(self, invocations)
+        batch_size = self.conf.parallel_batch_size
+
+        self.logger.info(f"Processing {len(arg_list)} calls in batches of {batch_size}")
+        start_time = time.time()
+
+        # Process in batches
+        for i in range(0, len(arg_list), batch_size):
+            batch_args = arg_list[i : i + batch_size]
+            batch_calls = [Call(self, args) for args in batch_args]
+
+            # Route calls in batch
+            batch_invocations: list[
+                DistributedInvocation[Params, Result]
+            ] = self.app.orchestrator.route_calls(batch_calls)
+            invocations.extend(batch_invocations)
+
+            # Log progress for large batches
+            if i + batch_size < len(arg_list):
+                self.logger.debug(
+                    f"Processed batch {i//batch_size + 1}, "
+                    f"{len(invocations)}/{len(arg_list)} invocations"
+                )
+
+        elapsed = time.time() - start_time
+        self.logger.info(f"Batch processed {len(invocations)} calls in {elapsed:.2f}s")
+
+        return invocations
