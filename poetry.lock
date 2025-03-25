@@ -1700,4 +1700,4 @@ monitor = ["fastapi", "jinja2", "python-multipart", "uvicorn"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.11.6"
-content-hash = "e3830bb9a60e98bcf1e2daa6698fc5cb1f576a175aee4a7278fdd9552cd253e1"
+content-hash = "03a0b466616f474b56e52fb1b4ba8f3167d0c05c72844b40b6a496188d7fb504"
