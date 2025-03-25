@@ -116,3 +116,66 @@ def test_cache_miss_handling() -> None:
 
     # Verify _retrieve was called with the key
     arg_cache._retrieve_mock.assert_called_once_with(non_existent_key)
+
+
+def test_cache_key_passthrough() -> None:
+    """Test that passing a cache key to serialize returns the same key without re-serializing."""
+    arg_cache = MockArgCache(app=mock_base_app)
+
+    # First create a cache key by serializing a large value
+    large_data = "x" * (arg_cache.conf.min_size_to_cache + 100)
+    cache_key = arg_cache.serialize(large_data)
+
+    # Reset mock counters
+    arg_cache._store_mock.reset_mock()
+
+    # Now pass the cache key to serialize again
+    result = arg_cache.serialize(cache_key)
+
+    # The result should be the same cache key
+    assert result == cache_key
+
+    # Verify _store wasn't called - no new serialization
+    arg_cache._store_mock.assert_not_called()
+
+    # Also test that deserializing works correctly
+    deserialized = arg_cache.deserialize(cache_key)
+    assert deserialized == large_data
+
+
+def test_cache_key_in_complex_structure() -> None:
+    """Test that cache keys inside complex structures are preserved during serialization."""
+    arg_cache = MockArgCache(app=mock_base_app)
+
+    # First create some cache keys
+    large_data1 = "x" * (arg_cache.conf.min_size_to_cache + 100)
+    large_data2 = "y" * (arg_cache.conf.min_size_to_cache + 200)
+
+    key1 = arg_cache.serialize(large_data1)
+    key2 = arg_cache.serialize(large_data2)
+
+    # Reset mocks
+    arg_cache._store_mock.reset_mock()
+
+    # Create a complex structure with cache keys
+    complex_data = {
+        "normal_key": "small_value",
+        "cached_key1": key1,
+        "nested": {"cached_key2": key2, "list_with_keys": [1, 2, key1, key2]},
+    }
+
+    # Serialize the complex structure
+    complex_key = arg_cache.serialize(complex_data)
+
+    # Deserialize and check structure
+    result = arg_cache.deserialize(complex_key)
+
+    # Verify the cache keys in the complex structure were preserved
+    assert result["cached_key1"] == key1
+    assert result["nested"]["cached_key2"] == key2
+    assert result["nested"]["list_with_keys"][2] == key1
+    assert result["nested"]["list_with_keys"][3] == key2
+
+    # Deserialize the keys in the complex structure
+    assert arg_cache.deserialize(result["cached_key1"]) == large_data1
+    assert arg_cache.deserialize(result["nested"]["cached_key2"]) == large_data2

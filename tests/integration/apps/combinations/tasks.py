@@ -1,4 +1,4 @@
-from time import process_time, sleep
+from time import process_time, sleep, time
 from typing import Any
 
 from pynenc import Pynenc
@@ -133,3 +133,64 @@ def distribute_cpu_work(total_iterations: int, num_sub_tasks: int) -> list[float
         f"END distribute_cpu_work {total_iterations=} {num_sub_tasks=} {invocation_id=} {elapsed=}"
     )
     return list(results.values())
+
+
+@mock_app.task(running_concurrency=ConcurrencyControlType.DISABLED)
+def process_large_shared_arg(large_data: str, index: int) -> tuple[int, int]:
+    """Process a large shared argument and return its length along with the task index.
+    This task is designed to test arg_cache efficiency and batch parallelization overhead.
+    """
+    invocation_id = process_large_shared_arg.invocation.invocation_id
+    process_large_shared_arg.app.logger.debug(
+        f"INI process_large_shared_arg {index=} {invocation_id=}"
+    )
+
+    # Simple processing to avoid adding CPU time that would mask parallelization overhead
+    data_len = len(large_data)
+
+    process_large_shared_arg.app.logger.debug(
+        f"END process_large_shared_arg {index=} {invocation_id=} len={data_len}"
+    )
+    return (data_len, index)
+
+
+@mock_app.task(running_concurrency=ConcurrencyControlType.DISABLED)
+def batch_process_shared_data(
+    shared_data: str, num_tasks: int
+) -> list[tuple[int, int]]:
+    """Orchestrate the parallel processing of a large shared argument with multiple sub-tasks.
+    This measures the batch overhead with a single large shared argument."""
+    invocation_id = batch_process_shared_data.invocation.invocation_id
+    app = batch_process_shared_data.app
+    app.logger.info(
+        f"INI batch_process_shared_data {num_tasks=} {invocation_id=} data_len={len(shared_data)}"
+    )
+
+    # Pre-cache the large data to get a cache key
+    app.logger.info("Pre-caching shared data...")
+    start_time = time()
+    data_cache_key = batch_process_shared_data.app.arg_cache.serialize(shared_data)
+    if app.arg_cache.is_cache_key(data_cache_key):
+        app.logger.info(f"Pre-cached shared data with key: {data_cache_key}")
+    else:
+        app.logger.warning("shared_data was not cached and was serialized instead")
+    cache_time = time() - start_time
+    app.logger.info(
+        f"Pre-cached shared data in {cache_time:.3f}s, key={data_cache_key[:20]}..."
+    )
+
+    # Now create parameters with the cache key instead of the actual data
+    param_list = [(data_cache_key, i) for i in range(num_tasks)]
+
+    # Execute in parallel
+    app.logger.info(
+        f"Starting parallel processing of {num_tasks} tasks with shared data"
+    )
+
+    invocation_group = process_large_shared_arg.parallelize(param_list)
+    results = list(invocation_group.results)
+
+    app.logger.info(
+        f"END batch_process_shared_data {num_tasks=} {invocation_id=} results={len(results)}"
+    )
+    return results

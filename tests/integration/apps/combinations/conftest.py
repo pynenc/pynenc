@@ -105,6 +105,7 @@ def app(request: "FixtureRequest", monkeypatch: MonkeyPatch) -> Pynenc:
     components: AppComponents = request.param
     test_module, test_name = util.get_module_name(request)
     monkeypatch.setenv("PYNENC__APP_ID", f"{test_module}.{test_name}")
+    monkeypatch.setenv("PYNENC__ARG_CACHE_CLS", components.arg_cache.__name__)
     monkeypatch.setenv("PYNENC__ORCHESTRATOR_CLS", components.orchestrator.__name__)
     monkeypatch.setenv("PYNENC__BROKER_CLS", components.broker.__name__)
     monkeypatch.setenv("PYNENC__SERIALIZER_CLS", components.serializer.__name__)
@@ -216,3 +217,15 @@ def task_async_fail(app: Pynenc) -> "Task":
 def task_async_sleep(app: Pynenc) -> "Task":
     tasks_async.async_sleep_seconds.app = app
     return tasks_async.async_sleep_seconds
+
+
+@pytest.fixture(scope="function")
+def task_process_large_shared_arg(app: Pynenc) -> "Task":
+    tasks.process_large_shared_arg.app = app
+    return tasks.process_large_shared_arg
+
+
+@pytest.fixture(scope="function")
+def task_batch_process_shared_data(app: Pynenc) -> "Task":
+    tasks.batch_process_shared_data.app = app
+    return tasks.batch_process_shared_data

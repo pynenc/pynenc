@@ -200,7 +200,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             for the task to complete.
         ```
         """
-        self.app.logger.info(f"ini waiting for invocation {self.invocation_id} result")
+        self.app.logger.debug(f"ini waiting for invocation {self.invocation_id} result")
         if not self.status.is_final():
             self.app.orchestrator.waiting_for_results(self.parent_invocation, [self])
 
@@ -208,7 +208,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             self.app.runner.waiting_for_results(
                 self.parent_invocation, [self], context.runner_args
             )
-        self.app.logger.info(f"end waiting for invocation {self.invocation_id} result")
+        self.app.logger.debug(f"end waiting for invocation {self.invocation_id} result")
         return self.get_final_result()
 
     async def async_result(self) -> Result:

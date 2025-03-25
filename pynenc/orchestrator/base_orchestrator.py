@@ -578,9 +578,6 @@ class BaseOrchestrator(ABC):
         """
         while missing_invocations > 0:
             if invocation := self.app.broker.retrieve_invocation():
-                self.app.runner.logger.info(  # TODO REMOVE
-                    f"Obtained broker invocation CANDIDATE to run {invocation=}"
-                )
                 if invocation.invocation_id not in blocking_invocation_ids:
                     invocation_status = self.get_invocation_status(invocation)
                     if invocation_status.is_available_for_run():
@@ -599,14 +596,6 @@ class BaseOrchestrator(ABC):
                         except PendingInvocationLockError:
                             # invocations_to_reroute.add(invocation)
                             continue
-                    else:
-                        self.app.runner.logger.warning(  # TODO REMOVE
-                            f"Ignoring broker invocation to run {invocation=} because {invocation_status=}"
-                        )
-                else:
-                    self.app.runner.logger.warning(  # TODO REMOVE
-                        f"Ignoring broker invocation to run {invocation=} because is in {blocking_invocation_ids=} is not available to run"
-                    )
             else:
                 break
 

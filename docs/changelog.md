@@ -56,6 +56,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Optimized registration and routing of large numbers of tasks
   - Added modular batch processing throughout the stack (broker, orchestrator, state backend)
   - Improved performance for high-volume task creation
+  - Added cache key passthrough in arg_cache to prevent re-serialization of already cached values
 
 ### Changed
 
