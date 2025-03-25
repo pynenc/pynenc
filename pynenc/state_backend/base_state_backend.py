@@ -68,8 +68,15 @@ class InvocationHistory:
         """
         hist_dict = json.loads(json_str)
         history = cls(hist_dict["invocation_id"])
-        history._timestamp = datetime.fromisoformat(hist_dict["_timestamp"])
-        history.status = InvocationStatus(hist_dict["status"])
+
+        timestamp = datetime.fromisoformat(hist_dict["_timestamp"])
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=timezone.utc)
+
+        history._timestamp = timestamp
+
+        if hist_dict["status"] is not None:
+            history.status = InvocationStatus(hist_dict["status"])
         history.execution_context = hist_dict["execution_context"]
         return history
 
