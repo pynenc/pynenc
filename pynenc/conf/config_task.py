@@ -183,7 +183,7 @@ class ConfigTask(ConfigPynencBase):
     offering flexibility and precise control over the behavior of tasks in the system.
     """
 
-    parallel_batch_size = ConfigField(0)
+    parallel_batch_size = ConfigField(100)
     retry_for = ConfigField((RetryError,), mapper=exception_config_mapper)
     max_retries = ConfigField(0)
     running_concurrency = ConfigField(ConcurrencyControlType.DISABLED)

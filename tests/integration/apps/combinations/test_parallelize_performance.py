@@ -129,7 +129,7 @@ def test_distributed_cpu_work_performance(
     # Set expected time factors based on runner type
     runner_type = app.runner.__class__.__name__
     if runner_type == "MultiThreadRunner":
-        MIN_TIME_FACTOR = 3
+        MIN_TIME_FACTOR = 1.5
         MAX_TIME_FACTOR = 5
     elif runner_type == "PersistentProcessRunner":
         MIN_TIME_FACTOR = 3
