@@ -101,6 +101,26 @@
 
           {% if invocations|length > 0 %}
             <div id="timeline"></div>
+            <div id="invocation-details-panel" class="mt-4 d-none">
+                <div class="card">
+                  <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Invocation Details</h5>
+                    <button type="button" class="btn-close" aria-label="Close" id="close-details"></button>
+                  </div>
+                  <div class="card-body">
+                    <div id="invocation-details-content">
+                      <div class="d-flex justify-content-center">
+                        <div class="spinner-border text-primary" role="status">
+                          <span class="visually-hidden">Loading...</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="card-footer">
+                    <a href="#" id="view-full-details" class="btn btn-primary">View Full Details</a>
+                  </div>
+                </div>
+              </div>
           {% else %}
             <div class="alert alert-warning">
               No invocations found for the selected filters.
@@ -143,85 +163,127 @@
   function createGanttChart() {
     if (invocations.length === 0) return;
 
-    const data = [];
+    document.getElementById('timeline').on('plotly_click', (data) => {
+    if (data.points[0].customdata) {
+        const invocationId = data.points[0].customdata[0];
+        loadInvocationDetails(invocationId);
+    }
+    });
 
-    // Group invocations by task_id for better visualization
+    const data = [];
+    console.log("Creating Gantt chart with", invocations.length, "invocations");
+
+    // Group invocations by task_id for better organization
     const taskGroups = {};
     invocations.forEach(inv => {
-      if (!taskGroups[inv.task_id]) {
+        if (!taskGroups[inv.task_id]) {
         taskGroups[inv.task_id] = [];
-      }
-      taskGroups[inv.task_id].push(inv);
+        }
+        taskGroups[inv.task_id].push(inv);
     });
 
     // Convert each invocation to a Gantt chart bar
     let i = 0;
     Object.entries(taskGroups).forEach(([taskId, invs]) => {
-      invs.forEach(inv => {
-        // For invocations without end time, use current time
-        const end = inv.end_time ? new Date(inv.end_time) : new Date();
+        // Add task label
+        data.push({
+        x: [startTime],
+        y: [i],
+        type: 'scatter',
+        mode: 'text',
+        text: [taskId],
+        textposition: 'middle left',
+        hoverinfo: 'none',
+        showlegend: false
+        });
+
+        i++; // Increment for spacing between task groups
+
+        invs.forEach(inv => {
         const start = new Date(inv.start_time);
 
-        // Make sure very short tasks are at least visible
-        let adjustedEnd = new Date(end);
-        if (end - start < 1000) { // If less than 1 second
-          adjustedEnd = new Date(start.getTime() + 1000); // Add 1 second for visibility
+        // For invocations without end time, use current time or add small duration
+        let end;
+        if (inv.end_time) {
+            end = new Date(inv.end_time);
+        } else {
+            // For ongoing tasks, extend to now or the end of the time range
+            end = new Date(Math.min(new Date().getTime(), endTime.getTime()));
         }
 
+        // Make sure very short tasks are visible (at least 10 seconds for visibility)
+        if (end - start < 10000) {
+            end = new Date(start.getTime() + 10000);
+        }
+
+        console.log(`Invocation ${inv.invocation_id}: start=${start.toISOString()}, end=${end.toISOString()}`);
+
         data.push({
-          x: [start, adjustedEnd],
-          y: [i],
-          type: 'scatter',
-          mode: 'lines',
-          line: {
+            x: [start, end],
+            y: [i, i],
+            type: 'scatter',
+            mode: 'lines',
+            line: {
             color: statusColors[inv.status] || '#000000',
             width: 20
-          },
-          name: `${inv.invocation_id.substring(0, 8)}... (${inv.status})`,
-          text: `Task: ${inv.task_id}<br>Status: ${inv.status}<br>ID: ${inv.invocation_id}`,
-          hoverinfo: 'text+name',
-          customdata: [inv.invocation_id],
+            },
+            name: `${inv.invocation_id.substring(0, 8)}... (${inv.status})`,
+            text: [`Task: ${inv.task_id}<br>Status: ${inv.status}<br>ID: ${inv.invocation_id}<br>Start: ${start.toLocaleString()}`],
+            hoverinfo: 'text+name',
+            customdata: [inv.invocation_id],
         });
         i++;
-      });
+        });
+
+        i++; // Add extra space between task groups
     });
 
     const layout = {
-      title: 'Invocation Timeline',
-      xaxis: {
+        title: 'Invocation Timeline',
+        xaxis: {
         title: 'Time (UTC)',
         type: 'date',
         range: [startTime, endTime]
-      },
-      yaxis: {
-        title: 'Invocations',
+        },
+        yaxis: {
+        title: 'Invocations by Task',
         showticklabels: false
-      },
-      showlegend: false,
-      hovermode: 'closest',
-      height: Math.max(500, invocations.length * 30), // Adjust height based on number of invocations
-      margin: {
+        },
+        showlegend: false,
+        hovermode: 'closest',
+        height: Math.max(500, i * 25), // Adjust height based on number of rows
+        margin: {
         l: 50,
         r: 50,
         b: 100,
         t: 50,
         pad: 4
-      }
+        }
     };
 
+    console.log("Plotting Gantt chart with", data.length, "data points");
     Plotly.newPlot('timeline', data, layout, {responsive: true});
     ganttPlot = {data, layout};
 
-    // Add click event to navigate to invocation details
+    // Add click event to show invocation details
     document.getElementById('timeline').on('plotly_click', (data) => {
-      const invocationId = data.points[0].customdata[0];
-      window.location.href = `/invocations/${invocationId}`;
+        if (data.points[0].customdata) {
+        const invocationId = data.points[0].customdata[0];
+        loadInvocationDetails(invocationId);
+        }
     });
   }
 
   // Function to create a status transition visualization
   function createStatusTransitionChart() {
     if (invocations.length === 0) return;
+
+    document.getElementById('timeline').on('plotly_click', (data) => {
+        if (data.points[0].customdata) {
+            const invocationId = data.points[0].customdata[0];
+            loadInvocationDetails(invocationId);
+        }
+    });
 
     const data = [];
 
@@ -331,7 +393,157 @@
         document.getElementById('custom_date_range').classList.add('d-none');
       }
     });
+
+    // Close button for details panel
+    document.getElementById('close-details').addEventListener('click', function() {
+        document.getElementById('invocation-details-panel').classList.add('d-none');
+    });
+
   });
+
+// Function to load invocation details when an invocation is clicked
+function loadInvocationDetails(invocationId) {
+  console.log(`Loading details for invocation: ${invocationId}`);
+
+  // Show the details panel and set it to loading state
+  const detailsPanel = document.getElementById('invocation-details-panel');
+  const detailsContent = document.getElementById('invocation-details-content');
+  const viewFullDetailsLink = document.getElementById('view-full-details');
+
+  detailsPanel.classList.remove('d-none');
+  detailsContent.innerHTML = `
+    <div class="d-flex justify-content-center p-4">
+      <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+      </div>
+    </div>
+  `;
+
+  // Update the full details link
+  viewFullDetailsLink.href = `/invocations/${invocationId}`;
+
+  // Fetch both basic invocation data and history
+  Promise.all([
+    fetch(`/invocations/${invocationId}/api`).then(r => r.json()),
+    fetch(`/invocations/${invocationId}/history`).then(r => r.json())
+  ])
+  .then(([invData, historyData]) => {
+    if (invData.error) {
+      detailsContent.innerHTML = `<div class="alert alert-danger">${invData.error}</div>`;
+      return;
+    }
+
+    // Sort history by timestamp
+    historyData.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+    // Format the details HTML
+    let html = `
+      <div class="row">
+        <div class="col-md-6">
+          <h5>Invocation ${invData.invocation_id.substring(0, 8)}...</h5>
+          <table class="table table-sm">
+            <tr>
+              <th>Status</th>
+              <td>
+                <span class="badge bg-${getStatusClass(invData.status)}">${invData.status}</span>
+              </td>
+            </tr>
+            <tr>
+              <th>Task</th>
+              <td>${invData.task_id}</td>
+            </tr>
+            <tr>
+              <th>Created</th>
+              <td>${historyData.length > 0 ? new Date(historyData[0].timestamp).toLocaleString() : 'Unknown'}</td>
+            </tr>
+            <tr>
+              <th>Duration</th>
+              <td>${calculateDuration(historyData)}</td>
+            </tr>
+          </table>
+        </div>
+        <div class="col-md-6">
+          <h5>Status History</h5>
+          <div style="max-height: 200px; overflow-y: auto;">
+            <table class="table table-sm">
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Timestamp</th>
+                </tr>
+              </thead>
+              <tbody>
+    `;
+
+    historyData.forEach(h => {
+      html += `
+        <tr>
+          <td><span class="badge bg-${getStatusClass(h.status)}">${h.status}</span></td>
+          <td>${new Date(h.timestamp).toLocaleString()}</td>
+        </tr>
+      `;
+    });
+
+    html += `
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Display formatted content
+    detailsContent.innerHTML = html;
+  })
+  .catch(error => {
+    console.error('Error loading invocation details:', error);
+    detailsContent.innerHTML = `
+      <div class="alert alert-danger">
+        Error loading invocation details: ${error.message || 'Unknown error'}
+      </div>
+    `;
+  });
+}
+
+// Helper function to get appropriate Bootstrap color class for status
+function getStatusClass(status) {
+  const statusMap = {
+    'REGISTERED': 'secondary',
+    'PENDING': 'warning',
+    'RUNNING': 'info',
+    'PAUSED': 'primary',
+    'SUCCESS': 'success',
+    'FAILED': 'danger',
+    'CANCELLED': 'dark',
+    'TIMEOUT': 'danger'
+  };
+  return statusMap[status] || 'secondary';
+}
+
+// Helper function to calculate duration from history
+function calculateDuration(history) {
+  if (!history || history.length < 2) return 'N/A';
+
+  const start = new Date(history[0].timestamp);
+
+  // Find the last entry
+  const lastStatus = history[history.length - 1].status;
+  const end = new Date(history[history.length - 1].timestamp);
+
+  // Calculate duration
+  const durationMs = end - start;
+
+  // Format nicely
+  if (durationMs < 1000) {
+    return `${durationMs}ms`;
+  } else if (durationMs < 60000) {
+    return `${(durationMs / 1000).toFixed(2)}s`;
+  } else if (durationMs < 3600000) {
+    return `${Math.floor(durationMs / 60000)}m ${Math.floor((durationMs % 60000) / 1000)}s`;
+  } else {
+    return `${Math.floor(durationMs / 3600000)}h ${Math.floor((durationMs % 3600000) / 60000)}m`;
+  }
+}
 </script>
 {% endif %}
 {% endblock %}

@@ -517,3 +517,40 @@ async def invocation_history(request: Request, invocation_id: str) -> JSONRespon
         )
         logger.error(traceback.format_exc())
         return JSONResponse({"error": str(e)}, 500)
+
+
+# Add this new API endpoint after the invocation_history function
+
+
+@router.get("/{invocation_id}/api")
+async def invocation_api(request: Request, invocation_id: str) -> JSONResponse:
+    """Return invocation data as JSON for the timeline visualization."""
+    app = get_pynenc_instance()
+    logger.info(f"Retrieving API data for invocation {invocation_id}")
+
+    try:
+        # Get the invocation
+        invocation = app.orchestrator.get_invocation(invocation_id)
+        if not invocation:
+            return JSONResponse(
+                {"error": f"No invocation found with ID: {invocation_id}"}, 404
+            )
+
+        # Create a simplified representation for the API
+        invocation_data = {
+            "invocation_id": invocation.invocation_id,
+            "task_id": invocation.task.task_id,
+            "status": invocation.status.name,
+            "num_retries": invocation.num_retries,
+            "parent_invocation_id": invocation.parent_invocation.invocation_id
+            if invocation.parent_invocation
+            else None,
+        }
+
+        return JSONResponse(invocation_data)
+    except Exception as e:
+        logger.error(
+            f"Error retrieving API data for invocation {invocation_id}: {str(e)}"
+        )
+        logger.error(traceback.format_exc())
+        return JSONResponse({"error": str(e)}, 500)
