@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from pynenc.invocation.status import InvocationStatus
 from pynmon.app import get_pynenc_instance, templates
@@ -469,3 +469,51 @@ async def invocation_detail(request: Request, invocation_id: str) -> HTMLRespons
     finally:
         elapsed = time.time() - start_time
         logger.info(f"invocation_detail completed in {elapsed:.2f} seconds")
+
+
+# Add this new route for history API
+
+
+@router.get("/{invocation_id}/history")
+async def invocation_history(request: Request, invocation_id: str) -> JSONResponse:
+    """Return invocation history as JSON for timeline visualization."""
+    app = get_pynenc_instance()
+    logger.info(f"Retrieving history for invocation {invocation_id} (API)")
+
+    try:
+        # Get the invocation
+        invocation = app.orchestrator.get_invocation(invocation_id)
+        if not invocation:
+            return JSONResponse(
+                {"error": f"No invocation found with ID: {invocation_id}"}, 404
+            )
+
+        # Get history
+        history = app.state_backend.get_history(invocation)
+
+        # Convert to format needed for visualization
+        formatted_history: list[dict] = []
+        for entry in history:
+            # Make sure timestamp is timezone-aware for comparison
+            timestamp = entry.timestamp
+            if timestamp.tzinfo is None:
+                timestamp = timestamp.replace(tzinfo=timezone.utc)
+
+            formatted_history.append(
+                {
+                    "timestamp": timestamp.isoformat(),
+                    "status": entry.status.name if entry.status else "UNKNOWN",
+                    "execution_context": entry.execution_context,
+                }
+            )
+
+        # Sort by timestamp
+        formatted_history.sort(key=lambda x: x["timestamp"])
+
+        return JSONResponse(formatted_history)
+    except Exception as e:
+        logger.error(
+            f"Error retrieving history for invocation {invocation_id}: {str(e)}"
+        )
+        logger.error(traceback.format_exc())
+        return JSONResponse({"error": str(e)}, 500)
