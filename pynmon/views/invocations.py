@@ -471,9 +471,6 @@ async def invocation_detail(request: Request, invocation_id: str) -> HTMLRespons
         logger.info(f"invocation_detail completed in {elapsed:.2f} seconds")
 
 
-# Add this new route for history API
-
-
 @router.get("/{invocation_id}/history")
 async def invocation_history(request: Request, invocation_id: str) -> JSONResponse:
     """Return invocation history as JSON for timeline visualization."""
@@ -517,9 +514,6 @@ async def invocation_history(request: Request, invocation_id: str) -> JSONRespon
         )
         logger.error(traceback.format_exc())
         return JSONResponse({"error": str(e)}, 500)
-
-
-# Add this new API endpoint after the invocation_history function
 
 
 @router.get("/{invocation_id}/api")

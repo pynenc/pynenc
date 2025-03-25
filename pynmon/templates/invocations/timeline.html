@@ -147,6 +147,9 @@
   let ganttPlot;
   let statusPlot;
 
+  // Track the current view type
+  let currentView = 'gantt';
+
   // Create color mapping for statuses
   const statusColors = {
     'REGISTERED': '#6c757d',   // Gray
@@ -159,34 +162,42 @@
     'TIMEOUT': '#ff4500'       // OrangeRed
   };
 
+  // Global click handler to avoid duplicating handlers
+  function handlePlotlyClick(data) {
+    if (data.points && data.points[0] && data.points[0].customdata) {
+      const invocationId = data.points[0].customdata[0];
+      loadInvocationDetails(invocationId);
+    }
+  }
+
   // Function to create the Gantt chart visualization
   function createGanttChart() {
     if (invocations.length === 0) return;
 
-    document.getElementById('timeline').on('plotly_click', (data) => {
-    if (data.points[0].customdata) {
-        const invocationId = data.points[0].customdata[0];
-        loadInvocationDetails(invocationId);
+    console.log("Creating Gantt chart with", invocations.length, "invocations");
+
+    // Remove previous event listeners to avoid duplicates
+    const timelineElement = document.getElementById('timeline');
+    if (timelineElement && timelineElement._fullLayout) {
+      Plotly.purge(timelineElement);
     }
-    });
 
     const data = [];
-    console.log("Creating Gantt chart with", invocations.length, "invocations");
 
     // Group invocations by task_id for better organization
     const taskGroups = {};
     invocations.forEach(inv => {
-        if (!taskGroups[inv.task_id]) {
+      if (!taskGroups[inv.task_id]) {
         taskGroups[inv.task_id] = [];
-        }
-        taskGroups[inv.task_id].push(inv);
+      }
+      taskGroups[inv.task_id].push(inv);
     });
 
     // Convert each invocation to a Gantt chart bar
     let i = 0;
     Object.entries(taskGroups).forEach(([taskId, invs]) => {
-        // Add task label
-        data.push({
+      // Add task label
+      data.push({
         x: [startTime],
         y: [i],
         type: 'scatter',
@@ -195,97 +206,132 @@
         textposition: 'middle left',
         hoverinfo: 'none',
         showlegend: false
-        });
+      });
 
-        i++; // Increment for spacing between task groups
+      i++; // Increment for spacing between task groups
 
-        invs.forEach(inv => {
+      invs.forEach(inv => {
         const start = new Date(inv.start_time);
 
         // For invocations without end time, use current time or add small duration
         let end;
         if (inv.end_time) {
-            end = new Date(inv.end_time);
+          end = new Date(inv.end_time);
         } else {
-            // For ongoing tasks, extend to now or the end of the time range
-            end = new Date(Math.min(new Date().getTime(), endTime.getTime()));
+          // For ongoing tasks, extend to now or the end of the time range
+          end = new Date(Math.min(new Date().getTime(), endTime.getTime()));
         }
 
         // Make sure very short tasks are visible (at least 10 seconds for visibility)
         if (end - start < 10000) {
-            end = new Date(start.getTime() + 10000);
+          end = new Date(start.getTime() + 10000);
         }
 
         console.log(`Invocation ${inv.invocation_id}: start=${start.toISOString()}, end=${end.toISOString()}`);
 
         data.push({
-            x: [start, end],
-            y: [i, i],
-            type: 'scatter',
-            mode: 'lines',
-            line: {
+          x: [start, end],
+          y: [i, i],
+          type: 'scatter',
+          mode: 'lines',
+          line: {
             color: statusColors[inv.status] || '#000000',
             width: 20
-            },
-            name: `${inv.invocation_id.substring(0, 8)}... (${inv.status})`,
-            text: [`Task: ${inv.task_id}<br>Status: ${inv.status}<br>ID: ${inv.invocation_id}<br>Start: ${start.toLocaleString()}`],
-            hoverinfo: 'text+name',
-            customdata: [inv.invocation_id],
+          },
+          name: `${inv.invocation_id.substring(0, 8)}... (${inv.status})`,
+          text: [`Task: ${inv.task_id}<br>Status: ${inv.status}<br>ID: ${inv.invocation_id}<br>Start: ${start.toLocaleString()}`],
+          hoverinfo: 'text+name',
+          customdata: [[inv.invocation_id], [inv.invocation_id]],
         });
         i++;
-        });
+      });
 
-        i++; // Add extra space between task groups
+      i++; // Add extra space between task groups
     });
 
     const layout = {
-        title: 'Invocation Timeline',
-        xaxis: {
+      title: 'Invocation Timeline',
+      xaxis: {
         title: 'Time (UTC)',
         type: 'date',
         range: [startTime, endTime]
-        },
-        yaxis: {
+      },
+      yaxis: {
         title: 'Invocations by Task',
         showticklabels: false
-        },
-        showlegend: false,
-        hovermode: 'closest',
-        height: Math.max(500, i * 25), // Adjust height based on number of rows
-        margin: {
+      },
+      showlegend: false,
+      hovermode: 'closest',
+      height: Math.max(500, i * 25), // Adjust height based on number of rows
+      margin: {
         l: 50,
         r: 50,
         b: 100,
         t: 50,
         pad: 4
-        }
+      }
     };
 
     console.log("Plotting Gantt chart with", data.length, "data points");
     Plotly.newPlot('timeline', data, layout, {responsive: true});
+
+    // Store for later reuse
     ganttPlot = {data, layout};
 
-    // Add click event to show invocation details
-    document.getElementById('timeline').on('plotly_click', (data) => {
-        if (data.points[0].customdata) {
-        const invocationId = data.points[0].customdata[0];
-        loadInvocationDetails(invocationId);
-        }
-    });
+    // Add click event handler
+    document.getElementById('timeline').on('plotly_click', handlePlotlyClick);
   }
 
   // Function to create a status transition visualization
   function createStatusTransitionChart() {
     if (invocations.length === 0) return;
 
-    document.getElementById('timeline').on('plotly_click', (data) => {
-        if (data.points[0].customdata) {
-            const invocationId = data.points[0].customdata[0];
-            loadInvocationDetails(invocationId);
-        }
-    });
+    console.log("Creating status transition chart");
 
-    const data = [];
+    // Remove previous event listeners to avoid duplicates
+    const timelineElement = document.getElementById('timeline');
+    if (timelineElement && timelineElement._fullLayout) {
+      Plotly.purge(timelineElement);
+    }
+
+    // First, create a loading placeholder
+    const loadingData = [{
+      x: [startTime, endTime],
+      y: [0, 0],
+      type: 'scatter',
+      mode: 'lines',
+      line: { color: 'transparent' },
+      showlegend: false
+    }];
+
+    const loadingLayout = {
+      title: 'Loading Status Transitions...',
+      xaxis: {
+        title: 'Time (UTC)',
+        type: 'date',
+        range: [startTime, endTime]
+      },
+      yaxis: {
+        showticklabels: false
+      },
+      annotations: [{
+        x: 0.5,
+        y: 0.5,
+        xref: 'paper',
+        yref: 'paper',
+        text: 'Loading status transitions...',
+        showarrow: false,
+        font: { size: 20 }
+      }],
+      height: 500
+    };
+
+    Plotly.newPlot('timeline', loadingData, loadingLayout);
+
+    // Track completed fetches
+    let completedFetches = 0;
+    const totalFetches = invocations.length;
+    const allTraces = [];
 
     // Process each invocation
     invocations.forEach((inv, i) => {
@@ -293,6 +339,8 @@
       fetch(`/invocations/${inv.invocation_id}/history`)
         .then(response => response.json())
         .then(history => {
+          completedFetches++;
+
           if (!history || history.length === 0) return;
 
           // Sort history by timestamp
@@ -300,12 +348,12 @@
 
           // Create a line connecting all status points
           const x = history.map(h => new Date(h.timestamp));
-          const y = history.map((h, idx) => i);
+          const y = history.map(() => i);
           const text = history.map(h => `Status: ${h.status}<br>Time: ${new Date(h.timestamp).toLocaleString()}`);
           const colors = history.map(h => statusColors[h.status] || '#000000');
 
           // Add line connecting status points
-          data.push({
+          allTraces.push({
             x: x,
             y: y,
             type: 'scatter',
@@ -321,12 +369,12 @@
             name: inv.invocation_id.substring(0, 8) + '...',
             text: text,
             hoverinfo: 'text+name',
-            customdata: Array(x.length).fill(inv.invocation_id),
+            customdata: Array(x.length).fill([inv.invocation_id]),
           });
 
-          // After all fetches are done, plot the data
-          // This is a simplistic approach - in production you'd want to use Promise.all
-          if (i === invocations.length - 1) {
+          // After all fetches are done or at 80% completion, plot the data
+          if (completedFetches === totalFetches ||
+             (completedFetches > totalFetches * 0.8 && completedFetches % 5 === 0)) {
             const layout = {
               title: 'Status Transitions',
               xaxis: {
@@ -350,39 +398,201 @@
               }
             };
 
-            Plotly.newPlot('timeline', data, layout, {responsive: true});
-            statusPlot = {data, layout};
+            console.log(`Plotting ${allTraces.length} status transition traces`);
+            Plotly.newPlot('timeline', allTraces, layout, {responsive: true});
+            statusPlot = { data: allTraces, layout };
 
-            // Add click event to navigate to invocation details
-            document.getElementById('timeline').on('plotly_click', (data) => {
-              const invocationId = data.points[0].customdata[0];
-              window.location.href = `/invocations/${invocationId}`;
-            });
+            // Add click event handler
+            document.getElementById('timeline').on('plotly_click', handlePlotlyClick);
           }
         })
-        .catch(error => console.error('Error fetching history:', error));
+        .catch(error => {
+          completedFetches++;
+          console.error('Error fetching history:', error);
+        });
     });
   }
 
-  // Initialize with Gantt chart
+  // Function to load invocation details when an invocation is clicked
+  function loadInvocationDetails(invocationId) {
+    console.log(`Loading details for invocation: ${invocationId}`);
+
+    // Show the details panel and set it to loading state
+    const detailsPanel = document.getElementById('invocation-details-panel');
+    const detailsContent = document.getElementById('invocation-details-content');
+    const viewFullDetailsLink = document.getElementById('view-full-details');
+
+    detailsPanel.classList.remove('d-none');
+    detailsContent.innerHTML = `
+      <div class="d-flex justify-content-center p-4">
+        <div class="spinner-border text-primary" role="status">
+          <span class="visually-hidden">Loading...</span>
+        </div>
+      </div>
+    `;
+
+    // Update the full details link
+    viewFullDetailsLink.href = `/invocations/${invocationId}`;
+
+    // Fetch both basic invocation data and history
+    Promise.all([
+      fetch(`/invocations/${invocationId}/api`).then(r => r.json()),
+      fetch(`/invocations/${invocationId}/history`).then(r => r.json())
+    ])
+    .then(([invData, historyData]) => {
+      if (invData.error) {
+        detailsContent.innerHTML = `<div class="alert alert-danger">${invData.error}</div>`;
+        return;
+      }
+
+      // Sort history by timestamp
+      historyData.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+      // Format the details HTML
+      let html = `
+        <div class="row">
+          <div class="col-md-6">
+            <h5>Invocation ${invData.invocation_id.substring(0, 8)}...</h5>
+            <table class="table table-sm">
+              <tr>
+                <th>Status</th>
+                <td>
+                  <span class="badge bg-${getStatusClass(invData.status)}">${invData.status}</span>
+                </td>
+              </tr>
+              <tr>
+                <th>Task</th>
+                <td>${invData.task_id}</td>
+              </tr>
+              <tr>
+                <th>Created</th>
+                <td>${historyData.length > 0 ? new Date(historyData[0].timestamp).toLocaleString() : 'Unknown'}</td>
+              </tr>
+              <tr>
+                <th>Duration</th>
+                <td>${calculateDuration(historyData)}</td>
+              </tr>
+            </table>
+          </div>
+          <div class="col-md-6">
+            <h5>Status History</h5>
+            <div style="max-height: 200px; overflow-y: auto;">
+              <table class="table table-sm">
+                <thead>
+                  <tr>
+                    <th>Status</th>
+                    <th>Timestamp</th>
+                  </tr>
+                </thead>
+                <tbody>
+      `;
+
+      historyData.forEach(h => {
+        html += `
+          <tr>
+            <td><span class="badge bg-${getStatusClass(h.status)}">${h.status}</span></td>
+            <td>${new Date(h.timestamp).toLocaleString()}</td>
+          </tr>
+        `;
+      });
+
+      html += `
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      `;
+
+      // Display formatted content
+      detailsContent.innerHTML = html;
+    })
+    .catch(error => {
+      console.error('Error loading invocation details:', error);
+      detailsContent.innerHTML = `
+        <div class="alert alert-danger">
+          Error loading invocation details: ${error.message || 'Unknown error'}
+        </div>
+      `;
+    });
+  }
+
+  // Helper function to get appropriate Bootstrap color class for status
+  function getStatusClass(status) {
+    const statusMap = {
+      'REGISTERED': 'secondary',
+      'PENDING': 'warning',
+      'RUNNING': 'info',
+      'PAUSED': 'primary',
+      'SUCCESS': 'success',
+      'FAILED': 'danger',
+      'CANCELLED': 'dark',
+      'TIMEOUT': 'danger'
+    };
+    return statusMap[status] || 'secondary';
+  }
+
+  // Helper function to calculate duration from history
+  function calculateDuration(history) {
+    if (!history || history.length < 2) return 'N/A';
+
+    const start = new Date(history[0].timestamp);
+
+    // Find the last entry
+    const lastStatus = history[history.length - 1].status;
+    const end = new Date(history[history.length - 1].timestamp);
+
+    // Calculate duration
+    const durationMs = end - start;
+
+    // Format nicely
+    if (durationMs < 1000) {
+      return `${durationMs}ms`;
+    } else if (durationMs < 60000) {
+      return `${(durationMs / 1000).toFixed(2)}s`;
+    } else if (durationMs < 3600000) {
+      return `${Math.floor(durationMs / 60000)}m ${Math.floor((durationMs % 60000) / 1000)}s`;
+    } else {
+      return `${Math.floor(durationMs / 3600000)}h ${Math.floor((durationMs % 3600000) / 60000)}m`;
+    }
+  }
+
+  // Initialize when the document is ready
   document.addEventListener('DOMContentLoaded', function() {
+    // Create the initial Gantt chart
     createGanttChart();
 
     // Set up view toggle handlers
     document.getElementById('gantt-view').addEventListener('click', function() {
+      if (currentView === 'gantt') return;
+
       this.classList.add('active');
       document.getElementById('status-view').classList.remove('active');
+
       if (ganttPlot) {
         Plotly.newPlot('timeline', ganttPlot.data, ganttPlot.layout, {responsive: true});
+        document.getElementById('timeline').on('plotly_click', handlePlotlyClick);
       } else {
         createGanttChart();
       }
+
+      currentView = 'gantt';
     });
 
     document.getElementById('status-view').addEventListener('click', function() {
+      if (currentView === 'status') return;
+
       this.classList.add('active');
       document.getElementById('gantt-view').classList.remove('active');
-      createStatusTransitionChart();
+
+      if (statusPlot) {
+        Plotly.newPlot('timeline', statusPlot.data, statusPlot.layout, {responsive: true});
+        document.getElementById('timeline').on('plotly_click', handlePlotlyClick);
+      } else {
+        createStatusTransitionChart();
+      }
+
+      currentView = 'status';
     });
 
     // Show/hide custom date range based on time_range selection
@@ -396,154 +606,9 @@
 
     // Close button for details panel
     document.getElementById('close-details').addEventListener('click', function() {
-        document.getElementById('invocation-details-panel').classList.add('d-none');
+      document.getElementById('invocation-details-panel').classList.add('d-none');
     });
-
   });
-
-// Function to load invocation details when an invocation is clicked
-function loadInvocationDetails(invocationId) {
-  console.log(`Loading details for invocation: ${invocationId}`);
-
-  // Show the details panel and set it to loading state
-  const detailsPanel = document.getElementById('invocation-details-panel');
-  const detailsContent = document.getElementById('invocation-details-content');
-  const viewFullDetailsLink = document.getElementById('view-full-details');
-
-  detailsPanel.classList.remove('d-none');
-  detailsContent.innerHTML = `
-    <div class="d-flex justify-content-center p-4">
-      <div class="spinner-border text-primary" role="status">
-        <span class="visually-hidden">Loading...</span>
-      </div>
-    </div>
-  `;
-
-  // Update the full details link
-  viewFullDetailsLink.href = `/invocations/${invocationId}`;
-
-  // Fetch both basic invocation data and history
-  Promise.all([
-    fetch(`/invocations/${invocationId}/api`).then(r => r.json()),
-    fetch(`/invocations/${invocationId}/history`).then(r => r.json())
-  ])
-  .then(([invData, historyData]) => {
-    if (invData.error) {
-      detailsContent.innerHTML = `<div class="alert alert-danger">${invData.error}</div>`;
-      return;
-    }
-
-    // Sort history by timestamp
-    historyData.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-
-    // Format the details HTML
-    let html = `
-      <div class="row">
-        <div class="col-md-6">
-          <h5>Invocation ${invData.invocation_id.substring(0, 8)}...</h5>
-          <table class="table table-sm">
-            <tr>
-              <th>Status</th>
-              <td>
-                <span class="badge bg-${getStatusClass(invData.status)}">${invData.status}</span>
-              </td>
-            </tr>
-            <tr>
-              <th>Task</th>
-              <td>${invData.task_id}</td>
-            </tr>
-            <tr>
-              <th>Created</th>
-              <td>${historyData.length > 0 ? new Date(historyData[0].timestamp).toLocaleString() : 'Unknown'}</td>
-            </tr>
-            <tr>
-              <th>Duration</th>
-              <td>${calculateDuration(historyData)}</td>
-            </tr>
-          </table>
-        </div>
-        <div class="col-md-6">
-          <h5>Status History</h5>
-          <div style="max-height: 200px; overflow-y: auto;">
-            <table class="table table-sm">
-              <thead>
-                <tr>
-                  <th>Status</th>
-                  <th>Timestamp</th>
-                </tr>
-              </thead>
-              <tbody>
-    `;
-
-    historyData.forEach(h => {
-      html += `
-        <tr>
-          <td><span class="badge bg-${getStatusClass(h.status)}">${h.status}</span></td>
-          <td>${new Date(h.timestamp).toLocaleString()}</td>
-        </tr>
-      `;
-    });
-
-    html += `
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    `;
-
-    // Display formatted content
-    detailsContent.innerHTML = html;
-  })
-  .catch(error => {
-    console.error('Error loading invocation details:', error);
-    detailsContent.innerHTML = `
-      <div class="alert alert-danger">
-        Error loading invocation details: ${error.message || 'Unknown error'}
-      </div>
-    `;
-  });
-}
-
-// Helper function to get appropriate Bootstrap color class for status
-function getStatusClass(status) {
-  const statusMap = {
-    'REGISTERED': 'secondary',
-    'PENDING': 'warning',
-    'RUNNING': 'info',
-    'PAUSED': 'primary',
-    'SUCCESS': 'success',
-    'FAILED': 'danger',
-    'CANCELLED': 'dark',
-    'TIMEOUT': 'danger'
-  };
-  return statusMap[status] || 'secondary';
-}
-
-// Helper function to calculate duration from history
-function calculateDuration(history) {
-  if (!history || history.length < 2) return 'N/A';
-
-  const start = new Date(history[0].timestamp);
-
-  // Find the last entry
-  const lastStatus = history[history.length - 1].status;
-  const end = new Date(history[history.length - 1].timestamp);
-
-  // Calculate duration
-  const durationMs = end - start;
-
-  // Format nicely
-  if (durationMs < 1000) {
-    return `${durationMs}ms`;
-  } else if (durationMs < 60000) {
-    return `${(durationMs / 1000).toFixed(2)}s`;
-  } else if (durationMs < 3600000) {
-    return `${Math.floor(durationMs / 60000)}m ${Math.floor((durationMs % 60000) / 1000)}s`;
-  } else {
-    return `${Math.floor(durationMs / 3600000)}h ${Math.floor((durationMs % 3600000) / 60000)}m`;
-  }
-}
 </script>
 {% endif %}
 {% endblock %}
