@@ -426,7 +426,24 @@ async def invocation_detail(request: Request, invocation_id: str) -> HTMLRespons
             except (ValueError, TypeError) as e:
                 logger.warning(f"Error calculating duration: {str(e)}")
 
-        # Then in the template context:
+        # Format the arguments for display
+        formatted_arguments = {}
+        try:
+            # Use the original arguments instead of serialized arguments
+            # This shows the actual values in a human-readable format
+            for key, value in call.arguments.kwargs.items():
+                # Convert values to string format with simple truncation for long values
+                max_length = 500  # Limit display length for very large values
+                str_value = str(value)
+                if len(str_value) > max_length:
+                    formatted_arguments[
+                        key
+                    ] = f"{str_value[:max_length]}... (truncated)"
+                else:
+                    formatted_arguments[key] = str_value
+        except Exception as e:
+            logger.error(f"Error formatting arguments: {str(e)}")
+            formatted_arguments = {"Error": f"Could not format arguments: {str(e)}"}
 
         logger.info(
             f"Rendering invocation detail template in {time.time() - start_time:.2f}s"
@@ -444,7 +461,7 @@ async def invocation_detail(request: Request, invocation_id: str) -> HTMLRespons
                 "result": formatted_result,
                 "exception": formatted_exception,
                 "history": formatted_history,
-                "serialized_arguments": call.serialized_arguments,
+                "arguments": formatted_arguments,
                 "created_at": created_at,
                 "completed_at": completed_at,
                 "duration": f"{duration_seconds:.2f} seconds"
