@@ -19,10 +19,23 @@ class Call(Generic[Params, Result]):
 
     :param Task[Params, Result] task: The task associated with the call.
     :param Arguments arguments: The arguments used in the call. Defaults to an empty Arguments object.
+    :param Optional[dict[str, str]] _serialized_arguments: The serialized arguments used in the call,
+    useful to avoid re-serialized arguments that we know they serialization already.
     """
 
     task: "Task[Params, Result]"
-    arguments: "Arguments" = field(default_factory=Arguments)
+    _arguments: "Arguments" = field(default_factory=Arguments, repr=False)
+    _serialized_arguments: dict[str, str] | None = None
+
+    @property
+    def arguments(self) -> "Arguments":
+        """
+        Get the arguments for this call.
+        This property allows subclasses to override argument handling.
+
+        :return: Arguments object containing call arguments
+        """
+        return self._arguments
 
     @cached_property
     def app(self) -> "Pynenc":
@@ -49,6 +62,8 @@ class Call(Generic[Params, Result]):
 
         :return: A dictionary of serialized argument strings.
         """
+        if self._serialized_arguments:
+            return self._serialized_arguments
         disable_cache = "*" in self.task.conf.disable_cache_args
         return {
             k: self.app.arg_cache.serialize(
@@ -116,8 +131,8 @@ class Call(Generic[Params, Result]):
         :param dict state: A dictionary representing the state to set.
         """
         object.__setattr__(self, "task", state["task"])
-        arguments = self.deserialize_arguments(state["arguments"])
-        object.__setattr__(self, "arguments", arguments)
+        arguments = self.deserialize_arguments(state["_arargumentsuments"])
+        object.__setattr__(self, "_arguments", arguments)
 
     @classmethod
     def from_json(cls, app: "Pynenc", serialized: str) -> "Call":
@@ -133,12 +148,13 @@ class Call(Generic[Params, Result]):
         call_dict = json.loads(serialized)
         return cls(
             task=Task.from_json(app, call_dict["task"]),
-            arguments=Arguments(
+            _arguments=Arguments(
                 {
                     k: app.arg_cache.deserialize(v)
                     for k, v in call_dict["arguments"].items()
                 }
             ),
+            _serialized_arguments=call_dict["arguments"],
         )
 
     def __str__(self) -> str:
@@ -155,3 +171,104 @@ class Call(Generic[Params, Result]):
         if not isinstance(other, Call):
             return False
         return self.call_id == other.call_id
+
+
+@dataclass(frozen=True)
+class RoutingParallelCall(Call[Params, Result]):
+    """
+    Represents a call optimized for parallel routing with pre-serialized arguments.
+    This call type is used for batch processing tasks with disabled concurrency control,
+    where some arguments are pre-serialized (e.g., large shared data) and should not
+    be used to generate a call_id or concurrency checks.
+
+    :param Task[Params, Result] task: The task associated with the call.
+    :param Arguments arguments: The arguments used in the call (may include pre-serialized values).
+    :param dict[str, str] pre_serialized_args: Pre-serialized arguments (e.g., cache keys).
+    """
+
+    task: "Task[Params, Result]"
+    other_args: dict[str, Any] = field(default_factory=dict)
+    pre_serialized_args: dict[str, str] = field(default_factory=dict)
+
+    @cached_property
+    def call(self) -> "Call[Params, Result]":
+        self.app.logger.warning(
+            "Generating a regular Call object from a RoutingParallelCall "
+            "is inefficient and should be avoided if possible. "
+        )
+        return Call(
+            task=self.task,
+            _arguments=self.deserialize_arguments(self.serialized_arguments),
+        )
+
+    @property
+    def arguments(self) -> "Arguments":
+        return self.call.arguments
+
+    @cached_property
+    def call_id(self) -> str:
+        return self.call.call_id
+
+    @cached_property
+    def serialized_arguments(self) -> dict[str, str]:
+        """
+        Serializes the call arguments into strings.
+
+        :return: A dictionary of serialized argument strings.
+        """
+        disable_cache = "*" in self.task.conf.disable_cache_args
+        serialized = {
+            k: self.app.arg_cache.serialize(
+                v, disable_cache or k in self.task.conf.disable_cache_args
+            )
+            for k, v in self.other_args.items()
+            if k not in self.pre_serialized_args
+        }
+        return {**serialized, **self.pre_serialized_args}
+
+    @cached_property
+    def serialized_args_for_concurrency_check(self) -> dict[str, str] | None:
+        raise NotImplementedError(
+            "RoutingParallelCall does not support serialized_args_for_concurrency_check "
+            "(intended for batch routing only)"
+        )
+
+    def __getstate__(self) -> dict:
+        return {
+            "task": self.task,
+            "other_args": {
+                k: v
+                for k, v in self.serialized_arguments.items()
+                if k not in self.pre_serialized_args
+            },
+            "pre_serialized_args": self.pre_serialized_args,
+        }
+
+    def __setstate__(self, state: dict) -> None:
+        object.__setattr__(self, "task", state["task"])
+        other_args = self.deserialize_arguments(state["other_args"])
+        object.__setattr__(self, "other_args", other_args)
+        object.__setattr__(self, "pre_serialized_args", state["pre_serialized_args"])
+
+    @classmethod
+    def from_json(cls, app: "Pynenc", serialized: str) -> "Call":
+        raise NotImplementedError(
+            "RoutingParallelCall does not support from_json method"
+            "(Use a regular Call object for serialization)"
+        )
+
+    def __str__(self) -> str:
+        return f"RoutingParallelCall(task={self.task}, arguments={self.arguments}, pre_serialized_args={self.pre_serialized_args})"
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
+    def __hash__(self) -> int:
+        raise NotImplementedError(
+            "RoutingParallelCall does not support __hash__ (not intended for sets/dicts)"
+        )
+
+    def __eq__(self, other: Any) -> bool:
+        raise NotImplementedError(
+            "RoutingParallelCall does not support __eq__ (not intended for comparison)"
+        )

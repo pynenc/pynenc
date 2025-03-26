@@ -271,8 +271,8 @@ def test_batch_parallelization_overhead(
 
     # Use fixed parameters for consistent testing - adjusted for better diagnostics
     data_size_kb = 20_000  # 20 MB
-    num_tasks = 500
-    batch_size = 100
+    num_tasks = 100
+    batch_size = 50
 
     app = task_batch_process_shared_data.app
     app.logger.info(
@@ -481,7 +481,7 @@ def test_batch_parallelization_overhead(
         )
 
     # For very small batches (high overhead), we're more lenient
-    max_acceptable_overhead = 0.5  # 50% of total time as overhead for batching
+    max_acceptable_overhead = 0.1  # 10% of total time as overhead for batching
 
     # Assert that batch overhead is acceptable
     assert batch_overhead_pct <= max_acceptable_overhead, (

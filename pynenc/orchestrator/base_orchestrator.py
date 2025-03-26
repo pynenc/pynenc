@@ -15,7 +15,7 @@ from pynenc.invocation.status import InvocationStatus
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
-    from pynenc.call import Call
+    from pynenc.call import Call, RoutingParallelCall
     from pynenc.task import Task
     from pynenc.types import Params, Result
 
@@ -648,13 +648,13 @@ class BaseOrchestrator(ABC):
         :return: The newly created `DistributedInvocation` for the call.
         :rtype: DistributedInvocation[Params, Result]
         """
-        self.app.logger.info(f"routing a new call {call.call_id} invocation")
+        self.app.logger.info(f"routing a new task {call.task.task_id} invocation")
         parent_invocation = context.get_dist_invocation_context(self.app.app_id)
         new_invocation = DistributedInvocation(call, parent_invocation)
         self.set_invocation_status(new_invocation, InvocationStatus.REGISTERED)
         self.app.broker.route_invocation(new_invocation)
         self.app.logger.info(
-            f"routed call {call.call_id} with invocation {new_invocation.invocation_id}"
+            f"routed task {call.task.task_id} with invocation {new_invocation.invocation_id}"
         )
         return new_invocation
 
@@ -723,7 +723,7 @@ class BaseOrchestrator(ABC):
         return ReusedInvocation.from_existing(invocation, call.arguments)
 
     def route_calls(
-        self, calls: list["Call"]
+        self, calls: list["RoutingParallelCall[Params, Result]"]
     ) -> list["DistributedInvocation[Params, Result]"]:
         """
         Routes multiple calls at once for improved performance.

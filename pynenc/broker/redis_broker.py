@@ -107,8 +107,22 @@ class RedisBroker(BaseBroker):
 
     def __init__(self, app: "Pynenc") -> None:
         super().__init__(app)
-        client = get_redis_client(self.conf)
-        self.queue = RedisQueue(app, client, "default")
+        self._client: redis.Redis | None = None
+        self._queue: RedisQueue | None = None
+
+    @property
+    def client(self) -> redis.Redis:
+        """Lazy initialization of Redis client"""
+        if self._client is None:
+            self.app.logger.debug("Lazy initializing Redis client for queue")
+            self._client = get_redis_client(self.conf)
+        return self._client
+
+    @property
+    def queue(self) -> RedisQueue:
+        if self._queue is None:
+            self._queue = RedisQueue(self.app, self.client, "default")
+        return self._queue
 
     @cached_property
     def conf(self) -> ConfigBrokerRedis:

@@ -3,7 +3,13 @@ from typing import Any
 import pytest
 
 from pynenc import Pynenc
-from pynenc.invocation import ConcurrentInvocationGroup, DistributedInvocationGroup
+from pynenc.call import RoutingParallelCall
+from pynenc.conf.config_task import ConcurrencyControlType
+from pynenc.invocation import (
+    BaseInvocationGroup,
+    ConcurrentInvocationGroup,
+    DistributedInvocationGroup,
+)
 
 _app = Pynenc()
 
@@ -14,8 +20,9 @@ def add(x: int, y: int) -> int:
 
 
 @_app.task
-def f_unpacking(*args: Any, **kwargs: Any) -> None:
-    """Does nothing"""
+def f_unpacking(*args: Any, **kwargs: Any) -> dict:
+    """Returns the unpacked arguments as a dictionary"""
+    return {"args": args, "kwargs": kwargs}
 
 
 @_app.task
@@ -26,7 +33,7 @@ def dummy(arg0: Any, arg1: Any, arg2: Any, arg3: Any) -> None:
 @pytest.fixture
 def app() -> Pynenc:
     # refresh the app for every test
-    app = Pynenc()
+    app = Pynenc(config_values={"serializer_cls": "PickleSerializer"})
     add.app = app
     f_unpacking.app = app
     dummy.app = app
@@ -63,8 +70,27 @@ def test_aconc_invocation(app: Pynenc) -> None:
     assert isinstance(invocation_group, DistributedInvocationGroup)
 
 
-def test_extract_arguments_unpacking(app: Pynenc) -> None:
+def check_args_unpacking(invocation_group: BaseInvocationGroup) -> None:
+    assert invocation_group.invocations[0].arguments.kwargs == {
+        "args": (1, 2, 3),
+        "kwargs": {},
+    }
+    # call with dict of keyword arguments:
+    assert invocation_group.invocations[1].arguments.kwargs == {
+        "args": (),
+        "kwargs": {"arg_3": "z"},
+    }
+    # call with Arguments instance:
+    assert invocation_group.invocations[2].arguments.kwargs == {
+        "args": ("x", "y"),
+        "kwargs": {"arg_3": "z"},
+    }
+
+
+def test_extract_arguments_unpacking_dev(app: Pynenc) -> None:
     """Test it will get args, kwargs from an unpacked function"""
+    # Checking parallelization with ConcurrentInvocationGroup
+    f_unpacking.app.conf.dev_mode_force_sync_tasks = True
     invocation_group = f_unpacking.parallelize(
         [
             (1, 2, 3),  # call with tuple of positional arguments
@@ -72,6 +98,33 @@ def test_extract_arguments_unpacking(app: Pynenc) -> None:
             f_unpacking.args("x", "y", arg_3="z"),  # call with Arguments instance
         ]
     )
+    assert isinstance(invocation_group, ConcurrentInvocationGroup)
+    check_args_unpacking(invocation_group)
+
+    # Checkin DistributedInvocationGroup with normal Call isntances, not parallel ones
+    f_unpacking.app.conf.dev_mode_force_sync_tasks = False
+    f_unpacking.conf.registration_concurrency = ConcurrencyControlType.ARGUMENTS
+    invocation_group = f_unpacking.parallelize(
+        [
+            (1, 2, 3),  # call with tuple of positional arguments
+            {"arg_3": "z"},  # call with dict of keyword arguments
+            f_unpacking.args("x", "y", arg_3="z"),  # call with Arguments instance
+        ]
+    )
+    assert isinstance(invocation_group, DistributedInvocationGroup)
+    assert not isinstance(invocation_group.invocations[0].call, RoutingParallelCall)
+    check_args_unpacking(invocation_group)
+
+    # chedking DistributedInvocationGroup with RoutingParallelCall instances
+    f_unpacking.conf.registration_concurrency = ConcurrencyControlType.DISABLED
+    invocation_group = f_unpacking.parallelize(
+        [
+            (1, 2, 3),  # call with tuple of positional arguments
+            {"arg_3": "z"},  # call with dict of keyword arguments
+            f_unpacking.args("x", "y", arg_3="z"),  # call with Arguments instance
+        ]
+    )
+    assert isinstance(invocation_group.invocations[0].call, RoutingParallelCall)
     # call with tuple of positional arguments:
     assert invocation_group.invocations[0].arguments.kwargs == {
         "args": (1, 2, 3),

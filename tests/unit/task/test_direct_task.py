@@ -164,3 +164,46 @@ def test_direct_task_complex_parallel() -> None:
     # Results: [[10, 11, 12], [11, 12, 13], [12, 13, 14]] -> flattened: [10, 11, 12, 11, 12, 13, 12, 13, 14]
     expected = [10, 11, 12, 11, 12, 13, 12, 13, 14]
     assert result == expected
+
+
+def parallel_with_common_data(kwargs: dict) -> tuple[dict, list[dict]]:
+    # Extract the large shared data and the array to split
+    items = kwargs.get("items", [1, 2, 3])
+
+    # Return common_args (shared data) and param_iter (one task per item)
+    return (
+        {"shared_data": kwargs["shared_data"]},
+        [{"items": [item]} for item in items],
+    )
+
+
+# Simple aggregation function
+def aggregate_results(
+    results: Iterable[tuple[str, list[int]]]
+) -> tuple[str, list[int]]:
+    results = list(results)
+    concat_items = [item for sublist in results for item in sublist[1]]
+    return results[0][0], concat_items
+
+
+# Task that processes each item with shared data
+@app.direct_task(
+    parallel_func=parallel_with_common_data, aggregate_func=aggregate_results
+)
+def process_item_with_shared_data(
+    shared_data: str, items: list[int]
+) -> tuple[str, list[int]]:
+    """Process an item using the shared data."""
+    # Simply return a tuple of the first char of shared data and the processed item
+    return (shared_data, items)
+
+
+def test_direct_task_with_common_data() -> None:
+    """Test that direct_task properly handles common data with array splitting."""
+    # Test with shared data and a list of items
+    result = process_item_with_shared_data(shared_data="test_data", items=[1, 2, 3])
+
+    # Each item is processed with the shared data
+    # Expected: [('t', 2), ('t', 4), ('t', 6)]
+    expected = ("test_data", [1, 2, 3])
+    assert result == expected

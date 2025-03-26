@@ -115,6 +115,10 @@ class Key:
 
         :param redis.Redis client: The Redis client.
         """
-        scan = client.scan_iter(self.prefix + "*")
-        for key in scan:
-            client.delete(key)
+        pattern = f"{self.prefix}*"
+        keys = list(client.scan_iter(pattern, count=1000))
+        if keys:
+            batch_size = 1000
+            for i in range(0, len(keys), batch_size):
+                batch = keys[i : i + batch_size]
+                client.delete(*batch)

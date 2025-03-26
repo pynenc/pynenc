@@ -255,11 +255,16 @@ class RedisBlockingControl(BaseBlockingControl):
                 invocation_id = waited_invocation_id.decode()
                 if inv := self.client.get(self.key.invocation(invocation_id)):
                     invocation = DistributedInvocation.from_json(self.app, inv.decode())
-                    if self.app.orchestrator.get_invocation_status(
-                        invocation
-                    ).is_available_for_run():
-                        max_num_invocations -= 1
-                        yield invocation
+                    try:
+                        status = self.app.orchestrator.get_invocation_status(invocation)
+                        if status.is_available_for_run():
+                            max_num_invocations -= 1
+                            yield invocation
+                    except StatusNotFound:
+                        self.app.logger.warning(
+                            f"Skipping invocation {invocation_id} in get_blocking_invocations: "
+                            "status not found in Redis"
+                        )
                 if max_num_invocations == 0:
                     break
 
@@ -312,6 +317,7 @@ class TaskRedisCache:
 
         :param DistributedInvocation invocation: The invocation to update.
         :param InvocationStatus status: The new status to set.
+        :param Optional[InvocationStatus] previous_status: The previous status, or None if it's a new invocation.
         :param redis.client.Pipeline pipeline: The Redis pipeline to use for commands.
         """
         task_id = invocation.task.task_id
@@ -369,6 +375,10 @@ class TaskRedisCache:
         """
         if not invocations:
             return
+
+        for invocation in invocations:
+            self.set_status(invocation, status)
+        return
 
         invocation_ids = [inv.invocation_id for inv in invocations]
         status_keys = [self.key.invocation_status(inv_id) for inv_id in invocation_ids]
@@ -583,8 +593,8 @@ class RedisOrchestrator(BaseOrchestrator):
 
     def __init__(self, app: "Pynenc") -> None:
         super().__init__(app)
-        self.client = get_redis_client(self.conf)
-        self.redis_cache = TaskRedisCache(app, self.client)
+        self._client: redis.Redis | None = None
+        self._redis_cache: TaskRedisCache | None = None
         self._cycle_control: Optional[RedisCycleControl] = None
         self._blocking_control: Optional[RedisBlockingControl] = None
 
@@ -594,6 +604,19 @@ class RedisOrchestrator(BaseOrchestrator):
             config_values=self.app.config_values,
             config_filepath=self.app.config_filepath,
         )
+
+    @property
+    def client(self) -> redis.Redis:
+        """Lazy initialization of Redis client"""
+        if self._client is None:
+            self._client = get_redis_client(self.conf)
+        return self._client
+
+    @property
+    def redis_cache(self) -> TaskRedisCache:
+        if not self._redis_cache:
+            self._redis_cache = TaskRedisCache(self.app, self.client)
+        return self._redis_cache
 
     @property
     def cycle_control(self) -> "RedisCycleControl":
@@ -640,7 +663,7 @@ class RedisOrchestrator(BaseOrchestrator):
         if not invocations:
             return
         self.redis_cache.set_batch_status(invocations, status)
-        self.app.logger.debug(f"Set status of invocations {invocations} to {status}")
+        self.app.logger.debug(f"Set {len(invocations)} invocations to {status=}")
 
     def _set_invocation_pending_status(
         self, invocation: "DistributedInvocation"

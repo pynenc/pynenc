@@ -36,14 +36,19 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
     :param Optional[str] _invocation_id:
         A unique identifier for the invocation. This ID is crucial for tracking and orchestrating the invocation
         across the distributed system. It's assigned internally and used by the orchestration mechanism.
+    :param bool _disable_upsert:
+        A flag to disable the upsert operation during initialization. This flag is used to prevent unnecessary
+        updates to the state backend when creating invocations in certain scenarios.
     """
 
     parent_invocation: DistributedInvocation | None
     _invocation_id: str | None = None
+    _disable_upsert: bool = False
 
     def __post_init__(self) -> None:
         super().__post_init__()
-        self.app.state_backend.upsert_invocation(self)
+        if not self._disable_upsert:
+            self.app.state_backend.upsert_invocation(self)
 
     @cached_property
     def invocation_id(self) -> str:
@@ -88,7 +93,9 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             parent_invocation = app.state_backend.get_invocation(
                 inv_dict["parent_invocation_id"]
             )
-        return cls(call, parent_invocation, inv_dict["invocation_id"])
+        return cls(
+            call, parent_invocation, inv_dict["invocation_id"], _disable_upsert=True
+        )
 
     def swap_context(self) -> DistributedInvocation | None:
         """

@@ -23,7 +23,16 @@ if TYPE_CHECKING:
     from pynenc.types import Args, Func, Params, Result
 
     # Type for the parallel function that generates arguments for parallel processing
-    ParallelFunc = Callable[[Args], Iterable[Union[tuple, dict, Arguments]]]
+    ParallelFuncReturn = Union[
+        # Option 1: Just return an iterable of arguments (any format)
+        Iterable[Union[tuple, dict, Arguments]],
+        # Option 2: Return a tuple of (common_args, param_iter) for optimized processing of large shared data
+        # This approach pre-serializes common_args once, reducing overhead for large arguments
+        # tuple.0 Common arguments shared by all tasks
+        # tuple.1 Iterable of dictionaries with task-specific arguments
+        tuple[dict[str, Any], Iterable[dict]],
+    ]
+    ParallelFunc = Callable[[Args], ParallelFuncReturn]
 
     # Type for the aggregation function that combines results
     AggregateFunc = Callable[[Iterable[Result]], Result]
@@ -369,7 +378,29 @@ class Pynenc:
         :param Optional[Func] func:
             The function to be converted into a Task instance that returns results directly.
         :param Optional[ParallelFunc] parallel_func:
-            Function that takes a dict of key arguments and returns an iterable of arguments for parallel execution.
+            Function that takes a dict of key arguments and returns either:
+
+            1. An iterable of parameters for parallel execution (can be tuples, dicts, or Arguments)
+               ```python
+               # Example returning just parameters
+               lambda args: [(i, i+1) for i in range(5)]  # Returns tuples
+               lambda args: [{"x": i, "y": i+1} for i in range(5)]  # Returns dicts
+               ```
+
+            2. A tuple containing (common_args, param_iter) for efficient handling of large shared data:
+               - common_args: Dictionary of arguments shared by all parallel tasks
+               - param_iter: Iterable of dictionaries with task-specific arguments
+
+               ```python
+               # Example with common arguments
+               lambda args: {
+                   "common_args": {"large_data": args["large_data"]},  # Shared data (serialized once)
+                   "param_iter": [{"index": i} for i in range(10)]  # Task-specific args
+               }
+               ```
+
+               This second approach provides major performance benefits when dealing with large shared
+               arguments (20MB+) as they're serialized only once instead of for each parallel task.
         :param Optional[AggregateFunc] aggregate_func:
             Function that takes a list of results and aggregates them into a single result.
         :param Optional[int] parallel_batch_size:
@@ -414,6 +445,22 @@ class Pynenc:
             return x + y
 
         result = add_parallel(0, 0)  # Returns sum of all parallel results
+
+        # With optimized pre-serialization of large shared data
+        @app.direct_task(
+            parallel_func=lambda args: {
+                "common_args": {"large_data": args["large_data"]},
+                "param_iter": [{"index": i} for i in range(100)]
+            },
+            aggregate_func=lambda results: sum(r[0] for r in results)
+        )
+        def process_data(large_data: str, index: int = 0) -> tuple[int, int]:
+            # Process large data with multiple parallel tasks
+            return (len(large_data) + index, index)
+
+        # Calling with 20MB of data
+        huge_data = "x" * (20 * 1024 * 1024)
+        result = process_data(huge_data)  # Pre-serializes huge_data only once
         ```
         """
 
@@ -421,7 +468,13 @@ class Pynenc:
             task: Task, *args: "Params.args", **kwargs: "Params.kwargs"
         ) -> "BaseInvocationGroup":
             parsed_args = task.args(*args, **kwargs).kwargs
-            return task.parallelize(parallel_func(parsed_args))  # type: ignore
+            parallel_result = parallel_func(parsed_args)  # type: ignore
+            if isinstance(parallel_result, tuple) and len(parallel_result) == 2:
+                common_args, param_iter = parallel_result
+                assert isinstance(param_iter, Iterable)
+                assert isinstance(common_args, dict)
+                return task.parallelize(param_iter, common_args)
+            return task.parallelize(parallel_result)
 
         def _aggregate_results(results: Iterable["Result"]) -> "Result":
             if aggregate_func is not None:

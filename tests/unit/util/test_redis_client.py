@@ -1,73 +1,37 @@
-from typing import Generator
+from collections.abc import Generator
 from unittest.mock import Mock, patch
 
 import pytest
 
 from pynenc.conf.config_redis import ConfigRedis
 from pynenc.util.redis_client import get_redis_client
+from pynenc.util.redis_connection_manager import RedisConnectionManager
 
 
-class TestRedisClient:
-    @pytest.fixture
-    def mock_redis(self) -> Generator:
-        with patch("redis.Redis") as mock:
-            yield mock
+@pytest.fixture
+def mock_connection_manager() -> Generator:
+    with patch("pynenc.util.redis_client.get_redis_connection_manager") as mock:
+        # Setup mock connection manager with client property
+        mock_manager = Mock(spec=RedisConnectionManager)
+        # Don't use spec here - just create a simple mock
+        mock_client = Mock(name="redis_client")
+        mock_manager.client = mock_client
+        mock.return_value = mock_manager
+        yield mock, mock_manager, mock_client
 
-    @pytest.fixture
-    def mock_redis_from_url(self) -> Generator:
-        # Patch redis.Redis.from_url directly
-        with patch("redis.Redis.from_url", autospec=True) as mock:
-            yield mock
 
-    def test_get_redis_client_with_url(self, mock_redis_from_url: Mock) -> None:
-        """Test client creation with redis_url."""
-        config = ConfigRedis()
-        config.redis_url = "redis://localhost:6379/0"
+def test_get_redis_client_uses_connection_manager(
+    mock_connection_manager: tuple,
+) -> None:
+    """Test that get_redis_client uses the connection manager."""
+    mock_get_manager, mock_manager, mock_client = mock_connection_manager
+    config = ConfigRedis()
 
-        get_redis_client(config)
+    # Call the function under test
+    client = get_redis_client(config)
 
-        mock_redis_from_url.assert_called_once_with(config.redis_url)
+    # Verify the connection manager was created with the config
+    mock_get_manager.assert_called_once_with(config)
 
-    def test_get_redis_client_with_credentials(self, mock_redis: Mock) -> None:
-        """Test client creation with username and password."""
-        config = ConfigRedis()
-        config.redis_username = "user"
-        config.redis_password = "pass"
-        config.redis_host = "localhost"
-        config.redis_port = 6379
-        config.redis_db = 1
-
-        get_redis_client(config)
-
-        mock_redis.assert_called_once_with(
-            host="localhost", port=6379, db=1, username="user", password="pass"
-        )
-
-    def test_get_redis_client_without_credentials(self, mock_redis: Mock) -> None:
-        """Test client creation without credentials."""
-        config = ConfigRedis()
-        config.redis_username = ""
-        config.redis_password = ""
-        config.redis_host = "localhost"
-        config.redis_port = 6379
-        config.redis_db = 0
-
-        get_redis_client(config)
-
-        mock_redis.assert_called_once_with(
-            host="localhost", port=6379, db=0, username=None, password=None
-        )
-
-    def test_get_redis_client_url_takes_precedence(
-        self, mock_redis_from_url: Mock, mock_redis: Mock
-    ) -> None:
-        """Test that redis_url takes precedence over other settings."""
-        config = ConfigRedis()
-        config.redis_url = "redis://localhost:6379/0"
-        config.redis_username = "user"
-        config.redis_password = "pass"
-
-        get_redis_client(config)
-
-        mock_redis.from_url.assert_called_once_with(config.redis_url)
-        mock_redis.assert_not_called()
+    # Verify the client property was accessed
+    assert client == mock_client

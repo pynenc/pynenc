@@ -68,14 +68,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Existing Redis connections now use connection pooling and health checks by default
 
 - **Task Parallelization Performance**:
+
   - Improve task parallelization to use batch processing when possible
   - Optimized Redis operations to minimize network round-trips during task parallelization
+
+- **Optimized Parallel Processing with Common Arguments**:
+  - Added pre-serialization for common arguments in `Task.parallelize()` to improve performance with shared data
+  - New `RoutingParallelCall` class for optimized batch operations with shared arguments
+  - Modified `direct_task` to support common argument optimization
+  - Improved Redis key management with batched purge operations
+  - Added `redis_debug_client` for performance analysis of Redis operations
 
 ### Fixed
 
 - Fixed issue with Redis connections being reset during high traffic periods
 - Improved error handling in views to gracefully handle connection failures
 - Added timeouts to prevent operations from hanging indefinitely on connection issues
+- Fixed serialization issue with JsonSerializer converting tuples to lists in args/kwargs
+- Fixed `filter_by_key_arguments` in the memory orchestrator for serialized tasks
 
 ## [0.0.20] - 2025-03-21
 

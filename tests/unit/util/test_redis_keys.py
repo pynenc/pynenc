@@ -35,13 +35,60 @@ def test_key_task(key_instance: Key) -> None:
 
 
 def test_key_purge() -> None:
+    # Setup mock Redis client
     mock_redis = Mock()
-    mock_redis.scan_iter.return_value = ["key1", "key2", "key3"]
+
+    # Set up the scan_iter to return multiple batches of keys
+    mock_redis.scan_iter.return_value = [
+        f"key{i}"
+        for i in range(1, 2501)  # Create a large list of keys to test batching
+    ]
+
+    # Create key instance and run purge
     key = Key("app", "prefix")
     key.purge(mock_redis)
-    mock_redis.delete.assert_has_calls(
-        [call("key1"), call("key2"), call("key3")], any_order=True
-    )
+
+    # Verify scan_iter was called with correct parameters
+    mock_redis.scan_iter.assert_called_once_with(f"{key.prefix}*", count=1000)
+
+    # Verify that delete was called with batches of 1000 keys
+    expected_calls = [
+        call(*[f"key{i}" for i in range(1, 1001)]),  # First batch
+        call(*[f"key{i}" for i in range(1001, 2001)]),  # Second batch
+        call(*[f"key{i}" for i in range(2001, 2501)]),  # Last batch (partial)
+    ]
+
+    # Check if delete was called with the expected batches
+    assert mock_redis.delete.call_count == 3
+    mock_redis.delete.assert_has_calls(expected_calls, any_order=False)
+
+
+def test_key_purge_empty() -> None:
+    """Test purge when no keys are found."""
+    mock_redis = Mock()
+    mock_redis.scan_iter.return_value = []
+
+    key = Key("app", "prefix")
+    key.purge(mock_redis)
+
+    # Verify scan_iter was called but delete was not
+    mock_redis.scan_iter.assert_called_once_with(f"{key.prefix}*", count=1000)
+    mock_redis.delete.assert_not_called()
+
+
+def test_key_purge_small_batch() -> None:
+    """Test purge with a small batch that doesn't need splitting."""
+    mock_redis = Mock()
+    mock_redis.scan_iter.return_value = [f"key{i}" for i in range(1, 11)]
+
+    key = Key("app", "prefix")
+    key.purge(mock_redis)
+
+    # Verify scan_iter was called
+    mock_redis.scan_iter.assert_called_once_with(f"{key.prefix}*", count=1000)
+
+    # Verify delete was called once with all keys
+    mock_redis.delete.assert_called_once_with(*[f"key{i}" for i in range(1, 11)])
 
 
 def test_key_with_empty_prefix() -> None:

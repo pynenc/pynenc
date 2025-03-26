@@ -1,4 +1,4 @@
-from time import process_time, sleep, time
+from time import process_time, sleep
 from typing import Any
 
 from pynenc import Pynenc
@@ -165,31 +165,11 @@ def batch_process_shared_data(
     app.logger.info(
         f"INI batch_process_shared_data {num_tasks=} {invocation_id=} data_len={len(shared_data)}"
     )
-
-    # Pre-cache the large data to get a cache key
-    app.logger.info("Pre-caching shared data...")
-    start_time = time()
-    data_cache_key = batch_process_shared_data.app.arg_cache.serialize(shared_data)
-    if app.arg_cache.is_cache_key(data_cache_key):
-        app.logger.info(f"Pre-cached shared data with key: {data_cache_key}")
-    else:
-        app.logger.warning("shared_data was not cached and was serialized instead")
-    cache_time = time() - start_time
-    app.logger.info(
-        f"Pre-cached shared data in {cache_time:.3f}s, key={data_cache_key[:20]}..."
+    invocation_group = process_large_shared_arg.parallelize(
+        param_iter=[{"index": i} for i in range(num_tasks)],
+        common_args={"large_data": shared_data},
     )
-
-    # Now create parameters with the cache key instead of the actual data
-    param_list = [(data_cache_key, i) for i in range(num_tasks)]
-
-    # Execute in parallel
-    app.logger.info(
-        f"Starting parallel processing of {num_tasks} tasks with shared data"
-    )
-
-    invocation_group = process_large_shared_arg.parallelize(param_list)
     results = list(invocation_group.results)
-
     app.logger.info(
         f"END batch_process_shared_data {num_tasks=} {invocation_id=} results={len(results)}"
     )
