@@ -749,7 +749,7 @@ class BaseOrchestrator(ABC):
 
         parent_invocation = context.get_dist_invocation_context(self.app.app_id)
         invocations: list[DistributedInvocation[Params, Result]] = [
-            DistributedInvocation(call, parent_invocation=parent_invocation)
+            DistributedInvocation(call, parent_invocation=parent_invocation)  # type: ignore
             for call in calls
         ]
         self._set_invocations_status(invocations, InvocationStatus.REGISTERED)
