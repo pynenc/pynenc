@@ -118,7 +118,7 @@ class RedisConnectionManager:
                 health_check_interval=self.conf.health_check_interval,
             )
 
-        logger.info(f"Connected to Redis at {self.get_connection_info()}")
+        logger.debug(f"Connected to Redis at {self.get_connection_info()}")
 
     def reconnect(self) -> None:
         """

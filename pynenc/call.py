@@ -258,7 +258,7 @@ class RoutingParallelCall(Call[Params, Result]):
         )
 
     def __str__(self) -> str:
-        return f"RoutingParallelCall(task={self.task}, arguments={self.arguments}, pre_serialized_args={self.pre_serialized_args})"
+        return f"RoutingParallelCall(task={self.task}, other_args={self.other_args}, pre_serialized_args={self.pre_serialized_args})"
 
     def __repr__(self) -> str:
         return self.__str__()

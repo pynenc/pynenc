@@ -61,7 +61,7 @@ class PynencBuilder:
         self._config["app_id"] = app_id
         return self
 
-    def redis(self, url: str, db: Optional[int] = None) -> "PynencBuilder":
+    def redis(self, url: str | None = None, db: int | None = None) -> "PynencBuilder":
         """
         Configure Redis components for the Pynenc application.
 
@@ -75,7 +75,8 @@ class PynencBuilder:
 
         :return: The builder instance for method chaining.
         """
-        self._config["redis_url"] = f"{url}/{db}" if db else url
+        if url or db:
+            self._config["redis_url"] = f"{url}/{db}" if db else url
         self._config.update(
             {
                 "orchestrator_cls": "RedisOrchestrator",
