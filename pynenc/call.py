@@ -1,5 +1,4 @@
 import json
-from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, Generic
@@ -13,22 +12,19 @@ if TYPE_CHECKING:
     from pynenc.task import Task
 
 
-class BaseCall(Generic[Params, Result], ABC):
+@dataclass
+class Call(Generic[Params, Result]):
     """
-    Abstract base class for task calls with common functionality.
+    Base class for task calls with common functionality.
 
     :param Task[Params, Result] task: The task associated with the call.
     """
 
-    def __init__(self, task: "Task[Params, Result]"):
-        """
-        Initialize the base call with a task.
+    task: "Task[Params, Result]"
+    _arguments: "Arguments" = field(default_factory=Arguments, repr=False)
+    _serialized_arguments: dict[str, str] | None = None
 
-        :param task: The task associated with the call
-        """
-        self.task = task
-
-    @cached_property
+    @property
     def app(self) -> "Pynenc":
         """
         Gets the Pynenc application instance associated with the task.
@@ -36,69 +32,6 @@ class BaseCall(Generic[Params, Result], ABC):
         :return: The Pynenc application instance.
         """
         return self.task.app
-
-    @property
-    @abstractmethod
-    def arguments(self) -> "Arguments":
-        """
-        Get the arguments for this call.
-        This property must be implemented by subclasses.
-
-        :return: Arguments object containing call arguments
-        """
-        pass
-
-    @property
-    @abstractmethod
-    def call_id(self) -> str:
-        """
-        Returns a unique identifier for the call.
-        This property must be implemented by subclasses.
-
-        :return: A string representing the unique identifier of the call.
-        """
-        pass
-
-    @property
-    @abstractmethod
-    def serialized_arguments(self) -> dict[str, str]:
-        """
-        Returns serialized call arguments.
-        This property must be implemented by subclasses.
-
-        :return: A dictionary of serialized argument strings.
-        """
-        pass
-
-    def deserialize_arguments(self, serialized_arguments: dict[str, str]) -> Arguments:
-        """
-        Deserializes the given serialized arguments.
-
-        :param dict[str, str] serialized_arguments: The serialized arguments to deserialize.
-        :return: An Arguments object representing the deserialized arguments.
-        """
-        return Arguments(
-            {
-                k: self.app.arg_cache.deserialize(v)
-                for k, v in serialized_arguments.items()
-            }
-        )
-
-
-@dataclass(frozen=True)
-class Call(BaseCall[Params, Result]):
-    """
-    Represents a specific call of a task. A call is unique per task and its arguments.
-
-    :param Task[Params, Result] task: The task associated with the call.
-    :param Arguments arguments: The arguments used in the call. Defaults to an empty Arguments object.
-    :param Optional[dict[str, str]] _serialized_arguments: The serialized arguments used in the call,
-    useful to avoid re-serialized arguments that we know they serialization already.
-    """
-
-    task: "Task[Params, Result]"
-    _arguments: "Arguments" = field(default_factory=Arguments, repr=False)
-    _serialized_arguments: dict[str, str] | None = None
 
     @property
     def arguments(self) -> "Arguments":
@@ -110,16 +43,7 @@ class Call(BaseCall[Params, Result]):
         """
         return self._arguments
 
-    @cached_property
-    def app(self) -> "Pynenc":
-        """
-        Gets the Pynenc application instance associated with the task.
-
-        :return: The Pynenc application instance.
-        """
-        return self.task.app
-
-    @cached_property
+    @property
     def call_id(self) -> str:
         """
         Generates a unique identifier for the call based on the task ID and the arguments.
@@ -204,7 +128,7 @@ class Call(BaseCall[Params, Result]):
         :param dict state: A dictionary representing the state to set.
         """
         object.__setattr__(self, "task", state["task"])
-        arguments = self.deserialize_arguments(state["_arargumentsuments"])
+        arguments = self.deserialize_arguments(state["arguments"])
         object.__setattr__(self, "_arguments", arguments)
 
     @classmethod
@@ -240,31 +164,29 @@ class Call(BaseCall[Params, Result]):
         return hash(self.call_id)
 
     def __eq__(self, other: Any) -> bool:
-        # TODO equality based in task and arguments or in invocation_id?
         if not isinstance(other, Call):
             return False
         return self.call_id == other.call_id
 
 
 @dataclass
-class RoutingParallelCall(BaseCall[Params, Result]):
+class PreSerializedCall(Call[Params, Result]):
     """
     Represents a call optimized for parallel routing with pre-serialized arguments.
     This call type is used for batch processing tasks with disabled concurrency control,
-    where some arguments are pre-serialized (e.g., large shared data) and should not
-    be used to generate a call_id or concurrency checks.
+    where some arguments are pre-serialized (e.g., large shared data).
 
     :param Task[Params, Result] task: The task associated with the call.
-    :param Arguments arguments: The arguments used in the call (may include pre-serialized values).
-    :param dict[str, str] pre_serialized_args: Pre-serialized arguments (e.g., cache keys).
+    :param dict[str, Any] other_args: Unique arguments for this specific call.
+    :param dict[str, str] pre_serialized_args: Pre-serialized common arguments.
     """
 
-    task: "Task[Params, Result]"
     other_args: dict[str, Any] = field(default_factory=dict)
     pre_serialized_args: dict[str, str] = field(default_factory=dict)
     _call: Call[Params, Result] | None = field(default=None, repr=False)
     _cached_arguments: Arguments | None = field(default=None, repr=False)
     _serialized_arguments: dict[str, str] | None = field(default=None, repr=False)
+    _args_hash: str | None = field(default=None, repr=False)
 
     @property
     def call(self) -> "Call[Params, Result]":
@@ -339,28 +261,20 @@ class RoutingParallelCall(BaseCall[Params, Result]):
         object.__setattr__(self, "other_args", other_args)
         object.__setattr__(self, "pre_serialized_args", state["pre_serialized_args"])
 
-    def to_json(self) -> str:
-        """
-        Serializes the call into a JSON string.
-
-        :return: A JSON string representing the serialized call.
-        """
-        return json.dumps(
-            {"task": self.task.to_json(), "arguments": self.serialized_arguments}
-        )
-
     @classmethod
     def from_json(cls, app: "Pynenc", serialized: str) -> "Call":
+        """
+        PreSerializedCall doesn't support from_json as it's meant for batch routing.
+
+        :raises NotImplementedError: This method is not implemented for PreSerializedCall.
+        """
         raise NotImplementedError(
-            "RoutingParallelCall does not support from_json method"
+            "PreSerializedCall does not support from_json method "
             "(Use a regular Call object for serialization)"
         )
 
     def __str__(self) -> str:
-        return f"RoutingParallelCall(task={self.task}, other_args={self.other_args}, pre_serialized_args={self.pre_serialized_args})"
-
-    def __repr__(self) -> str:
-        return self.__str__()
+        return f"PreSerializedCall(task={self.task}, other_args={self.other_args}, pre_serialized_args={list(self.pre_serialized_args.keys())})"
 
     def __hash__(self) -> int:
         raise NotImplementedError(

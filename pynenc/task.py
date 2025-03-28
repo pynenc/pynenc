@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, Generic, overload
 
 from pynenc import context
 from pynenc.arguments import Arguments
-from pynenc.call import Call, RoutingParallelCall
+from pynenc.call import Call, PreSerializedCall
 from pynenc.conf.config_task import ConcurrencyControlType, ConfigTask
 from pynenc.exceptions import InvalidTaskOptionsError, RetryError
 from pynenc.invocation.base_invocation import BaseInvocation, BaseInvocationGroup
@@ -407,7 +407,7 @@ def distribute_batch_calls(
     common_args: dict | None = None,
 ) -> DistributedInvocationGroup:
     """
-    Process a list of parameters in batches using RoutingParallelCall.
+    Process a list of parameters in batches using PreSerializedCall.
     Handles pre-serialization of common arguments for efficient distribution.
 
     :param Task task: The task to process
@@ -438,7 +438,7 @@ def distribute_batch_calls(
     for i in range(0, len(other_args), batch_size):
         batch_args = other_args[i : i + batch_size]
         batch_calls = [
-            RoutingParallelCall(
+            PreSerializedCall(
                 task, other_args=args, pre_serialized_args=pre_serialized_args
             )
             for args in batch_args
@@ -446,7 +446,7 @@ def distribute_batch_calls(
         batch_invocations = task.app.orchestrator.route_calls(batch_calls)
         invocations.extend(batch_invocations)
         if i + batch_size < len(other_args):
-            task.logger.debug(
+            task.logger.info(
                 f"Processed batch {i//batch_size + 1}, "
                 f"{len(invocations)}/{len(other_args)} invocations"
             )

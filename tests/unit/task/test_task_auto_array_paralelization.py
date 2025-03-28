@@ -3,7 +3,7 @@ from typing import Any
 import pytest
 
 from pynenc import Pynenc
-from pynenc.call import RoutingParallelCall
+from pynenc.call import PreSerializedCall
 from pynenc.conf.config_task import ConcurrencyControlType
 from pynenc.invocation import (
     BaseInvocationGroup,
@@ -112,10 +112,10 @@ def test_extract_arguments_unpacking_dev(app: Pynenc) -> None:
         ]
     )
     assert isinstance(invocation_group, DistributedInvocationGroup)
-    assert not isinstance(invocation_group.invocations[0].call, RoutingParallelCall)
+    assert not isinstance(invocation_group.invocations[0].call, PreSerializedCall)
     check_args_unpacking(invocation_group)
 
-    # chedking DistributedInvocationGroup with RoutingParallelCall instances
+    # chedking DistributedInvocationGroup with PreSerializedCall instances
     f_unpacking.conf.registration_concurrency = ConcurrencyControlType.DISABLED
     invocation_group = f_unpacking.parallelize(
         [
@@ -124,7 +124,7 @@ def test_extract_arguments_unpacking_dev(app: Pynenc) -> None:
             f_unpacking.args("x", "y", arg_3="z"),  # call with Arguments instance
         ]
     )
-    assert isinstance(invocation_group.invocations[0].call, RoutingParallelCall)
+    assert isinstance(invocation_group.invocations[0].call, PreSerializedCall)
     # call with tuple of positional arguments:
     assert invocation_group.invocations[0].arguments.kwargs == {
         "args": (1, 2, 3),

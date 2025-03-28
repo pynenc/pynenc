@@ -15,7 +15,7 @@ from pynenc.invocation.status import InvocationStatus
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
-    from pynenc.call import Call, RoutingParallelCall
+    from pynenc.call import Call, PreSerializedCall
     from pynenc.task import Task
     from pynenc.types import Params, Result
 
@@ -723,7 +723,7 @@ class BaseOrchestrator(ABC):
         return ReusedInvocation.from_existing(invocation, call.arguments)
 
     def route_calls(
-        self, calls: list["RoutingParallelCall[Params, Result]"]
+        self, calls: list["PreSerializedCall[Params, Result]"]
     ) -> list["DistributedInvocation[Params, Result]"]:
         """
         Routes multiple calls at once for improved performance.

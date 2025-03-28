@@ -74,7 +74,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - **Optimized Parallel Processing with Common Arguments**:
   - Added pre-serialization for common arguments in `Task.parallelize()` to improve performance with shared data
-  - New `RoutingParallelCall` class for optimized batch operations with shared arguments
+  - New `PreSerializedCall` class for optimized batch operations with shared and large arguments
   - Modified `direct_task` to support common argument optimization
   - Improved Redis key management with batched purge operations
   - Added `redis_debug_client` for performance analysis of Redis operations
