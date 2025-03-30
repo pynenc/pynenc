@@ -18,6 +18,7 @@ class PynencBuilder:
     # Create a Pynenc application with Redis and MultiThreadRunner
     pynenc_app = (
         PynencBuilder()
+        .app_id("my_application")
         .serializer("pickle")
         .redis(url="redis://localhost:6379/14")
         .multi_thread_runner(min_threads=1, max_threads=4)
@@ -45,7 +46,22 @@ class PynencBuilder:
         self._using_memory_components = False
         self._using_redis_components = False
 
-    def redis(self, url: str, db: Optional[int] = None) -> "PynencBuilder":
+    def app_id(self, app_id: str) -> "PynencBuilder":
+        """
+        Set the application ID for the Pynenc application.
+
+        The application ID uniquely identifies this Pynenc application instance
+        and is used in logging, monitoring, and component configuration.
+
+        :param str app_id:
+            The unique identifier for this application.
+
+        :return: The builder instance for method chaining.
+        """
+        self._config["app_id"] = app_id
+        return self
+
+    def redis(self, url: str | None = None, db: int | None = None) -> "PynencBuilder":
         """
         Configure Redis components for the Pynenc application.
 
@@ -59,7 +75,8 @@ class PynencBuilder:
 
         :return: The builder instance for method chaining.
         """
-        self._config["redis_url"] = f"{url}/{db}" if db else url
+        if url or db:
+            self._config["redis_url"] = f"{url}/{db}" if db else url
         self._config.update(
             {
                 "orchestrator_cls": "RedisOrchestrator",
@@ -494,6 +511,9 @@ class PynencBuilder:
 
         This method allows adding any custom configuration values that are not
         covered by the specialized methods.
+
+        For common configuration values, prefer using the dedicated methods
+        (like app_id(), logging_level(), etc.) instead of this generic method.
 
         :param Any kwargs:
             Custom configuration values to add to the configuration.

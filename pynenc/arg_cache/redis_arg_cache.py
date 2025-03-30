@@ -1,6 +1,8 @@
 from functools import cached_property
 from typing import TYPE_CHECKING
 
+import redis
+
 from pynenc.arg_cache.base_arg_cache import BaseArgCache
 from pynenc.conf.config_arg_cache import ConfigArgCacheRedis
 from pynenc.util.redis_client import get_redis_client
@@ -20,8 +22,15 @@ class RedisArgCache(BaseArgCache):
 
     def __init__(self, app: "Pynenc") -> None:
         super().__init__(app)
-        self.client = get_redis_client(self.conf)
+        self._client: redis.Redis | None = None
         self.key = Key(app.app_id, "arg_cache")
+
+    @property
+    def client(self) -> redis.Redis:
+        """Lazy initialization of Redis client"""
+        if self._client is None:
+            self._client = get_redis_client(self.conf)
+        return self._client
 
     @cached_property
     def conf(self) -> ConfigArgCacheRedis:

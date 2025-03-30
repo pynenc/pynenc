@@ -1,9 +1,21 @@
+import multiprocessing
 import os
 import signal
 import time
 from functools import cached_property
 from multiprocessing import Manager, Process
 from typing import TYPE_CHECKING, Any, Optional
+
+# Use 'spawn' method on macOS to avoid connection issues
+if (
+    hasattr(multiprocessing, "get_start_method")
+    and multiprocessing.get_start_method(allow_none=True) != "spawn"
+):
+    try:
+        multiprocessing.set_start_method("spawn", force=True)
+    except RuntimeError:
+        # Method already set and we're not in main process
+        pass
 
 from pynenc import context
 from pynenc.conf.config_runner import ConfigPersistentProcessRunner
@@ -112,8 +124,8 @@ class PersistentProcessRunner(BaseRunner):
 
     def _spawn_persistent_process(self) -> str:
         """Spawns a new persistent process and returns its key."""
-        if not self.running:
-            raise RuntimeError("Trying to spawn new process after stoppint loop")
+        if not hasattr(self, "running") or not self.running:
+            raise RuntimeError("Trying to spawn new process after stopping loop")
         process_key = self._generate_process_key()
         args = {
             "app": self.app,
@@ -135,30 +147,53 @@ class PersistentProcessRunner(BaseRunner):
 
     def _terminate_all_processes(self) -> None:
         """Terminates all running processes with graceful shutdown attempt."""
-        self.stop_event.set()  # Signal all processes to stop
+        # Check if stop_event is initialized first
+        if hasattr(self, "stop_event"):
+            try:
+                self.stop_event.set()  # Signal all processes to stop
+            except Exception as e:
+                self.logger.warning(f"Failed to set stop event: {e}")
+
+        # Continue with process termination regardless
         for key, process in list(self.processes.items()):
-            if process.is_alive():
-                process.terminate()
-                process.join(timeout=5)
+            try:
                 if process.is_alive():
-                    self.logger.warning(
-                        f"Process {key} did not terminate, forcing kill"
-                    )
-                    process.kill()
-                self.processes.pop(key, None)
-                self.logger.debug(f"Terminated process {key}")
+                    process.terminate()
+                    process.join(timeout=5)
+                    if process.is_alive():
+                        self.logger.warning(
+                            f"Process {key} did not terminate, forcing kill"
+                        )
+                        process.kill()
+                    self.processes.pop(key, None)
+                    self.logger.debug(f"Terminated process {key}")
+            except Exception as e:
+                self.logger.warning(f"Error terminating process {key}: {e}")
 
     def _on_stop(self) -> None:
         """Cleans up all resources when runner stops."""
-        self.logger.info("Stopping PersistentProcessRunner")
-        self._terminate_all_processes()
-        self.manager.shutdown()  # type: ignore
-        self.logger.info("PersistentProcessRunner stopped")
+        try:
+            self.logger.info("Stopping PersistentProcessRunner")
+            self._terminate_all_processes()
+
+            # Check if manager is initialized
+            if hasattr(self, "manager"):
+                try:
+                    self.manager.shutdown()  # type: ignore
+                except Exception as e:
+                    self.logger.warning(f"Failed to shutdown manager: {e}")
+
+            self.logger.info("PersistentProcessRunner stopped")
+        except Exception as e:
+            self.logger.error(f"Error during runner stop: {e}")
 
     def _on_stop_runner_loop(self) -> None:
         """Handles immediate stop from signal."""
-        self.logger.info("Stopping PersistentProcessRunner loop due to signal")
-        self._terminate_all_processes()
+        try:
+            self.logger.info("Stopping PersistentProcessRunner loop due to signal")
+            self._terminate_all_processes()
+        except Exception as e:
+            self.logger.error(f"Error during runner loop stop: {e}")
 
     def runner_loop_iteration(self) -> None:
         """Maintains the configured number of running processes."""

@@ -2,6 +2,8 @@ import json
 from functools import cached_property
 from typing import TYPE_CHECKING
 
+import redis
+
 from pynenc import exceptions
 from pynenc.conf.config_state_backend import ConfigStateBackendRedis
 from pynenc.invocation.dist_invocation import DistributedInvocation
@@ -24,7 +26,7 @@ class RedisStateBackend(BaseStateBackend):
 
     def __init__(self, app: "Pynenc") -> None:
         super().__init__(app)
-        self.client = get_redis_client(self.conf)
+        self._client: redis.Redis | None = None
         self.key = Key(app.app_id, "state_backend")
 
     @cached_property
@@ -33,6 +35,13 @@ class RedisStateBackend(BaseStateBackend):
             config_values=self.app.config_values,
             config_filepath=self.app.config_filepath,
         )
+
+    @property
+    def client(self) -> redis.Redis:
+        """Lazy initialization of Redis client"""
+        if self._client is None:
+            self._client = get_redis_client(self.conf)
+        return self._client
 
     def purge(self) -> None:
         """Clears all data from the Redis backend for the current `app.app_id`."""

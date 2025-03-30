@@ -1,0 +1,156 @@
+{% extends "base.html" %} {% block content %}
+<div class="row">
+  <div class="col-12">
+    <div class="card">
+      <div
+        class="card-header d-flex justify-content-between align-items-center"
+      >
+        <span>Call Details</span>
+        <div>
+          <a href="/invocations" class="btn btn-sm btn-outline-secondary me-2">
+            Back to Invocations
+          </a>
+          <a
+            href="/tasks/{{ task.task_id }}"
+            class="btn btn-sm btn-outline-primary"
+          >
+            View Task
+          </a>
+        </div>
+      </div>
+      <div class="card-body">
+        <h5>Call ID: {{ call.call_id }}</h5>
+
+        <div class="row mt-3">
+          <div class="col-md-6">
+            <div class="card">
+              <div class="card-header">Task Information</div>
+              <div class="card-body">
+                <table class="table">
+                  <tbody>
+                    <tr>
+                      <th>Task ID:</th>
+                      <td>
+                        <a href="/tasks/{{ task.task_id }}">
+                          {{ task.task_id }}
+                        </a>
+                      </td>
+                    </tr>
+                    <tr>
+                      <th>Module:</th>
+                      <td>{{ task.module }}</td>
+                    </tr>
+                    <tr>
+                      <th>Function:</th>
+                      <td>{{ task.func_qualname }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-6">
+            <div class="card">
+              <div
+                class="card-header d-flex justify-content-between align-items-center"
+              >
+                <span>Arguments</span>
+                <button
+                  class="btn btn-sm btn-outline-secondary"
+                  data-bs-toggle="collapse"
+                  data-bs-target="#arguments-section"
+                >
+                  Expand/Collapse
+                </button>
+              </div>
+              <div class="card-body collapse show" id="arguments-section">
+                <div class="mb-3">
+                  <label class="form-label">Argument Values</label>
+                  {% with args=formatted_args, id_prefix='call-args' %} {%
+                  include "partials/formatted_arguments.html" %} {% endwith %}
+                </div>
+
+                <!-- Only show this if there are arguments -->
+                {% if formatted_args %}
+                <div class="d-grid gap-2 mt-3">
+                  <button
+                    class="btn btn-outline-primary"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#full-args"
+                  >
+                    Show All Arguments
+                  </button>
+                </div>
+
+                <div class="collapse mt-3" id="full-args">
+                  <div class="card card-body">
+                    <pre
+                      class="m-0"
+                    ><code>{{ serialized_arguments }}</code></pre>
+                  </div>
+                </div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row mt-3">
+          <div class="col-12">
+            <div class="card">
+              <div class="card-header">
+                Invocations ({{ invocations|length }})
+              </div>
+              <div class="card-body">
+                {% if invocations %}
+                <div class="table-responsive">
+                  <table class="table table-hover">
+                    <thead>
+                      <tr>
+                        <th>Invocation ID</th>
+                        <th>Status</th>
+                        <th>Retries</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for invocation in invocations %}
+                      <tr>
+                        <td>
+                          <a href="/invocations/{{ invocation.invocation_id }}">
+                            {{ invocation.invocation_id[:8] }}...
+                          </a>
+                        </td>
+                        <td>
+                          <span
+                            class="badge {% if invocation.status.name == 'SUCCESS' %}bg-success {% elif invocation.status.name == 'FAILED' %}bg-danger {% elif invocation.status.name == 'RUNNING' %}bg-primary {% elif invocation.status.name == 'PENDING' %}bg-warning {% elif invocation.status.name == 'PAUSED' %}bg-info {% elif invocation.status.name == 'RETRY' %}bg-secondary {% else %}bg-dark{% endif %}"
+                          >
+                            {{ invocation.status.name }}
+                          </span>
+                        </td>
+                        <td>{{ invocation.num_retries }}</td>
+                        <td>
+                          <a
+                            href="/invocations/{{ invocation.invocation_id }}"
+                            class="btn btn-sm btn-primary"
+                            >Details</a
+                          >
+                        </td>
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+                {% else %}
+                <p class="text-muted">No invocations found for this call.</p>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

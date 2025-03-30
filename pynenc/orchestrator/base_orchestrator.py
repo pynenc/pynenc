@@ -8,13 +8,14 @@ from pynenc.conf.config_task import ConcurrencyControlType
 from pynenc.exceptions import (
     InvocationConcurrencyWithDifferentArgumentsError,
     PendingInvocationLockError,
+    TaskParallelProcessingError,
 )
 from pynenc.invocation.dist_invocation import DistributedInvocation, ReusedInvocation
 from pynenc.invocation.status import InvocationStatus
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
-    from pynenc.call import Call
+    from pynenc.call import Call, PreSerializedCall
     from pynenc.task import Task
     from pynenc.types import Params, Result
 
@@ -130,6 +131,19 @@ class BaseOrchestrator(ABC):
         """
 
     @abstractmethod
+    def get_invocation(self, invocation_id: str) -> Optional["DistributedInvocation"]:
+        """
+        Retrieves a specific invocation by its ID.
+
+        This method provides a direct way to access an invocation without filtering through all invocations,
+        which can be much more efficient when the invocation ID is known.
+
+        :param str invocation_id: The ID of the invocation to retrieve.
+        :return: The invocation if found, None otherwise.
+        :rtype: Optional[DistributedInvocation]
+        """
+
+    @abstractmethod
     def _set_invocation_status(
         self,
         invocation: "DistributedInvocation[Params, Result]",
@@ -140,6 +154,20 @@ class BaseOrchestrator(ABC):
 
         :param DistributedInvocation[Params, Result] invocation: The invocation to update.
         :param InvocationStatus status: The new status to set for the invocation.
+        """
+
+    @abstractmethod
+    def _set_invocations_status(
+        self, invocations: list[DistributedInvocation], status: InvocationStatus
+    ) -> None:
+        """
+        Set the status of multiple invocations at once.
+
+        Default implementation sets status for each invocation sequentially.
+        Subclasses should override this with more efficient batch implementations.
+
+        :param list[DistributedInvocation] invocations: The invocations to update.
+        :param InvocationStatus status: The status to set.
         """
 
     @abstractmethod
@@ -227,6 +255,41 @@ class BaseOrchestrator(ABC):
         :return: The number of retries for the invocation.
         :rtype: int
         """
+
+    @abstractmethod
+    def filter_by_status(
+        self,
+        invocations: list["DistributedInvocation"],
+        status_filter: set["InvocationStatus"] | None = None,
+    ) -> list["DistributedInvocation"]:
+        """
+        Filters a list of invocations by their status in an optimized way.
+
+        This method allows efficient batch filtering of invocations by status,
+        reducing the number of individual status checks needed.
+
+        :param list[DistributedInvocation] invocations: The invocations to filter
+        :param list[InvocationStatus] | None status_filter: The statuses to filter by.
+            If None, defaults to final statuses.
+        :return: List of invocations matching the status filter
+        :rtype: list[DistributedInvocation]
+        """
+        pass
+
+    def filter_final(
+        self, invocations: list["DistributedInvocation"]
+    ) -> list["DistributedInvocation"]:
+        """
+        Returns invocations that have reached a final status.
+
+        This is a convenience method that internally uses filter_by_status
+        with all final statuses.
+
+        :param list[DistributedInvocation] invocations: The invocations to check
+        :return: List of invocations that have reached a final status
+        :rtype: list[DistributedInvocation]
+        """
+        return self.filter_by_status(invocations, InvocationStatus.get_final_statuses())
 
     @abstractmethod
     def purge(self) -> None:
@@ -519,16 +582,10 @@ class BaseOrchestrator(ABC):
         """
         for blocking_invocation in self.get_blocking_invocations(max_num_invocations):
             if not self.is_candidate_to_run_by_concurrency_control(blocking_invocation):
-                self.app.runner.logger.warning(  # TODO REMOVE
-                    f"DISCARDING blocking invocation to run {blocking_invocation=}"
-                )
                 continue
             blocking_invocation_ids.add(blocking_invocation.invocation_id)
             try:
                 self._set_pending(blocking_invocation)
-                self.app.runner.logger.info(  # TODO REMOVE
-                    f"Obtained blocking invocation to run {blocking_invocation=}"
-                )
                 yield blocking_invocation
             except PendingInvocationLockError:
                 continue
@@ -550,9 +607,6 @@ class BaseOrchestrator(ABC):
         """
         while missing_invocations > 0:
             if invocation := self.app.broker.retrieve_invocation():
-                self.app.runner.logger.info(  # TODO REMOVE
-                    f"Obtained broker invocation CANDIDATE to run {invocation=}"
-                )
                 if invocation.invocation_id not in blocking_invocation_ids:
                     invocation_status = self.get_invocation_status(invocation)
                     if invocation_status.is_available_for_run():
@@ -564,21 +618,10 @@ class BaseOrchestrator(ABC):
                         try:
                             self._set_pending(invocation)
                             missing_invocations -= 1
-                            self.app.runner.logger.info(
-                                f"YIELDING broker invocation to run {invocation=}"
-                            )
                             yield invocation
                         except PendingInvocationLockError:
                             # invocations_to_reroute.add(invocation)
                             continue
-                    else:
-                        self.app.runner.logger.warning(  # TODO REMOVE
-                            f"Ignoring broker invocation to run {invocation=} because {invocation_status=}"
-                        )
-                else:
-                    self.app.runner.logger.warning(  # TODO REMOVE
-                        f"Ignoring broker invocation to run {invocation=} because is in {blocking_invocation_ids=} is not available to run"
-                    )
             else:
                 break
 
@@ -611,7 +654,7 @@ class BaseOrchestrator(ABC):
         yield from self.get_blocking_invocations_to_run(
             max_num_invocations, blocking_invocation_ids
         )
-        invocations_to_reroute: set["DistributedInvocation"] = set()
+        invocations_to_reroute: set[DistributedInvocation] = set()
         missing_invocations = max_num_invocations - len(blocking_invocation_ids)
         yield from self.get_additional_invocations_to_run(
             missing_invocations, blocking_invocation_ids, invocations_to_reroute
@@ -631,13 +674,13 @@ class BaseOrchestrator(ABC):
         :return: The newly created `DistributedInvocation` for the call.
         :rtype: DistributedInvocation[Params, Result]
         """
-        self.app.logger.info(f"routing a new call {call.call_id} invocation")
         parent_invocation = context.get_dist_invocation_context(self.app.app_id)
         new_invocation = DistributedInvocation(call, parent_invocation)
+        self.app.logger.info(f"routing {new_invocation=}")
         self.set_invocation_status(new_invocation, InvocationStatus.REGISTERED)
         self.app.broker.route_invocation(new_invocation)
         self.app.logger.info(
-            f"routed call {call.call_id} with invocation {new_invocation.invocation_id}"
+            f"routed task {call.task.task_id} with invocation {new_invocation.invocation_id}"
         )
         return new_invocation
 
@@ -704,3 +747,37 @@ class BaseOrchestrator(ABC):
                 existing_invocation=invocation, new_call=call
             )
         return ReusedInvocation.from_existing(invocation, call.arguments)
+
+    def route_calls(
+        self, calls: list["PreSerializedCall[Params, Result]"]
+    ) -> list["DistributedInvocation[Params, Result]"]:
+        """
+        Routes multiple calls at once for improved performance.
+
+        This method is specifically for batch processing tasks with disabled concurrency control.
+
+        :param list[Call] calls: The calls to be routed.
+        :return: The list of routed invocations.
+        :raises BatchProcessingError: If concurrency control is enabled for any of the calls.
+        """
+        if not calls:
+            self.app.logger.debug("No calls to route")
+            return []
+
+        if (
+            calls[0].task.conf.registration_concurrency
+            != ConcurrencyControlType.DISABLED
+        ):
+            raise TaskParallelProcessingError(
+                calls[0].task.task_id,
+                "Batch processing is only supported with ConcurrencyControlType.DISABLED",
+            )
+
+        parent_invocation = context.get_dist_invocation_context(self.app.app_id)
+        invocations: list[DistributedInvocation[Params, Result]] = [
+            DistributedInvocation(call, parent_invocation=parent_invocation)  # type: ignore
+            for call in calls
+        ]
+        self._set_invocations_status(invocations, InvocationStatus.REGISTERED)
+        self.app.broker.route_invocations(invocations)
+        return invocations

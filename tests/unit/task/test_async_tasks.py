@@ -43,6 +43,8 @@ async def test_async_results_final() -> None:
     )
     # Force both invocations to be final.
     app.orchestrator._get_invocation_status_mock.return_value = InvocationStatus.SUCCESS
+    # ! Patch _mock_filter_final as it is used for performance instead of individual status checks.
+    app.orchestrator._mock_filter_final.return_value = [invocation0, invocation1]
     # Patch get_final_result on both invocations (using object.__setattr__ to bypass immutability)
     object.__setattr__(invocation0, "get_final_result", lambda: -13)
     object.__setattr__(invocation1, "get_final_result", lambda: -13)
@@ -62,6 +64,7 @@ async def test_async_results_pending_exception(monkeypatch: pytest.MonkeyPatch) 
         task=add, invocations=[invocation0, invocation1]
     )
     # Force pending status for both invocations.
+    app.orchestrator._mock_filter_final.return_value = []
     app.orchestrator._get_invocation_status_mock.return_value = InvocationStatus.PENDING
 
     async def dummy_wait(parent: Any, invs: Any, runner_args: Any = None) -> None:

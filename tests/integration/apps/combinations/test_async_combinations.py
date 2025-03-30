@@ -33,7 +33,7 @@ async def test_async_task_execution(task_async_add: Task) -> None:
 async def test_async_task_waiting(task_async_sleep: Task) -> None:
     """Test an async task that sleeps for a while before completing"""
     thread = run_runner_in_thread(task_async_sleep.app)
-    sleep_time = 1
+    sleep_time = 0.1
     start_time = time()
     invocation = task_async_sleep(sleep_time)
     result = await invocation.async_result()

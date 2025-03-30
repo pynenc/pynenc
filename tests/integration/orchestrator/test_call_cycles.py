@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from time import sleep
 from typing import TYPE_CHECKING
 
 import pytest
@@ -119,6 +120,7 @@ def test_avoid_getting_always_same_invocations(test_vars: Vars) -> None:
     # when we instead call get_invocation_to_run it will get inv3 as its blocking inv3
     # but this call will change the status of inv3 to pending
     inv_to_run = list(test_vars.app.orchestrator.get_invocations_to_run(1))
+    sleep(0.1)  # sleep as the pending status is async
     assert blocking_inv == inv_to_run == [test_vars.inv3]
     # when we call again get_blocking_invocations or get_invocation_to_run
     # it will not return anything because inv3 is already pending

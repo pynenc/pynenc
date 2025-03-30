@@ -187,6 +187,9 @@ class BaseArgCache(ABC):
         if disable_cache:
             return self.app.serializer.serialize(obj)
 
+        if isinstance(obj, str) and self.is_cache_key(obj):
+            return obj
+
         # Try object identity cache (fastest)
         if key := self._check_object_identity(obj):
             return key

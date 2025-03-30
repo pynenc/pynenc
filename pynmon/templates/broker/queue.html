@@ -1,0 +1,154 @@
+{% extends "base.html" %} {% block content %}
+<div class="row">
+  <div class="col-12">
+    <div class="card">
+      <div
+        class="card-header d-flex justify-content-between align-items-center"
+      >
+        <span>Broker Queue</span>
+        <div>
+          <a href="/broker" class="btn btn-sm btn-outline-secondary me-2">
+            Back to Broker
+          </a>
+          <button
+            class="btn btn-sm btn-outline-primary"
+            onclick="window.location.reload()"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              fill="currentColor"
+              class="bi bi-arrow-clockwise"
+              viewBox="0 0 16 16"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"
+              />
+              <path
+                d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"
+              />
+            </svg>
+            Refresh
+          </button>
+        </div>
+      </div>
+      <div class="card-body">
+        <h5>App ID: {{ app_id }}</h5>
+
+        <div class="alert alert-warning mt-3">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="24"
+            height="24"
+            fill="currentColor"
+            class="bi bi-exclamation-triangle-fill flex-shrink-0 me-2"
+            viewBox="0 0 16 16"
+          >
+            <path
+              d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5zm.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"
+            />
+          </svg>
+          <div>
+            <strong>Performance Warning:</strong> Viewing queue messages
+            involves retrieving and re-queueing them, which can cause overhead.
+            Only showing {{ displayed_count }} of {{ total_count }} total
+            pending invocations.
+          </div>
+        </div>
+
+        <div class="mt-3">
+          <h6>Queue Size: {{ total_count }}</h6>
+
+          {% if pending_invocations %}
+          <div class="table-responsive">
+            <table class="table table-hover">
+              <thead>
+                <tr>
+                  <th>Invocation ID</th>
+                  <th>Task</th>
+                  <th>Call ID</th>
+                  <th>Arguments</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for invocation in pending_invocations %}
+                <tr>
+                  <td>
+                    <a href="/invocations/{{ invocation.invocation_id }}">
+                      {{ invocation.invocation_id[:8] }}...
+                    </a>
+                  </td>
+                  <td>
+                    <a href="/tasks/{{ invocation.task.task_id }}">
+                      {{ invocation.task.task_id.split('.')[-1] }}
+                    </a>
+                  </td>
+                  <td>
+                    <a
+                      href="/calls/?call_id={{ invocation.call_id|urlencode }}"
+                    >
+                      {{ invocation.call_id.split('#')[-1][:8] if '#' in
+                      invocation.call_id else invocation.call_id[:8] }}...
+                    </a>
+                  </td>
+                  <td>
+                    <button
+                      class="btn btn-sm btn-outline-secondary"
+                      data-bs-toggle="collapse"
+                      data-bs-target="#args-{{ loop.index }}"
+                    >
+                      View
+                    </button>
+                  </td>
+                  <td>
+                    <a
+                      href="/invocations/{{ invocation.invocation_id }}"
+                      class="btn btn-sm btn-primary"
+                      >Details</a
+                    >
+                  </td>
+                </tr>
+                <tr class="collapse" id="args-{{ loop.index }}">
+                  <td colspan="5">
+                    <div class="card card-body">
+                      <pre
+                        class="m-0"
+                      ><code>{{ invocation.serialized_arguments }}</code></pre>
+                    </div>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <div class="alert alert-info">No pending invocations in queue.</div>
+          {% endif %}
+        </div>
+
+        <div class="mt-3">
+          <form action="/broker/queue" method="get" class="row g-3">
+            <div class="col-md-4">
+              <label for="limit" class="form-label">Limit</label>
+              <div class="input-group">
+                <input
+                  type="number"
+                  class="form-control"
+                  id="limit"
+                  name="limit"
+                  value="{{ request.query_params.get('limit', 20) }}"
+                />
+                <button type="submit" class="btn btn-primary">Apply</button>
+              </div>
+              <div class="form-text">Number of invocations to display</div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

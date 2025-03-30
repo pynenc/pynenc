@@ -57,6 +57,10 @@ class ConfigPynenc(ConfigPynencBase):
     :cvar ArgumentPrintMode argument_print_mode:
         How to print arguments: FULL (all args), KEYS (only names),
         TRUNCATED (truncated values), HIDDEN (no args). Default TRUNCATED.
+    :cvar float cached_status_time:
+        Time in seconds to cache invocation status for non-final states. This helps
+        reduce Redis queries by avoiding repeated status checks within this time window.
+        Final statuses are cached indefinitely since they never change. Default 0.1.
     """
 
     app_id = ConfigField("pynenc")
@@ -72,3 +76,4 @@ class ConfigPynenc(ConfigPynencBase):
     print_arguments = ConfigField(True)
     truncate_arguments_length = ConfigField(32)
     argument_print_mode = ConfigField(ArgumentPrintMode.TRUNCATED)
+    cached_status_time = ConfigField(0.1)

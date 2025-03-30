@@ -3,8 +3,7 @@ from __future__ import annotations
 import uuid
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator, Iterator
-from dataclasses import dataclass
-from functools import cached_property
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from pynenc.call import Call
@@ -22,6 +21,14 @@ T = TypeVar("T", bound="BaseInvocation")
 
 
 @dataclass(frozen=True)
+class InvocationIdentity(Generic[Params, Result]):
+    """Immutable identity of an invocation"""
+
+    call: Call[Params, Result]
+    invocation_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    parent_invocation: BaseInvocation | None = None
+
+
 class BaseInvocation(ABC, Generic[Params, Result]):
     """
     Base class for representing an invocation of a task call in a distributed system.
@@ -47,12 +54,37 @@ class BaseInvocation(ABC, Generic[Params, Result]):
     :param Call[Params, Result] call: The specific call instance that this invocation represents.
     """
 
-    call: Call[Params, Result]
+    def __init__(
+        self,
+        call: Call[Params, Result],
+        parent_invocation: BaseInvocation | None = None,
+        invocation_id: str | None = None,
+    ):
+        """Initialize the invocation with its identity."""
+        self.identity = InvocationIdentity(
+            call=call,
+            invocation_id=invocation_id or str(uuid.uuid4()),
+            parent_invocation=parent_invocation if parent_invocation else None,
+        )
+        self.init_logger()
 
-    def __post_init__(self) -> None:
+    def init_logger(self) -> None:
+        """Initialize the logger for the invocation."""
         self.task.logger = TaskLoggerAdapter(
             self.app.logger, self.task.task_id, self.invocation_id
         )
+
+    @property
+    def call(self) -> Call[Params, Result]:
+        return self.identity.call
+
+    @property
+    def invocation_id(self) -> str:
+        return self.identity.invocation_id
+
+    @property
+    def parent_invocation(self) -> BaseInvocation | None:
+        return self.identity.parent_invocation
 
     @property
     def app(self) -> Pynenc:
@@ -83,14 +115,6 @@ class BaseInvocation(ABC, Generic[Params, Result]):
     def call_id(self) -> str:
         return self.call.call_id
 
-    @cached_property
-    def invocation_id(self) -> str:
-        """:return: a unique id for this invocation
-
-        A task with the same arguments can have multiple invocations, the invocation id is used to differentiate them
-        """
-        return str(uuid.uuid4())
-
     @property
     @abstractmethod
     def status(self) -> InvocationStatus:
@@ -120,10 +144,9 @@ class BaseInvocation(ABC, Generic[Params, Result]):
         return hash(self.invocation_id)
 
     def __eq__(self, other: Any) -> bool:
-        # TODO equality based in task and arguments or in invocation_id?
         if not isinstance(other, BaseInvocation):
             return False
-        return self.invocation_id == other.invocation_id
+        return self.identity == other.identity and self.status == other.status
 
 
 @dataclass(frozen=True)

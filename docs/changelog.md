@@ -4,6 +4,112 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.21] - 2025-03-24
+
+### Added
+
+- **New Web-Based Monitoring System**:
+
+  - Introduced a comprehensive web interface for monitoring Pynenc applications.
+  - Provides real-time visibility into tasks, invocations, calls, orchestration, and broker status.
+  - Detailed views for task configuration, invocation history, arguments, and results.
+  - Status-based filtering for invocations with color-coded indicators.
+  - Interactive dashboard with HTMX-powered dynamic updates.
+
+- **CLI Monitor Command**:
+
+  - Added `pynenc monitor` subcommand to start the monitoring web application.
+  - Automatic dependency checking to ensure required packages are installed.
+
+- **Task Registry and Lookup**:
+
+  - Added `app.tasks` property to access all registered tasks in a Pynenc application.
+  - Implemented `app.get_task(task_id)` method for efficient task lookup by ID.
+  - Tasks are now automatically registered when decorated with `@app.task`.
+  - Serialization support for task registry to maintain state across process boundaries.
+
+- **Enhanced PynencBuilder**:
+
+  - Added missing `app_id()` method to PynencBuilder for more complete configuration options.
+  - Improved documentation and example usage in method docstrings.
+
+- **Optional Dependencies**:
+
+  - Added monitoring extras to package dependencies for easier installation.
+  - Web monitoring functionality requires additional dependencies: fastapi, jinja2, uvicorn, and python-multipart.
+  - These can be installed via `pip install pynenc[monitor]` or `poetry install --with monitor`.
+
+- **Enhanced Redis Connection Management**:
+
+  - Added robust connection handling with automatic reconnection capability
+  - Implemented configurable retry mechanism with exponential backoff
+  - Added socket timeouts and health check intervals for connection stability
+  - Created connection manager that properly handles connection resets and errors
+  - Improved resilience against "Connection reset by peer" errors
+
+- **Batch Processing for Task Parallelization**:
+
+  - Added batch processing for `parallelize()` operations
+  - Implemented batch routing in orchestrator via new `route_calls()` method
+  - Added Redis pipeline-based batch operations for significant performance improvements
+  - Added configurable `parallel_batch_size` for tuning performance
+  - Reduced Redis network operations when parallelizing many tasks
+  - Optimized registration and routing of large numbers of tasks
+  - Added modular batch processing throughout the stack (broker, orchestrator, state backend)
+  - Improved performance for high-volume task creation
+  - Added cache key passthrough in arg_cache to prevent re-serialization of already cached values
+
+- **Enhanced Redis Performance and Reliability**:
+
+  - New Redis connection pool to efficiently reuse connections
+  - Added InvocationIdentity for BaseInvocation to freeze only critical parameters and enable efficient caching
+  - Implemented ThreadPoolExecutor in RedisOrchestrator to process pending status updates asynchronously
+  - Added orchestrator methods `filter_final` and `filter_by_status` to efficiently filter invocations in batches
+  - Improved DistributedInvocation with status caching to reduce Redis queries
+
+- **Performance Testing and Analysis**:
+  - Added Redis degradation tests to verify runner performance under high load conditions
+  - Enhanced Redis debug client with summaries, tables, and call stack tracing for slow operations
+
+### Changed
+
+- **Redis Configuration Parameters**:
+
+  - Added new configuration options: `socket_timeout`, `socket_connect_timeout`,
+    `health_check_interval`, and `max_connection_attempts`
+  - Enhanced docstrings with detailed parameter descriptions
+  - Existing Redis connections now use connection pooling and health checks by default
+
+- **Task Parallelization Performance**:
+
+  - Improve task parallelization to use batch processing when possible
+  - Optimized Redis operations to minimize network round-trips during task parallelization
+
+- **Optimized Parallel Processing with Common Arguments**:
+
+  - Added pre-serialization for common arguments in `Task.parallelize()` to improve performance with shared data
+  - New `PreSerializedCall` class for optimized batch operations with shared and large arguments
+  - Modified `direct_task` to support common argument optimization
+  - Improved Redis key management with batched purge operations
+  - Added `redis_debug_client` for performance analysis of Redis operations
+
+- **Changes on StateBackend**:
+
+  - Modified `upsert_invocation` to be synchronous, ensuring completion before routing new invocations
+
+- **Fixes on Runners**:
+  - Improved thread runner performance with optimized polling mechanisms
+  - Fixed race conditions in process waiting and synchronization
+  - Enhanced PersistentProcessRunner shutdown process for cleaner termination
+
+### Fixed
+
+- Fixed issue with Redis connections being reset during high traffic periods
+- Improved error handling in views to gracefully handle connection failures
+- Added timeouts to prevent operations from hanging indefinitely on connection issues
+- Fixed serialization issue with JsonSerializer converting tuples to lists in args/kwargs
+- Fixed `filter_by_key_arguments` in the memory orchestrator for serialized tasks
+
 ## [0.0.20] - 2025-03-21
 
 ### Added

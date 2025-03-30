@@ -39,6 +39,18 @@ class MemBroker(BaseBroker):
         """
         self._queue.append(invocation.to_json())
 
+    def route_invocations(self, invocations: list[DistributedInvocation]) -> None:
+        """
+        Routes multiple invocations at once.
+
+        :param list[DistributedInvocation] invocations: The invocations to be routed.
+        """
+        for invocation in invocations:
+            self.route_invocation(invocation)
+
+        if invocations:
+            self.app.logger.debug(f"Batch routed {len(invocations)} invocations")
+
     def retrieve_invocation(self) -> Optional["DistributedInvocation"]:
         """
         Retrieve the next invocation from the queue.

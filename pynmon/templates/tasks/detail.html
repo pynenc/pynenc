@@ -1,0 +1,166 @@
+{% extends "base.html" %} {% block content %}
+<div class="row">
+  <div class="col-12">
+    <div class="card">
+      <div
+        class="card-header d-flex justify-content-between align-items-center"
+      >
+        <span>Task Details</span>
+        <a href="/tasks" class="btn btn-sm btn-outline-secondary">
+          Back to Tasks
+        </a>
+      </div>
+      <div class="card-body">
+        <h5>Task ID: {{ task.task_id }}</h5>
+
+        <div class="row mt-3">
+          <div class="col-md-6">
+            <div class="card">
+              <div class="card-header">Basic Information</div>
+              <div class="card-body">
+                <table class="table">
+                  <tbody>
+                    <tr>
+                      <th>Module:</th>
+                      <td>{{ task_extra.module }}</td>
+                    </tr>
+                    <tr>
+                      <th>Function:</th>
+                      <td>{{ task_extra.func_qualname }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-6">
+            <div class="card">
+              <div class="card-header">Configuration</div>
+              <div class="card-body">
+                <table class="table">
+                  <tbody>
+                    <tr>
+                      <th>Registration Concurrency:</th>
+                      <td>{{ task.conf.registration_concurrency.name }}</td>
+                    </tr>
+                    <tr>
+                      <th>Running Concurrency:</th>
+                      <td>{{ task.conf.running_concurrency.name }}</td>
+                    </tr>
+                    <tr>
+                      <th>Key Arguments:</th>
+                      <td>
+                        {{ task.conf.key_arguments|join(', ') or 'None' }}
+                      </td>
+                    </tr>
+                    <tr>
+                      <th>Max Retries:</th>
+                      <td>{{ task.conf.max_retries }}</td>
+                    </tr>
+                    <tr>
+                      <th>Retry For Exceptions:</th>
+                      <td>{{ task_extra.retry_for|join(', ') }}</td>
+                    </tr>
+                    <tr>
+                      <th>Auto Parallel Batch Size:</th>
+                      <td>{{ task.conf.parallel_batch_size }}</td>
+                    </tr>
+                    <tr>
+                      <th>Call Result Cache:</th>
+                      <td>{{ task.conf.call_result_cache }}</td>
+                    </tr>
+                    <tr>
+                      <th>Disable Cache Args:</th>
+                      <td>
+                        {{ task.conf.disable_cache_args|join(', ') or 'None' }}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row mt-3">
+          <div class="col-12">
+            <div class="card">
+              <div class="card-header">Active Calls ({{ calls|length }})</div>
+              <div class="card-body">
+                {% if calls %}
+                <div class="table-responsive">
+                  <table class="table table-hover">
+                    <thead>
+                      <tr>
+                        <th>Call ID</th>
+                        <th>Arguments</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for call in calls %}
+                      <tr>
+                        <td>
+                          {% if call and call.call_id %}
+                          <a
+                            href="/calls/?call_id={{ call.call_id|urlencode }}"
+                          >
+                            {{ call.call_id.split('#')[-1][:8] if '#' in
+                            call.call_id else call.call_id[:8] }}...
+                          </a>
+                          {% else %}
+                          <span class="text-muted">Invalid ID</span>
+                          {% endif %}
+                        </td>
+                        <td>
+                          {% if call and call.serialized_arguments %}
+                          <button
+                            class="btn btn-sm btn-outline-secondary"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#args-{{ loop.index }}"
+                          >
+                            View
+                          </button>
+                          {% else %}
+                          <span class="text-muted">No arguments</span>
+                          {% endif %}
+                        </td>
+                        <td>
+                          {% if call and call.call_id %}
+                          <a
+                            href="/calls?call_id={{ call.call_id|urlencode }}"
+                            class="btn btn-sm btn-primary"
+                            >Details</a
+                          >
+                          {% else %}
+                          <button class="btn btn-sm btn-secondary" disabled>
+                            Details
+                          </button>
+                          {% endif %}
+                        </td>
+                      </tr>
+                      {% if call and call.serialized_arguments %}
+                      <tr class="collapse" id="args-{{ loop.index }}">
+                        <td colspan="3">
+                          {% with args=call.serialized_arguments,
+                          id_prefix='task-call-'~loop.index %} {% include
+                          "partials/formatted_arguments.html" %} {% endwith %}
+                        </td>
+                      </tr>
+                      {% endif %} {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+                {% else %}
+                <p class="text-muted">No active calls for this task.</p>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

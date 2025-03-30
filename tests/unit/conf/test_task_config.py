@@ -19,7 +19,7 @@ class CustomException(Exception):
 
 
 @app.task(
-    auto_parallel_batch_size=1,
+    parallel_batch_size=1,
     retry_for=(CustomException,),
     max_retries=2,
     running_concurrency=ConcurrencyControlType.TASK,
@@ -38,7 +38,7 @@ def test_task_config_from_decorator_options() -> None:
     """
     Test that the task config was set with the options from the decorator
     """
-    assert store_with_opt.conf.auto_parallel_batch_size == 1
+    assert store_with_opt.conf.parallel_batch_size == 1
     assert store_with_opt.conf.retry_for == (CustomException,)  # type: ignore
     assert store_with_opt.conf.max_retries == 2
     assert store_with_opt.conf.running_concurrency == ConcurrencyControlType.TASK
@@ -80,9 +80,9 @@ def test_task_config_with_env_vars() -> None:
     """
     with patch.dict(
         os.environ,
-        {"PYNENC__CONFIGTASK__AUTO_PARALLEL_BATCH_SIZE": "2"},
+        {"PYNENC__CONFIGTASK__PARALLEL_BATCH_SIZE": "2"},
     ):
-        assert store_with_env.conf.auto_parallel_batch_size == 2
+        assert store_with_env.conf.parallel_batch_size == 2
 
 
 @app.task
@@ -99,11 +99,11 @@ def test_task_config_with_task_specific_env_vars() -> None:
     with patch.dict(
         os.environ,
         {
-            "PYNENC__CONFIGTASK__AUTO_PARALLEL_BATCH_SIZE": "2",
-            "PYNENC__CONFIGTASK__TEST_TASK_CONFIG#STORE_WITH_SPECIFIC_ENV__AUTO_PARALLEL_BATCH_SIZE": "3",
+            "PYNENC__CONFIGTASK__PARALLEL_BATCH_SIZE": "2",
+            "PYNENC__CONFIGTASK__TEST_TASK_CONFIG#STORE_WITH_SPECIFIC_ENV__PARALLEL_BATCH_SIZE": "3",
         },
     ):
-        assert store_with_specific_env.conf.auto_parallel_batch_size == 3
+        assert store_with_specific_env.conf.parallel_batch_size == 3
 
 
 def test_task_config_from_file() -> None:
@@ -115,7 +115,7 @@ def test_task_config_from_file() -> None:
         {
             "task": {
                 # general config values for all the task
-                "auto_parallel_batch_size": 4,
+                "parallel_batch_size": 4,
                 "max_retries": 10,
                 # specific config values for the task module_name.task_name
                 "module_name.task_name": {"max_retries": 5},
@@ -127,12 +127,12 @@ def test_task_config_from_file() -> None:
     all_tasks_config = ConfigTask(
         task_id="module_name.random_task", config_filepath=filepath
     )
-    assert all_tasks_config.auto_parallel_batch_size == 4
+    assert all_tasks_config.parallel_batch_size == 4
     assert all_tasks_config.max_retries == 10
     one_task_config = ConfigTask(
         task_id="module_name.task_name", config_filepath=filepath
     )
-    assert one_task_config.auto_parallel_batch_size == 4
+    assert one_task_config.parallel_batch_size == 4
     assert one_task_config.max_retries == 5
 
 

@@ -107,10 +107,9 @@ class ConfigTask(ConfigPynencBase):
     specified globally for all tasks, or individually for each task using environment
     variables, configuration files, or the `@task` decorator.
 
-    :cvar ConfigField[int] auto_parallel_batch_size:
-        If set to 0, auto parallelization is disabled. If greater than 0, tasks with iterable
-        arguments are automatically split into chunks, with each chunk potentially processed
-        by a different worker. If the task arguments are not an iterable, nothing happens.
+    :cvar ConfigField[int] parallel_batch_size:
+        If set to 100, when parallelizing a task, we will route batches of 100 tasks.
+        0 means that each parallel task will be routed individually.
 
     :cvar ConfigField[tuple] retry_for:
         A tuple of exceptions for which the task should be retried.
@@ -154,17 +153,17 @@ class ConfigTask(ConfigPynencBase):
     .. code-block:: python
 
         # Set global auto parallel batch size
-        os.environ["PYNENC__CONFIGTASK__AUTO_PARALLEL_BATCH_SIZE"] = "2"
+        os.environ["PYNENC__CONFIGTASK__PARALLEL_BATCH_SIZE"] = "2"
 
         # Set auto parallel batch size specifically for 'my_module.my_task'
-        os.environ["PYNENC__CONFIGTASK__MY_MODULE#MY_TASK__AUTO_PARALLEL_BATCH_SIZE"] = "3"
+        os.environ["PYNENC__CONFIGTASK__MY_MODULE#MY_TASK__PARALLEL_BATCH_SIZE"] = "3"
 
     Loading configuration from a YAML file:
 
     .. code-block:: yaml
 
         task:
-            auto_parallel_batch_size: 4
+            parallel_batch_size: 4
             max_retries: 10
             module_name.task_name:
                 max_retries: 5
@@ -184,7 +183,7 @@ class ConfigTask(ConfigPynencBase):
     offering flexibility and precise control over the behavior of tasks in the system.
     """
 
-    auto_parallel_batch_size = ConfigField(0)
+    parallel_batch_size = ConfigField(100)
     retry_for = ConfigField((RetryError,), mapper=exception_config_mapper)
     max_retries = ConfigField(0)
     running_concurrency = ConfigField(ConcurrencyControlType.DISABLED)

@@ -13,7 +13,7 @@ app = Pynenc(config_values={"runner_cls": "ThreadRunner"})
 
 @app.task
 def sleeper() -> None:
-    time.sleep(1)
+    time.sleep(0.1)
 
 
 @app.task

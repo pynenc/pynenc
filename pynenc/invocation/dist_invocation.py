@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import AsyncGenerator, Iterator
-from dataclasses import dataclass
-from functools import cached_property
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from pynenc import context, exceptions
 from pynenc.arguments import Arguments
 from pynenc.call import Call
-from pynenc.invocation.base_invocation import BaseInvocation, BaseInvocationGroup
+from pynenc.invocation.base_invocation import (
+    BaseInvocation,
+    BaseInvocationGroup,
+    InvocationIdentity,
+)
 from pynenc.invocation.status import InvocationStatus
 from pynenc.types import Params, Result
 from pynenc.util.asyncio_helper import run_task_sync
@@ -19,7 +22,6 @@ if TYPE_CHECKING:
 
 
 # Create a context variable to store current invocation
-@dataclass(frozen=True, eq=False)
 class DistributedInvocation(BaseInvocation[Params, Result]):
     """
     Represents a distributed invocation of a task call in the system.
@@ -36,59 +38,135 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
     :param Optional[str] _invocation_id:
         A unique identifier for the invocation. This ID is crucial for tracking and orchestrating the invocation
         across the distributed system. It's assigned internally and used by the orchestration mechanism.
+    :param bool _disable_upsert:
+        A flag to disable the upsert operation during initialization. This flag is used to prevent unnecessary
+        updates to the state backend when creating invocations in certain scenarios.
     """
 
-    parent_invocation: DistributedInvocation | None
-    _invocation_id: str | None = None
+    def __init__(
+        self,
+        call: Call[Params, Result],
+        parent_invocation: DistributedInvocation | None = None,
+        invocation_id: str | None = None,
+        stored_in_backend: bool = False,
+    ) -> None:
+        # Call parent init
+        super().__init__(call, parent_invocation, invocation_id)
 
-    def __post_init__(self) -> None:
-        super().__post_init__()
-        self.app.state_backend.upsert_invocation(self)
+        # Initialize additional state
+        self._result: Result | None = None
+        self._num_retries: int = 0
 
-    @cached_property
-    def invocation_id(self) -> str:
-        """on deserialization allows to set the invocation_id"""
-        return self._invocation_id or super().invocation_id
+        # Initialize state fields
+        self._cached_status: InvocationStatus | None = None
+        self._cached_status_time: float = 0.0
+
+        # Store in state backend
+        self._stored_in_backend: bool = stored_in_backend
+        self.store_in_backend()
+
+    @property
+    def parent_invocation(self) -> DistributedInvocation | None:
+        """
+        :return: the parent invocation of this invocation
+        """
+        return (
+            cast(DistributedInvocation, self.identity.parent_invocation)
+            if self.identity.parent_invocation
+            else None
+        )
+
+    def store_in_backend(self) -> None:
+        """Store the invocation in the state backend."""
+        if not self._stored_in_backend:
+            self._stored_in_backend = True
+            self.app.state_backend.upsert_invocation(self)
 
     @property
     def num_retries(self) -> int:
         """:return: number of times the invocation got retried"""
         return self.app.orchestrator.get_invocation_retries(self)
 
+    def update_status_cache(self, status: InvocationStatus) -> None:
+        """Update the cached status and timestamp."""
+        self._cached_status = status
+        self._cached_status_time = time.time()
+
     @property
     def status(self) -> InvocationStatus:
         """:return: status of the invocation from the orchestrator"""
-        return self.app.orchestrator.get_invocation_status(self)
+        # return self.app.orchestrator.get_invocation_status(self)
+        # First check cache for final statuses - they never change
+        if self._cached_status and self._cached_status.is_final():
+            return self._cached_status
+        # For non-final statuses, use a short cache (100ms) to avoid hammering Redis
+        cache_ttl = self.app.conf.cached_status_time
+        if self._cached_status and (time.time() - self._cached_status_time < cache_ttl):
+            return self._cached_status
+        # check status and update cache
+        status = self.app.orchestrator.get_invocation_status(self)
+        self.update_status_cache(status)
+        return status
 
     def to_json(self) -> str:
         """:return: The serialized invocation"""
-        inv_dict = {"invocation_id": self.invocation_id, "call": self.call.to_json()}
+        inv_dict: dict = {}
+        inv_dict["invocation_id"] = self.invocation_id
+        inv_dict["call"] = self.call.to_json()
         if self.parent_invocation:
-            inv_dict["parent_invocation_id"] = self.parent_invocation.invocation_id
+            inv_dict["parent_invocation"] = self.parent_invocation.to_json()
+        inv_dict["_stored_in_backend"] = self._stored_in_backend
         return json.dumps(inv_dict)
-
-    def __getstate__(self) -> dict:
-        # Return state as a dictionary and a secondary value as a tuple
-        state = self.__dict__.copy()
-        state["invocation_id"] = self.invocation_id
-        return state
-
-    def __setstate__(self, state: dict) -> None:
-        # Restore instance attributes
-        for key, value in state.items():
-            object.__setattr__(self, key, value)
 
     @classmethod
     def from_json(cls, app: Pynenc, serialized: str) -> DistributedInvocation:
         """:return: a new invocation from a serialized invocation"""
         inv_dict = json.loads(serialized)
-        call = Call.from_json(app, inv_dict["call"])
-        parent_invocation = None
-        if "parent_invocation_id" in inv_dict:
-            parent_invocation = app.state_backend.get_invocation(
-                inv_dict["parent_invocation_id"]
-            )
-        return cls(call, parent_invocation, inv_dict["invocation_id"])
+        parent_invocation: DistributedInvocation | None = None
+        if "parent_invocation" in inv_dict:
+            parent_invocation = cls.from_json(app, inv_dict["parent_invocation"])
+        return cls(
+            call=Call.from_json(app, inv_dict["call"]),
+            parent_invocation=parent_invocation,
+            invocation_id=inv_dict["invocation_id"],
+            stored_in_backend=inv_dict["_stored_in_backend"],
+        )
+
+    def __getstate__(self) -> dict:
+        """Return a serialized state dict for pickling."""
+        state = {}
+        state["identity"] = {
+            "invocation_id": self.invocation_id,
+            "call": self.call,
+            "parent_invocation": self.parent_invocation,
+        }
+        state["state"] = {
+            "cached_status": self._cached_status,
+            "cached_status_time": self._cached_status_time,
+            "stored_in_backend": self._stored_in_backend,
+            "num_retries": self._num_retries,
+            "result": self._result,
+        }
+        return state
+
+    def __setstate__(self, state: dict) -> None:
+        """Restore state from a pickled dict."""
+        # Recreate identity object (it's immutable, needs to be created properly)
+        identity_data = state["identity"]
+        self.identity = InvocationIdentity(
+            call=identity_data["call"],
+            invocation_id=identity_data["invocation_id"],
+            parent_invocation=identity_data["parent_invocation"],
+        )
+        # Restore mutable state directly
+        state_data = state["state"]
+        self._cached_status = state_data["cached_status"]
+        self._cached_status_time = state_data["cached_status_time"]
+        self._stored_in_backend = state_data["stored_in_backend"]
+        self._num_retries = state_data["num_retries"]
+        self._result = state_data["result"]
+        # Initialize logger if needed
+        self.init_logger()
 
     def swap_context(self) -> DistributedInvocation | None:
         """
@@ -151,7 +229,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         # runner_args are passed from/to the runner (e.g. used to sync subprocesses)
         context.runner_args = runner_args
         try:
-            self.task.logger.info(f"Invocation {self.invocation_id} started")
+            self.task.logger.info("Invocation STARTED")
             previous_invocation_context = self.swap_context()
             if not self.app.orchestrator.is_authorize_to_run_by_concurrency_control(
                 self
@@ -160,18 +238,16 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             self.app.orchestrator.set_invocation_run(self.parent_invocation, self)
             result = run_task_sync(self.task.func, **self.arguments.kwargs)
             self.app.orchestrator.set_invocation_result(self, result)
-            self.task.logger.info(f"Invocation {self.invocation_id} finished")
+            self.task.logger.info("Invocation FINISHED")
         except self.task.retriable_exceptions as ex:
             if self.num_retries >= self.task.conf.max_retries:
-                self.task.logger.exception("Max retries reached")
+                self.app.logger.exception("Invocation MAX-RETRY")
                 self.app.orchestrator.set_invocation_exception(self, ex)
                 raise ex
             self.app.orchestrator.set_invocation_retry(self, ex)
-            self.task.logger.warning(
-                f"Invocation {self.invocation_id} marked for retry {ex=}"
-            )
+            self.task.logger.warning(f"Invocation WILL-RETRY {ex=}")
         except Exception as ex:
-            self.app.logger.exception(f"Invocation {self.invocation_id} exception")
+            self.app.logger.exception("Invocation EXCEPTION")
             self.app.orchestrator.set_invocation_exception(self, ex)
             raise ex
         finally:
@@ -200,7 +276,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             for the task to complete.
         ```
         """
-        self.app.logger.info(f"ini waiting for invocation {self.invocation_id} result")
+        self.app.logger.debug(f"ini waiting for invocation {self.invocation_id} result")
         if not self.status.is_final():
             self.app.orchestrator.waiting_for_results(self.parent_invocation, [self])
 
@@ -208,7 +284,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             self.app.runner.waiting_for_results(
                 self.parent_invocation, [self], context.runner_args
             )
-        self.app.logger.info(f"end waiting for invocation {self.invocation_id} result")
+        self.app.logger.debug(f"end waiting for invocation {self.invocation_id} result")
         return self.get_final_result()
 
     async def async_result(self) -> Result:
@@ -286,10 +362,9 @@ class DistributedInvocationGroup(
         parent_invocation = waiting_invocations[0].parent_invocation
         notified_orchestrator = False
         while waiting_invocations:
-            for invocation in waiting_invocations:
-                if invocation.status.is_final():
-                    waiting_invocations.remove(invocation)
-                    yield invocation.result
+            for final_inv in self.app.orchestrator.filter_final(waiting_invocations):
+                waiting_invocations.remove(final_inv)
+                yield final_inv.result
             if not waiting_invocations:
                 break
             if not notified_orchestrator:
@@ -308,10 +383,9 @@ class DistributedInvocationGroup(
         parent_invocation = waiting_invocations[0].parent_invocation
         notified_orchestrator = False
         while waiting_invocations:
-            for invocation in waiting_invocations:
-                if invocation.status.is_final():
-                    waiting_invocations.remove(invocation)
-                    yield invocation.result
+            for final_inv in self.app.orchestrator.filter_final(waiting_invocations):
+                waiting_invocations.remove(final_inv)
+                yield final_inv.result
             if not waiting_invocations:
                 break
             if not notified_orchestrator:
@@ -324,7 +398,6 @@ class DistributedInvocationGroup(
             )
 
 
-@dataclass(frozen=True)
 class ReusedInvocation(DistributedInvocation):
     """
     A specialized invocation that reuses an existing `DistributedInvocation`.
@@ -337,9 +410,16 @@ class ReusedInvocation(DistributedInvocation):
         If `None`, it indicates no differences in arguments.
     """
 
-    # Due to single invocation functionality
-    # keeps existing invocation + new argument if any change
-    diff_arg: Arguments | None = None
+    def __init__(
+        self,
+        call: Call[Params, Result],
+        parent_invocation: DistributedInvocation | None = None,
+        invocation_id: str | None = None,
+        diff_arg: Arguments | None = None,
+    ):
+        # Call parent init
+        super().__init__(call, parent_invocation, invocation_id)
+        self.diff_arg = diff_arg
 
     @classmethod
     def from_existing(
@@ -366,7 +446,7 @@ class ReusedInvocation(DistributedInvocation):
             call=Call(invocation.task, invocation.arguments),
             parent_invocation=invocation.parent_invocation,
             # we reuse invocation_id from original invocation
-            _invocation_id=invocation.invocation_id,
+            invocation_id=invocation.invocation_id,
             diff_arg=diff_arg,
         )
         return new_invc

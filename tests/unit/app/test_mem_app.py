@@ -167,6 +167,7 @@ def test_pynenc_getstate_setstate() -> None:
         "config_values": {"runner_cls": "ThreadRunner"},
         "config_filepath": None,
         "reporting": None,
+        # "tasks": {}, # TODO disabled for now
     }
     assert state == expected_state
 

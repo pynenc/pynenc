@@ -5,6 +5,8 @@ import redis
 if TYPE_CHECKING:
     from pynenc.invocation.status import InvocationStatus
 
+PYNENC_KEY_PREFIX = "__pynenc__"
+
 
 def sanitize_for_redis(s: str) -> str:
     """
@@ -42,7 +44,7 @@ class Key:
             prefix += ":"
         if app_id:
             prefix = f"{app_id}:{prefix}"
-        self.prefix = f"__pynenc__:{prefix}"
+        self.prefix = f"{PYNENC_KEY_PREFIX}:{prefix}"
 
     def invocation(self, invocation_id: str) -> str:
         return f"{self.prefix}invocation:{invocation_id}"
@@ -113,6 +115,10 @@ class Key:
 
         :param redis.Redis client: The Redis client.
         """
-        scan = client.scan_iter(self.prefix + "*")
-        for key in scan:
-            client.delete(key)
+        pattern = f"{self.prefix}*"
+        keys = list(client.scan_iter(pattern, count=1000))
+        if keys:
+            batch_size = 1000
+            for i in range(0, len(keys), batch_size):
+                batch = keys[i : i + batch_size]
+                client.delete(*batch)

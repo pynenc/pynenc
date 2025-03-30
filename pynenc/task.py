@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import importlib
 import json
+import time
+from collections.abc import Iterable
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Generic, Iterable
+from typing import TYPE_CHECKING, Any, Generic, overload
 
 from pynenc import context
 from pynenc.arguments import Arguments
-from pynenc.call import Call
-from pynenc.conf.config_task import ConfigTask
+from pynenc.call import Call, PreSerializedCall
+from pynenc.conf.config_task import ConcurrencyControlType, ConfigTask
 from pynenc.exceptions import InvalidTaskOptionsError, RetryError
 from pynenc.invocation.base_invocation import BaseInvocation, BaseInvocationGroup
 from pynenc.invocation.conc_invocation import (
@@ -202,25 +204,54 @@ class Task(Generic[Params, Result]):
         """
         if self.app.conf.dev_mode_force_sync_tasks:
             return ConcurrentInvocation(call=Call(self, arguments))
-        return self.app.orchestrator.route_call(Call(self, arguments))
+        call = Call(self, arguments)
+        return self.app.orchestrator.route_call(call)
+
+    @overload
+    def parallelize(
+        self,
+        param_iter: Iterable[tuple | dict | Arguments],
+        common_args: None = None,
+    ) -> BaseInvocationGroup:
+        ...
+
+    @overload
+    def parallelize(
+        self,
+        param_iter: Iterable[dict],
+        common_args: dict,
+    ) -> BaseInvocationGroup:
+        ...
 
     def parallelize(
-        self, param_iter: Iterable[tuple | dict | Arguments]
+        self,
+        param_iter: Iterable[tuple | dict | Arguments],
+        common_args: dict | None = None,
     ) -> BaseInvocationGroup:
         """
         Parallelize the execution of a task with different sets of parameters.
 
         This method allows for concurrent execution of the same task with varying parameters.
         It accepts an iterable where each element represents a set of parameters for a separate task invocation.
+        When `common_args` is provided, `param_iter` must be an iterable of dictionaries, and common arguments
+        are pre-serialized for efficiency.
         ```{note}
-        These parameters can be specified in different formats:
+        Without common_args param_iter can be specified in different formats:
         - As a tuple: Interpreted as positional arguments for the task.
         - As a dictionary: Interpreted as keyword arguments for the task.
         - As an `Arguments` instance: Created using `task.args(*args, **kwargs)`.
         ```
+        ```{important}
+        common_args is intended for optimize parallelization of huge arguments that will be cached by the arg_cache.
+        if the arguments are small or the arg_cache is disabled, it will not provide any major improvement.
+        However, for big arguments, it will provide massive time and memory improvements.
+        ```
+
 
         :param Iterable[tuple | dict | Arguments] param_iter: An iterable of parameters for each call.
             Each element in the iterable is used to invoke the task separately.
+
+        :param common_args: Optional dictionary of common arguments to pre-serialize and share across calls.
 
         :return: A group of task invocations, allowing the task to be run in parallel with different parameters.
             The type of group (synchronous or distributed) depends on the application's configuration.
@@ -232,6 +263,7 @@ class Task(Generic[Params, Result]):
         ```
 
         ### Examples
+        Parallelization with tuples, dicts and arguments:
         ```{code-block} python
         app = Pynenc()
 
@@ -244,26 +276,182 @@ class Task(Generic[Params, Result]):
         print(list(invocation_group.results))
         # prints [2, 3, 5]
         ```
+
+        Parallelization with common_args:
+        ```python
+        @app.task(registration_concurrency=ConcurrencyControlType.DISABLED)
+        def process(large_data: str, index: int) -> int:
+            return len(large_data) + index
+
+        # With common_args
+        common = {"large_data": "huge_string"}
+        params = [{"index": i} for i in range(3)]
+        invocation_group = process.parallelize(params, common)
+        print(list(invocation_group.results))  # [len("huge_string") + i for i in range(3)]
+        ```
         """
         self.logger.info(f"parallelizing {self.task_id}")
-        group_cls: type[BaseInvocationGroup]
-        if self.app.conf.dev_mode_force_sync_tasks:
-            group_cls = ConcurrentInvocationGroup
+
+        # Convert param_iter to a list to allow multiple iterations and length checking
+        param_list = list(param_iter)
+
+        if common_args is not None and not all(
+            isinstance(p, dict) for p in param_list or {}
+        ):
+            raise ValueError(
+                "When using common_args, param_iter must contain only dictionaries"
+            )
+
+        # Choose distribution strategy based on whether batch processing is available
+        if can_batch_process(self, len(param_list)):
+            return distribute_batch_calls(self, param_list, common_args)
+        return distribute_calls(self, param_list, common_args)
+
+
+def can_batch_process(task: Task, num_calls: int) -> bool:
+    """
+    Determine if a task can be processed in batches.
+
+    A task can be batch processed when:
+    1. The application is not in development mode
+    2. Registration concurrency is disabled
+    3. There are multiple calls to process
+    4. The task has a valid parallel_batch_size
+
+    :param Task task: The task to check
+    :param int num_calls: The number of calls to process
+    :return: True if the task can be batch processed, False otherwise
+    """
+    return (
+        not task.app.conf.dev_mode_force_sync_tasks
+        and task.conf.registration_concurrency == ConcurrencyControlType.DISABLED
+        and num_calls > 1
+        and task.conf.parallel_batch_size > 0
+    )
+
+
+def prepare_arguments(
+    task: Task,
+    param_iter: Iterable[tuple | dict | Arguments],
+    common_args: dict | None = None,
+) -> list[Arguments]:
+    """
+    Convert various parameter formats to a list of Arguments objects,
+    merging with common_args when provided.
+
+    :param Task task: The task to prepare arguments for
+    :param Iterable[tuple | dict | Arguments] param_iter: Iterable of parameters
+    :param dict | None common_args: Optional common arguments to merge with each parameter
+    :return: A list of Arguments objects with common_args merged in
+    """
+    result = []
+
+    for params in param_iter:
+        if common_args and not isinstance(params, dict):
+            raise ValueError(
+                "common_args can only be used with an iterable of dictionaries"
+            )
+        if isinstance(params, tuple):
+            args_obj = task.args(*params)
+        elif isinstance(params, dict):
+            if common_args:
+                # Create a new dict with common_args as base, then update with specific params
+                merged_kwargs = common_args.copy()
+                merged_kwargs.update(params)
+                args_obj = task.args(**merged_kwargs)
+            else:
+                args_obj = task.args(**params)
         else:
-            group_cls = DistributedInvocationGroup
+            args_obj = params
 
-        def get_args(params: tuple | dict | Arguments) -> Arguments:
-            if isinstance(params, tuple):
-                return self.args(*params)
-            if isinstance(params, dict):
-                return self.args(**params)
-            return params
+        result.append(args_obj)
 
-        invocations = []
-        for params in param_iter:
-            if invocation := self._call(get_args(params)):
-                invocations.append(invocation)
-        self.logger.info(
-            f"parallelized {self.task_id} with {len(invocations)} invocations"
-        )
-        return group_cls(self, invocations)
+    return result
+
+
+def distribute_calls(
+    task: Task,
+    param_list: list[tuple | dict | Arguments],
+    common_args: dict | None = None,
+) -> BaseInvocationGroup:
+    """
+    Distribute calls individually without batch processing.
+
+    :param Task task: The task to process
+    :param list[tuple | dict | Arguments] param_list: List of parameters
+    :param dict | None common_args: Optional common arguments to merge with each parameter
+    :return: A list of created invocations
+    """
+    # Prepare arguments with common_args merged in
+    all_args = prepare_arguments(task, param_list, common_args)
+
+    # Standard processing - distribute calls normally
+    invocations = []
+    for args in all_args:
+        invocation = task._call(args)
+        if invocation:
+            invocations.append(invocation)
+
+    group_cls: type[BaseInvocationGroup]
+    if task.app.conf.dev_mode_force_sync_tasks:
+        group_cls = ConcurrentInvocationGroup
+    else:
+        group_cls = DistributedInvocationGroup
+
+    return group_cls(task, invocations)
+
+
+def distribute_batch_calls(
+    task: Task[Params, Result],
+    param_list: list[tuple | dict | Arguments],
+    common_args: dict | None = None,
+) -> DistributedInvocationGroup:
+    """
+    Process a list of parameters in batches using PreSerializedCall.
+    Handles pre-serialization of common arguments for efficient distribution.
+
+    :param Task task: The task to process
+    :param list[tuple | dict | Arguments] param_list: The arguments to process
+    :param dict | None common_args: Optional common arguments to be pre-serialized once
+    :return: An invocation group for the distributed calls
+    """
+    # Pre-serialize common arguments if provided
+    pre_serialized_args = {}
+    other_args: list[dict[str, Any]] = []
+    if common_args:
+        task.logger.info("Pre-serializing common arguments for batch parallelization")
+        pre_serialized_args = {
+            k: task.app.arg_cache.serialize(v) for k, v in common_args.items()
+        }
+        task.logger.debug(f"Pre-serialized {len(pre_serialized_args)} common arguments")
+        other_args = param_list  # type: ignore
+    else:
+        other_args = [a.kwargs for a in prepare_arguments(task, param_list)]
+
+    invocations = []
+    batch_size = task.conf.parallel_batch_size
+
+    task.logger.info(f"Processing {len(other_args)} calls in batches of {batch_size}")
+    start_time = time.time()
+
+    # Process in batches
+    for i in range(0, len(other_args), batch_size):
+        batch_args = other_args[i : i + batch_size]
+        batch_calls = [
+            PreSerializedCall(
+                task, other_args=args, pre_serialized_args=pre_serialized_args
+            )
+            for args in batch_args
+        ]
+        batch_invocations = task.app.orchestrator.route_calls(batch_calls)
+        invocations.extend(batch_invocations)
+        if i + batch_size < len(other_args):
+            task.logger.info(
+                f"Processed batch {i//batch_size + 1}, "
+                f"{len(invocations)}/{len(other_args)} invocations"
+            )
+
+    elapsed = time.time() - start_time
+    task.logger.info(f"Batch processed {len(invocations)} calls in {elapsed:.2f}s")
+
+    return DistributedInvocationGroup(task, invocations)

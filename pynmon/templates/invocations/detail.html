@@ -1,0 +1,262 @@
+{% extends "base.html" %} {% block content %}
+<div class="row">
+  <div class="col-12">
+    <div class="card">
+      <div
+        class="card-header d-flex justify-content-between align-items-center"
+      >
+        <span>Invocation Details</span>
+        <div>
+          <a href="/invocations" class="btn btn-sm btn-outline-secondary me-2">
+            Back to Invocations
+          </a>
+          <a
+            href="/calls?call_id={{ call.call_id|urlencode }}"
+            class="btn btn-sm btn-outline-info me-2"
+          >
+            View Call
+          </a>
+          <a
+            href="/tasks/{{ task.task_id }}"
+            class="btn btn-sm btn-outline-primary"
+          >
+            View Task
+          </a>
+        </div>
+      </div>
+      <div class="card-body">
+        <h5>Invocation ID: {{ invocation.invocation_id }}</h5>
+
+        <div class="row mt-3">
+          <div class="col-md-6">
+            <div class="card">
+              <div class="card-header">Invocation Information</div>
+              <div class="card-body">
+                <table class="table">
+                  <tbody>
+                    <tr>
+                      <th>Status:</th>
+                      <td>
+                        <span
+                          class="badge {% if invocation.status.name == 'SUCCESS' %}bg-success {% elif invocation.status.name == 'FAILED' %}bg-danger {% elif invocation.status.name == 'RUNNING' %}bg-primary {% elif invocation.status.name == 'PENDING' %}bg-warning {% elif invocation.status.name == 'PAUSED' %}bg-info {% elif invocation.status.name == 'RETRY' %}bg-secondary {% else %}bg-dark{% endif %}"
+                        >
+                          {{ invocation.status.name }}
+                        </span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <th>Retries:</th>
+                      <td>{{ invocation.num_retries }}</td>
+                    </tr>
+                    <tr>
+                      <th>Parent Invocation:</th>
+                      <td>
+                        {% if invocation.parent_invocation %}
+                        <a
+                          href="/invocations/{{ invocation.parent_invocation.invocation_id }}"
+                        >
+                          {{ invocation.parent_invocation.invocation_id[:8]
+                          }}...
+                        </a>
+                        {% else %}
+                        <span class="text-muted">None</span>
+                        {% endif %}
+                      </td>
+                    </tr>
+                    <tr>
+                      <th>Created At:</th>
+                      <td>{{ created_at }}</td>
+                    </tr>
+                    {% if completed_at %}
+                    <tr>
+                      <th>Completed At:</th>
+                      <td>{{ completed_at }}</td>
+                    </tr>
+                    {% endif %} {% if duration %}
+                    <tr>
+                      <th>Duration:</th>
+                      <td>{{ duration }}</td>
+                    </tr>
+                    {% endif %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-6">
+            <div class="card">
+              <div class="card-header">Call & Task Information</div>
+              <div class="card-body">
+                <table class="table">
+                  <tbody>
+                    <tr>
+                      <th>Call ID:</th>
+                      <td>
+                        <a href="/calls/?call_id={{ call.call_id|urlencode }}">
+                          {{ call.call_id.split('#')[-1][:8] if '#' in
+                          call.call_id else call.call_id[:8] }}...
+                        </a>
+                      </td>
+                    </tr>
+                    <tr>
+                      <th>Task ID:</th>
+                      <td>
+                        <a href="/tasks/{{ task.task_id }}">
+                          {{ task.task_id }}
+                        </a>
+                      </td>
+                    </tr>
+                    <tr>
+                      <th>Task Module:</th>
+                      <td>{{ task_extra.module }}</td>
+                    </tr>
+                    <tr>
+                      <th>Task Function:</th>
+                      <td>{{ task_extra.func_qualname }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row mt-3">
+          <div class="col-md-6">
+            <div class="card">
+              <div class="card-header">Arguments</div>
+              <div class="card-body">
+                {% with args=arguments, id_prefix='invocation-args' %} {%
+                include "partials/formatted_arguments.html" %} {% endwith%}
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-6">
+            <div class="card">
+              <div class="card-header">Result / Exception</div>
+              <div class="card-body">
+                {% if result is not none %}
+                <h6 class="text-success">Result:</h6>
+                <div class="result-container">
+                  <pre class="result-content"><code>{{ result }}</code></pre>
+                </div>
+                {% elif exception is not none %}
+                <h6 class="text-danger">Exception:</h6>
+                <div class="result-container">
+                  <pre class="result-content"><code>{{ exception }}</code></pre>
+                </div>
+                {% else %}
+                <p class="text-muted">No result or exception available.</p>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- New section for history timeline -->
+        <div class="row mt-3">
+          <div class="col-12">
+            <div class="card">
+              <div class="card-header">Status Timeline</div>
+              <div class="card-body">
+                {% if history %}
+                <div class="timeline">
+                  {% for entry in history %}
+                  <div class="timeline-item">
+                    <div
+                      class="timeline-marker {% if entry.status == 'SUCCESS' %}bg-success{% elif entry.status == 'FAILED' %}bg-danger{% elif entry.status == 'RUNNING' %}bg-primary{% elif entry.status == 'PENDING' %}bg-warning{% elif entry.status == 'PAUSED' %}bg-info{% elif entry.status == 'RETRY' %}bg-secondary{% else %}bg-dark{% endif %}"
+                    ></div>
+                    <div class="timeline-content">
+                      <h5 class="timeline-title">
+                        <span
+                          class="badge {% if entry.status == 'SUCCESS' %}bg-success{% elif entry.status == 'FAILED' %}bg-danger{% elif entry.status == 'RUNNING' %}bg-primary{% elif entry.status == 'PENDING' %}bg-warning{% elif entry.status == 'PAUSED' %}bg-info{% elif entry.status == 'RETRY' %}bg-secondary{% else %}bg-dark{% endif %}"
+                        >
+                          {{ entry.status }}
+                        </span>
+                      </h5>
+                      <p class="timeline-date">{{ entry.timestamp }}</p>
+                      {% if entry.execution_context %}
+                      <p class="timeline-text">{{ entry.execution_context }}</p>
+                      {% endif %}
+                    </div>
+                  </div>
+                  {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted">No history available.</p>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  /* Timeline styling */
+  .timeline {
+    position: relative;
+    padding-left: 40px;
+    margin-bottom: 20px;
+  }
+
+  .timeline:before {
+    content: "";
+    position: absolute;
+    left: 15px;
+    top: 0;
+    height: 100%;
+    width: 2px;
+    background: #e9ecef;
+  }
+
+  .timeline-item {
+    position: relative;
+    margin-bottom: 20px;
+  }
+
+  .timeline-marker {
+    position: absolute;
+    left: -35px;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    top: 0;
+  }
+
+  .timeline-content {
+    padding-bottom: 10px;
+  }
+
+  .timeline-title {
+    margin-top: 0;
+    font-size: 16px;
+  }
+
+  .timeline-date {
+    color: #6c757d;
+    font-size: 14px;
+    margin-bottom: 0.5rem;
+  }
+
+  .result-container {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid #e9ecef;
+    border-radius: 4px;
+    background-color: #f8f9fa;
+  }
+
+  .result-content {
+    margin: 0;
+    padding: 10px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 0.875rem;
+  }
+</style>
+{% endblock %}

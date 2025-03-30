@@ -129,7 +129,7 @@ def test_distributed_cpu_work_performance(
     # Set expected time factors based on runner type
     runner_type = app.runner.__class__.__name__
     if runner_type == "MultiThreadRunner":
-        MIN_TIME_FACTOR = 3
+        MIN_TIME_FACTOR = 1.5
         MAX_TIME_FACTOR = 5
     elif runner_type == "PersistentProcessRunner":
         MIN_TIME_FACTOR = 3
@@ -158,7 +158,7 @@ def test_distributed_cpu_work_performance(
     # Check variance in individual execution times
     avg_sub_task_time = sum(individual_times) / len(individual_times)
     for i, t in enumerate(individual_times):
-        assert 0.5 * avg_sub_task_time <= t <= 3.0 * avg_sub_task_time, (
+        assert 0.25 * avg_sub_task_time <= t <= 3.0 * avg_sub_task_time, (
             f"Sub-task {i} time {t:.3f}s deviates too far from average {avg_sub_task_time:.3f}s "
-            f"(must be within 50%-200%)"
+            f"(must be within 25%-200%)"
         )

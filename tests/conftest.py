@@ -21,12 +21,16 @@ class MockBroker(BaseBroker):
     def __init__(self, app: "Pynenc") -> None:
         super().__init__(app)
         self.route_invocation_mock = MagicMock()
+        self.route_invocations_mock = MagicMock()
         self.retrieve_invocation_mock = MagicMock()
         self.count_invocations_mock = MagicMock()
         self.purge_mock = MagicMock()
 
     def route_invocation(self, *args: Any, **kwargs: Any) -> None:
         self.route_invocation_mock(*args, **kwargs)
+
+    def route_invocations(self, *args: Any, **kwargs: Any) -> None:
+        self.route_invocations_mock(*args, **kwargs)
 
     def retrieve_invocation(self, *args: Any, **kwargs: Any) -> Any:
         return self.retrieve_invocation_mock(*args, **kwargs)
@@ -58,7 +62,9 @@ class MockBaseOrchestrator(BaseOrchestrator):
     def __init__(self, app: "Pynenc") -> None:
         super().__init__(app)
         self._get_existing_invocations_mock = MagicMock()
+        self._get_invocation_mock = MagicMock()
         self._set_invocation_status_mock = MagicMock()
+        self._set_invocations_status_mock = MagicMock()
         self._set_invocation_pending_status_mock = MagicMock()
         self._get_invocation_status_mock = MagicMock()
         self._increment_invocation_retries_mock = MagicMock()
@@ -68,12 +74,20 @@ class MockBaseOrchestrator(BaseOrchestrator):
         self._cycle_control_mock = MagicMock()
         self._auto_purge_mock = MagicMock()
         self.blocking_control_mock = MockBlockingControl()
+        self._mock_filter_by_status = MagicMock()
+        self._mock_filter_final = MagicMock()
 
     def get_existing_invocations(self, *args: Any, **kwargs: Any) -> Any:
         return self._get_existing_invocations_mock(*args, **kwargs)
 
+    def get_invocation(self, *args: Any, **kwargs: Any) -> Any:
+        return self._get_invocation_mock(*args, **kwargs)
+
     def _set_invocation_status(self, *args: Any, **kwargs: Any) -> Any:
         return self._set_invocation_status_mock(*args, **kwargs)
+
+    def _set_invocations_status(self, *args: Any, **kwargs: Any) -> Any:
+        return self._set_invocations_status_mock(*args, **kwargs)
 
     def _set_invocation_pending_status(self, *args: Any, **kwargs: Any) -> Any:
         return self._set_invocation_pending_status_mock(*args, **kwargs)
@@ -89,6 +103,12 @@ class MockBaseOrchestrator(BaseOrchestrator):
 
     def set_up_invocation_auto_purge(self, *args: Any, **kwargs: Any) -> Any:
         return self._set_up_invocation_auto_purge_mock(*args, **kwargs)
+
+    def filter_by_status(self, *args: Any, **kwargs: Any) -> Any:
+        return self._mock_filter_by_status(*args, **kwargs)
+
+    def filter_final(self, *args: Any, **kwargs: Any) -> Any:
+        return self._mock_filter_final(*args, **kwargs)
 
     @property
     def cycle_control(self) -> Any:

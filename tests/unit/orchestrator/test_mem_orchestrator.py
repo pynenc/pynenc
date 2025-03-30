@@ -5,9 +5,9 @@ import pytest
 from pynenc.exceptions import PendingInvocationLockError
 from pynenc.invocation import DistributedInvocation, InvocationStatus
 from pynenc.orchestrator.mem_orchestrator import ArgPair, TaskInvocationCache
-from tests.conftest import MockPynenc
+from tests.conftest import Pynenc
 
-app = MockPynenc()
+app = Pynenc()
 
 
 @app.task
@@ -96,3 +96,21 @@ def test_set_pending_status_already_pending() -> None:
     # Action & Assertion
     with pytest.raises(PendingInvocationLockError):
         cache.set_pending_status(invocation)
+
+
+def test_get_invocation_by_id() -> None:
+    # Create an invocation
+    invocation = add(1, 5)  # type: ignore
+    invocation_id = invocation.invocation_id
+
+    # Test getting the invocation by ID
+    retrieved_invocation = app.orchestrator.get_invocation(invocation_id)
+    assert retrieved_invocation is not None
+    assert retrieved_invocation.invocation_id == invocation_id
+    assert (
+        retrieved_invocation.call.serialized_arguments
+        == invocation.call.serialized_arguments
+    )
+
+    # Test with non-existent ID
+    assert app.orchestrator.get_invocation("non-existent-id") is None

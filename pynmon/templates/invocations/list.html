@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>Invocations</span>
+                <button class="btn btn-sm btn-outline-primary"
+                        hx-get="/invocations?{{ request.query_params }}"
+                        hx-target="#invocations-content"
+                        hx-swap="innerHTML">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-clockwise" viewBox="0 0 16 16">
+                        <path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
+                        <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/>
+                    </svg>
+                    Refresh
+                </button>
+            </div>
+            <div class="card-body">
+                <h5>App ID: {{ app_id }}</h5>
+
+                <!-- Filters -->
+                <div class="card mb-3">
+                    <div class="card-header">Filters</div>
+                    <div class="card-body">
+                        <form action="/invocations" method="get" class="row g-3">
+                            <div class="col-md-4">
+                                <label for="status" class="form-label">Status</label>
+                                <select name="status" id="status" class="form-select" multiple>
+                                    {% for status in all_statuses %}
+                                    <option value="{{ status }}" {% if status in current_filters.status %}selected{% endif %}>
+                                        {{ status|upper }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                <div class="form-text">Hold Ctrl to select multiple</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="task_id" class="form-label">Task ID</label>
+                                <select name="task_id" id="task_id" class="form-select">
+                                    <option value="">All Tasks</option>
+                                    {% for task_id in all_task_ids %}
+                                    <option value="{{ task_id }}" {% if task_id == current_filters.task_id %}selected{% endif %}>
+                                        {{ task_id }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label for="limit" class="form-label">Limit</label>
+                                <input type="number" class="form-control" id="limit" name="limit"
+                                    value="{{ current_filters.limit }}">
+                            </div>
+                            <div class="col-md-2 d-flex align-items-end">
+                                <button type="submit" class="btn btn-primary w-100">Apply Filters</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <div id="invocations-content">
+                    {% if invocations %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Invocation ID</th>
+                                    <th>Task</th>
+                                    <th>Call ID</th>
+                                    <th>Status</th>
+                                    <th>Retries</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for invocation in invocations %}
+                                <tr>
+                                    <td>
+                                        <a href="/invocations/{{ invocation.invocation_id }}">
+                                            {{ invocation.invocation_id[:8] }}...
+                                        </a>
+                                    </td>
+                                    <td>
+                                        <a href="/tasks/{{ invocation.task.task_id }}">
+                                            {{ invocation.task.task_id.split('.')[-1] }}
+                                        </a>
+                                    </td>
+                                    <td>
+                                        <a href="/calls/?call_id={{ invocation.call_id|urlencode }}">
+                                          {{ invocation.call_id.split('#')[-1][:8] if '#' in invocation.call_id else invocation.call_id[:8] }}...
+                                        </a>
+                                      </td>
+                                    <td>
+                                        <span class="badge
+                                            {% if invocation.status.name == 'SUCCESS' %}bg-success
+                                            {% elif invocation.status.name == 'FAILED' %}bg-danger
+                                            {% elif invocation.status.name == 'RUNNING' %}bg-primary
+                                            {% elif invocation.status.name == 'PENDING' %}bg-warning
+                                            {% elif invocation.status.name == 'PAUSED' %}bg-info
+                                            {% elif invocation.status.name == 'RETRY' %}bg-secondary
+                                            {% else %}bg-dark{% endif %}">
+                                            {{ invocation.status.name }}
+                                        </span>
+                                    </td>
+                                    <td>{{ invocation.num_retries }}</td>
+                                    <td>
+                                        <a href="/invocations/{{ invocation.invocation_id }}"
+                                           class="btn btn-sm btn-primary">Details</a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info">No invocations found matching the filters.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,5 +1,6 @@
 import concurrent.futures
 from dataclasses import dataclass
+from time import sleep
 from typing import TYPE_CHECKING
 
 import pytest
@@ -228,3 +229,39 @@ def test_get_invocations_to_run_max_limit(test_vars: Vars) -> None:
         if app.orchestrator.get_invocation_status(inv) == InvocationStatus.PENDING
     )
     assert pending_count == 1, f"Expected 1 invocation PENDING, got {pending_count}"
+
+
+def test_get_invocation_by_id(test_vars: Vars) -> None:
+    """Test retrieving an invocation directly by its ID."""
+    app = test_vars.app
+
+    # Test retrieving each of the test invocations
+    for inv in [test_vars.inv1, test_vars.inv2, test_vars.inv3]:
+        retrieved_inv = app.orchestrator.get_invocation(inv.invocation_id)
+        assert (
+            retrieved_inv is not None
+        ), f"Could not retrieve invocation with ID {inv.invocation_id}"
+        assert retrieved_inv.invocation_id == inv.invocation_id
+        assert retrieved_inv.status == app.orchestrator.get_invocation_status(inv)
+        assert retrieved_inv.call.serialized_arguments == inv.call.serialized_arguments
+
+    # Test with a non-existent invocation ID
+    non_existent_id = "non_existent_invocation_id"
+    retrieved_inv = app.orchestrator.get_invocation(non_existent_id)
+    assert (
+        retrieved_inv is None
+    ), f"Unexpectedly retrieved an invocation with ID {non_existent_id}"
+
+    # Test after changing an invocation's status
+    app.orchestrator.set_invocation_status(test_vars.inv1, InvocationStatus.RUNNING)
+    retrieved_inv = app.orchestrator.get_invocation(test_vars.inv1.invocation_id)
+    assert retrieved_inv is not None
+    sleep(0.1)  # wait for dist_invocation cache to be updated
+    assert retrieved_inv.status == InvocationStatus.RUNNING
+
+    # Verify that the retrieved invocation can be used for regular operations
+    app.orchestrator.set_invocation_status(retrieved_inv, InvocationStatus.SUCCESS)
+    assert (
+        app.orchestrator.get_invocation_status(test_vars.inv1)
+        == InvocationStatus.SUCCESS
+    )

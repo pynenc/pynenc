@@ -3,7 +3,7 @@ import threading
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -32,7 +32,9 @@ class InvocationHistory:
     """
 
     invocation_id: str
-    _timestamp: datetime = field(init=False, default_factory=lambda: datetime.utcnow())
+    _timestamp: datetime = field(
+        init=False, default_factory=lambda: datetime.now(timezone.utc)
+    )
     status: Optional["InvocationStatus"] = None
     execution_context: Optional[Any] = None  # Todo on Runners
 
@@ -66,8 +68,15 @@ class InvocationHistory:
         """
         hist_dict = json.loads(json_str)
         history = cls(hist_dict["invocation_id"])
-        history._timestamp = datetime.fromisoformat(hist_dict["_timestamp"])
-        history.status = InvocationStatus(hist_dict["status"])
+
+        timestamp = datetime.fromisoformat(hist_dict["_timestamp"])
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=timezone.utc)
+
+        history._timestamp = timestamp
+
+        if hist_dict["status"] is not None:
+            history.status = InvocationStatus(hist_dict["status"])
         history.execution_context = hist_dict["execution_context"]
         return history
 
@@ -193,9 +202,7 @@ class BaseStateBackend(ABC):
 
         :param DistributedInvocation invocation: The invocation to upsert.
         """
-        thread = threading.Thread(target=self._upsert_invocation, args=(invocation,))
-        thread.start()
-        self.invocation_threads[invocation.invocation_id].append(thread)
+        self._upsert_invocation(invocation)
 
     def get_invocation(self, invocation_id: str) -> "DistributedInvocation":
         """

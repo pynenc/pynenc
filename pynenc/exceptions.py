@@ -82,6 +82,10 @@ class TaskRoutingError(TaskError):
     """Error raised when a task will not be routed."""
 
 
+class TaskParallelProcessingError(TaskError):
+    """Error parallelizing a task."""
+
+
 class InvocationConcurrencyWithDifferentArgumentsError(TaskRoutingError):
     """
     Error raised when there is a task with different arguments

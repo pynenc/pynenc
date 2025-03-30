@@ -110,8 +110,8 @@ The `ConfigTask` class provides specialized configurations for tasks within the 
    **Example**:
 
    ```shell
-      export PYNENC__CONFIGTASK__AUTO_PARALLEL_BATCH_SIZE="2"
-      export PYNENC__CONFIGTASK__MY_MODULE#MY_TASK__AUTO_PARALLEL_BATCH_SIZE="3"
+      export PYNENC__CONFIGTASK__PARALLEL_BATCH_SIZE="2"
+      export PYNENC__CONFIGTASK__MY_MODULE#MY_TASK__PARALLEL_BATCH_SIZE="3"
    ```
 
    ```{note}
@@ -126,7 +126,7 @@ The `ConfigTask` class provides specialized configurations for tasks within the 
 
    ```yaml
    task:
-     auto_parallel_batch_size: 4
+     parallel_batch_size: 4
      max_retries: 10
      module_name.task_name:
        max_retries: 5

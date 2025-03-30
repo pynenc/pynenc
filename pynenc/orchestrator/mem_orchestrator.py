@@ -1,8 +1,9 @@
 import pickle
 import threading
 from collections import OrderedDict, defaultdict, deque
+from collections.abc import Iterator
 from time import time
-from typing import TYPE_CHECKING, Any, Generic, Iterator
+from typing import TYPE_CHECKING, Any, Generic, Optional
 
 from pynenc.exceptions import CycleDetectedError, PendingInvocationLockError
 from pynenc.invocation.status import InvocationStatus
@@ -213,12 +214,36 @@ class ArgPair:
         self.value = value
 
     def __hash__(self) -> int:
+        """Generate a hash that works with serialized values"""
+        # For string values (like serialized JSON), use the string value directly
+        if isinstance(self.value, str):
+            return hash((self.key, self.value))
+        # For other types, use pickle for consistent hashing
         return hash((self.key, pickle.dumps(self.value)))
 
     def __eq__(self, other: Any) -> bool:
-        if isinstance(other, ArgPair):
-            return self.key == other.key and self.value == other.value
-        return False
+        """Equality check that works with serialized values"""
+        if not isinstance(other, ArgPair):
+            return False
+
+        # Basic key comparison
+        if self.key != other.key:
+            return False
+
+        # For string values (likely serialized JSON), direct comparison
+        if isinstance(self.value, str) and isinstance(other.value, str):
+            return self.value == other.value
+
+        # For other types, try direct comparison first
+        if self.value == other.value:
+            return True
+
+        # Last resort: pickle comparison for complex objects
+        try:
+            return pickle.dumps(self.value) == pickle.dumps(other.value)
+        except (pickle.PickleError, TypeError):
+            # If pickling fails, they're not equal
+            return False
 
     def __str__(self) -> str:
         return f"{self.key}:{self.value}"
@@ -249,20 +274,52 @@ class TaskInvocationCache(Generic[Result]):
         self.locks: dict[str, threading.Lock] = {}
 
     def filter_by_key_arguments(self, key_arguments: dict[str, str]) -> set[str]:
-        matches = []
+        """
+        Filters invocations by key arguments, requiring ALL keys to match.
+
+        :param dict[str, str] key_arguments: Key-value pairs to filter by
+        :return: Set of invocation IDs that match ALL provided key-value pairs
+        """
+        if not key_arguments:
+            return set()
+
+        # First, get candidates that match at least one key-value pair
+        all_candidate_sets = []
+
         for key, value in key_arguments.items():
-            invocation_ids = set()
-            for _id in self.args_index[ArgPair(key, value)]:
-                invocation_ids.add(_id)
-            if invocation_ids:
-                matches.append(invocation_ids)
-        return set.intersection(*matches) if matches else set()
+            # Get invocation IDs matching this specific key-value pair
+            pair = ArgPair(key, value)
+            matching_ids = self.args_index.get(pair, set())
+
+            # If no matches for any single key, we can return early
+            if not matching_ids:
+                return set()
+
+            all_candidate_sets.append(matching_ids)
+
+        # Return only invocations that appear in ALL the candidate sets (intersection)
+        if not all_candidate_sets:
+            return set()
+
+        # Start with the first set and intersect with each subsequent set
+        result = all_candidate_sets[0].copy()
+        for candidate_set in all_candidate_sets[1:]:
+            result.intersection_update(candidate_set)
+            # Early exit if intersection becomes empty
+            if not result:
+                break
+
+        return result
 
     def filter_by_statuses(self, statuses: list[InvocationStatus]) -> set[str]:
         matched_ids = set()
         for status in statuses:
             matched_ids.update(self.status_index[status])
         return matched_ids
+
+    def get_invocation(self, invocation_id: str) -> Optional["DistributedInvocation"]:
+        """Retrieves an invocation by its ID."""
+        return self.invocations.get(invocation_id)
 
     def get_invocations(
         self,
@@ -476,12 +533,31 @@ class MemOrchestrator(BaseOrchestrator):
             key_serialized_arguments, statuses
         )
 
+    def get_invocation(self, invocation_id: str) -> Optional["DistributedInvocation"]:
+        """Retrieves an invocation by its ID."""
+        for task_cache in self.cache.values():
+            if invocation := task_cache.get_invocation(invocation_id):
+                return invocation
+        return None
+
     def _set_invocation_status(
         self,
         invocation: "DistributedInvocation[Params, Result]",
         status: InvocationStatus,
     ) -> None:
         self.cache[invocation.task.task_id].set_status(invocation, status)
+
+    def _set_invocations_status(
+        self, invocations: list["DistributedInvocation"], status: InvocationStatus
+    ) -> None:
+        """
+        Set the status of multiple invocations at once.
+
+        :param list[DistributedInvocation] invocations: The invocations to update.
+        :param InvocationStatus status: The status to set.
+        """
+        for invocation in invocations:
+            self.cache[invocation.task.task_id].set_status(invocation, status)
 
     def _set_invocation_pending_status(
         self, invocation: "DistributedInvocation[Params, Result]"
@@ -511,6 +587,19 @@ class MemOrchestrator(BaseOrchestrator):
         self, invocation: "DistributedInvocation[Params, Result]"
     ) -> int:
         return self.cache[invocation.task.task_id].get_retries(invocation)
+
+    def filter_by_status(
+        self,
+        invocations: list["DistributedInvocation"],
+        status_filter: set["InvocationStatus"] | None = None,
+    ) -> list["DistributedInvocation"]:
+        if not invocations or status_filter is None:
+            return []
+        return [
+            inv
+            for inv in invocations
+            if self.get_invocation_status(inv) in status_filter
+        ]
 
     def purge(self) -> None:
         self.cache.clear()

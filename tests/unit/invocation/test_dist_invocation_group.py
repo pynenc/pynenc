@@ -32,7 +32,8 @@ def test_get_final_invocations() -> None:
     invocation_group: DistributedInvocationGroup = DistributedInvocationGroup(
         task=add, invocations=[invocation0, invocation1]
     )
-    app.orchestrator._get_invocation_status_mock.return_value = InvocationStatus.SUCCESS
+    # filter final will return both invocations.
+    app.orchestrator._mock_filter_final.return_value = [invocation0, invocation1]
     app.state_backend._get_result_mock.return_value = -13
     # Both invocations are final so results should be yielded immediately.
     assert list(invocation_group.results) == [-13, -13]
@@ -47,6 +48,7 @@ def test_get_pending_results() -> None:
         task=add, invocations=[invocation0, invocation1]
     )
     # Force pending status for both invocations.
+    app.orchestrator._mock_filter_final.return_value = []
     app.orchestrator._get_invocation_status_mock.return_value = InvocationStatus.PENDING
     # Patch waiting methods: orchestrator.waiting_for_results and runner.waiting_for_results.
     app.orchestrator.waiting_for_results = MagicMock()  # type: ignore

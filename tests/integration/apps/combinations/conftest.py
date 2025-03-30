@@ -1,6 +1,9 @@
+import logging
+import time
 from collections import namedtuple
+from collections.abc import Generator
 from itertools import product
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
@@ -12,6 +15,7 @@ from pynenc.orchestrator.base_orchestrator import BaseOrchestrator
 from pynenc.runner.base_runner import BaseRunner
 from pynenc.serializer.base_serializer import BaseSerializer
 from pynenc.state_backend.base_state_backend import BaseStateBackend
+from pynenc.util.redis_debug_client import patch_redis_client
 from tests import util
 from tests.integration.apps.combinations import tasks, tasks_async
 
@@ -20,6 +24,31 @@ if TYPE_CHECKING:
     from _pytest.python import Metafunc
 
     from pynenc.task import Task
+
+
+def pytest_configure(config: Any) -> None:
+    # Set up debug logging
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s.%(msecs)03d %(levelname)-8s %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+    # Ensure Redis debugging is enabled
+    patch_redis_client()
+
+
+@pytest.fixture(scope="function", autouse=True)
+def measure_test_time(request: "FixtureRequest") -> Generator:
+    """Automatically measure and report the time taken by each test."""
+    test_name = request.node.name
+    logging.info(f"TIMER: Test {test_name} starting")
+    start_time = time.time()
+
+    yield
+
+    elapsed = time.time() - start_time
+    logging.info(f"TIMER: Test {test_name} took {elapsed:.3f} seconds")
 
 
 AppComponents = namedtuple(
@@ -105,6 +134,7 @@ def app(request: "FixtureRequest", monkeypatch: MonkeyPatch) -> Pynenc:
     components: AppComponents = request.param
     test_module, test_name = util.get_module_name(request)
     monkeypatch.setenv("PYNENC__APP_ID", f"{test_module}.{test_name}")
+    monkeypatch.setenv("PYNENC__ARG_CACHE_CLS", components.arg_cache.__name__)
     monkeypatch.setenv("PYNENC__ORCHESTRATOR_CLS", components.orchestrator.__name__)
     monkeypatch.setenv("PYNENC__BROKER_CLS", components.broker.__name__)
     monkeypatch.setenv("PYNENC__SERIALIZER_CLS", components.serializer.__name__)
@@ -216,3 +246,15 @@ def task_async_fail(app: Pynenc) -> "Task":
 def task_async_sleep(app: Pynenc) -> "Task":
     tasks_async.async_sleep_seconds.app = app
     return tasks_async.async_sleep_seconds
+
+
+@pytest.fixture(scope="function")
+def task_process_large_shared_arg(app: Pynenc) -> "Task":
+    tasks.process_large_shared_arg.app = app
+    return tasks.process_large_shared_arg
+
+
+@pytest.fixture(scope="function")
+def task_batch_process_shared_data(app: Pynenc) -> "Task":
+    tasks.batch_process_shared_data.app = app
+    return tasks.batch_process_shared_data

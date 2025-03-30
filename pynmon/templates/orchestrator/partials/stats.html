@@ -1,0 +1,81 @@
+<div class="row mt-3">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header">Invocation Status</div>
+      <div class="card-body">
+        <div class="table-responsive">
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th>Status</th>
+                <th>Count</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for status, count in status_counts.items() %}
+              <tr>
+                <td>
+                  <span
+                    class="badge {% if status == 'SUCCESS' %}bg-success {% elif status == 'FAILED' %}bg-danger {% elif status == 'RUNNING' %}bg-primary {% elif status == 'PENDING' %}bg-warning {% elif status == 'PAUSED' %}bg-info {% elif status == 'RETRY' %}bg-secondary {% else %}bg-dark{% endif %}"
+                  >
+                    {{ status }}
+                  </span>
+                </td>
+                <td>{{ count }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+            <tfoot>
+              <tr class="table-dark">
+                <th>Total</th>
+                <th>{{ status_counts.values()|sum }}</th>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header">Blocking Invocations</div>
+      <div class="card-body">
+        {% if blocking_invocations %}
+        <div class="table-responsive">
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Task</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for invocation in blocking_invocations %}
+              <tr>
+                <td>
+                  <a href="/invocations/{{ invocation.invocation_id }}">
+                    {{ invocation.invocation_id[:8] }}...
+                  </a>
+                </td>
+                <td>{{ invocation.task.task_id.split('.')[-1] }}</td>
+                <td>
+                  <span
+                    class="badge {% if invocation.status.name == 'SUCCESS' %}bg-success {% elif invocation.status.name == 'FAILED' %}bg-danger {% elif invocation.status.name == 'RUNNING' %}bg-primary {% elif invocation.status.name == 'PENDING' %}bg-warning {% elif invocation.status.name == 'PAUSED' %}bg-info {% elif invocation.status.name == 'RETRY' %}bg-secondary {% else %}bg-dark{% endif %}"
+                  >
+                    {{ invocation.status.name }}
+                  </span>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <p class="text-muted">No blocking invocations found.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>

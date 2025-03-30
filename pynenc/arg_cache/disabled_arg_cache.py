@@ -14,7 +14,8 @@ class DisabledArgCache(BaseArgCache):
     """
 
     def __init__(self, app: "Pynenc") -> None:
-        super().__init__(app)
+        self.app = app
+        # Do not call super().__init__(app) to avoid runner cache initialization
 
     def serialize(self, obj: Any, disable_cache: bool = False) -> str:
         """Direct passthrough to serializer."""
@@ -36,3 +37,10 @@ class DisabledArgCache(BaseArgCache):
 
     def _purge(self) -> None:
         """No-op for disabled cache."""
+
+    def purge(self) -> None:
+        """Override to prevent access to runner cache."""
+
+    def is_cache_key(self, value: str) -> bool:
+        """Always returns False for disabled cache."""
+        return False

@@ -30,18 +30,18 @@ def mock_arguments() -> MagicMock:
 
 def test_call_id(mock_task: MagicMock, mock_arguments: MagicMock) -> None:
     """Test that call_id is based in task_id and args_id"""
-    call: Call = Call(task=mock_task, arguments=mock_arguments)
+    call: Call = Call(task=mock_task, _arguments=mock_arguments)
     assert mock_task.task_id in call.call_id
     assert mock_arguments.args_id in call.call_id
 
 
 def test_serialized_arguments(mock_task: MagicMock, mock_arguments: MagicMock) -> None:
     """Test that it will call the serializer for each argument"""
-    call: Call = Call(task=mock_task, arguments=mock_arguments)
+    call: Call = Call(task=mock_task, _arguments=mock_arguments)
     call.app.arg_cache = DisabledArgCache(call.app)
     call.app.serializer.serialize = lambda obj: obj  # type: ignore
     assert call.serialized_arguments == mock_arguments.kwargs
-    call: Call = Call(task=mock_task, arguments=mock_arguments)
+    call: Call = Call(task=mock_task, _arguments=mock_arguments)
     call.app.serializer.serialize = lambda obj: "0"  # type: ignore
     assert call.serialized_arguments == {k: "0" for k in mock_arguments.kwargs}  # type: ignore
 
@@ -51,7 +51,7 @@ def test_serialized_arguments_with_caching(
 ) -> None:
     """Test that large arguments are cached while small ones are directly serialized."""
     # Setup
-    call: Call = Call(task=mock_task, arguments=mock_arguments)
+    call: Call = Call(task=mock_task, _arguments=mock_arguments)
     call.app.config_values = None
     call.app.config_filepath = None
     call.app.arg_cache = MemArgCache(call.app)
@@ -85,20 +85,20 @@ def test_serialized_arguments_with_caching(
 def test_equality_and_hash(mock_task: MagicMock, mock_arguments: MagicMock) -> None:
     mock_task.task_id = "test_task"
     mock_arguments.args_id = "test_args"
-    call1: Call = Call(task=mock_task, arguments=mock_arguments)
-    call2: Call = Call(task=mock_task, arguments=mock_arguments)
+    call1: Call = Call(task=mock_task, _arguments=mock_arguments)
+    call2: Call = Call(task=mock_task, _arguments=mock_arguments)
     assert call1 == call2
     assert hash(call1) == hash(call2)
 
     different_task = MagicMock()
     different_task.task_id = "different_task"
-    call3: Call = Call(task=different_task, arguments=mock_arguments)
+    call3: Call = Call(task=different_task, _arguments=mock_arguments)
     assert call1 != call3
     assert hash(call1) != hash(call3)
 
     different_arguments = MagicMock()
     different_arguments.args_id = "different_args"
-    call4: Call = Call(task=mock_task, arguments=different_arguments)
+    call4: Call = Call(task=mock_task, _arguments=different_arguments)
     assert call1 != call4
     assert hash(call1) != hash(call4)
 
@@ -123,14 +123,14 @@ def test_serialized_args_for_concurrency_check_returns_none(
     mock_task.conf.registration_concurrency = concurrency_type
     mock_task.conf.key_arguments = []
 
-    call: Call = Call(task=mock_task, arguments=mock_arguments)
+    call: Call = Call(task=mock_task, _arguments=mock_arguments)
 
     assert call.serialized_args_for_concurrency_check is None
 
 
 def test_call_getstate(mock_task: MagicMock, mock_arguments: MagicMock) -> None:
     """Test that __getstate__ correctly serializes the call object."""
-    call: Call = Call(task=mock_task, arguments=mock_arguments)
+    call: Call = Call(task=mock_task, _arguments=mock_arguments)
 
     # Expected state should contain the task and the serialized arguments
     expected_state = {
