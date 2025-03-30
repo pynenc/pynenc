@@ -1,3 +1,5 @@
+import threading
+from concurrent.futures import Future, ThreadPoolExecutor
 from functools import cached_property
 from time import time
 from typing import TYPE_CHECKING, Iterator, Optional
@@ -21,6 +23,27 @@ from pynenc.util.redis_keys import Key
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
     from pynenc.task import Task
+
+
+# Thread registry to avoid duplicating status update threads for the same invocation
+_pending_resolution_threads: dict[str, Future[None]] = {}
+_registry_lock = threading.Lock()
+
+
+def _clean_dead_threads() -> None:
+    """Remove completed futures from the registry to prevent memory leaks."""
+    with _registry_lock:
+        completed_keys = [
+            inv_id
+            for inv_id, future in _pending_resolution_threads.items()
+            if future.done()
+        ]
+        for inv_id in completed_keys:
+            _pending_resolution_threads.pop(inv_id)
+
+
+class StatusNotFound(Exception):
+    """Raised when a status is not found in Redis"""
 
 
 class RedisCycleControl(BaseCycleControl):
@@ -59,8 +82,6 @@ class RedisCycleControl(BaseCycleControl):
             raise CycleDetectedError.from_cycle([caller.call])
         if cycle := self.find_cycle_caused_by_new_invocation(caller, callee):
             raise CycleDetectedError.from_cycle(cycle)
-        self.client.set(self.key.invocation(caller.invocation_id), caller.to_json())
-        self.client.set(self.key.invocation(callee.invocation_id), callee.to_json())
         self.client.sadd(
             self.key.call_to_invocation(caller.call_id), caller.invocation_id
         )
@@ -91,7 +112,6 @@ class RedisCycleControl(BaseCycleControl):
         Cleans up the graph by removing a given invocation and its associated edges.
         :param DistributedInvocation invocation: The `DistributedInvocation` instance to be removed.
         """
-        self.client.delete(self.key.invocation(invocation.invocation_id))
         self.client.srem(
             self.key.call_to_invocation(invocation.call_id), invocation.invocation_id
         )
@@ -194,7 +214,9 @@ class RedisBlockingControl(BaseBlockingControl):
         waited_invocation_ids = []
         for waited in waiteds:
             waited_invocation_ids.append(waited.invocation_id)
-            self.client.set(self.key.invocation(waited.invocation_id), waited.to_json())
+            self.client.set(
+                self.key.invocation(waited.invocation_id), waited.invocation_id
+            )
             self.client.sadd(
                 self.key.waited_by(waited.invocation_id), waiter.invocation_id
             )
@@ -253,8 +275,15 @@ class RedisBlockingControl(BaseBlockingControl):
             index += page_size
             for waited_invocation_id in page:
                 invocation_id = waited_invocation_id.decode()
-                if inv := self.client.get(self.key.invocation(invocation_id)):
-                    invocation = DistributedInvocation.from_json(self.app, inv.decode())
+                # Ugly workaround
+                # invocation existance holds some logic, use a set or something else
+                # ! remove/fix this with issue 90 https://github.com/pynenc/pynenc/issues/90
+                val_inv_id = self.client.get(self.key.invocation(invocation_id))
+                if not val_inv_id:
+                    continue
+                if invocation := self.app.state_backend.get_invocation(
+                    val_inv_id.decode()
+                ):
                     try:
                         status = self.app.orchestrator.get_invocation_status(invocation)
                         if status.is_available_for_run():
@@ -267,10 +296,6 @@ class RedisBlockingControl(BaseBlockingControl):
                         )
                 if max_num_invocations == 0:
                     break
-
-
-class StatusNotFound(Exception):
-    """Raised when a status is not found in Redis"""
 
 
 class TaskRedisCache:
@@ -287,23 +312,19 @@ class TaskRedisCache:
         self.app = app
         self.client = client
         self.key = Key(app.app_id, "orchestrator")
+        self._executor = ThreadPoolExecutor(
+            max_workers=self.conf.max_pending_resolution_threads
+        )
+
+    @property
+    def conf(self) -> ConfigOrchestratorRedis:
+        return self.app.orchestrator.conf
 
     def purge(self) -> None:
         """
         Purges all data related to task invocations from Redis.
         """
         self.key.purge(self.client)
-
-    def get_invocation(self, invocation_id: str) -> Optional["DistributedInvocation"]:
-        """
-        Get a specific invocation by its ID.
-
-        :param str invocation_id: The ID of the invocation to retrieve.
-        :return: The invocation if found, None otherwise.
-        """
-        if inv_json := self.client.get(self.key.invocation(invocation_id)):
-            return DistributedInvocation.from_json(self.app, inv_json.decode())
-        return None
 
     def _set_status(
         self,
@@ -330,7 +351,6 @@ class TaskRedisCache:
             # New invocation, initialize in Redis
             for arg, val in invocation.serialized_arguments.items():
                 pipeline.sadd(self.key.args(task_id, arg, val), invocation_id)
-            pipeline.set(self.key.invocation(invocation_id), invocation.to_json())
             pipeline.sadd(self.key.task(task_id), invocation_id)
 
         # Set new status
@@ -354,13 +374,14 @@ class TaskRedisCache:
         :param InvocationStatus status: The new status to set.
         :param Optional[redis.client.Pipeline] pipeline: Optional Redis pipeline; if None, creates and executes one.
         """
-        pipeline = self.client.pipeline(transaction=False)
+        pipeline = self.client.pipeline(transaction=True)
         try:
             previous_status = self._get_invocation_status(invocation.invocation_id)
         except StatusNotFound:
             previous_status = None
         self._set_status(invocation, status, previous_status, pipeline)
         pipeline.execute()
+        invocation.update_status_cache(status)
 
     def set_batch_status(
         self,
@@ -373,13 +394,6 @@ class TaskRedisCache:
         :param list[DistributedInvocation] invocations: The invocations to update.
         :param InvocationStatus status: The status to set.
         """
-        if not invocations:
-            return
-
-        for invocation in invocations:
-            self.set_status(invocation, status)
-        return
-
         invocation_ids = [inv.invocation_id for inv in invocations]
         status_keys = [self.key.invocation_status(inv_id) for inv_id in invocation_ids]
         statuses = self.client.mget(status_keys)  # Single round-trip
@@ -390,7 +404,7 @@ class TaskRedisCache:
             for inv, status in zip(invocations, statuses)
         }
 
-        with self.client.pipeline(transaction=False) as pipe:
+        with self.client.pipeline(transaction=True) as pipe:
             for invocation in invocations:
                 prev_status = previous_statuses.get(invocation.invocation_id)
                 self._set_status(invocation, status, prev_status, pipe)
@@ -453,6 +467,7 @@ class TaskRedisCache:
             The duration is specified in the configuration file using the `auto_final_invocation_purge_hours` parameter.
         ```
         """
+        # TODO use expire, not auto_purge (at least for redis)
         end_time = (
             time() - self.app.orchestrator.conf.auto_final_invocation_purge_hours * 3600
         )
@@ -460,9 +475,8 @@ class TaskRedisCache:
             self.key.invocation_auto_purge(), 0, end_time
         ):
             invocation_id = _invocation_id.decode()
-            if inv := self.client.get(self.key.invocation(invocation_id)):
-                invocation = DistributedInvocation.from_json(self.app, inv.decode())
-                self.client.delete(self.key.invocation(invocation_id))
+            try:
+                invocation = self.app.state_backend.get_invocation(invocation_id)
                 task_id = invocation.task.task_id
                 # clean up task keys
                 self.client.srem(self.key.task(task_id), invocation_id)
@@ -476,6 +490,8 @@ class TaskRedisCache:
                     self.key.status(task_id, invocation.status)
                 ):
                     self.client.delete(self.key.status(task_id, invocation.status))
+            except KeyError:
+                self.app.logger.warning(f"{invocation_id=} not found during auto purge")
             self.client.delete(self.key.invocation_status(invocation_id))
             self.client.zrem(self.key.invocation_auto_purge(), invocation_id)
             self.client.delete(self.key.pending_timer(invocation_id))
@@ -491,6 +507,12 @@ class TaskRedisCache:
         self.client.delete(self.key.pending_timer(invocation.invocation_id))
         self.client.delete(self.key.previous_status(invocation.invocation_id))
 
+    # @with_retry(
+    #     StatusNotFound,
+    #     max_retries=lambda self: self.conf.redis_retry_max_attempts,
+    #     base_delay=lambda self: self.conf.redis_retry_base_delay_sec,
+    #     max_delay=lambda self: self.conf.redis_retry_max_delay_sec,
+    # )
     def _get_invocation_status(self, invocation_id: str) -> "InvocationStatus":
         """
         Gets the status of a specific task invocation.
@@ -499,6 +521,8 @@ class TaskRedisCache:
         """
         if encoded_status := self.client.get(self.key.invocation_status(invocation_id)):
             return InvocationStatus(encoded_status.decode())
+        # redis_key = self.key.invocation_status(invocation_id)
+        # self.app.logger.warning(f"STATUS NOT FOUND {invocation_id=} {redis_key=}")
         raise StatusNotFound(f"Invocation status {invocation_id} not found in Redis")
 
     def get_invocation_status(
@@ -511,20 +535,70 @@ class TaskRedisCache:
         """
         status = self._get_invocation_status(invocation.invocation_id)
         if status == InvocationStatus.PENDING:
-            if encoded_pending_timer := self.client.get(
-                self.key.pending_timer(invocation.invocation_id)
-            ):
-                elapsed = time() - float(encoded_pending_timer.decode())
-                if elapsed > self.app.conf.max_pending_seconds:
-                    if encoded_previous_status := self.client.get(
-                        self.key.previous_status(invocation.invocation_id)
-                    ):
-                        previous_status = InvocationStatus(
-                            encoded_previous_status.decode()
-                        )
-                        self.set_status(invocation, previous_status)
-                        return previous_status
+            self._start_async_pending_resolution_for_invocation(invocation)
         return status
+
+    def _async_resolve_pending_status(
+        self, invocation: "DistributedInvocation"
+    ) -> None:
+        """
+        Asynchronously resolve and update an expired PENDING status.
+
+        This method is designed to run in a background thread.
+
+        :param str invocation_id: The ID of the invocation to update
+        """
+        try:
+            pending_timer_key = self.key.pending_timer(invocation.invocation_id)
+            encoded_pending_timer = self.client.get(pending_timer_key)
+            if not encoded_pending_timer:
+                # Pending timer already removed, nothing to do
+                return
+            elapsed = time() - float(encoded_pending_timer.decode())
+            if elapsed <= self.app.conf.max_pending_seconds:
+                # Not expired yet, nothing to do
+                return
+            # Check for previous status
+            prev_status_key = self.key.previous_status(invocation.invocation_id)
+            encoded_previous_status = self.client.get(prev_status_key)
+            if not encoded_previous_status:
+                # No previous status, can't restore
+                return
+            # Get the previous status
+            previous_status = InvocationStatus(encoded_previous_status.decode())
+            self.set_status(invocation, previous_status)
+
+            self.app.logger.debug(
+                f"Async resolved PENDING status for {invocation.invocation_id} to {previous_status}"
+            )
+        except Exception as e:
+            self.app.logger.exception(
+                f"Error in async PENDING resolution for {invocation.invocation_id}: {e}"
+            )
+
+    def _start_async_pending_resolution_for_invocation(
+        self, invocation: "DistributedInvocation"
+    ) -> None:
+        """
+        Start asynchronous resolution of a PENDING status.
+
+        Uses ThreadPoolExecutor to manage a pool of worker threads.
+
+        :param invocation: The invocation to check PENDING status for
+        """
+        invocation_id = invocation.invocation_id
+        with _registry_lock:
+            if invocation_id in _pending_resolution_threads:
+                if not _pending_resolution_threads[invocation_id].done():
+                    return
+                _pending_resolution_threads.pop(invocation_id)
+
+            future = self._executor.submit(
+                self._async_resolve_pending_status, invocation
+            )
+            _pending_resolution_threads[invocation_id] = future
+            if len(_pending_resolution_threads) > 1000:
+                _clean_dead_threads()
 
     def get_invocation_retries(self, invocation: "DistributedInvocation") -> int:
         """
@@ -574,12 +648,49 @@ class TaskRedisCache:
                 status_ids = self.client.smembers(self.key.status(task_id, status))
                 all_status_ids.update(status_ids)
             invocation_ids = invocation_ids.intersection(all_status_ids)
-
-        # Now obj_ids contains only the ids of obj_strings that match all the provided keys
-        # Fetch the obj_strings for these ids
+        # Fetch invocations
         for invocation_id in invocation_ids:
-            if inv := self.client.get(self.key.invocation(invocation_id.decode())):
-                yield DistributedInvocation.from_json(self.app, inv.decode())
+            yield self.app.state_backend.get_invocation(invocation_id.decode())
+
+    def filter_by_status(
+        self,
+        invocations: list[DistributedInvocation],
+        status_filter: set["InvocationStatus"],
+    ) -> list[DistributedInvocation]:
+        """
+        Get statuses for multiple invocations in a single Redis operation.
+
+        This is a low-level method that fetches the raw statuses from Redis,
+        performing minimal processing. Unlike get_invocation_status, this
+        method may return PENDING status even if it has expired, as it's
+        optimized for high-throughput batch queries.
+
+        :param invocations: List of DistributedInvocation to get statuses for
+        :return: list of DistributedInvocation with matching statuses
+        """
+        if not invocations or not status_filter:
+            return []
+        with self.client.pipeline(transaction=False) as pipe:
+            for inv in invocations:
+                pipe.get(self.key.invocation_status(inv.invocation_id))
+            status_results = pipe.execute()
+        filtered = []
+        for i, inv in enumerate(invocations):
+            status_bytes = status_results[i]
+            if not status_bytes:
+                continue
+            status = InvocationStatus(status_bytes.decode())
+            inv.update_status_cache(status)
+            if status == InvocationStatus.PENDING:
+                self._start_async_pending_resolution_for_invocation(inv)
+            if status in status_filter:
+                filtered.append(inv)
+        return filtered
+
+    def __del__(self) -> None:
+        """Ensure thread pool is shut down properly when the object is destroyed."""
+        if hasattr(self, "_executor") and self._executor:
+            self._executor.shutdown(wait=False)
 
 
 class RedisOrchestrator(BaseOrchestrator):
@@ -641,7 +752,11 @@ class RedisOrchestrator(BaseOrchestrator):
         )
 
     def get_invocation(self, invocation_id: str) -> Optional["DistributedInvocation"]:
-        return self.redis_cache.get_invocation(invocation_id)
+        self.app.logger.warning("Use state_backend.get_invocation instead")
+        try:
+            return self.app.state_backend.get_invocation(invocation_id)
+        except KeyError:
+            return None
 
     def _set_invocation_status(
         self,
@@ -693,6 +808,24 @@ class RedisOrchestrator(BaseOrchestrator):
         self, invocation: "DistributedInvocation[Params, Result]"
     ) -> None:
         self.redis_cache.increment_invocation_retries(invocation)
+
+    def filter_by_status(
+        self,
+        invocations: list["DistributedInvocation"],
+        status_filter: set["InvocationStatus"] | None = None,
+    ) -> list["DistributedInvocation"]:
+        """
+        Filters a list of invocations by their status in an optimized way.
+
+        Uses batch Redis operations for better performance.
+
+        :param list[DistributedInvocation] invocations: The invocations to filter
+        :param list[InvocationStatus] | None status_filter: The statuses to filter by
+        :return: List of invocations matching the status filter
+        """
+        if not invocations or not status_filter:
+            return []
+        return self.redis_cache.filter_by_status(invocations, status_filter)
 
     def purge(self) -> None:
         """Remove all invocations from the orchestrator"""

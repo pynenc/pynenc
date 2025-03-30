@@ -250,14 +250,14 @@ class PreSerializedCall(Call[Params, Result]):
             "other_args": {
                 k: v
                 for k, v in self.serialized_arguments.items()
-                if k not in self.pre_serialized_args
+                if k in self.other_args
             },
             "pre_serialized_args": self.pre_serialized_args,
         }
 
     def __setstate__(self, state: dict) -> None:
         object.__setattr__(self, "task", state["task"])
-        other_args = self.deserialize_arguments(state["other_args"])
+        other_args = self.deserialize_arguments(state["other_args"]).kwargs
         object.__setattr__(self, "other_args", other_args)
         object.__setattr__(self, "pre_serialized_args", state["pre_serialized_args"])
 
@@ -282,6 +282,8 @@ class PreSerializedCall(Call[Params, Result]):
         )
 
     def __eq__(self, other: Any) -> bool:
-        raise NotImplementedError(
-            "RoutingParallelCall does not support __eq__ (not intended for comparison)"
-        )
+        if not isinstance(other, Call):
+            return False
+        if isinstance(other, PreSerializedCall):
+            return self.call == other.call
+        return self.call == other

@@ -126,13 +126,12 @@ class ThreadRunner(BaseRunner):
 
         for invocation in invocations:
             try:
-                self.app.logger.info(
-                    f"{self.runner_id} starting invocation:{invocation.invocation_id}"
-                )
                 thread = threading.Thread(target=invocation.run, daemon=True)
                 thread.start()
                 self.threads[invocation.invocation_id] = ThreadInfo(thread, invocation)
-                self.logger.info(f"Running {invocation=} on {thread=}")
+                self.logger.debug(
+                    f"Running invocation {invocation.invocation_id} on {thread=}"
+                )
             except RuntimeError as e:
                 self.logger.error(
                     f"Failed to start thread for {invocation.invocation_id}: {e}"
@@ -143,14 +142,10 @@ class ThreadRunner(BaseRunner):
         waiting_count = len(self.wait_invocation)
         self.logger.debug(f"Checking {waiting_count} waiting conditions")
 
-        for invocation in list(self.wait_invocation):
-            self.logger.debug(
-                f"Checking invocation {invocation.invocation_id} status={invocation.status}"
-            )
-            if invocation.status.is_final():
-                self.final_invocations[invocation] = None  # Add to ordered set
-                self.wait_invocation.remove(invocation)
-                self.logger.debug(f"{invocation=} on final {invocation.status=}")
+        for inv in self.app.orchestrator.filter_final(list(self.wait_invocation)):
+            self.final_invocations[inv] = None  # Add to ordered set
+            self.wait_invocation.remove(inv)
+            self.logger.debug(f"invocation={inv} on final status")
 
         # Clean up final_invocations if over size limit
         while len(self.final_invocations) > self.conf.final_invocation_cache_size:

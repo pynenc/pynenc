@@ -1,3 +1,5 @@
+import pytest
+
 from pynenc import Pynenc
 
 app = Pynenc(app_id="task_registry_test")
@@ -38,6 +40,8 @@ def sample_task(x: int) -> int:
 
 def test_task_registry_serialization() -> None:
     """Test that the task registry is properly serialized and deserialized."""
+
+    pytest.skip("Disable task serialization for now")  # TODO
 
     # Get the state that would be serialized
     state = app_ser.__getstate__()

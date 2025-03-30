@@ -14,23 +14,6 @@ if TYPE_CHECKING:
     from tests.conftest import MockPynenc
 
 
-def test_upsert_invocation_non_blocking(
-    mock_base_app: "MockPynenc",
-    dummy_invocation: "DistributedInvocation[Params, Result]",
-) -> None:
-    """Test that upsert_invocation is called in a non-blocking way."""
-    mock_base_app.state_backend._upsert_invocation_mock.side_effect = (
-        lambda x: time.sleep(0.5)
-    )
-
-    start_time = time.time()
-    mock_base_app.state_backend.upsert_invocation(dummy_invocation)
-    end_time = time.time()
-
-    # check that our method returned control to the main thread almost instantly
-    assert end_time - start_time < 0.5
-
-
 def test_add_history_non_blocking(
     mock_base_app: "MockPynenc",
     dummy_invocation: "DistributedInvocation[Params, Result]",

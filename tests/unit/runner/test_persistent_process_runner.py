@@ -141,7 +141,7 @@ def test_spawn_persistent_process_after_stop(
     runner._on_start()
     runner.running = False
     with pytest.raises(
-        RuntimeError, match="Trying to spawn new process after stoppint loop"
+        RuntimeError, match="Trying to spawn new process after stopping loop"
     ):
         runner._spawn_persistent_process()
 
@@ -210,9 +210,7 @@ def test_runner_loop_iteration_no_action_if_all_alive(
         assert len(runner.processes) == 2
 
 
-def test_waiting_for_results(
-    runner: PersistentProcessRunner, add_task: Task, mock_manager: Mock
-) -> None:
+def test_waiting_for_results(runner: PersistentProcessRunner, add_task: Task) -> None:
     # Avoid starting processes by not calling _on_start
     runner.num_processes = 1  # Set to avoid real process spawning
     running_invocation: BaseInvocation[Any, Any] = add_task(1, 2)

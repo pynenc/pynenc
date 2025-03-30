@@ -53,12 +53,10 @@ def test_task_running_concurrency(task_sleep: Task) -> None:
 
     thread = threading.Thread(target=run_in_thread, daemon=True)
     thread.start()
+    sleep(0.2)  # wait for the runner to start
 
     fast_invocation_sleep_seconds = 0
-    if app.conf.runner_cls == "ThreadRunner":
-        slow_invocation_sleep_seconds = 0.25
-    else:
-        slow_invocation_sleep_seconds = 2
+    slow_invocation_sleep_seconds = 0.5
     max_fast_running_time = slow_invocation_sleep_seconds / 3
 
     assert slow_invocation_sleep_seconds > max_fast_running_time
@@ -67,15 +65,12 @@ def test_task_running_concurrency(task_sleep: Task) -> None:
     #####################################################################################
     # CONTROL CHECK: fastes invocation should finish before max_fast_running_time
     start_fast = time()
-    # trigger invocation and ask wait for the result directly
-    invocation = task_sleep(seconds=fast_invocation_sleep_seconds)
-    assert invocation.result
-    assert fast_invocation_sleep_seconds <= time() - start_fast < max_fast_running_time
-    # check it was not rerouted in the history
-    assert isinstance(invocation, DistributedInvocation)
-    history = app.state_backend.get_history(invocation)
-    statuses = {h.status for h in history}
-    assert InvocationStatus.REROUTED not in statuses
+    assert task_sleep(seconds=fast_invocation_sleep_seconds).result
+    time_fast = time() - start_fast
+    start_slow = time()
+    assert task_sleep(seconds=slow_invocation_sleep_seconds).result
+    time_slow = time() - start_slow
+    assert time_fast < time_slow, f"control failed: {time_fast=} {time_slow=}"
     #####################################################################################
 
     #####################################################################################

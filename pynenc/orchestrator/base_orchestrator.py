@@ -257,6 +257,41 @@ class BaseOrchestrator(ABC):
         """
 
     @abstractmethod
+    def filter_by_status(
+        self,
+        invocations: list["DistributedInvocation"],
+        status_filter: set["InvocationStatus"] | None = None,
+    ) -> list["DistributedInvocation"]:
+        """
+        Filters a list of invocations by their status in an optimized way.
+
+        This method allows efficient batch filtering of invocations by status,
+        reducing the number of individual status checks needed.
+
+        :param list[DistributedInvocation] invocations: The invocations to filter
+        :param list[InvocationStatus] | None status_filter: The statuses to filter by.
+            If None, defaults to final statuses.
+        :return: List of invocations matching the status filter
+        :rtype: list[DistributedInvocation]
+        """
+        pass
+
+    def filter_final(
+        self, invocations: list["DistributedInvocation"]
+    ) -> list["DistributedInvocation"]:
+        """
+        Returns invocations that have reached a final status.
+
+        This is a convenience method that internally uses filter_by_status
+        with all final statuses.
+
+        :param list[DistributedInvocation] invocations: The invocations to check
+        :return: List of invocations that have reached a final status
+        :rtype: list[DistributedInvocation]
+        """
+        return self.filter_by_status(invocations, InvocationStatus.get_final_statuses())
+
+    @abstractmethod
     def purge(self) -> None:
         """
         Purges all the orchestrator data for the current self.app.app_id.
@@ -547,16 +582,10 @@ class BaseOrchestrator(ABC):
         """
         for blocking_invocation in self.get_blocking_invocations(max_num_invocations):
             if not self.is_candidate_to_run_by_concurrency_control(blocking_invocation):
-                self.app.runner.logger.warning(  # TODO REMOVE
-                    f"DISCARDING blocking invocation to run {blocking_invocation=}"
-                )
                 continue
             blocking_invocation_ids.add(blocking_invocation.invocation_id)
             try:
                 self._set_pending(blocking_invocation)
-                self.app.runner.logger.info(  # TODO REMOVE
-                    f"Obtained blocking invocation to run {blocking_invocation=}"
-                )
                 yield blocking_invocation
             except PendingInvocationLockError:
                 continue
@@ -589,9 +618,6 @@ class BaseOrchestrator(ABC):
                         try:
                             self._set_pending(invocation)
                             missing_invocations -= 1
-                            self.app.runner.logger.info(
-                                f"YIELDING broker invocation to run {invocation=}"
-                            )
                             yield invocation
                         except PendingInvocationLockError:
                             # invocations_to_reroute.add(invocation)
@@ -628,7 +654,7 @@ class BaseOrchestrator(ABC):
         yield from self.get_blocking_invocations_to_run(
             max_num_invocations, blocking_invocation_ids
         )
-        invocations_to_reroute: set["DistributedInvocation"] = set()
+        invocations_to_reroute: set[DistributedInvocation] = set()
         missing_invocations = max_num_invocations - len(blocking_invocation_ids)
         yield from self.get_additional_invocations_to_run(
             missing_invocations, blocking_invocation_ids, invocations_to_reroute
@@ -648,9 +674,9 @@ class BaseOrchestrator(ABC):
         :return: The newly created `DistributedInvocation` for the call.
         :rtype: DistributedInvocation[Params, Result]
         """
-        self.app.logger.info(f"routing a new task {call.task.task_id} invocation")
         parent_invocation = context.get_dist_invocation_context(self.app.app_id)
         new_invocation = DistributedInvocation(call, parent_invocation)
+        self.app.logger.info(f"routing {new_invocation=}")
         self.set_invocation_status(new_invocation, InvocationStatus.REGISTERED)
         self.app.broker.route_invocation(new_invocation)
         self.app.logger.info(

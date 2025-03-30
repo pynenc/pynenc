@@ -57,6 +57,14 @@ class ConfigRedis(ConfigPynencBase):
         the system will retry this many times before raising an error. Defaults to 3
         attempts, allowing for transient network issues while preventing excessive delays.
 
+    :cvar ConfigField[int] redis_pool_max_connections:
+        Maximum number of connections to keep in the Redis connection pool.
+        Default is 10.
+
+    :cvar ConfigField[float] redis_pool_health_check_interval:
+        Interval in seconds for checking the health of connections in the pool.
+        Default is 30.0 seconds.
+
     Example usage of the `ConfigRedis` class involves initializing it with specific
     values for host, port, and database, or relying on the defaults for a standard
     Redis setup.
@@ -74,3 +82,7 @@ class ConfigRedis(ConfigPynencBase):
     socket_connect_timeout = ConfigField(5.0)
     health_check_interval = ConfigField(30)
     max_connection_attempts = ConfigField(3)
+
+    # Redis connection pool settings
+    redis_pool_max_connections = ConfigField(100)
+    redis_pool_health_check_interval = ConfigField(30.0)

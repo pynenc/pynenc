@@ -52,7 +52,7 @@ def test_max_retries() -> None:
     with capture_logs(app.logger) as log_buffer:
         with pytest.raises(RetryError):
             invocation.run(runner_args={})
-        assert "Max retries reached" in log_buffer.getvalue()
+        assert "Invocation MAX-RETRY" in log_buffer.getvalue()
 
 
 def test_reroute_on_running_control() -> None:
@@ -121,9 +121,10 @@ def test_distributed_invocation_getstate() -> None:
     invocation = add(1, 2)  # Create a sample invocation
 
     # Expected state should contain all instance attributes
-    expected_state = invocation.__dict__.copy()
-    expected_state[
-        "invocation_id"
-    ] = invocation.invocation_id  # Ensure invocation_id is included
+    expected_identity = {
+        "invocation_id": invocation.invocation_id,
+        "call": invocation.call,
+        "parent_invocation": None,
+    }
 
-    assert invocation.__getstate__() == expected_state
+    assert invocation.__getstate__()["identity"] == expected_identity  # type: ignore

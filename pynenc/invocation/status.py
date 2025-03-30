@@ -73,4 +73,13 @@ class InvocationStatus(StrEnum):
 
         :return: True if the status is final, False otherwise.
         """
-        return self in {InvocationStatus.SUCCESS, InvocationStatus.FAILED}
+        return self in InvocationStatus.get_final_statuses()
+
+    @classmethod
+    def get_final_statuses(cls) -> set["InvocationStatus"]:
+        """
+        Returns the set of statuses that are considered final.
+
+        :return: A set containing all final statuses
+        """
+        return {cls.SUCCESS, cls.FAILED}

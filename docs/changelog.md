@@ -48,6 +48,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Improved resilience against "Connection reset by peer" errors
 
 - **Batch Processing for Task Parallelization**:
+
   - Added batch processing for `parallelize()` operations
   - Implemented batch routing in orchestrator via new `route_calls()` method
   - Added Redis pipeline-based batch operations for significant performance improvements
@@ -57,6 +58,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Added modular batch processing throughout the stack (broker, orchestrator, state backend)
   - Improved performance for high-volume task creation
   - Added cache key passthrough in arg_cache to prevent re-serialization of already cached values
+
+- **Enhanced Redis Performance and Reliability**:
+
+  - New Redis connection pool to efficiently reuse connections
+  - Added InvocationIdentity for BaseInvocation to freeze only critical parameters and enable efficient caching
+  - Implemented ThreadPoolExecutor in RedisOrchestrator to process pending status updates asynchronously
+  - Added orchestrator methods `filter_final` and `filter_by_status` to efficiently filter invocations in batches
+  - Improved DistributedInvocation with status caching to reduce Redis queries
+
+- **Performance Testing and Analysis**:
+  - Added Redis degradation tests to verify runner performance under high load conditions
+  - Enhanced Redis debug client with summaries, tables, and call stack tracing for slow operations
 
 ### Changed
 
@@ -73,11 +86,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Optimized Redis operations to minimize network round-trips during task parallelization
 
 - **Optimized Parallel Processing with Common Arguments**:
+
   - Added pre-serialization for common arguments in `Task.parallelize()` to improve performance with shared data
   - New `PreSerializedCall` class for optimized batch operations with shared and large arguments
   - Modified `direct_task` to support common argument optimization
   - Improved Redis key management with batched purge operations
   - Added `redis_debug_client` for performance analysis of Redis operations
+
+- **Changes on StateBackend**:
+
+  - Modified `upsert_invocation` to be synchronous, ensuring completion before routing new invocations
+
+- **Fixes on Runners**:
+  - Improved thread runner performance with optimized polling mechanisms
+  - Fixed race conditions in process waiting and synchronization
+  - Enhanced PersistentProcessRunner shutdown process for cleaner termination
 
 ### Fixed
 

@@ -4,6 +4,7 @@ import pytest
 
 from pynenc.orchestrator.redis_orchestrator import (
     PendingInvocationLockError,
+    RedisOrchestrator,
     TaskRedisCache,
 )
 from tests.conftest import MockPynenc
@@ -19,6 +20,7 @@ def test_set_pending_status_lock_error() -> None:
 
     # Setup the TaskRedisCache with the mocked client
     app = MockPynenc()
+    app.orchestrator = RedisOrchestrator(app)  # type: ignore
     cache = TaskRedisCache(app, mock_redis_client)
 
     # Mock a DistributedInvocation

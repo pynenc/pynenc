@@ -74,6 +74,8 @@ class MockBaseOrchestrator(BaseOrchestrator):
         self._cycle_control_mock = MagicMock()
         self._auto_purge_mock = MagicMock()
         self.blocking_control_mock = MockBlockingControl()
+        self._mock_filter_by_status = MagicMock()
+        self._mock_filter_final = MagicMock()
 
     def get_existing_invocations(self, *args: Any, **kwargs: Any) -> Any:
         return self._get_existing_invocations_mock(*args, **kwargs)
@@ -101,6 +103,12 @@ class MockBaseOrchestrator(BaseOrchestrator):
 
     def set_up_invocation_auto_purge(self, *args: Any, **kwargs: Any) -> Any:
         return self._set_up_invocation_auto_purge_mock(*args, **kwargs)
+
+    def filter_by_status(self, *args: Any, **kwargs: Any) -> Any:
+        return self._mock_filter_by_status(*args, **kwargs)
+
+    def filter_final(self, *args: Any, **kwargs: Any) -> Any:
+        return self._mock_filter_final(*args, **kwargs)
 
     @property
     def cycle_control(self) -> Any:

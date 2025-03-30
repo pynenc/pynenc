@@ -1,5 +1,6 @@
 import concurrent.futures
 from dataclasses import dataclass
+from time import sleep
 from typing import TYPE_CHECKING
 
 import pytest
@@ -255,6 +256,7 @@ def test_get_invocation_by_id(test_vars: Vars) -> None:
     app.orchestrator.set_invocation_status(test_vars.inv1, InvocationStatus.RUNNING)
     retrieved_inv = app.orchestrator.get_invocation(test_vars.inv1.invocation_id)
     assert retrieved_inv is not None
+    sleep(0.1)  # wait for dist_invocation cache to be updated
     assert retrieved_inv.status == InvocationStatus.RUNNING
 
     # Verify that the retrieved invocation can be used for regular operations

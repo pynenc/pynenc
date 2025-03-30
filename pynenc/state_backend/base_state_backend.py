@@ -202,9 +202,7 @@ class BaseStateBackend(ABC):
 
         :param DistributedInvocation invocation: The invocation to upsert.
         """
-        thread = threading.Thread(target=self._upsert_invocation, args=(invocation,))
-        thread.start()
-        self.invocation_threads[invocation.invocation_id].append(thread)
+        self._upsert_invocation(invocation)
 
     def get_invocation(self, invocation_id: str) -> "DistributedInvocation":
         """

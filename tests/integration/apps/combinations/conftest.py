@@ -1,8 +1,9 @@
 import logging
 import time
 from collections import namedtuple
+from collections.abc import Generator
 from itertools import product
-from typing import TYPE_CHECKING, Any, Generator, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
@@ -14,7 +15,7 @@ from pynenc.orchestrator.base_orchestrator import BaseOrchestrator
 from pynenc.runner.base_runner import BaseRunner
 from pynenc.serializer.base_serializer import BaseSerializer
 from pynenc.state_backend.base_state_backend import BaseStateBackend
-from pynenc.util.redis_debug_client import patch_redis_connection_manager
+from pynenc.util.redis_debug_client import patch_redis_client
 from tests import util
 from tests.integration.apps.combinations import tasks, tasks_async
 
@@ -34,7 +35,7 @@ def pytest_configure(config: Any) -> None:
     )
 
     # Ensure Redis debugging is enabled
-    patch_redis_connection_manager()
+    patch_redis_client()
 
 
 @pytest.fixture(scope="function", autouse=True)

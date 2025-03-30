@@ -588,6 +588,19 @@ class MemOrchestrator(BaseOrchestrator):
     ) -> int:
         return self.cache[invocation.task.task_id].get_retries(invocation)
 
+    def filter_by_status(
+        self,
+        invocations: list["DistributedInvocation"],
+        status_filter: set["InvocationStatus"] | None = None,
+    ) -> list["DistributedInvocation"]:
+        if not invocations or status_filter is None:
+            return []
+        return [
+            inv
+            for inv in invocations
+            if self.get_invocation_status(inv) in status_filter
+        ]
+
     def purge(self) -> None:
         self.cache.clear()
         self._cycle_control = None
