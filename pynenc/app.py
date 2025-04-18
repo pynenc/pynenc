@@ -14,12 +14,14 @@ from pynenc.runner.base_runner import BaseRunner
 from pynenc.serializer.base_serializer import BaseSerializer
 from pynenc.state_backend.base_state_backend import BaseStateBackend
 from pynenc.task import Task
+from pynenc.trigger.base_trigger import BaseTrigger
 from pynenc.util.log import create_logger
 from pynenc.util.subclasses import get_subclass
 
 if TYPE_CHECKING:
     from pynenc.arguments import Arguments
     from pynenc.invocation import BaseInvocationGroup
+    from pynenc.trigger import TriggerBuilder
     from pynenc.types import Args, Func, Params, Result
 
     # Type for the parallel function that generates arguments for parallel processing
@@ -84,14 +86,18 @@ class Pynenc:
         """
         return self._tasks
 
-    def get_task(self, task_id: str) -> Optional[Task]:
+    def get_task(self, task_id: str) -> Task:
         """
         Get a task by its ID.
 
         :param task_id: The ID of the task to retrieve.
         :return: The Task instance if found, None otherwise.
+
+        warning it may overwrite the options
         """
-        return self._tasks.get(task_id)
+        if task_id not in self._tasks:
+            self._tasks[task_id] = Task.from_id(self, task_id)
+        return self._tasks[task_id]
 
     def __getstate__(self) -> dict:
         # Return state as a dictionary and a secondary value as a tuple
@@ -126,6 +132,10 @@ class Pynenc:
     @cached_property
     def orchestrator(self) -> BaseOrchestrator:
         return get_subclass(BaseOrchestrator, self.conf.orchestrator_cls)(self)  # type: ignore # mypy issue #4717
+
+    @cached_property
+    def trigger(self) -> BaseTrigger:
+        return get_subclass(BaseTrigger, self.conf.trigger_cls)(self)  # type: ignore # mypy issue #4717
 
     @cached_property
     def broker(self) -> BaseBroker:
@@ -192,6 +202,7 @@ class Pynenc:
         on_diff_non_key_args_raise: Optional[bool] = None,
         call_result_cache: Optional[bool] = None,
         disable_cache_args: Optional[tuple[str, ...]] = None,
+        triggers: Union["TriggerBuilder", list["TriggerBuilder"]] | None = None,
     ) -> "Task":
         ...
 
@@ -209,6 +220,7 @@ class Pynenc:
         on_diff_non_key_args_raise: Optional[bool] = None,
         call_result_cache: Optional[bool] = None,
         disable_cache_args: Optional[tuple[str, ...]] = None,
+        triggers: Union["TriggerBuilder", list["TriggerBuilder"]] | None = None,
     ) -> Callable[["Func"], "Task"]:
         ...
 
@@ -225,6 +237,7 @@ class Pynenc:
         on_diff_non_key_args_raise: Optional[bool] = None,
         call_result_cache: Optional[bool] = None,
         disable_cache_args: Optional[tuple[str, ...]] = None,
+        triggers: Union["TriggerBuilder", list["TriggerBuilder"]] | None = None,
     ) -> "Task" | Callable[["Func"], "Task"]:
         """
         The task decorator converts the function into an instance of a BaseTask. It accepts any kind of options,
@@ -253,14 +266,54 @@ class Pynenc:
             otherwise it will trigger a new invocation as expected.
         :param Optional[tuple[str, ...]] disable_cache_args:
             Arguments to exclude from caching, it will accept "*" to disable caching for all arguments.
+        :param Union[TriggerBuilder, list[TriggerBuilder]] | None triggers:
+            Trigger definitions that determine when this task should execute automatically.
+            Can be a single TriggerBuilder or a list of builders for multiple trigger conditions.
 
         :return: A Task instance or a callable that when called returns a Task instance.
 
         :example:
         ```python
-        @app.task(parallel_batch_size=10, max_retries=3)
-        def my_func(x, y):
+        # Basic task with no triggers
+        @app.task(max_retries=3)
+        def simple_task(x: int, y: int) -> int:
             return x + y
+
+        # Task with a single trigger using a cron schedule
+        from pynenc.trigger import on_cron
+        @app.task(triggers=on_cron("0 0 * * *"))  # Run daily at midnight
+        def daily_report() -> None:
+            # Generate daily report
+            pass
+
+        # Task with multiple triggers using different conditions
+        from pynenc.trigger import on_event, on_status
+        @app.task(
+            triggers=[
+                on_event("payment.completed", filters={"amount": {"$gt": 1000}}),
+                on_status("validate_data", statuses=["SUCCESS"])
+            ]
+        )
+        def process_important_payment(payment_id: str) -> None:
+            # Process high-value payment after validation
+            pass
+
+        # Task with complex trigger condition using a builder
+        from pynenc.trigger import TriggerBuilder
+        from pynenc.trigger.conditions import CompositeLogic
+
+        trigger = (
+            TriggerBuilder()
+            .on_event("payment.received")
+            .on_status("validate_payment")
+            .with_logic(CompositeLogic.AND)  # Both conditions must be met
+            .with_arguments(lambda ctx: {"payment_id": ctx["event"].payload["id"]})
+        )
+
+        @app.task(triggers=trigger)
+        def process_payment(payment_id: str) -> None:
+            # Process payment that has been received and validated
+            pass
         ```
         """
         options = {
@@ -283,6 +336,7 @@ class Pynenc:
                 )
             task: Task = Task(self, _func, options)
             self._tasks[task.task_id] = task
+            self.trigger.register_task_triggers(task, triggers)
             return task
 
         if func is None:
@@ -324,7 +378,7 @@ class Pynenc:
         on_diff_non_key_args_raise: Optional[bool] = None,
         call_result_cache: Optional[bool] = None,
         disable_cache_args: Optional[tuple[str, ...]] = None,
-    ) -> "Func[Params, Result]":
+    ) -> "Func":
         ...
 
     @overload
@@ -426,6 +480,9 @@ class Pynenc:
             Arguments to exclude from caching, it will accept "*" to disable caching for all arguments.
 
         :return: A function that behaves like the original but is backed by a distributed task system.
+
+        :note:
+        A direct task do not have triggers, it is always executed when called.
 
         :example:
         ```python

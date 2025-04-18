@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pynenc"
-version = "0.0.21"
+version = "0.0.22"
 description = "A task management system for complex distributed orchestration"
 authors = ["Jose Diaz"]
 license = "MIT License"
@@ -32,6 +32,7 @@ redis = ">=4.6.0"
 pyyaml = ">=6.0.1"
 typing-extensions = "^4.9.0"
 cistell = "0.0.7"
+croniter = "^6.0.0"
 # Optional dependencies for monitor
 fastapi = { version = "^0.115.11", optional = true }
 jinja2 = { version = ">=3.1.4,<4.0.0", optional = true }
@@ -127,6 +128,12 @@ pretty = true
 allow_redefinition = true
 no_implicit_optional = true
 strict_equality = true
+
+# Add mypy module configuration for croniter
+[[tool.mypy.overrides]]
+module = "croniter.*"
+ignore_missing_imports = true
+follow_imports = "skip"
 
 [tool.pytest]
 log_cli = true

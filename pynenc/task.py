@@ -5,7 +5,7 @@ import json
 import time
 from collections.abc import Iterable
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Generic, overload
+from typing import TYPE_CHECKING, Any, Callable, Generic, overload
 
 from pynenc import context
 from pynenc.arguments import Arguments
@@ -128,7 +128,10 @@ class Task(Generic[Params, Result]):
 
     def __getstate__(self) -> dict:
         # Return state as a dictionary and a secondary value as a tuple
-        return {"app": self.app, "task_json": self.to_json()}
+        return {
+            "app": self.app,
+            "task_json": self.to_json(),
+        }
 
     def __setstate__(self, state: dict) -> None:
         # Restore instance attributes
@@ -143,13 +146,22 @@ class Task(Generic[Params, Result]):
         self.logger = TaskLoggerAdapter(self.app.logger, self.task_id)
 
     @staticmethod
+    def _get_from_task_id(task_id: str) -> Task | Callable:
+        try:
+            module_name, function_name = task_id.rsplit(".", 1)
+        except ValueError as e:
+            raise ValueError(
+                f"Invalid task_id format: {task_id}. Expected format: module_name.function_name"
+            ) from e
+        module = importlib.import_module(module_name)
+        return getattr(module, function_name)
+
+    @staticmethod
     def _from_json(serialized: str) -> tuple[str, Func, dict[str, Any]]:
         """:return: a function and options from a serialized task"""
         task_dict = json.loads(serialized)
         task_id = task_dict["task_id"]
-        module_name, function_name = task_id.rsplit(".", 1)
-        module = importlib.import_module(module_name)
-        function = getattr(module, function_name)
+        function = Task._get_from_task_id(task_id)
         options = ConfigTask.options_from_json(task_dict["options"])
         # Check if the function is a Task (from @task) or a plain function (from @direct_task)
         if isinstance(function, Task):
@@ -162,6 +174,14 @@ class Task(Generic[Params, Result]):
         """:return: a new task from a serialized task"""
         _, func, options = cls._from_json(serialized)
         return cls(app, func, options)
+
+    @classmethod
+    def from_id(cls, app: Pynenc, task_id: str) -> Task:
+        """:return: a new task from a task ID"""
+        function = Task._get_from_task_id(task_id)
+        if isinstance(function, Task):
+            return function
+        raise ValueError("Cannot reference direct_task by ID")
 
     @cached_property
     def retriable_exceptions(self) -> tuple[type[Exception], ...]:

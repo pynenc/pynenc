@@ -122,3 +122,75 @@ class Key:
             for i in range(0, len(keys), batch_size):
                 batch = keys[i : i + batch_size]
                 client.delete(*batch)
+
+    def condition(self, condition_id: str) -> str:
+        """Get key for storing a trigger condition."""
+        return f"{self.prefix}condition:{condition_id}"
+
+    def trigger(self, trigger_id: str) -> str:
+        """Get key for storing a trigger definition."""
+        return f"{self.prefix}trigger:{trigger_id}"
+
+    def valid_condition(self, condition_id: str) -> str:
+        """Get key for storing a valid condition."""
+        return f"{self.prefix}valid_condition:{condition_id}"
+
+    def task_triggers(self, task_id: str) -> str:
+        """Get key for storing triggers associated with a task."""
+        return f"{self.prefix}task_triggers:{task_id}"
+
+    def condition_triggers(self, condition_id: str) -> str:
+        """Get key for storing triggers that use a condition."""
+        return f"{self.prefix}condition_triggers:{condition_id}"
+
+    def event_channel(self) -> str:
+        """Get channel name for publishing trigger events."""
+        return f"{self.prefix}events"
+
+    def cron_last_execution(self, condition_id: str) -> str:
+        """
+        Generate a key for storing the last execution time of a cron condition.
+
+        :param condition_id: ID of the cron condition
+        :return: Redis key string
+        """
+        return f"{self.prefix}cron_last_execution:{condition_id}"
+
+    def source_task_conditions(self, task_id: str) -> str:
+        """
+        Generate key for source task to condition mapping.
+
+        This key stores conditions that are sourced from a specific task.
+
+        :param task_id: ID of the source task
+        :return: Redis key for task's source conditions
+        """
+        return f"{self.prefix}source_task_conditions:{task_id}"
+
+    def trigger_execution_claim(self, trigger_id: str, valid_condition_id: str) -> str:
+        """
+        Generate a key for a trigger execution claim.
+
+        This key is used to atomically claim the right to execute a trigger
+        for a specific valid condition across multiple workers.
+
+        :param trigger_id: ID of the trigger definition
+        :param valid_condition_id: ID of the valid condition
+        :return: Redis key for the trigger execution claim
+        """
+        return (
+            f"{self.prefix}:trigger:execution_claim:{trigger_id}:{valid_condition_id}"
+        )
+
+    def trigger_run_claim(self, trigger_run_id: str) -> str:
+        """
+        Generate a key for a trigger run claim.
+
+        This key is used to atomically claim the right to execute a specific trigger run
+        across multiple workers. A trigger run is a unique execution attempt for a
+        trigger and its satisfied conditions.
+
+        :param trigger_run_id: Unique ID for this trigger run
+        :return: Redis key for the trigger run claim
+        """
+        return f"{self.prefix}:trigger:run_claim:{trigger_run_id}"

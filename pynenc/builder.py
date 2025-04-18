@@ -36,6 +36,9 @@ class PynencBuilder:
     _MEMORY_ARG_CACHE = "MemArgCache"
     _REDIS_ARG_CACHE = "RedisArgCache"
     _DISABLED_ARG_CACHE = "DisabledArgCache"
+    _MEMORY_TRIGGER = "MemTrigger"
+    _REDIS_TRIGGER = "RedisTrigger"
+    _DISABLED_TRIGGER = "DisabledTrigger"
     _VALID_CONCURRENCY_MODES = {"DISABLED", "TASK", "ARGUMENTS", "KEYS"}
 
     def __init__(self) -> None:
@@ -83,6 +86,7 @@ class PynencBuilder:
                 "broker_cls": "RedisBroker",
                 "state_backend_cls": "RedisStateBackend",
                 "arg_cache_cls": self._REDIS_ARG_CACHE,
+                "trigger_cls": self._REDIS_TRIGGER,
             }
         )
         self._using_redis_components = True
@@ -107,6 +111,7 @@ class PynencBuilder:
                 "broker_cls": "MemBroker",
                 "state_backend_cls": "MemStateBackend",
                 "arg_cache_cls": self._MEMORY_ARG_CACHE,
+                "trigger_cls": self._MEMORY_TRIGGER,
             }
         )
         self._using_memory_components = True
@@ -152,6 +157,47 @@ class PynencBuilder:
         # Set the cache configuration values
         self._config["min_size_to_cache"] = min_size_to_cache
         self._config["local_cache_size"] = local_cache_size
+
+        return self
+
+    def trigger(
+        self,
+        mode: Literal["redis", "memory", "disabled"] = "redis",
+        scheduler_interval_seconds: int = 60,  # Default from ConfigTrigger
+        enable_scheduler: bool = True,  # Default from ConfigTrigger
+    ) -> "PynencBuilder":
+        """
+        Configure trigger behavior.
+
+        :param mode:
+            "redis": Use Redis for trigger system (requires redis() to be called)
+            "memory": Use in-memory trigger system (for testing/development)
+            "disabled": Disable trigger functionality completely
+        :param int scheduler_interval_seconds:
+            Interval in seconds for the scheduler to check for time-based triggers.
+            Default is 60 seconds (1 minute).
+        :param bool enable_scheduler:
+            Whether to enable the scheduler for time-based triggers.
+            Default is True.
+
+        :return: The builder instance for method chaining.
+        :raises ValueError: If "redis" mode is selected without prior redis() configuration
+        """
+        if mode == "disabled":
+            self._config["trigger_cls"] = self._DISABLED_TRIGGER
+        elif mode == "memory":
+            self._config["trigger_cls"] = self._MEMORY_TRIGGER
+            self._using_memory_components = True
+        elif mode == "redis":
+            self._config["trigger_cls"] = self._REDIS_TRIGGER
+            if not self._using_redis_components and "redis_url" not in self._config:
+                raise ValueError(
+                    "Redis trigger requires redis configuration. Call redis() first."
+                )
+
+        # Set the trigger configuration values
+        self._config["scheduler_interval_seconds"] = scheduler_interval_seconds
+        self._config["enable_scheduler"] = enable_scheduler
 
         return self
 

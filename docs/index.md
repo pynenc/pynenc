@@ -27,6 +27,7 @@ license
 
 - Intuitive Orchestration
 - Configurable Concurrency Management
+- Trigger System for Event-Driven and Scheduled Tasks
 - Automatic Task Prioritization
 - Automatic Task Pausing
 - Cycle Detection

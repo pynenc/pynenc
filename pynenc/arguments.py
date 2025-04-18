@@ -61,6 +61,32 @@ class Arguments:
         args_str = "".join([f"{k}:{v}" for k, v in sorted_items])
         return hashlib.sha256(args_str.encode()).hexdigest()
 
+    def to_json(self, app: "Pynenc") -> dict[str, Any]:
+        """
+        Serializes the Arguments object to a JSON-compatible dictionary.
+
+        :param app: Pynenc application instance for serializing complex arguments.
+        :return: A dictionary with serialized argument data.
+        """
+        serialized_args = {}
+        for key, value in self.kwargs.items():
+            serialized_args[key] = app.arg_cache.serialize(value)
+        return serialized_args
+
+    @classmethod
+    def from_json(cls, app: "Pynenc", data: dict[str, Any]) -> "Arguments":
+        """
+        Deserializes a JSON-compatible dictionary to an Arguments object.
+
+        :param app: Pynenc application instance for deserializing complex arguments.
+        :param data: Dictionary with serialized argument data.
+        :return: An Arguments object with deserialized arguments.
+        """
+        deserialized_args = {}
+        for key, value in data.items():
+            deserialized_args[key] = app.arg_cache.deserialize(value)
+        return cls(deserialized_args)
+
     def __hash__(self) -> int:
         return hash(self.args_id)
 

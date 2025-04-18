@@ -33,3 +33,25 @@ def get_subclass(root_class: type[T], child_class_name: str) -> type[T]:
         if subclass.__name__ == child_class_name:
             return subclass
     raise ValueError(f"Unknown subclass: {child_class_name} of {root_class.__name__}")
+
+
+def build_class_cache(base_cls: type) -> dict[str, type]:
+    """
+    Build a class cache by recursively finding all subclasses.
+
+    This is a utility function to reuse the subclass discovery logic
+    without using global variables.
+
+    :param base_cls: Base class to find subclasses for
+    :return: Dictionary mapping class names to class objects
+    """
+    class_cache: dict[str, type] = {}
+
+    def add_subclasses_to_cache(cls: type) -> None:
+        """Recursively add all subclasses to the class cache."""
+        for subclass in cls.__subclasses__():
+            class_cache[subclass.__name__] = subclass
+            add_subclasses_to_cache(subclass)
+
+    add_subclasses_to_cache(base_cls)
+    return class_cache

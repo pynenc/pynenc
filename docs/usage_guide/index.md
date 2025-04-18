@@ -14,6 +14,7 @@ This Usage Guide is designed to provide you with detailed instructions and pract
 ./use_case_005_sync_unit_testing
 ./use_case_006_mem_unit_testing
 ./use_case_009_argument_caching
+./use_case_010_trigger_system
 ```
 
 ## Getting Started with Pynenc
@@ -150,7 +151,7 @@ def fibonacci(n: int) -> int:
 
 This use case highlights how tasks that depend on the results of previous tasks can be executed seamlessly, showcasing Pynenc's capability to pause and resume tasks as needed based on their dependencies. It's an ideal demonstration for understanding Pynenc's orchestration mechanisms in scenarios with complex task dependencies.
 
-For a detailed guide and examples, see {doc}`./use_case_004_automatic_orchestration`.
+For a detailed guide and examples, see {doc}`./use_case_004_auto_orchestration`.
 
 ## Use Case 5: Unit Testing with Synchronous Mode
 
@@ -348,3 +349,34 @@ local_cache_size = 1000   # Keep 1000 most recent entries
 This use case demonstrates how Pynenc's argument caching can significantly improve performance in distributed systems by reducing network traffic and serialization overhead.
 
 For a detailed guide and examples, see {doc}`./use_case_009_argument_caching`.
+
+## Use Case 10: Trigger System
+
+Explore Pynenc's powerful trigger system, which enables declarative task scheduling and event-driven workflows. This feature allows you to automatically execute tasks in response to various conditions such as scheduled times, task status changes, results, exceptions, or custom events.
+
+```python
+from pynenc import Pynenc
+from pynenc.trigger.trigger_builder import TriggerBuilder
+
+app = Pynenc()
+
+@app.task
+def source_task(x: int) -> str:
+    return f"Processed {x}"
+
+# Define a task that runs when source_task completes successfully
+@app.task(triggers=TriggerBuilder().on_status(source_task, statuses=["SUCCESS"]))
+def notification_task() -> str:
+    return "Source task completed successfully"
+```
+
+The trigger system provides a comprehensive framework for automating workflows with features including:
+
+- Diverse trigger conditions (cron expressions, task statuses, results, exceptions, events)
+- Flexible argument handling with providers that can generate task arguments dynamically
+- Conditional execution with filters based on arguments, results, or payload content
+- Composite conditions using AND/OR logic for complex triggering rules
+
+This use case demonstrates how to create self-managing workflows that respond to system events and task outcomes, reducing the need for manual orchestration.
+
+For a detailed guide and examples, see {doc}`./use_case_010_trigger_system`.

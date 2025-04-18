@@ -27,7 +27,10 @@ def test_task_registry() -> None:
     # Check that get_task works correctly
     assert app.get_task(task1.task_id) is task1
     assert app.get_task(task2.task_id) is task2
-    assert app.get_task("nonexistent_task") is None
+    with pytest.raises(ValueError):
+        app.get_task("wrong_task_id_format")
+    with pytest.raises(ModuleNotFoundError):
+        app.get_task("unexisting_module.task_id")
 
 
 app_ser = Pynenc(app_id="serialization_test")

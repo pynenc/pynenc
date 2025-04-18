@@ -54,6 +54,16 @@ Pynenc addresses the complex challenges of task management in distributed enviro
 
   This structured approach to concurrency management in Pynenc allows for precise control over task execution, ensuring efficient handling of tasks without overloading the system and adhering to specified constraints.
 
+- **Comprehensive Trigger System**: Enables declarative task scheduling and event-driven workflows:
+
+  - **Diverse Trigger Conditions**: Schedule tasks using cron expressions, react to events, task status changes, results, or exceptions.
+  - **Flexible Argument Handling**:
+    - **ArgumentProvider**: Dynamically generate arguments for triggered tasks from the context of the condition (static values or using custom functions).
+    - **ArgumentFilter**: Filter task execution based on original task arguments (exact match dictionary or custom validation function).
+    - **ResultFilter**: Conditionally trigger tasks based on specific result values of the preceding task.
+    - **Event Payload Filtering**: Selectively process events based on payload content.
+  - **Composable Conditions**: Combine multiple conditions with AND/OR logic for complex triggering rules.
+
 - **Flexible Configuration with `PynencBuilder`**: A builder interface allows users to configure apps programmatically, including Redis vs memory mode, runners, logging levels, concurrency control, and argument formatting.
 
 - **Automatic Task Prioritization**: Pynenc prioritizes tasks by simply counting the number of dependencies each task has. The task with the most dependencies is selected first.
@@ -132,6 +142,41 @@ To get started with Pynenc, here's a simple example that demonstrates the creati
     # Direct task (returns result directly)
     direct_result = direct_add(1, 2)  # 3
    ```
+
+### Using the Trigger System
+
+Here's an example of creating and using triggers:
+
+```python
+from pynenc import Pynenc
+from datetime import datetime
+
+app = Pynenc()
+
+@app.task
+def process_data(data: dict) -> dict:
+    return {"processed": data, "timestamp": datetime.now().isoformat()}
+
+@app.task
+def notify_admin(result: dict, urgency: str = "normal") -> None:
+    print(f"Admin notification ({urgency}): {result}")
+
+# Create a trigger that runs when process_data completes successfully
+trigger = app.trigger.on_success(process_data).run(notify_admin)
+
+# Create a trigger with argument filtering - only trigger when data contains 'urgent'
+trigger_urgent = (app.trigger
+    .on_success(process_data)
+    .with_argument_filter(lambda args: args.get('data', {}).get('priority') == 'urgent')
+    .run(notify_admin, argument_provider=lambda ctx: [ctx.result, "high"])
+)
+
+# Create a cron-based scheduled task
+scheduled_task = (app.trigger
+    .on_cron("*/30 * * * *")  # Every 30 minutes
+    .run(process_data, argument_provider={"data": {"source": "scheduled"}})
+)
+```
 
 For a complete guide on how to set up and run pynenc, visit our [samples library](https://github.com/pynenc/samples).
 
