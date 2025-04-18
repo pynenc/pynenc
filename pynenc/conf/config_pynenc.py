@@ -33,6 +33,8 @@ class ConfigPynenc(ConfigPynencBase):
         The id of the application.
     :cvar str orchestrator_cls:
         The orchestrator class to use.
+    :cvar str trigger_cls:
+        The trigger class to use.
     :cvar str broker_cls:
         The broker class to use.
     :cvar str state_backend_cls:
@@ -65,6 +67,7 @@ class ConfigPynenc(ConfigPynencBase):
 
     app_id = ConfigField("pynenc")
     orchestrator_cls = ConfigField("MemOrchestrator")
+    trigger_cls = ConfigField("DisabledTrigger")
     broker_cls = ConfigField("MemBroker")
     state_backend_cls = ConfigField("MemStateBackend")
     serializer_cls = ConfigField("JsonSerializer")

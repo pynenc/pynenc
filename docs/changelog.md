@@ -4,6 +4,68 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.22] - 2025-04-17
+
+### Added
+
+- **New Trigger System for Task Orchestration**:
+
+  - Introduced a comprehensive trigger framework for declarative task scheduling and event-driven execution
+  - Created `BaseTrigger` abstract class defining core trigger functionality
+  - Implemented memory-based (`MemTrigger`), Redis-based (`RedisTrigger`), and disabled (`DisabledTrigger`) trigger backends
+  - Added `TriggerBuilder` to construct triggers using a fluent API
+  - Extended `PynencBuilder` to support configuring trigger backends with `trigger(mode)` method
+
+- **Diverse Trigger Conditions**:
+
+  - **Cron-based Scheduling**: Schedule tasks using standard cron expressions
+  - **Event-driven Execution**: Trigger tasks in response to system events
+  - **Task Status Changes**: React to task transitions between states (pending, running, completed)
+  - **Result-based Triggers**: Execute tasks based on the output of other tasks
+  - **Exception Handling**: Trigger recovery or fallback tasks when exceptions occur
+  - **Composite Conditions**: Combine multiple conditions with AND/OR logic
+
+- **Argument Handling for Triggered Tasks**:
+
+  - Added `ArgumentProvider` system to dynamically generate parameters for triggered tasks:
+    - Support for static argument values defined as dictionaries
+    - Support for callable providers that generate arguments based on trigger context
+    - Context-aware generation using source task arguments, results, and status
+  - Implemented conditional argument filtering mechanisms:
+    - `ArgumentFilter`: Filter task execution based on original task arguments
+    - `ResultFilter`: Conditionally trigger tasks based on specific result values
+    - Event payload filtering for selective event-based execution
+  - Each filter supports both static dictionary matching and dynamic callable functions:
+    - Dictionary filters check for exact value matches in arguments/results/payloads
+    - Callable filters support complex logic (e.g., pandas DataFrame operations)
+  - Developed context-aware argument extraction from events and task results
+
+- **Configuration Infrastructure**:
+
+  - Added `config_trigger.py` with comprehensive trigger-related settings
+  - Created trigger-specific Redis key management in `redis_keys.py`
+  - Extended application configuration to support trigger backends
+  - Integrated trigger system with existing runner and orchestrator components
+
+- **Comprehensive Test Coverage**:
+
+  - Unit tests for each condition type and the trigger base classes
+  - Integration tests validating end-to-end trigger functionality with Redis
+  - Tests for multi-runner scenarios and complex trigger chains
+  - Validation tests for argument extraction and transformation
+
+- **Documentation**:
+
+  - Added comprehensive usage guide for Trigger System (Use Case 10)
+  - Detailed examples of cron-based scheduling, event-driven task execution, result-based triggers
+
+### Changed
+
+- Enhanced `BaseOrchestrator` to integrate with trigger system
+- Updated runner classes to process trigger-initiated tasks
+- Extended core `Pynenc` app class to support trigger registration and management
+- Improved utility functions in `import_tools.py` and `subclasses.py` for better type handling
+
 ## [0.0.21] - 2025-03-24
 
 ### Added

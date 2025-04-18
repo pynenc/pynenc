@@ -237,7 +237,9 @@ class BaseRunner(ABC):
         self.on_start()
         try:
             while self.running:
+                self.app.trigger.trigger_loop_iteration()
                 self.runner_loop_iteration()
+                time.sleep(self.conf.runner_loop_sleep_time_sec)
         except KeyboardInterrupt:
             self.logger.warning("KeyboardInterrupt received. Stopping runner...")
         except Exception as e:

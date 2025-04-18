@@ -48,7 +48,6 @@ def persistent_process_main(
                 app.orchestrator.get_invocations_to_run(max_num_invocations=1)
             )
             if not invocations:
-                time.sleep(app.runner.conf.runner_loop_sleep_time_sec)
                 continue
             invocation = invocations[0]
             invocation_id = invocation.invocation_id

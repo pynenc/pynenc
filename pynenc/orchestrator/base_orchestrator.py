@@ -423,6 +423,7 @@ class BaseOrchestrator(ABC):
             # TODO! on previous fail, this should still change status to running
             self._set_invocation_status(invocation, status)
         self.app.state_backend.add_history(invocation, status)
+        self.app.trigger.report_tasks_status([invocation], status)
 
     def set_invocations_status(
         self,
@@ -435,8 +436,8 @@ class BaseOrchestrator(ABC):
         :param list[DistributedInvocation[Params, Result]] invocations: The invocations to update.
         :param InvocationStatus status: The new status to set for the invocations.
         """
-        for invocation in invocations:
-            self.set_invocation_status(invocation, status)
+        self._set_invocations_status(invocations, status)
+        self.app.trigger.report_tasks_status(invocations, status)
 
     def set_invocation_run(
         self,
@@ -464,10 +465,10 @@ class BaseOrchestrator(ABC):
         :param Any result: The result of the invocation's execution.
         """
         self.app.state_backend.set_result(invocation, result)
-        # TODO! on previous fail, this should still change status
         self.app.orchestrator.set_invocation_status(
             invocation, InvocationStatus.SUCCESS
         )
+        self.app.trigger.report_invocation_result(invocation, result)
 
     def set_invocation_exception(
         self, invocation: "DistributedInvocation", exception: Exception
@@ -483,6 +484,7 @@ class BaseOrchestrator(ABC):
         # eg. on case of interruption from a kubernetes pod (SIGTERM, SIGKILL)
         #     it should try to finish all the calls in this function
         self.app.orchestrator.set_invocation_status(invocation, InvocationStatus.FAILED)
+        self.app.trigger.report_invocation_failure(invocation, exception)
 
     def set_invocation_retry(
         self, invocation: "DistributedInvocation", exception: Exception

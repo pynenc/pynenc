@@ -26,6 +26,7 @@ from pynenc.runner import (
 )
 from pynenc.serializer import JsonSerializer, PickleSerializer
 from pynenc.state_backend import MemStateBackend, RedisStateBackend
+from pynenc.trigger import DisabledTrigger, MemTrigger, RedisTrigger
 
 
 def test_basic_builder() -> None:
@@ -527,3 +528,97 @@ def test_complete_app_example() -> None:
     assert app.runner.conf.runner_loop_sleep_time_sec == 0.01
     assert app.orchestrator.conf.cycle_control is True
     assert app.broker.conf.redis_url == "redis://localhost:6379/14"
+
+
+def test_trigger_modes() -> None:
+    """Test different trigger modes with default config values"""
+    # Redis trigger
+    app_redis = (
+        PynencBuilder()
+        .redis(url="redis://localhost:6379")
+        .trigger(mode="redis")
+        .build()
+    )
+    assert app_redis.conf.trigger_cls == "RedisTrigger"
+    assert isinstance(app_redis.trigger, RedisTrigger)
+    assert app_redis.trigger.conf.scheduler_interval_seconds == 60  # Default value
+    assert app_redis.trigger.conf.enable_scheduler is True  # Default value
+
+    # Memory trigger
+    app_memory = PynencBuilder().trigger(mode="memory").build()
+    assert app_memory.conf.trigger_cls == "MemTrigger"
+    assert isinstance(app_memory.trigger, MemTrigger)
+    assert app_memory.trigger.conf.scheduler_interval_seconds == 60  # Default value
+    assert app_memory.trigger.conf.enable_scheduler is True  # Default value
+
+    # Disabled trigger
+    app_disabled = PynencBuilder().trigger(mode="disabled").build()
+    assert app_disabled.conf.trigger_cls == "DisabledTrigger"
+    assert isinstance(app_disabled.trigger, DisabledTrigger)
+    assert app_disabled.trigger.conf.scheduler_interval_seconds == 60  # Default value
+    assert app_disabled.trigger.conf.enable_scheduler is True  # Default value
+
+
+def test_trigger_custom_config() -> None:
+    """Test trigger with custom scheduler_interval_seconds and enable_scheduler"""
+    # Redis with custom values
+    app_redis_custom = (
+        PynencBuilder()
+        .redis(url="redis://localhost:6379")
+        .trigger(mode="redis", scheduler_interval_seconds=30, enable_scheduler=False)
+        .build()
+    )
+    assert app_redis_custom.conf.trigger_cls == "RedisTrigger"
+    assert isinstance(app_redis_custom.trigger, RedisTrigger)
+    assert (
+        app_redis_custom.trigger.conf.scheduler_interval_seconds == 30
+    )  # Custom value
+    assert app_redis_custom.trigger.conf.enable_scheduler is False  # Custom value
+
+    # Memory with custom values
+    app_memory_custom = (
+        PynencBuilder()
+        .trigger(mode="memory", scheduler_interval_seconds=15, enable_scheduler=False)
+        .build()
+    )
+    assert app_memory_custom.conf.trigger_cls == "MemTrigger"
+    assert isinstance(app_memory_custom.trigger, MemTrigger)
+    assert (
+        app_memory_custom.trigger.conf.scheduler_interval_seconds == 15
+    )  # Custom value
+    assert app_memory_custom.trigger.conf.enable_scheduler is False  # Custom value
+
+    # Disabled with custom values (still applied, though triggering is off)
+    app_disabled_custom = (
+        PynencBuilder()
+        .trigger(
+            mode="disabled", scheduler_interval_seconds=120, enable_scheduler=False
+        )
+        .build()
+    )
+    assert app_disabled_custom.conf.trigger_cls == "DisabledTrigger"
+    assert isinstance(app_disabled_custom.trigger, DisabledTrigger)
+    assert (
+        app_disabled_custom.trigger.conf.scheduler_interval_seconds == 120
+    )  # Custom value
+    assert app_disabled_custom.trigger.conf.enable_scheduler is False  # Custom value
+
+
+def test_trigger_match_default_config() -> None:
+    """Test that the default trigger config values match the app's config"""
+    app_builder = PynencBuilder().trigger(mode="memory").build()
+    app = Pynenc()
+    assert (
+        app.trigger.conf.scheduler_interval_seconds
+        == app_builder.trigger.conf.scheduler_interval_seconds
+    )
+    assert (
+        app.trigger.conf.enable_scheduler == app_builder.trigger.conf.enable_scheduler
+    )
+
+
+def test_redis_trigger_validation() -> None:
+    """Test validation for Redis trigger without Redis configuration"""
+    builder = PynencBuilder()
+    with pytest.raises(ValueError, match="Redis trigger requires redis configuration"):
+        builder.trigger(mode="redis").build()

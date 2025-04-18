@@ -1,6 +1,5 @@
 import os
 import signal
-import time
 from multiprocessing import Manager, Process, cpu_count
 from typing import TYPE_CHECKING, Any, NamedTuple, Optional
 
@@ -211,10 +210,6 @@ class ProcessRunner(BaseRunner):
                 # Optionally, raise an exception or log error if process.pid is not available.
                 raise RunnerError("Failed to start process: PID not available")
         self.handle_waiting_invocations()
-        self.logger.debug(
-            f"finishing loop iteration sleeping {self.conf.runner_loop_sleep_time_sec=}"
-        )
-        time.sleep(self.conf.runner_loop_sleep_time_sec)
 
     def _waiting_for_results(
         self,
