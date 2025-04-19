@@ -16,6 +16,7 @@ from pynenc.invocation.base_invocation import (
 from pynenc.invocation.status import InvocationStatus
 from pynenc.types import Params, Result
 from pynenc.util.asyncio_helper import run_task_sync
+from pynenc.workflow.workflow_identity import WorkflowIdentity
 
 if TYPE_CHECKING:
     from ..app import Pynenc
@@ -49,9 +50,10 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         parent_invocation: DistributedInvocation | None = None,
         invocation_id: str | None = None,
         stored_in_backend: bool = False,
+        workflow: WorkflowIdentity | None = None,
     ) -> None:
         # Call parent init
-        super().__init__(call, parent_invocation, invocation_id)
+        super().__init__(call, parent_invocation, invocation_id, workflow)
 
         # Initialize additional state
         self._result: Result | None = None
@@ -113,6 +115,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         inv_dict: dict = {}
         inv_dict["invocation_id"] = self.invocation_id
         inv_dict["call"] = self.call.to_json()
+        inv_dict["workflow"] = self.workflow.to_json()
         if self.parent_invocation:
             inv_dict["parent_invocation"] = self.parent_invocation.to_json()
         inv_dict["_stored_in_backend"] = self._stored_in_backend
@@ -130,11 +133,12 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             parent_invocation=parent_invocation,
             invocation_id=inv_dict["invocation_id"],
             stored_in_backend=inv_dict["_stored_in_backend"],
+            workflow=WorkflowIdentity.from_json(inv_dict["workflow"]),
         )
 
     def __getstate__(self) -> dict:
         """Return a serialized state dict for pickling."""
-        state = {}
+        state: dict = {}
         state["identity"] = {
             "invocation_id": self.invocation_id,
             "call": self.call,
@@ -147,6 +151,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             "num_retries": self._num_retries,
             "result": self._result,
         }
+        state["workflow"] = self.workflow.to_json()
         return state
 
     def __setstate__(self, state: dict) -> None:
@@ -158,6 +163,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             invocation_id=identity_data["invocation_id"],
             parent_invocation=identity_data["parent_invocation"],
         )
+        self.workflow = WorkflowIdentity.from_json(state["workflow"])
         # Restore mutable state directly
         state_data = state["state"]
         self._cached_status = state_data["cached_status"]

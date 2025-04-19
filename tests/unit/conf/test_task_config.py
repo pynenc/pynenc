@@ -28,6 +28,7 @@ class CustomException(Exception):
     on_diff_non_key_args_raise=True,
     call_result_cache=False,
     disable_cache_args=("*",),
+    force_new_workflow=True,
 )
 def store_with_opt(id: int, value: int) -> None:
     del id, value

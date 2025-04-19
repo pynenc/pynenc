@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.23] - 2025-04-19
+
+### Added
+
+- **Workflow System for Task Orchestration**:
+
+  - Added `WorkflowIdentity` class for immutable workflow context tracking
+  - Enhanced `BaseInvocation` to maintain workflow association for all tasks
+  - Introduced `force_new_workflow` task option to always start a new workflow
+  - Implemented parent-child workflow relationship tracking
+
+- **Workflow Context Propagation**:
+
+  - Tasks now inherit workflow context from parent invocations
+  - Integration with existing task serialization and execution infrastructure
+
+- **Enhanced Task Configuration**:
+  - Added `force_new_workflow` option in `ConfigTask` to create new workflows regardless parent
+  - Maintained backward compatibility with existing task definitions
+
+### Changed
+
+- Modified `BaseInvocation` to derive workflow context from parent or create new workflows
+
 ## [0.0.22] - 2025-04-17
 
 ### Added

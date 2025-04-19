@@ -203,6 +203,7 @@ class Pynenc:
         call_result_cache: Optional[bool] = None,
         disable_cache_args: Optional[tuple[str, ...]] = None,
         triggers: Union["TriggerBuilder", list["TriggerBuilder"]] | None = None,
+        force_new_workflow: Optional[bool] = None,
     ) -> "Task":
         ...
 
@@ -221,6 +222,7 @@ class Pynenc:
         call_result_cache: Optional[bool] = None,
         disable_cache_args: Optional[tuple[str, ...]] = None,
         triggers: Union["TriggerBuilder", list["TriggerBuilder"]] | None = None,
+        force_new_workflow: Optional[bool] = None,
     ) -> Callable[["Func"], "Task"]:
         ...
 
@@ -238,6 +240,7 @@ class Pynenc:
         call_result_cache: Optional[bool] = None,
         disable_cache_args: Optional[tuple[str, ...]] = None,
         triggers: Union["TriggerBuilder", list["TriggerBuilder"]] | None = None,
+        force_new_workflow: Optional[bool] = None,
     ) -> "Task" | Callable[["Func"], "Task"]:
         """
         The task decorator converts the function into an instance of a BaseTask. It accepts any kind of options,
@@ -269,6 +272,10 @@ class Pynenc:
         :param Union[TriggerBuilder, list[TriggerBuilder]] | None triggers:
             Trigger definitions that determine when this task should execute automatically.
             Can be a single TriggerBuilder or a list of builders for multiple trigger conditions.
+        :param Optional[bool] force_new_workflow:
+            If True, this task will always create a new workflow when invoked.
+            Even when called from within another workflow, it creates a subworkflow
+            that maintains a reference to its parent workflow.
 
         :return: A Task instance or a callable that when called returns a Task instance.
 
@@ -326,6 +333,7 @@ class Pynenc:
             "on_diff_non_key_args_raise": on_diff_non_key_args_raise,
             "call_result_cache": call_result_cache,
             "disable_cache_args": disable_cache_args,
+            "force_new_workflow": force_new_workflow,
         }
         options = {k: v for k, v in options.items() if v is not None}
 
@@ -359,6 +367,7 @@ class Pynenc:
         on_diff_non_key_args_raise: Optional[bool] = None,
         call_result_cache: Optional[bool] = None,
         disable_cache_args: Optional[tuple[str, ...]] = None,
+        force_new_workflow: Optional[bool] = None,
     ) -> "Func":
         ...
 
@@ -378,6 +387,7 @@ class Pynenc:
         on_diff_non_key_args_raise: Optional[bool] = None,
         call_result_cache: Optional[bool] = None,
         disable_cache_args: Optional[tuple[str, ...]] = None,
+        force_new_workflow: Optional[bool] = None,
     ) -> "Func":
         ...
 
@@ -397,6 +407,7 @@ class Pynenc:
         on_diff_non_key_args_raise: Optional[bool] = None,
         call_result_cache: Optional[bool] = None,
         disable_cache_args: Optional[tuple[str, ...]] = None,
+        force_new_workflow: Optional[bool] = None,
     ) -> Callable[["Func[Params, Result]"], "Func[Params, Result]"]:
         ...
 
@@ -415,6 +426,7 @@ class Pynenc:
         on_diff_non_key_args_raise: Optional[bool] = None,
         call_result_cache: Optional[bool] = None,
         disable_cache_args: Optional[tuple[str, ...]] = None,
+        force_new_workflow: Optional[bool] = None,
     ) -> (
         "Func[Params, Result]"
         | Callable[["Func[Params, Result]"], "Func[Params, Result]"]
@@ -478,6 +490,10 @@ class Pynenc:
             otherwise it will trigger a new invocation as expected.
         :param Optional[tuple[str, ...]] disable_cache_args:
             Arguments to exclude from caching, it will accept "*" to disable caching for all arguments.
+        :param Optional[bool] force_new_workflow:
+            If True, this task will always create a new workflow when invoked.
+            Even when called from within another workflow, it creates a subworkflow
+            that maintains a reference to its parent workflow.
 
         :return: A function that behaves like the original but is backed by a distributed task system.
 
@@ -551,6 +567,7 @@ class Pynenc:
                 "on_diff_non_key_args_raise": on_diff_non_key_args_raise,
                 "call_result_cache": call_result_cache,
                 "disable_cache_args": disable_cache_args,
+                "force_new_workflow": force_new_workflow,
             }
             task_options = {k: v for k, v in task_options.items() if v is not None}
             task = self.task(func, **task_options)  # type: ignore
