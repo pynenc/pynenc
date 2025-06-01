@@ -64,6 +64,14 @@ Pynenc addresses the complex challenges of task management in distributed enviro
     - **Event Payload Filtering**: Selectively process events based on payload content.
   - **Composable Conditions**: Combine multiple conditions with AND/OR logic for complex triggering rules.
 
+- **Advanced Workflow System**: Sophisticated task orchestration with deterministic execution and state management:
+
+  - **Deterministic Execution**: All non-deterministic operations (random numbers, UUIDs, timestamps) are made deterministic for perfect replay.
+  - **Workflow Identity**: Unique workflow contexts with parent-child relationships and inheritance.
+  - **State Persistence**: Automatic key-value storage for workflow data with failure recovery capabilities.
+  - **Task Integration**: Integration with existing Pynenc tasks using `force_new_workflow` decorator option.
+  - **Failure Recovery**: Workflows can resume from exact points of failure with identical replay behavior.
+
 - **Flexible Configuration with `PynencBuilder`**: A builder interface allows users to configure apps programmatically, including Redis vs memory mode, runners, logging levels, concurrency control, and argument formatting.
 
 - **Automatic Task Prioritization**: Pynenc prioritizes tasks by simply counting the number of dependencies each task has. The task with the most dependencies is selected first.

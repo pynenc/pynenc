@@ -12,9 +12,10 @@ from pynenc.exceptions import InvocationNotFoundError
 from pynenc.invocation.status import InvocationStatus
 
 if TYPE_CHECKING:
-    from pynenc.app import Pynenc
+    from pynenc.app import AppInfo, Pynenc
     from pynenc.invocation.dist_invocation import DistributedInvocation
     from pynenc.types import Params, Result
+    from pynenc.workflow import WorkflowIdentity
 
 
 @dataclass
@@ -292,3 +293,77 @@ class BaseStateBackend(ABC):
         :return: The exception of the invocation.
         """
         return self._get_exception(invocation)
+
+    @abstractmethod
+    def set_workflow_data(
+        self, workflow_identity: "WorkflowIdentity", key: str, value: Any
+    ) -> None:
+        """
+        Set a value in workflow data.
+
+        :param workflow_identity: Workflow identity
+        :param key: Data key to set
+        :param value: Value to store
+        """
+
+    @abstractmethod
+    def get_workflow_data(
+        self, workflow_identity: "WorkflowIdentity", key: str, default: Any = None
+    ) -> Any:
+        """
+        Get a value from workflow data.
+
+        :param workflow_identity: Workflow identity
+        :param key: Data key to retrieve
+        :param default: Default value if key doesn't exist
+        :return: Stored value or default
+        """
+
+    @abstractmethod
+    def get_workflow_deterministic_value(
+        self, workflow: "WorkflowIdentity", key: str
+    ) -> Any:
+        """
+        Get a stored deterministic value for a workflow.
+
+        :param workflow_identity: Workflow identity
+        :param key: Value key
+        :return: Stored value or None if not found
+        """
+
+    @abstractmethod
+    def set_workflow_deterministic_value(
+        self, workflow: "WorkflowIdentity", key: str, value: Any
+    ) -> None:
+        """
+        Store a deterministic value for a workflow.
+
+        :param workflow_identity: Workflow identity
+        :param key: Value key
+        :param value: Value to store
+        """
+
+    @abstractmethod
+    def store_app_info(self, app_info: "AppInfo") -> None:
+        """
+        Register this app's information in the state backend for discovery.
+
+        :param app_info: The app information to store
+        :return: None
+        """
+
+    @abstractmethod
+    def get_app_info(self) -> "AppInfo":
+        """
+        Retrieve information of the current app.
+        :return: The app information
+        """
+
+    @staticmethod
+    @abstractmethod
+    def get_all_app_infos() -> dict[str, "AppInfo"]:
+        """
+        Retrieve all app information registered in this state backend.
+
+        :return: Dictionary mapping app_id to app information
+        """

@@ -36,15 +36,18 @@ class Key:
     """
 
     def __init__(self, app_id: str, prefix: str) -> None:
-        app_id = sanitize_for_redis(app_id)
         prefix = sanitize_for_redis(prefix)
         if not prefix:
             raise ValueError("Prefix cannot be an empty string or None")
+        app_id = sanitize_for_redis(app_id)
+        if not app_id:
+            raise ValueError("App ID cannot be an empty string or None")
+        if ":" in app_id:
+            raise ValueError("App ID cannot contain ':'")
         if prefix and not prefix.endswith(":"):
             prefix += ":"
-        if app_id:
-            prefix = f"{app_id}:{prefix}"
-        self.prefix = f"{PYNENC_KEY_PREFIX}:{prefix}"
+        self.class_prefix = prefix
+        self.prefix = f"{PYNENC_KEY_PREFIX}:{app_id}:{prefix}"
 
     def invocation(self, invocation_id: str) -> str:
         return f"{self.prefix}invocation:{invocation_id}"
@@ -194,3 +197,29 @@ class Key:
         :return: Redis key for the trigger run claim
         """
         return f"{self.prefix}:trigger:run_claim:{trigger_run_id}"
+
+    def workflow_data_value(self, workflow_id: str, key: str) -> str:
+        return f"{self.prefix}workflow:{workflow_id}:data:{key}"
+
+    def workflow_deterministic_value(self, workflow_id: str, key: str) -> str:
+        """
+        Get key for storing a deterministic value for workflow operations.
+
+        :param workflow_id: ID of the workflow
+        :param key: Identifier for the deterministic value
+        :return: Redis key for the deterministic value
+        """
+        return f"{self.prefix}workflow:{workflow_id}:det:{key}"
+
+    @staticmethod
+    def all_apps_info_key(app_id: str) -> str:
+        """
+        Get key for storing app information in the central registry.
+
+        This uses a special prefix outside the normal app namespace
+        to make discovery possible across all apps.
+
+        :param app_id: The ID of the app
+        :return: Redis key for app information
+        """
+        return f"{PYNENC_KEY_PREFIX}:{PYNENC_KEY_PREFIX}:apps_info:{app_id}"

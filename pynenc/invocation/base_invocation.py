@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Generic, TypeVar
 from pynenc.call import Call
 from pynenc.types import Params, Result
 from pynenc.util.log import TaskLoggerAdapter
+from pynenc.workflow.identity import WorkflowIdentity
 
 if TYPE_CHECKING:
     from ..app import Pynenc
@@ -59,12 +60,16 @@ class BaseInvocation(ABC, Generic[Params, Result]):
         call: Call[Params, Result],
         parent_invocation: BaseInvocation | None = None,
         invocation_id: str | None = None,
+        workflow: WorkflowIdentity | None = None,
     ):
         """Initialize the invocation with its identity."""
         self.identity = InvocationIdentity(
             call=call,
             invocation_id=invocation_id or str(uuid.uuid4()),
             parent_invocation=parent_invocation if parent_invocation else None,
+        )
+        self.workflow: WorkflowIdentity = workflow or WorkflowIdentity.from_invocation(
+            self.identity
         )
         self.init_logger()
 

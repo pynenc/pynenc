@@ -4,10 +4,14 @@ from typing import TYPE_CHECKING, Any
 from pynenc.state_backend.base_state_backend import BaseStateBackend
 
 if TYPE_CHECKING:
-    from pynenc.app import Pynenc
+    from pynenc.app import AppInfo, Pynenc
     from pynenc.invocation.dist_invocation import DistributedInvocation
     from pynenc.state_backend.base_state_backend import InvocationHistory
     from pynenc.types import Params, Result
+    from pynenc.workflow import WorkflowIdentity
+
+
+_APP_INFO_REGISTRY: dict[str, "AppInfo"] = {}
 
 
 class MemStateBackend(BaseStateBackend):
@@ -24,10 +28,12 @@ class MemStateBackend(BaseStateBackend):
     """
 
     def __init__(self, app: "Pynenc") -> None:
-        self._cache: dict[str, "DistributedInvocation"] = {}
+        self._cache: dict[str, DistributedInvocation] = {}
         self._history: dict[str, list] = defaultdict(list)
         self._results: dict[str, Any] = {}
         self._exceptions: dict[str, Exception] = {}
+        self._workflow_data: dict[str, dict[str, Any]] = defaultdict(dict)
+        self._deterministic_values: dict[str, dict[str, Any]] = defaultdict(dict)
         super().__init__(app)
 
     def purge(self) -> None:
@@ -125,3 +131,84 @@ class MemStateBackend(BaseStateBackend):
         :return: The exception of the invocation.
         """
         return self._exceptions[invocation.invocation_id]
+
+    def get_workflow_data(
+        self, workflow_identity: "WorkflowIdentity", key: str, default: Any = None
+    ) -> Any:
+        """
+        Get a value from workflow data.
+
+        :param workflow_identity: Workflow identity
+        :param key: Data key to retrieve
+        :param default: Default value if key doesn't exist
+        :return: Stored value or default
+        """
+        workflow_id = workflow_identity.workflow_id
+        return self._workflow_data.get(workflow_id, {}).get(key, default)
+
+    def set_workflow_data(
+        self, workflow_identity: "WorkflowIdentity", key: str, value: Any
+    ) -> None:
+        """
+        Set a value in workflow data.
+
+        :param workflow_identity: Workflow identity
+        :param key: Data key to set
+        :param value: Value to store
+        """
+        workflow_id = workflow_identity.workflow_id
+        if workflow_id not in self._workflow_data:
+            self._workflow_data[workflow_id] = {}
+        self._workflow_data[workflow_id][key] = value
+
+    def get_workflow_deterministic_value(
+        self, workflow: "WorkflowIdentity", key: str
+    ) -> Any:
+        """
+        Retrieve a deterministic value for workflow operations.
+
+        :param workflow: The workflow identity
+        :param key: Key identifying the deterministic value
+        :return: The stored value or None if not found
+        """
+        workflow_id = workflow.workflow_id
+        return self._deterministic_values.get(workflow_id, {}).get(key)
+
+    def set_workflow_deterministic_value(
+        self, workflow: "WorkflowIdentity", key: str, value: Any
+    ) -> None:
+        """
+        Store a deterministic value for workflow operations.
+
+        :param workflow: The workflow identity
+        :param key: Key identifying the deterministic value
+        :param value: The value to store
+        """
+        workflow_id = workflow.workflow_id
+        if workflow_id not in self._deterministic_values:
+            self._deterministic_values[workflow_id] = {}
+        self._deterministic_values[workflow_id][key] = value
+
+    def store_app_info(self, app_info: "AppInfo") -> None:
+        """
+        Register this app's information in the state backend for discovery.
+
+        :param app_info: The app information to store
+        """
+        _APP_INFO_REGISTRY[app_info.app_id] = app_info
+
+    def get_app_info(self) -> "AppInfo":
+        """
+        Retrieve information of the current app.
+
+        :return: The app information
+        :raises ValueError: If app info is not found
+        """
+        app_id = self.app.app_id
+        if app_id not in _APP_INFO_REGISTRY:
+            raise ValueError(f"No app info found for app_id '{app_id}'")
+        return _APP_INFO_REGISTRY[app_id]
+
+    @staticmethod
+    def get_all_app_infos() -> dict[str, "AppInfo"]:
+        return _APP_INFO_REGISTRY

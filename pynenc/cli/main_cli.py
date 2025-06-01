@@ -17,8 +17,8 @@ def main() -> None:
     sets up logging, and executes the appropriate subcommand function based on the user input.
 
     The CLI supports various subcommands for different functionalities, such as running tasks
-    and configuring the application. It requires the specification of an application module and name
-    and optionally allows for increased output verbosity.
+    and configuring the application. The `--app` parameter is required for most commands, but optional for monitoring which can
+    auto-discover apps.
 
     The main steps include:
     - Parsing command line arguments with `argparse`.
@@ -34,7 +34,6 @@ def main() -> None:
         "--app",
         help="Specify the application module (e.g., 'core.src.api.backtes') "
         "or file path (e.g., 'core/src/api/backtes.py')",
-        required=True,
     )
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Increase output verbosity"
@@ -56,9 +55,14 @@ def main() -> None:
     log_level = logging.DEBUG if args.verbose else logging.WARNING
     logging.basicConfig(level=log_level, format="%(levelname)s: %(message)s")
 
+    # Only require --app for non-monitor commands
+    if args.command != "monitor" and not args.app:
+        parser.error("the --app argument is required for this command")
+
     try:
-        app_instance = find_app_instance(args.app)
-        args.app_instance = app_instance
+        if args.app:
+            app_instance = find_app_instance(args.app)
+            args.app_instance = app_instance
         args.func(args)
     except ValueError as e:
         logging.error(f"Failed to load application: {str(e)}")

@@ -146,6 +146,11 @@ class ConfigTask(ConfigPynencBase):
         should not cache results based on certain arguments.
         It can be set to `("*",)` to disable caching for all arguments.
 
+    :cvar ConfigField[bool] force_new_workflow:
+        If True, this task will always create a new workflow when invoked.
+        Even when called from within another workflow, it creates a subworkflow
+        that maintains a reference to its parent workflow.
+
     Examples
     --------
     Using environment variables to configure tasks:
@@ -192,6 +197,7 @@ class ConfigTask(ConfigPynencBase):
     on_diff_non_key_args_raise = ConfigField(False)
     call_result_cache = ConfigField(False)
     disable_cache_args: ConfigField[tuple[str, ...]] = ConfigField(())
+    force_new_workflow = ConfigField(False)
 
     def __init__(
         self,

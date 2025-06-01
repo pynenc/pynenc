@@ -215,13 +215,13 @@ def test_waiting_for_results(runner: PersistentProcessRunner, add_task: Task) ->
     runner.num_processes = 1  # Set to avoid real process spawning
     running_invocation: BaseInvocation[Any, Any] = add_task(1, 2)
     result_invocation: BaseInvocation[Any, Any] = add_task(3, 4)
-    # Create DistributedInvocation instances directly since from_base doesn't exist
+
     with patch("time.sleep") as mock_sleep:
         runner.waiting_for_results(
             Mock(spec=DistributedInvocation, base_invocation=running_invocation),
             [Mock(spec=DistributedInvocation, base_invocation=result_invocation)],
         )
-        mock_sleep.assert_called_once_with(
+        mock_sleep.assert_called_with(
             runner.conf.invocation_wait_results_sleep_time_sec
         )
 

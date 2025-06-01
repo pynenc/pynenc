@@ -4,6 +4,65 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.23] - 2025-04-19
+
+### Added
+
+- **Workflow System for Task Orchestration**:
+
+  - Added `WorkflowIdentity` class for immutable workflow context tracking
+  - Enhanced `BaseInvocation` to maintain workflow association for all tasks
+  - Introduced `force_new_workflow` task option to always start a new workflow
+  - Implemented parent-child workflow relationship tracking
+
+- **Added workflow data and deterministic execution**:
+
+  - Implemented `get_workflow_data` and `set_workflow_data` methods for key-value storage
+  - Added `DeterministicExecutor` for managing deterministic operations in workflows
+  - Introduced deterministic random, UUID, and time functions that replay consistently
+  - Implemented deterministic task execution with result recording and replay
+
+- **Workflow Context Propagation**:
+
+  - Tasks now inherit workflow context from parent invocations
+  - Integration with existing task serialization and execution infrastructure
+
+- **App Discovery and Registration**:
+
+  - Added `store_app_info` and `get_app_info` methods to state backends
+  - Implemented `get_all_app_infos` to discover registered apps in the system
+  - Enhanced `AppInfo` class with module path and variable name information
+
+- **Improved Monitoring Interface**:
+
+  - Enhanced pynmon to support discovering apps without requiring direct app instance
+  - Added app switching capabilities in the monitoring UI
+  - Improved error handling with helpful configuration guidance
+  - Added state backend configuration support via environment variables
+
+- **Enhanced Task API**:
+
+  - Added `wf` property to tasks for workflow context access
+  - Implemented `WorkflowContext` class for workflow state management
+  - Added methods for deterministic operations in workflows
+
+- **Enhanced Task Configuration**:
+  - Added `force_new_workflow` option in `ConfigTask` to create new workflows regardless parent
+  - Maintained backward compatibility with existing task definitions
+
+### Fixed
+
+- **Critical Trigger System Bug Fixes**:
+
+  - Fixed OR logic bug in `trigger_loop_iteration()` method where `break` statement was preventing OR triggers from executing multiple times
+  - Improved trigger system integration with multiple runners to prevent race conditions
+  - Enhanced trigger execution consistency across distributed environments
+
+- **Enhanced Test Coverage**:
+  - Added comprehensive test suites for trigger behavior validation
+  - Created integration tests for OR/AND logic execution patterns
+  - Improved test coverage for workflow deterministic operations and replay scenarios
+
 ## [0.0.22] - 2025-04-17
 
 ### Added

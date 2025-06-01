@@ -57,8 +57,37 @@
             </li>
           </ul>
 
-          <!-- App Info -->
-          <span class="navbar-text"> App: {{ app_id }} </span>
+          <ul class="navbar-nav ms-auto">
+            <li class="nav-item dropdown">
+              <a
+                class="nav-link dropdown-toggle"
+                href="#"
+                id="appDropdown"
+                role="button"
+                data-bs-toggle="dropdown"
+                aria-expanded="false"
+              >
+                App: {{ app_id }}
+              </a>
+              <ul
+                class="dropdown-menu dropdown-menu-end"
+                aria-labelledby="appDropdown"
+              >
+                {% for app_name in all_apps %}
+                <li>
+                  <a
+                    class="dropdown-item {% if app_name == app_id %}active{% endif %}"
+                    href="/switch-app/{{ app_name }}"
+                  >
+                    {{ app_name }} {% if app_name == app_id %}
+                    <span class="ms-2 badge bg-success">Active</span>
+                    {% endif %}
+                  </a>
+                </li>
+                {% endfor %}
+              </ul>
+            </li>
+          </ul>
         </div>
       </div>
     </nav>

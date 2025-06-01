@@ -419,3 +419,34 @@ class RedisTrigger(BaseTrigger):
         )
 
         return bool(result)
+
+    def clean_task_trigger_definitions(self, task_id: str) -> None:
+        """
+        Remove all trigger definitions for a specific task from Redis.
+
+        This method removes all trigger definitions associated with the given task
+        and their references in the index keys. It's safe to use in a distributed
+        environment as it uses Redis atomic operations.
+
+        :param task_id: ID of the task to clean triggers for
+        """
+        # Get all trigger IDs for this task
+        task_trigger_key = self.key.task_triggers(task_id)
+        trigger_ids = self.client.smembers(task_trigger_key)
+
+        if not trigger_ids:
+            return
+
+        pipeline = self.client.pipeline()
+
+        for trigger_id in trigger_ids:
+            trigger_data = self.client.get(self.key.trigger(trigger_id.decode()))
+            if trigger_data:
+                trigger = TriggerDefinition.from_json(trigger_data.decode(), self.app)
+                for condition_id in trigger.condition_ids:
+                    pipeline.srem(
+                        self.key.condition_triggers(condition_id), trigger_id.decode()
+                    )
+                pipeline.delete(self.key.trigger(trigger_id.decode()))
+        pipeline.delete(task_trigger_key)
+        pipeline.execute()

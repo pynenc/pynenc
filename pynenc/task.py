@@ -20,6 +20,7 @@ from pynenc.invocation.conc_invocation import (
 from pynenc.invocation.dist_invocation import DistributedInvocationGroup
 from pynenc.types import Func, Params, Result
 from pynenc.util.log import TaskLoggerAdapter
+from pynenc.workflow.context import WorkflowContext
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
@@ -119,6 +120,53 @@ class Task(Generic[Params, Result]):
         if sync_inv := context.sync_inv_context.get(self.app.app_id):
             return sync_inv
         raise RuntimeError("Task has not been invoked yet")
+
+    def is_main_workflow_task(self) -> bool:
+        """Check if the task is the main workflow task.
+
+        :return: True if the task is the main workflow task, False otherwise
+
+        ```{note}
+            All tasks run within a workflow, the main workflow task is just the first task in the workflow.
+            To determine that, we check if the task_id of the workflow task is the same as the task_id of the current task.
+        ```
+        """
+        return self.invocation.workflow.workflow_task_id == self.task_id
+
+    @cached_property
+    def wf(self) -> WorkflowContext:
+        """
+        Access workflow functionality for this task.
+
+        Provides methods for workflow state management, deterministic operations,
+        and durability features like pause/resume and continue-as-new.
+
+        :return: A helper object with workflow functionality
+
+        Example:
+        ```python
+        @app.task
+        def main_wf_task(data: dict) -> str:
+            # Save workflow state
+            state = main_wf_task.wf.get_state({"step": 0})
+
+            # Use deterministic random
+            if main_wf_task.wf.random() > 0.5:
+                state["path"] = "A"
+            else:
+                state["path"] = "B"
+
+            # Save updated state
+            main_wf_task.wf.save_state(state)
+
+            # Conditionally pause workflow
+            if needs_human_approval(data):
+                main_wf_task.wf.pause("Waiting for approval")
+
+            return f"Completed via path {state['path']}"
+        ```
+        """
+        return WorkflowContext(self)
 
     def to_json(self) -> str:
         """:return: The serialized task"""

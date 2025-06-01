@@ -1,5 +1,7 @@
 import asyncio
+import json
 from collections.abc import Iterable
+from dataclasses import dataclass
 from functools import cached_property, wraps
 from logging import Logger
 from typing import TYPE_CHECKING, Any, Callable, Optional, Union, overload
@@ -40,6 +42,86 @@ if TYPE_CHECKING:
     AggregateFunc = Callable[[Iterable[Result]], Result]
 
 
+@dataclass(frozen=True)
+class AppInfo:
+    """
+    Information about a Pynenc application instance.
+
+    Stores metadata required for app discovery and re-instantiation.
+
+    :param app_id: Unique identifier for the application
+    :param module: Module path where the app is defined
+    :param config_values: Configuration values for app initialization
+    :param config_filepath: Path to configuration file, if any
+    :param module_filepath: Absolute file path of the module
+    :param app_variable: Name of the variable holding the app instance in the module
+    """
+
+    app_id: str
+    module: str
+    config_values: dict[str, Any] | None = None
+    config_filepath: str | None = None
+    module_filepath: str | None = None
+    app_variable: str | None = None
+
+    @classmethod
+    def from_app(cls, app: "Pynenc") -> "AppInfo":
+        """
+        Create AppInfo from a Pynenc app instance.
+
+        Captures necessary metadata for later re-instantiation.
+
+        :param app: The Pynenc app instance
+        :return: AppInfo containing app metadata
+        """
+        from pynenc.util.import_app import extract_module_info
+
+        module_filepath, app_variable = extract_module_info(app)
+        return cls(
+            app_id=app.app_id,
+            config_values=app.config_values,
+            config_filepath=app.config_filepath,
+            module=app.__module__,
+            module_filepath=module_filepath,
+            app_variable=app_variable,
+        )
+
+    def to_json(self) -> str:
+        """
+        Serialize AppInfo to JSON string.
+
+        :return: JSON representation of AppInfo
+        """
+        return json.dumps(
+            {
+                "app_id": self.app_id,
+                "config_values": self.config_values,
+                "config_filepath": self.config_filepath,
+                "module": self.module,
+                "module_filepath": self.module_filepath,
+                "app_variable": self.app_variable,
+            }
+        )
+
+    @classmethod
+    def from_json(cls, json_str: str) -> "AppInfo":
+        """
+        Deserialize AppInfo from JSON string.
+
+        :param json_str: JSON string representation of AppInfo
+        :return: AppInfo instance
+        """
+        data = json.loads(json_str)
+        return cls(
+            app_id=data["app_id"],
+            config_values=data.get("config_values"),
+            config_filepath=data.get("config_filepath"),
+            module=data["module"],
+            module_filepath=data.get("module_filepath"),
+            app_variable=data.get("app_variable"),
+        )
+
+
 class Pynenc:
     """
     The main class of the Pynenc library that creates an application object.
@@ -72,6 +154,25 @@ class Pynenc:
         self._runner_instance: Optional[BaseRunner] = None
         self._tasks: dict[str, Task] = {}
         self.logger.info(f"Initialized Pynenc app with id {self.app_id}")
+        self.state_backend.store_app_info(AppInfo.from_app(self))
+
+    @classmethod
+    def from_info(cls, app_info: AppInfo) -> "Pynenc":
+        """
+        Create a Pynenc app instance from AppInfo.
+
+        :param app_info: The AppInfo object containing app metadata
+        :return: A new Pynenc app instance
+        """
+        from pynenc.util.import_app import create_app_from_info
+
+        if app := create_app_from_info(app_info):
+            return app
+        return cls(
+            app_id=app_info.app_id,
+            config_values=app_info.config_values,
+            config_filepath=app_info.config_filepath,
+        )
 
     @property
     def app_id(self) -> str:
@@ -187,6 +288,7 @@ class Pynenc:
         self.orchestrator.purge()
         self.state_backend.purge()
         self.arg_cache.purge()
+        self.trigger.purge()
 
     @overload
     def task(
@@ -203,6 +305,7 @@ class Pynenc:
         call_result_cache: Optional[bool] = None,
         disable_cache_args: Optional[tuple[str, ...]] = None,
         triggers: Union["TriggerBuilder", list["TriggerBuilder"]] | None = None,
+        force_new_workflow: Optional[bool] = None,
     ) -> "Task":
         ...
 
@@ -221,6 +324,7 @@ class Pynenc:
         call_result_cache: Optional[bool] = None,
         disable_cache_args: Optional[tuple[str, ...]] = None,
         triggers: Union["TriggerBuilder", list["TriggerBuilder"]] | None = None,
+        force_new_workflow: Optional[bool] = None,
     ) -> Callable[["Func"], "Task"]:
         ...
 
@@ -238,6 +342,7 @@ class Pynenc:
         call_result_cache: Optional[bool] = None,
         disable_cache_args: Optional[tuple[str, ...]] = None,
         triggers: Union["TriggerBuilder", list["TriggerBuilder"]] | None = None,
+        force_new_workflow: Optional[bool] = None,
     ) -> "Task" | Callable[["Func"], "Task"]:
         """
         The task decorator converts the function into an instance of a BaseTask. It accepts any kind of options,
@@ -269,6 +374,10 @@ class Pynenc:
         :param Union[TriggerBuilder, list[TriggerBuilder]] | None triggers:
             Trigger definitions that determine when this task should execute automatically.
             Can be a single TriggerBuilder or a list of builders for multiple trigger conditions.
+        :param Optional[bool] force_new_workflow:
+            If True, this task will always create a new workflow when invoked.
+            Even when called from within another workflow, it creates a subworkflow
+            that maintains a reference to its parent workflow.
 
         :return: A Task instance or a callable that when called returns a Task instance.
 
@@ -326,6 +435,7 @@ class Pynenc:
             "on_diff_non_key_args_raise": on_diff_non_key_args_raise,
             "call_result_cache": call_result_cache,
             "disable_cache_args": disable_cache_args,
+            "force_new_workflow": force_new_workflow,
         }
         options = {k: v for k, v in options.items() if v is not None}
 
@@ -359,6 +469,7 @@ class Pynenc:
         on_diff_non_key_args_raise: Optional[bool] = None,
         call_result_cache: Optional[bool] = None,
         disable_cache_args: Optional[tuple[str, ...]] = None,
+        force_new_workflow: Optional[bool] = None,
     ) -> "Func":
         ...
 
@@ -378,6 +489,7 @@ class Pynenc:
         on_diff_non_key_args_raise: Optional[bool] = None,
         call_result_cache: Optional[bool] = None,
         disable_cache_args: Optional[tuple[str, ...]] = None,
+        force_new_workflow: Optional[bool] = None,
     ) -> "Func":
         ...
 
@@ -397,6 +509,7 @@ class Pynenc:
         on_diff_non_key_args_raise: Optional[bool] = None,
         call_result_cache: Optional[bool] = None,
         disable_cache_args: Optional[tuple[str, ...]] = None,
+        force_new_workflow: Optional[bool] = None,
     ) -> Callable[["Func[Params, Result]"], "Func[Params, Result]"]:
         ...
 
@@ -415,6 +528,7 @@ class Pynenc:
         on_diff_non_key_args_raise: Optional[bool] = None,
         call_result_cache: Optional[bool] = None,
         disable_cache_args: Optional[tuple[str, ...]] = None,
+        force_new_workflow: Optional[bool] = None,
     ) -> (
         "Func[Params, Result]"
         | Callable[["Func[Params, Result]"], "Func[Params, Result]"]
@@ -478,6 +592,10 @@ class Pynenc:
             otherwise it will trigger a new invocation as expected.
         :param Optional[tuple[str, ...]] disable_cache_args:
             Arguments to exclude from caching, it will accept "*" to disable caching for all arguments.
+        :param Optional[bool] force_new_workflow:
+            If True, this task will always create a new workflow when invoked.
+            Even when called from within another workflow, it creates a subworkflow
+            that maintains a reference to its parent workflow.
 
         :return: A function that behaves like the original but is backed by a distributed task system.
 
@@ -551,6 +669,7 @@ class Pynenc:
                 "on_diff_non_key_args_raise": on_diff_non_key_args_raise,
                 "call_result_cache": call_result_cache,
                 "disable_cache_args": disable_cache_args,
+                "force_new_workflow": force_new_workflow,
             }
             task_options = {k: v for k, v in task_options.items() if v is not None}
             task = self.task(func, **task_options)  # type: ignore

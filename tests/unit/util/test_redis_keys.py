@@ -116,3 +116,9 @@ def test_key_sanitization() -> None:
         key.prefix
         == "__pynenc__:app__OPEN_BRACKET__id__CLOSE_BRACKET__:pre__ASTERISK__fix:"
     )
+
+
+def test_app_id_with_colon() -> None:
+    with pytest.raises(ValueError) as exc_info:
+        Key("app:id", "prefix")
+    assert "App ID cannot contain ':'" in str(exc_info.value)

@@ -4,8 +4,9 @@ import os
 import sys
 import types
 from importlib.util import module_from_spec, spec_from_file_location
+from typing import Optional
 
-from pynenc.app import Pynenc
+from pynenc.app import AppInfo, Pynenc
 
 
 def build_file_path_from_module_name(module_name: str) -> str:
@@ -158,3 +159,99 @@ def find_app_instance(app_spec: str | None) -> Pynenc:
                     f"Error: {str(e)}"
                 ) from e
         return find_pynenc_instance_in_module(module)
+
+
+def extract_module_info(app: "Pynenc") -> tuple[str | None, str | None]:
+    """
+    Extract module filepath and app variable name from a Pynenc instance.
+
+    :param app: Pynenc application instance
+    :return: Tuple of (module_filepath, app_variable_name)
+    """
+    import inspect
+    import sys
+
+    module_filepath = None
+    app_variable = None
+
+    try:
+        if app.__module__ != "__main__":
+            module = sys.modules.get(app.__module__)
+            if module and hasattr(module, "__file__"):
+                module_filepath = module.__file__
+
+                # Find the variable name holding the app instance
+                for var_name, var_val in inspect.getmembers(module):
+                    if var_val is app and not var_name.startswith("_"):
+                        app_variable = var_name
+                        break
+    except Exception:
+        # Ignore errors when trying to discover module information
+        pass
+
+    return module_filepath, app_variable
+
+
+def create_app_from_info(app_info: AppInfo) -> Optional[Pynenc]:
+    """
+    Create a Pynenc app instance from AppInfo.
+
+    This function delegates to Pynenc.from_info class method.
+
+    :param app_info: Application metadata
+    :return: Re-hydrated Pynenc app instance
+    :raises ValueError: If app can't be re-hydrated
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    # Strategy 1: Try to import the module and get the variable if available
+    if (
+        app_info.module != "__main__"
+        and app_info.module_filepath
+        and app_info.app_variable
+    ):
+        try:
+            # Ensure module directory is in sys.path
+            module_dir = os.path.dirname(app_info.module_filepath)
+            if module_dir not in sys.path:
+                sys.path.insert(0, module_dir)
+
+            # Import the module by name
+            module = importlib.import_module(app_info.module)
+
+            # Get the app instance from the module
+            if hasattr(module, app_info.app_variable):
+                app = getattr(module, app_info.app_variable)
+                if isinstance(app, Pynenc) and app.app_id == app_info.app_id:
+                    logger.info(
+                        f"Found app instance {app_info.app_id} in module {app_info.module}"
+                    )
+                    return app
+        except (ImportError, AttributeError) as e:
+            logger.debug(f"Could not import module {app_info.module}: {e}")
+
+    # Strategy 2: Search for the app in already imported modules
+    if app_info.module != "__main__":
+        for module_name, module in list(sys.modules.items()):
+            if module_name.startswith("_"):
+                continue
+
+            try:
+                for attr_name in dir(module):
+                    if attr_name.startswith("_"):
+                        continue
+
+                    try:
+                        attr = getattr(module, attr_name)
+                        if isinstance(attr, Pynenc) and attr.app_id == app_info.app_id:
+                            logger.info(
+                                f"Found app instance {app_info.app_id} in module {module_name}"
+                            )
+                            return attr
+                    except (AttributeError, TypeError):
+                        continue
+            except (AttributeError, ImportError):
+                continue
+    return None

@@ -32,7 +32,6 @@ def test_cli_missing_app() -> None:
     assert "error: the following arguments are required" in output
     for line in output.splitlines():
         if "error: the following arguments are required" in line:
-            assert "--app" in line
             assert "command" in line
 
 
