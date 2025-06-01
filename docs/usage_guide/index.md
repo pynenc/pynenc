@@ -15,6 +15,7 @@ This Usage Guide is designed to provide you with detailed instructions and pract
 ./use_case_006_mem_unit_testing
 ./use_case_009_argument_caching
 ./use_case_010_trigger_system
+./use_case_011_workflow_system
 ```
 
 ## Getting Started with Pynenc
@@ -380,3 +381,67 @@ The trigger system provides a comprehensive framework for automating workflows w
 This use case demonstrates how to create self-managing workflows that respond to system events and task outcomes, reducing the need for manual orchestration.
 
 For a detailed guide and examples, see {doc}`./use_case_010_trigger_system`.
+
+## Use Case 11: Workflow System
+
+Discover Pynenc's advanced workflow system for building sophisticated task orchestration with deterministic execution, state management, and automatic replay capabilities. The workflow system enables complex multi-step processes that can recover from failures and maintain consistency across distributed environments.
+
+```python
+from pynenc import Pynenc
+
+app = Pynenc()
+
+@app.task
+def process_order_workflow(order_id: str) -> dict[str, Any]:
+    """
+    Order processing workflow with deterministic operations.
+
+    All random operations and timestamps are deterministic and will
+    replay identically during failure recovery.
+    """
+    # Generate deterministic tracking number
+    tracking_number = f"TRK-{order_id}-{int(process_order_workflow.wf.random() * 100000):05d}"
+
+    # Execute payment processing within workflow context
+    payment_result = process_order_workflow.wf.execute_task(
+        process_payment, order_id
+    )
+
+    # Store workflow state for persistence
+    process_order_workflow.wf.set_data("tracking_number", tracking_number)
+    process_order_workflow.wf.set_data("payment_id", payment_result.result["payment_id"])
+
+    return {
+        "order_id": order_id,
+        "tracking_number": tracking_number,
+        "payment_status": payment_result.result["status"],
+        "workflow_id": process_order_workflow.workflow.workflow_id
+    }
+
+@app.task(force_new_workflow=True)
+def independent_audit_workflow(order_id: str) -> dict[str, Any]:
+    """
+    Independent audit workflow with force_new_workflow=True.
+
+    This always creates a new workflow context regardless of calling context.
+    """
+    audit_id = independent_audit_workflow.wf.uuid()
+    return {
+        "audit_id": audit_id,
+        "order_id": order_id,
+        "workflow_id": independent_audit_workflow.workflow.workflow_id
+    }
+```
+
+The workflow system provides essential features for enterprise-grade task orchestration:
+
+- **Deterministic Execution**: All non-deterministic operations (random, UUID, timestamps) are made deterministic for perfect replay
+- **Workflow Identity**: Unique workflow contexts with parent-child relationships and inheritance
+- **State Persistence**: Automatic state management with key-value storage for workflow data
+- **Task Integration**: Seamless integration with existing Pynenc tasks and execution infrastructure
+- **Workflow Boundaries**: Use `force_new_workflow=True` decorator to create independent workflow contexts
+- **Failure Recovery**: Workflows can resume from exact points of failure with identical replay behavior
+
+This use case demonstrates how to build robust, stateful workflows that can handle complex business logic while providing reliability guarantees and failure recovery capabilities.
+
+For a detailed guide and examples, see {doc}`./use_case_011_workflow_system`.

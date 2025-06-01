@@ -8,6 +8,8 @@ should trigger again.
 
 from datetime import datetime
 
+import pytest
+
 from pynenc.trigger.conditions.cron import CronCondition, CronContext
 
 
@@ -206,3 +208,22 @@ def test_affects_task() -> None:
 
     # Time-based conditions don't specifically affect any task
     assert not condition.affects_task("any_task")
+
+
+def test_validate_expression_rejects_seconds_precision() -> None:
+    """
+    Test that CronCondition rejects cron expressions with seconds precision (6 fields).
+
+    This ensures that only standard 5-field cron expressions are accepted,
+    preventing timing issues with high-frequency schedules.
+    """
+    # Should raise ValueError for 6-field expression (with seconds)
+    with pytest.raises(ValueError, match="seconds precision .* not supported"):
+        CronCondition("*/10 * * * * *")
+
+    # Should accept valid 5-field expression (no exception)
+    CronCondition("*/5 * * * *")  # Every 5 minutes
+
+    # Should reject expression with invalid syntax
+    with pytest.raises(ValueError):
+        CronCondition("invalid cron")

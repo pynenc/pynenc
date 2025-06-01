@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, Generic, TypeVar
 from pynenc.call import Call
 from pynenc.types import Params, Result
 from pynenc.util.log import TaskLoggerAdapter
-from pynenc.workflow.workflow_identity import WorkflowIdentity
+from pynenc.workflow.identity import WorkflowIdentity
 
 if TYPE_CHECKING:
     from ..app import Pynenc

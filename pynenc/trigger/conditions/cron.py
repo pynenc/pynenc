@@ -13,6 +13,12 @@ from croniter import croniter  # type: ignore[import]
 from pynenc.trigger.conditions import ConditionContext
 from pynenc.trigger.conditions.base import TriggerCondition
 
+# Default timing constants for cron conditions
+DEFAULT_CHECK_WINDOW_SECONDS = 60
+DEFAULT_MIN_INTERVAL_SECONDS = 50
+DEFAULT_PRECISION_TOLERANCE_SECONDS = 30
+DEFAULT_STRICT_TIMING = False
+
 if TYPE_CHECKING:
     from ...app import Pynenc
 
@@ -88,15 +94,29 @@ class CronCondition(TriggerCondition[CronContext]):
 
     context_type: ClassVar[type[CronContext]] = CronContext
 
-    def __init__(self, cron_expression: str, check_window_seconds: int = 60) -> None:
+    def __init__(
+        self,
+        cron_expression: str,
+        check_window_seconds: int = DEFAULT_CHECK_WINDOW_SECONDS,
+        min_interval_seconds: int = DEFAULT_MIN_INTERVAL_SECONDS,
+        precision_tolerance_seconds: int = DEFAULT_PRECISION_TOLERANCE_SECONDS,
+        strict_timing: bool = DEFAULT_STRICT_TIMING,
+    ) -> None:
         """
         Create a cron-based trigger condition.
 
         :param cron_expression: Standard cron expression (e.g., "0 0 * * *" for daily at midnight)
+        :param check_window_seconds: Check window in seconds after scheduled time (default: 60)
+        :param min_interval_seconds: Minimum interval between executions (default: 50)
+        :param precision_tolerance_seconds: Precision tolerance for strict timing (default: 30)
+        :param strict_timing: Whether to enforce strict timing mode (default: False)
         :raises ValueError: If the cron expression is invalid
         """
         self.cron_expression = cron_expression
         self.check_window_seconds = check_window_seconds
+        self.min_interval_seconds = min_interval_seconds
+        self.precision_tolerance_seconds = precision_tolerance_seconds
+        self.strict_timing = strict_timing
         self._validate_expression()
 
     def _validate_expression(self) -> None:
@@ -105,6 +125,13 @@ class CronCondition(TriggerCondition[CronContext]):
             croniter(self.cron_expression)
         except ValueError as e:
             raise ValueError(f"Invalid cron expression: {self.cron_expression}") from e
+
+        fields = self.cron_expression.split()
+        if len(fields) == 6:
+            raise ValueError(
+                "Cron expressions with seconds precision (6 fields) are not supported. "
+                "Use minute-level precision (5 fields) instead."
+            )
 
     @property
     def condition_id(self) -> str:
@@ -128,6 +155,9 @@ class CronCondition(TriggerCondition[CronContext]):
         return {
             "cron_expression": self.cron_expression,
             "check_window_seconds": self.check_window_seconds,
+            "min_interval_seconds": self.min_interval_seconds,
+            "precision_tolerance_seconds": self.precision_tolerance_seconds,
+            "strict_timing": self.strict_timing,
         }
 
     @classmethod
@@ -141,71 +171,105 @@ class CronCondition(TriggerCondition[CronContext]):
         :raises ValueError: If the data is invalid for this condition type
         """
         cron_expression = data.get("cron_expression")
-        check_window_seconds = data.get("check_window_seconds", 60)
-
         if not cron_expression:
             raise ValueError("Missing required cron_expression in CronCondition data")
 
         return cls(
-            cron_expression=cron_expression, check_window_seconds=check_window_seconds
+            cron_expression=cron_expression,
+            check_window_seconds=data.get(
+                "check_window_seconds", DEFAULT_CHECK_WINDOW_SECONDS
+            ),
+            min_interval_seconds=data.get(
+                "min_interval_seconds", DEFAULT_MIN_INTERVAL_SECONDS
+            ),
+            precision_tolerance_seconds=data.get(
+                "precision_tolerance_seconds", DEFAULT_PRECISION_TOLERANCE_SECONDS
+            ),
+            strict_timing=data.get("strict_timing", DEFAULT_STRICT_TIMING),
         )
 
     def _is_satisfied_by(self, context: CronContext) -> bool:
         """
-        Check if the current time matches the cron schedule.
+        Check if the current time matches the cron schedule with flexible timing.
 
-        A time matches when it is within the check window after a scheduled run time.
-        For example, with a daily noon schedule (0 12 * * *), this checks if the
-        timestamp is between noon and noon + check_window_seconds.
+        This method implements configurable timing behavior:
+        - Uses check_window_seconds for the maximum time after scheduled execution
+        - Respects min_interval_seconds to prevent too-frequent executions
+        - Applies precision_tolerance_seconds for high-precision matching
+        - Honors strict_timing mode when enabled
 
-        When context includes last_execution, this method also verifies that
-        enough time has passed since the last execution according to the cron schedule.
-
-        :param context: Time context with timestamp and check window
-        :return: True if the timestamp falls within the check window after a scheduled run
+        :param context: Time context with timestamp and optional last execution
+        :return: True if the timestamp satisfies the cron condition
         """
-        # If we have last_execution info, verify that enough time has passed
-        # since the last execution according to the schedule
+        # Check minimum interval constraint if we have last execution
         if context.last_execution:
-            # Get the next scheduled time after the last execution
+            time_since_last = (
+                context.timestamp - context.last_execution
+            ).total_seconds()
+            if time_since_last < self.min_interval_seconds:
+                return False
+
+            # Also check if enough time has passed according to the cron schedule
             next_after_last = croniter(
                 self.cron_expression, context.last_execution
             ).get_next(datetime)
 
-            # If the current time hasn't reached the next scheduled time after the last execution,
-            # the condition is not satisfied
             if context.timestamp < next_after_last:
                 return False
 
-        # Continue with the regular time condition check if there's no last_execution
-        # or if enough time has passed since the last execution
+        # Get the most recent scheduled time at or before the current timestamp
         cron = croniter(self.cron_expression, context.timestamp)
 
-        # First check if the timestamp is exactly at a scheduled time
-        # Get the previous scheduled time
-        prev_time = cron.get_prev(datetime)
+        # Check if current timestamp exactly matches a scheduled time
+        if croniter.match(self.cron_expression, context.timestamp):
+            # Exact match - time difference is 0
+            time_diff_seconds = 0.0
+        else:
+            # Get previous scheduled time and calculate difference
+            prev_time = cron.get_prev(datetime)
+            time_diff_seconds = (context.timestamp - prev_time).total_seconds()
 
-        # Check if this timestamp is within the check window after a scheduled time
-        time_diff_seconds = (context.timestamp - prev_time).total_seconds()
+        # Check if we're within the allowed time window
+        if not (0 <= time_diff_seconds <= self.check_window_seconds):
+            return False
 
-        # If timestamp is at or just after a scheduled time (within the window)
-        # Consider it a match
-        if 0 <= time_diff_seconds < self.check_window_seconds:
-            return True
+        # Apply strict timing if enabled
+        if self.strict_timing and time_diff_seconds > self.precision_tolerance_seconds:
+            return False
 
-        # For exact matches (important when using croniter), also check if
-        # the timestamp exactly equals a scheduled time
-        next_time = cron.get_next(datetime)
-        cron_times: list[datetime] = [prev_time, next_time]
+        # All checks passed
+        return True
 
-        # For daily schedules like "0 12 * * *", check if the hour:minute:second match
-        # regardless of the date, which handles the different_day test case
-        for cron_time in cron_times:
-            if (
-                context.timestamp.hour == cron_time.hour
-                and context.timestamp.minute == cron_time.minute
-                and context.timestamp.second == cron_time.second
-            ):
-                return True
+    def _time_components_match(self, time1: datetime, time2: datetime) -> bool:
+        """
+        Check if time components match based on cron expression fields.
 
+        This handles special cases when the exact timestamp matches the cron schedule.
+
+        :param time1: First timestamp to compare
+        :param time2: Second timestamp to compare
+        :return: True if relevant components match according to cron field count
+        """
+        field_count = len(self.cron_expression.split())
+
+        # 5-field standard cron (minute, hour, day, month, weekday)
+        if field_count == 5:
+            return (
+                time1.minute == time2.minute
+                and time1.hour == time2.hour
+                and time1.day == time2.day
+                and time1.month == time2.month
+            )
+
+        # 6-field cron with seconds
+        elif field_count == 6:
+            return (
+                time1.second == time2.second
+                and time1.minute == time2.minute
+                and time1.hour == time2.hour
+                and time1.day == time2.day
+                and time1.month == time2.month
+            )
+
+        # Default case
         return False

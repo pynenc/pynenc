@@ -24,6 +24,11 @@ class WorkflowIdentity:
     workflow_invocation_id: str
     parent_workflow: Optional["WorkflowIdentity"] = None
 
+    @property
+    def workflow_id(self) -> str:
+        """Get the unique identifier for this workflow."""
+        return self.workflow_invocation_id
+
     @classmethod
     def from_invocation(cls, invocation: "InvocationIdentity") -> "WorkflowIdentity":
         """

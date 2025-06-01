@@ -121,3 +121,9 @@ class DisabledTrigger(BaseTrigger):
     ) -> "BaseInvocation":
         """Raises NotImplementedError as task execution via triggers is disabled."""
         raise NotImplementedError("Task execution via triggers is disabled.")
+
+    def clean_task_trigger_definitions(self, task_id: str) -> None:
+        """No-op implementation for cleaning task trigger definitions."""
+
+    def purge(self) -> None:
+        """No-op implementation for purging trigger data."""

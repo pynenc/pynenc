@@ -1,8 +1,12 @@
 import argparse
 import importlib.util
 import sys
+from typing import TYPE_CHECKING
 
 from pynenc.cli.namespace import PynencCLINamespace
+
+if TYPE_CHECKING:
+    from pynenc.app import AppInfo, Pynenc
 
 
 def add_monitor_subparser(subparsers: argparse._SubParsersAction) -> None:
@@ -42,12 +46,18 @@ def start_monitor_command(args: PynencCLINamespace) -> None:
         sys.exit(1)
 
     # Start the monitor with the provided app instance
-    if not hasattr(args, "app_instance") or not args.app_instance:
+    apps: dict[str, AppInfo] = get_all_available_apps(args)
+    if not apps:
         print("Error: No Pynenc app instance available.")
         sys.exit(1)
+    selected_app: Pynenc | None = None
+    if hasattr(args, "app_instance") and args.app_instance:
+        selected_app = args.app_instance
 
-    print(f"Starting monitor for app: {args.app}")
-    start_monitor(app_instance=args.app_instance, host=args.host, port=args.port)
+    print(
+        f"Starting monitoring for app: {selected_app.app_id if selected_app else 'None'}"
+    )
+    start_monitor(apps=apps, selected_app=selected_app, host=args.host, port=args.port)
 
 
 def _check_monitor_dependencies() -> bool:
@@ -57,3 +67,12 @@ def _check_monitor_dependencies() -> bool:
         if importlib.util.find_spec(dep) is None:
             return False
     return True
+
+
+def get_all_available_apps(args: PynencCLINamespace) -> dict[str, "AppInfo"]:
+    """Get all available apps in the current environment."""
+    if not hasattr(args, "app_instance") or not args.app_instance:
+        from pynenc.app import Pynenc
+
+        return Pynenc().state_backend.get_all_app_infos()
+    return args.app_instance.state_backend.get_all_app_infos()

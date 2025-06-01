@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Iterator, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from pynenc import context
 from pynenc.conf.config_orchestrator import ConfigOrchestrator
@@ -454,6 +455,7 @@ class BaseOrchestrator(ABC):
             self.add_call_and_check_cycles(caller, callee)
         # TODO! on previous fail, this should still change status
         self.set_invocation_status(callee, InvocationStatus.RUNNING)
+        callee.wf.register_task_run(caller)
 
     def set_invocation_result(
         self, invocation: "DistributedInvocation", result: Any

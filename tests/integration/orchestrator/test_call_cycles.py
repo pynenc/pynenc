@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from time import sleep
 from typing import TYPE_CHECKING
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 
@@ -10,6 +11,8 @@ from pynenc.exceptions import CycleDetectedError
 from pynenc.invocation import DistributedInvocation, InvocationStatus
 
 if TYPE_CHECKING:
+    from collections.abc import Generator
+
     from pynenc import Pynenc
     from pynenc.task import Task
 
@@ -46,7 +49,30 @@ def test_vars(task_mirror: "Task") -> Vars:
     return Vars(app, task_mirror, inv1, inv2, inv3, expected_ids)
 
 
-def test_causes_cycles(test_vars: Vars) -> None:
+@pytest.fixture
+def mock_register_task_run() -> "Generator[MagicMock, None, None]":
+    """
+    Mock workflow registration for tests to prevent crashes.
+
+    This fixture patches the workflow context's register_task_run method
+    to prevent crashes when calling set_invocation_run directly.
+
+    :yield: The mocked register_task_run method
+    """
+    # Create a mock workflow context with register_task_run method
+    mock_context = MagicMock()
+    mock_context.register_task_run = MagicMock()
+
+    # Patch the property to return our mock context
+    with patch(
+        "pynenc.invocation.dist_invocation.DistributedInvocation.wf",
+        new_callable=PropertyMock,
+        return_value=mock_context,
+    ):
+        yield mock_context.register_task_run
+
+
+def test_causes_cycles(test_vars: Vars, mock_register_task_run: MagicMock) -> None:
     """Test that it will raise an exception on cycles"""
     test_vars.app.orchestrator.set_invocation_run(test_vars.inv1, test_vars.inv2)
     test_vars.app.orchestrator.set_invocation_run(test_vars.inv2, test_vars.inv3)
@@ -66,7 +92,7 @@ def test_causes_cycles(test_vars: Vars) -> None:
     assert str(exc_info.value) == expected_error
 
 
-def test_clean_up_cycles(test_vars: Vars) -> None:
+def test_clean_up_cycles(test_vars: Vars, mock_register_task_run: MagicMock) -> None:
     """Test that it will clean up cycles"""
     test_vars.app.orchestrator.set_invocation_run(test_vars.inv1, test_vars.inv2)
     test_vars.app.orchestrator.set_invocation_run(test_vars.inv2, test_vars.inv3)
@@ -189,7 +215,9 @@ def test_auto_purge(test_vars: Vars) -> None:
     assert get_invocations() == []
 
 
-def test_config_cycle_control(test_vars: Vars) -> None:
+def test_config_cycle_control(
+    test_vars: Vars, mock_register_task_run: MagicMock
+) -> None:
     test_vars.app.orchestrator.conf.cycle_control = True
     test_vars.app.orchestrator.set_invocation_run(test_vars.inv1, test_vars.inv2)
     test_vars.app.orchestrator.set_invocation_run(test_vars.inv2, test_vars.inv3)

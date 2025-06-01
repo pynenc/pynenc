@@ -284,3 +284,41 @@ class MemTrigger(BaseTrigger):
             # Set our claim with expiration time
             self._trigger_run_claims[trigger_run_id] = expiration
             return True
+
+    def clean_task_trigger_definitions(self, task_id: str) -> None:
+        """Remove all trigger definitions for a specific task from memory."""
+        # Find all triggers for this task
+        task_triggers = [t for t in self._triggers.values() if t.task_id == task_id]
+
+        # Collect condition IDs and remove triggers
+        for trigger in task_triggers:
+            # Remove from triggers dictionary
+            if trigger.trigger_id in self._triggers:
+                del self._triggers[trigger.trigger_id]
+            # Remove from condition_triggers mappings
+            for condition_id in trigger.condition_ids:
+                if condition_id in self._condition_triggers:
+                    # Remove this trigger from the condition's list
+                    self._condition_triggers[condition_id] = [
+                        t_id
+                        for t_id in self._condition_triggers[condition_id]
+                        if t_id != trigger.trigger_id
+                    ]
+                    # Clean up empty lists
+                    if not self._condition_triggers[condition_id]:
+                        del self._condition_triggers[condition_id]
+
+    def purge(self) -> None:
+        """
+        Purge all data from the in-memory trigger system.
+
+        This method clears all registered conditions, triggers, and valid conditions.
+        """
+        self._conditions.clear()
+        self._triggers.clear()
+        self._valid_conditions.clear()
+        self._condition_triggers.clear()
+        self._source_task_conditions.clear()
+        self._last_cron_executions.clear()
+        self._execution_claims.clear()
+        self._trigger_run_claims.clear()

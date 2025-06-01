@@ -27,6 +27,7 @@ license
 
 - Intuitive Orchestration
 - Configurable Concurrency Management
+- Workflow System for Complex Task Orchestration with Deterministic Execution
 - Trigger System for Event-Driven and Scheduled Tasks
 - Automatic Task Prioritization
 - Automatic Task Pausing

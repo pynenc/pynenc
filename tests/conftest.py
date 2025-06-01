@@ -131,6 +131,9 @@ class MockBaseOrchestrator(BaseOrchestrator):
         return self._purge_mock(*args, **kwargs)
 
 
+_get_all_app_infos_mock = MagicMock()
+
+
 class MockStateBackend(BaseStateBackend):
     def __init__(self, app: "Pynenc") -> None:
         super().__init__(app)
@@ -143,6 +146,14 @@ class MockStateBackend(BaseStateBackend):
         self._get_result_mock = MagicMock()
         self._set_exception_mock = MagicMock()
         self._get_exception_mock = MagicMock()
+        self._set_workflow_state_mock = MagicMock()
+        self._get_workflow_state_mock = MagicMock()
+        self._store_app_info_mock = MagicMock()
+        self._get_app_info_mock = MagicMock()
+        self._get_workflow_deterministic_value_mock = MagicMock()
+        self._set_workflow_deterministic_value_mock = MagicMock()
+        self._get_workflow_data_mock = MagicMock()
+        self._set_workflow_data_mock = MagicMock()
 
     def purge(self) -> None:
         return self._purge_mock()
@@ -170,6 +181,34 @@ class MockStateBackend(BaseStateBackend):
 
     def _get_exception(self, invocation: DistributedInvocation) -> Exception:
         return self._get_exception_mock(invocation)
+
+    def set_workflow_state(self, *args: Any, **kwargs: Any) -> Any:
+        return self._set_workflow_state_mock(*args, **kwargs)
+
+    def get_workflow_state(self, *args: Any, **kwargs: Any) -> Any:
+        return self._get_workflow_state_mock(*args, **kwargs)
+
+    def store_app_info(self, *args: Any, **kwargs: Any) -> Any:
+        return self._store_app_info_mock(*args, **kwargs)
+
+    def get_app_info(self, *args: Any, **kwargs: Any) -> Any:
+        return self._get_app_info_mock(*args, **kwargs)
+
+    def get_workflow_deterministic_value(self, *args: Any, **kwargs: Any) -> Any:
+        return self._get_workflow_deterministic_value_mock(*args, **kwargs)
+
+    def set_workflow_deterministic_value(self, *args: Any, **kwargs: Any) -> Any:
+        return self._set_workflow_deterministic_value_mock(*args, **kwargs)
+
+    def get_workflow_data(self, *args: Any, **kwargs: Any) -> Any:
+        return self._get_workflow_data_mock(*args, **kwargs)
+
+    def set_workflow_data(self, *args: Any, **kwargs: Any) -> None:
+        return self._set_workflow_data_mock(*args, **kwargs)
+
+    @staticmethod
+    def get_all_app_infos(*args: Any, **kwargs: Any) -> Any:
+        return _get_all_app_infos_mock(*args, **kwargs)
 
 
 class MockArgCache(BaseArgCache):

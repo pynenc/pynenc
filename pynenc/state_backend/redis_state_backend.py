@@ -1,18 +1,20 @@
 import json
 from functools import cached_property
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import redis
 
 from pynenc import exceptions
+from pynenc.conf.config_redis import ConfigRedis
 from pynenc.conf.config_state_backend import ConfigStateBackendRedis
 from pynenc.invocation.dist_invocation import DistributedInvocation
 from pynenc.state_backend.base_state_backend import BaseStateBackend, InvocationHistory
 from pynenc.util.redis_client import get_redis_client
 from pynenc.util.redis_keys import Key
+from pynenc.workflow import WorkflowIdentity
 
 if TYPE_CHECKING:
-    from pynenc.app import Pynenc
+    from pynenc.app import AppInfo, Pynenc
     from pynenc.types import Params, Result
 
 
@@ -174,3 +176,118 @@ class RedisStateBackend(BaseStateBackend):
                 )
             return self.app.serializer.deserialize(serialized_exception["error_data"])
         raise KeyError(f"Exception for invocation {invocation.invocation_id} not found")
+
+    def get_workflow_data(
+        self, workflow_identity: "WorkflowIdentity", key: str, default: Any = None
+    ) -> Any:
+        """
+        Get a value from workflow data.
+
+        :param workflow_identity: Workflow identity
+        :param key: Data key to retrieve
+        :param default: Default value if key doesn't exist
+        :return: Stored value or default
+        """
+        data_key = self.key.workflow_data_value(workflow_identity.workflow_id, key)
+        serialized_value = self.client.get(data_key)
+
+        if serialized_value is None:
+            return default
+
+        return self.app.serializer.deserialize(serialized_value.decode())
+
+    def set_workflow_data(
+        self, workflow_identity: "WorkflowIdentity", key: str, value: Any
+    ) -> None:
+        """
+        Set a value in workflow data.
+
+        :param workflow_identity: Workflow identity
+        :param key: Data key to set
+        :param value: Value to store
+        """
+        data_key = self.key.workflow_data_value(workflow_identity.workflow_id, key)
+        serialized_value = self.app.serializer.serialize(value)
+        self.client.set(data_key, serialized_value)
+
+    def get_workflow_deterministic_value(
+        self, workflow: "WorkflowIdentity", key: str
+    ) -> Any:
+        """
+        Retrieve a deterministic value for workflow operations.
+
+        :param workflow: The workflow identity
+        :param key: Key identifying the deterministic value
+        :return: The stored value or None if not found
+        """
+        deterministic_key = self.key.workflow_deterministic_value(
+            workflow.workflow_id, key
+        )
+        value = self.client.get(deterministic_key)
+
+        if value is None:
+            return None
+
+        return self.app.serializer.deserialize(value.decode())
+
+    def set_workflow_deterministic_value(
+        self, workflow: "WorkflowIdentity", key: str, value: Any
+    ) -> None:
+        """
+        Store a deterministic value for workflow operations.
+
+        :param workflow: The workflow identity
+        :param key: Key identifying the deterministic value
+        :param value: The value to store (must be serializable)
+        """
+        deterministic_key = self.key.workflow_deterministic_value(
+            workflow.workflow_id, key
+        )
+        serialized_value = self.app.serializer.serialize(value)
+        self.client.set(deterministic_key, serialized_value)
+
+    def store_app_info(self, app_info: "AppInfo") -> None:
+        """
+        Register this app's information in the state backend for discovery.
+
+        :param app_info: The app information to store
+        """
+        self.client.set(self.key.all_apps_info_key(app_info.app_id), app_info.to_json())
+
+    def get_app_info(self) -> "AppInfo":
+        """
+        Retrieve information of the current app.
+
+        :return: The app information
+        :raises ValueError: If app info is not found
+        """
+        app_info_data = self.client.get(self.key.all_apps_info_key(self.app.app_id))
+
+        if not app_info_data:
+            raise ValueError(f"No app info found for app_id '{self.app.app_id}'")
+
+        return AppInfo.from_json(app_info_data.decode())
+
+    @staticmethod
+    def get_all_app_infos() -> dict[str, "AppInfo"]:
+        """
+        Retrieve all app information registered in this state backend.
+
+        :return: Dictionary mapping app_id to app information
+        """
+        from pynenc.app import AppInfo
+
+        redis_client = get_redis_client(ConfigRedis())
+        # Scan for all app info keys
+        pattern = Key.all_apps_info_key("*")
+        all_keys = redis_client.keys(pattern)
+        # Extract all available app IDs and Info
+        result = {}
+        for key in all_keys:
+            key_str = key.decode() if isinstance(key, bytes) else key
+            app_id = key_str.split(":")[-1]  # Last part is app_id
+            app_info_data = redis_client.get(key_str)
+            if app_info_data:
+                app_info = AppInfo.from_json(app_info_data.decode())
+                result[app_id] = app_info
+        return result

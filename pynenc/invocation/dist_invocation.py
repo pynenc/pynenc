@@ -16,9 +16,12 @@ from pynenc.invocation.base_invocation import (
 from pynenc.invocation.status import InvocationStatus
 from pynenc.types import Params, Result
 from pynenc.util.asyncio_helper import run_task_sync
-from pynenc.workflow.workflow_identity import WorkflowIdentity
+from pynenc.workflow.exceptions import WorkflowPauseError
+from pynenc.workflow.identity import WorkflowIdentity
 
 if TYPE_CHECKING:
+    from pynenc.workflow import WorkflowContext
+
     from ..app import Pynenc
 
 
@@ -77,6 +80,11 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             if self.identity.parent_invocation
             else None
         )
+
+    @property
+    def wf(self) -> WorkflowContext:
+        """Access workflow functionality for this invocation task."""
+        return self.task.wf
 
     def store_in_backend(self) -> None:
         """Store the invocation in the state backend."""
@@ -245,6 +253,10 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             result = run_task_sync(self.task.func, **self.arguments.kwargs)
             self.app.orchestrator.set_invocation_result(self, result)
             self.task.logger.info("Invocation FINISHED")
+        except WorkflowPauseError as ex:
+            self.task.logger.warning(
+                f"Workflow pause requested but not implemented yet: {ex.reason}"
+            )
         except self.task.retriable_exceptions as ex:
             if self.num_retries >= self.task.conf.max_retries:
                 self.app.logger.exception("Invocation MAX-RETRY")

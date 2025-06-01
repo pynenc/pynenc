@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any, Optional
 from pynenc.arguments import Arguments
 from pynenc.conf.config_trigger import ConfigTrigger
 from pynenc.trigger.conditions import (
+    CompositeLogic,
     CronCondition,
     CronContext,
     EventCondition,
@@ -41,7 +42,7 @@ if TYPE_CHECKING:
     from pynenc.trigger.conditions import ConditionContext, TriggerCondition
     from pynenc.trigger.trigger_builder import TriggerBuilder
     from pynenc.trigger.trigger_definitions import TriggerDefinition
-    from pynenc.trigger.types import ConditionId, TaskId, TriggerDefinitionId
+    from pynenc.trigger.types import ConditionId, TaskId
 
 
 class BaseTrigger(ABC):
@@ -61,7 +62,6 @@ class BaseTrigger(ABC):
         self.app = app
         self._running = False
         self._registered_conditions: dict[ConditionId, TriggerCondition] = {}
-        self._registered_triggers: dict[TriggerDefinitionId, TriggerDefinition] = {}
         # Map of task_id to set of condition_ids that are sourced from this task
         self._source_task_conditions: dict[TaskId, set[ConditionId]] = defaultdict(set)
         # Local cache of last cron execution times
@@ -270,6 +270,18 @@ class BaseTrigger(ABC):
         :param conditions: List of valid conditions to clear
         """
 
+    @abstractmethod
+    def clean_task_trigger_definitions(self, task_id: str) -> None:
+        """
+        Remove all trigger definitions for a specific task.
+
+        This method should clean up any persisted trigger definitions
+        associated with the task.
+
+        :param task_id: ID of the task to clean triggers for
+        """
+        pass
+
     def register_task_triggers(
         self,
         task: "Task",
@@ -285,6 +297,7 @@ class BaseTrigger(ABC):
         :param triggers: A TriggerBuilder or list of TriggerBuilders that define
                          when the task should be triggered
         """
+        self.clean_task_trigger_definitions(task.task_id)
         if not triggers:
             return
         builders = triggers if isinstance(triggers, list) else [triggers]
@@ -612,7 +625,10 @@ class BaseTrigger(ABC):
                 if self.claim_trigger_run(run_id):
                     args = trigger.get_arguments(context)
                     self.execute_task(trigger.task_id, args)
-                    break
+                    # For OR logic, continue processing other run IDs
+                    # For AND logic, only one run ID is generated, so this has no effect
+                    if trigger.logic == CompositeLogic.AND:
+                        break
         # Clean up the valid conditions that are no longer needed
         # Because all the triggers that required already ran
         conditions_to_clean = [
@@ -640,3 +656,12 @@ class BaseTrigger(ABC):
         invocation = task._call(Arguments(kwargs=arguments or {}))
         self.app.logger.info(f"Triggered task {task_id} with arguments {arguments}")
         return invocation
+
+    @abstractmethod
+    def purge(self) -> None:
+        """
+        Purges all the trigger data for the current self.app.app_id.
+        ```{important}
+            This should only be used for testing purposes.
+        ```
+        """
