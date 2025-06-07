@@ -4,6 +4,53 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.24] - 2025-06-07
+
+### Added
+
+- **Enhanced Pynmon Monitoring Interface**:
+  - Complete visual redesign with minimalist, professional aesthetic
+  - Dark navigation menu with light content area for optimal contrast and readability
+  - Material Design Icons integration replacing emoji icons for consistency
+  - Comprehensive design system with structured color palette and typography guidelines
+
+### Improved
+
+- **User Interface Enhancements**:
+
+  - Redesigned filter forms with compact, horizontal layouts and improved visual hierarchy
+  - Enhanced table layouts with tighter row spacing and optimized column widths
+  - Improved status badge system with distinct colors for all invocation states
+  - Responsive grid layouts using Bootstrap for better mobile experience
+  - Reduced visual noise through selective use of colors and minimalist card designs
+
+- **HTMX Integration**:
+
+  - Added partial template refresh for invocation tables to improve performance
+  - Enhanced real-time updates without full page reloads
+  - Better user experience with targeted content updates
+
+- **Testing Infrastructure**:
+  - Comprehensive integration test suite for pynmon web interface
+  - Unit tests for view components and routing logic
+  - Test fixtures and utilities for reliable UI testing
+  - Browser debugging capabilities for development workflow
+
+### Fixed
+
+- **Template Issues**:
+  - Resolved duplicate headers in orchestrator overview
+  - Fixed Material Icons implementation (replaced unsupported outlined variants)
+  - Corrected filter tile background colors for proper visual differentiation
+  - Improved status badge color mapping for better state distinction
+
+### Technical
+
+- **Code Quality**:
+  - Structured CSS organization with CSS variables for maintainable theming
+  - Improved template organization with reusable partial components
+  - Enhanced error handling and user feedback in web interface
+
 ## [0.0.23] - 2025-04-19
 
 ### Added

@@ -1,87 +1,100 @@
 {% extends "base.html" %} {% block content %}
-<div class="row">
-  <div class="col-12">
-    <div class="card">
-      <div
-        class="card-header d-flex justify-content-between align-items-center"
+<div class="container-fluid">
+  <!-- Page Header -->
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="h4 mb-0 text-primary">Orchestrator Monitor</h2>
+    <button
+      class="btn btn-sm btn-outline-primary"
+      hx-get="/orchestrator/refresh"
+      hx-target="#orchestrator-stats"
+      hx-swap="innerHTML"
+    >
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="16"
+        height="16"
+        fill="currentColor"
+        class="bi bi-arrow-clockwise"
+        viewBox="0 0 16 16"
       >
-        <span>Orchestrator Information</span>
-        <button
-          class="btn btn-sm btn-outline-primary"
-          hx-get="/orchestrator/refresh"
-          hx-target="#orchestrator-stats"
-          hx-swap="innerHTML"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
-            fill="currentColor"
-            class="bi bi-arrow-clockwise"
-            viewBox="0 0 16 16"
-          >
-            <path
-              fill-rule="evenodd"
-              d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"
-            />
-            <path
-              d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"
-            />
-          </svg>
-          Refresh
-        </button>
-      </div>
-      <div class="card-body">
-        <h5>App ID: {{ app_id }}</h5>
-        <h6>Orchestrator Type: {{ orchestrator_info.type }}</h6>
+        <path
+          fill-rule="evenodd"
+          d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"
+        />
+        <path
+          d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"
+        />
+      </svg>
+      Refresh
+    </button>
+  </div>
 
-        <div class="row mt-3">
-          <div class="col-md-6">
-            <div class="card">
-              <div class="card-header">Configuration</div>
-              <div class="card-body">
-                <ul class="list-group">
-                  <li class="list-group-item d-flex justify-content-between">
-                    <span>Cycle Control:</span>
-                    <span
-                      class="badge {% if orchestrator_info.cycle_control_enabled %}bg-success{% else %}bg-secondary{% endif %}"
-                    >
-                      {{ 'Enabled' if orchestrator_info.cycle_control_enabled
-                      else 'Disabled' }}
-                    </span>
-                  </li>
-                  <li class="list-group-item d-flex justify-content-between">
-                    <span>Blocking Control:</span>
-                    <span
-                      class="badge {% if orchestrator_info.blocking_control_enabled %}bg-success{% else %}bg-secondary{% endif %}"
-                    >
-                      {{ 'Enabled' if orchestrator_info.blocking_control_enabled
-                      else 'Disabled' }}
-                    </span>
-                  </li>
-                  <li class="list-group-item d-flex justify-content-between">
-                    <span>Auto Purge (hours):</span>
-                    <span class="badge bg-info"
-                      >{{ orchestrator_info.auto_purge_hours }}</span
-                    >
-                  </li>
-                </ul>
-              </div>
-            </div>
+  <!-- Orchestrator Type -->
+  <div class="row mb-3">
+    <div class="col-12">
+      <div class="info-card">
+        <h6 class="section-title">Orchestrator Type</h6>
+        <p class="mb-0 fw-semibold">{{ orchestrator_info.type }}</p>
+      </div>
+    </div>
+  </div>
+  <!-- Configuration and Stats Grid -->
+  <div class="row g-3">
+    <!-- Configuration Card -->
+    <div class="col-md-6">
+      <div class="metric-card">
+        <h6 class="section-title">Configuration</h6>
+        <div class="metric-grid">
+          <div class="metric-item">
+            <span class="metric-label">Cycle Control</span>
+            <span
+              class="badge {% if orchestrator_info.cycle_control_enabled %}bg-success{% else %}bg-secondary{% endif %}"
+            >
+              {{ 'Enabled' if orchestrator_info.cycle_control_enabled else
+              'Disabled' }}
+            </span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">Blocking Control</span>
+            <span
+              class="badge {% if orchestrator_info.blocking_control_enabled %}bg-success{% else %}bg-secondary{% endif %}"
+            >
+              {{ 'Enabled' if orchestrator_info.blocking_control_enabled else
+              'Disabled' }}
+            </span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">Auto Purge (hours)</span>
+            <span class="badge bg-info"
+              >{{ orchestrator_info.auto_purge_hours }}</span
+            >
           </div>
         </div>
+      </div>
+    </div>
 
-        <div id="orchestrator-stats">
-          {% include "orchestrator/partials/stats.html" %}
-        </div>
+    <!-- Stats Section -->
+    <div class="col-md-6">
+      <div id="orchestrator-stats">
+        {% include "orchestrator/partials/stats.html" %}
+      </div>
+    </div>
+  </div>
 
-        <div class="mt-3 d-flex justify-content-center">
-          <a href="/invocations" class="btn btn-primary mx-2"
+  <!-- Action Buttons -->
+  <div class="row mt-4">
+    <div class="col-12">
+      <div class="info-card text-center">
+        <h6 class="section-title">Quick Actions</h6>
+        <div class="d-flex justify-content-center gap-2 flex-wrap">
+          <a href="/invocations" class="btn btn-outline-primary btn-sm"
             >View All Invocations</a
           >
-          <a href="/tasks" class="btn btn-info mx-2">View All Tasks</a>
+          <a href="/tasks" class="btn btn-outline-info btn-sm"
+            >View All Tasks</a
+          >
           <button
-            class="btn btn-warning mx-2"
+            class="btn btn-outline-warning btn-sm"
             hx-post="/orchestrator/auto-purge"
             hx-confirm="This will purge all completed invocations older than the auto-purge threshold. Continue?"
           >

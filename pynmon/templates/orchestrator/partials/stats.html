@@ -1,81 +1,72 @@
-<div class="row mt-3">
-  <div class="col-md-6">
-    <div class="card">
-      <div class="card-header">Invocation Status</div>
-      <div class="card-body">
-        <div class="table-responsive">
-          <table class="table table-sm">
-            <thead>
-              <tr>
-                <th>Status</th>
-                <th>Count</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for status, count in status_counts.items() %}
-              <tr>
-                <td>
-                  <span
-                    class="badge {% if status == 'SUCCESS' %}bg-success {% elif status == 'FAILED' %}bg-danger {% elif status == 'RUNNING' %}bg-primary {% elif status == 'PENDING' %}bg-warning {% elif status == 'PAUSED' %}bg-info {% elif status == 'RETRY' %}bg-secondary {% else %}bg-dark{% endif %}"
-                  >
-                    {{ status }}
-                  </span>
-                </td>
-                <td>{{ count }}</td>
-              </tr>
-              {% endfor %}
-            </tbody>
-            <tfoot>
-              <tr class="table-dark">
-                <th>Total</th>
-                <th>{{ status_counts.values()|sum }}</th>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </div>
+<div class="metric-card">
+  <h6 class="section-title">Invocation Status</h6>
+  <div class="d-flex flex-wrap gap-2 mb-3">
+    {% for status, count in status_counts.items() %}
+    <div class="badge-item d-flex align-items-center">
+      <span
+        class="badge {% if status == 'SUCCESS' %}bg-success{% elif status == 'FAILED' %}bg-danger{% elif status == 'RUNNING' %}bg-primary{% elif status == 'PENDING' %}bg-warning{% elif status == 'PAUSED' %}bg-info{% elif status == 'RETRY' %}bg-secondary{% elif status == 'REGISTERED' %}bg-secondary{% elif status == 'REROUTED' %}bg-info{% elif status == 'SCHEDULED' %}bg-warning text-dark{% else %}bg-dark{% endif %} me-2"
+      >
+        {{ status }}
+      </span>
+      <span class="fw-semibold" style="font-size: 14px">{{ count }}</span>
     </div>
+    {% endfor %}
   </div>
-
-  <div class="col-md-6">
-    <div class="card">
-      <div class="card-header">Blocking Invocations</div>
-      <div class="card-body">
-        {% if blocking_invocations %}
-        <div class="table-responsive">
-          <table class="table table-sm">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Task</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for invocation in blocking_invocations %}
-              <tr>
-                <td>
-                  <a href="/invocations/{{ invocation.invocation_id }}">
-                    {{ invocation.invocation_id[:8] }}...
-                  </a>
-                </td>
-                <td>{{ invocation.task.task_id.split('.')[-1] }}</td>
-                <td>
-                  <span
-                    class="badge {% if invocation.status.name == 'SUCCESS' %}bg-success {% elif invocation.status.name == 'FAILED' %}bg-danger {% elif invocation.status.name == 'RUNNING' %}bg-primary {% elif invocation.status.name == 'PENDING' %}bg-warning {% elif invocation.status.name == 'PAUSED' %}bg-info {% elif invocation.status.name == 'RETRY' %}bg-secondary {% else %}bg-dark{% endif %}"
-                  >
-                    {{ invocation.status.name }}
-                  </span>
-                </td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-        {% else %}
-        <p class="text-muted">No blocking invocations found.</p>
-        {% endif %}
-      </div>
-    </div>
+  <div class="border-top pt-2">
+    <small class="text-muted"
+      >Total:
+      <span class="fw-bold">{{ status_counts.values()|sum }}</span></small
+    >
   </div>
 </div>
+
+{% if blocking_invocations %}
+<div class="metric-card mt-3">
+  <h6 class="section-title">Blocking Invocations</h6>
+  <div class="table-responsive">
+    <table class="table table-sm table-borderless mb-0">
+      <thead>
+        <tr>
+          <th style="font-size: 12px; color: var(--text-secondary)">ID</th>
+          <th style="font-size: 12px; color: var(--text-secondary)">Task</th>
+          <th style="font-size: 12px; color: var(--text-secondary)">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for invocation in blocking_invocations %}
+        <tr>
+          <td>
+            <a
+              href="/invocations/{{ invocation.invocation_id }}"
+              class="text-decoration-none"
+            >
+              <code class="text-primary" style="font-size: 11px"
+                >{{ invocation.invocation_id[:8] }}...</code
+              >
+            </a>
+          </td>
+          <td style="font-size: 12px">
+            {{ invocation.task.task_id.split('.')[-1] }}
+          </td>
+          <td>
+            <span
+              class="badge {% if invocation.status.name == 'SUCCESS' %}bg-success{% elif invocation.status.name == 'FAILED' %}bg-danger{% elif invocation.status.name == 'RUNNING' %}bg-primary{% elif invocation.status.name == 'PENDING' %}bg-warning{% elif invocation.status.name == 'PAUSED' %}bg-info{% elif invocation.status.name == 'RETRY' %}bg-secondary{% elif invocation.status.name == 'REGISTERED' %}bg-secondary{% elif invocation.status.name == 'REROUTED' %}bg-info{% elif invocation.status.name == 'SCHEDULED' %}bg-warning text-dark{% else %}bg-dark{% endif %}"
+              style="font-size: 10px"
+            >
+              {{ invocation.status.name }}
+            </span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="info-card mt-3 text-center">
+  <div class="text-success">
+    <span class="material-icons" style="font-size: 24px">check_circle</span>
+  </div>
+  <small class="text-muted">No blocking invocations</small>
+</div>
+{% endif %}

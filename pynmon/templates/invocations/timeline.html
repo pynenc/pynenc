@@ -4,14 +4,14 @@
 <div class="container-fluid mt-4">
   <div class="row">
     <div class="col-md-3">
-      <div class="card mb-4">
-        <div class="card-header d-flex justify-content-between align-items-center">
-          <h5 class="mb-0">Filters</h5>
-          <small class="text-muted">All times shown in UTC</small>
+      <div class="card mb-4 filter-form">
+        <div class="card-header">
+          Filters
+          <small class="text-muted ms-2">All times shown in UTC</small>
         </div>
         <div class="card-body">
           <form action="/invocations/timeline" method="get">
-            <div class="mb-3">
+            <div class="mb-2">
               <label for="time_range" class="form-label">Time Range</label>
               <select class="form-select" id="time_range" name="time_range">
                 <option value="15m" {% if current_filters.time_range == '15m' %}selected{% endif %}>Last 15 minutes</option>
@@ -25,7 +25,7 @@
               </select>
             </div>
 
-            <div id="custom_date_range" class="mb-3 {% if current_filters.time_range != 'custom' %}d-none{% endif %}">
+            <div id="custom_date_range" class="mb-2 {% if current_filters.time_range != 'custom' %}d-none{% endif %}">
               <div class="mb-2">
                 <label for="start_date" class="form-label">Start Date</label>
                 <input type="datetime-local" class="form-control" id="start_date" name="start_date"
@@ -38,7 +38,7 @@
               </div>
             </div>
 
-            <div class="mb-3">
+            <div class="mb-2">
               <label for="task_id" class="form-label">Task ID</label>
               <select class="form-select" id="task_id" name="task_id">
                 <option value="">All Tasks</option>
@@ -48,7 +48,7 @@
               </select>
             </div>
 
-            <div class="form-check mb-3">
+            <div class="form-check mb-2">
               <input class="form-check-input" type="checkbox" id="show_relationships" name="show_relationships"
                      {% if current_filters.show_relationships %}checked{% endif %}>
               <label class="form-check-label" for="show_relationships">
@@ -56,7 +56,7 @@
               </label>
             </div>
 
-            <div class="mb-3">
+            <div class="mb-2">
               <label for="limit" class="form-label">Limit</label>
               <input type="number" class="form-control" id="limit" name="limit"
                      value="{{ current_filters.limit }}" min="1" max="500">
