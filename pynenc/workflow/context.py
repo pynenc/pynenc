@@ -120,14 +120,20 @@ class WorkflowContext:
         return self.deterministic.execute_task(task, *args, **kwargs)
 
     def register_task_run(self, caller: DistributedInvocation | None) -> None:
-        """Register a task run in the workflow context."""
+        """
+        Register a task run in the workflow context.
+
+        This method is called when a task starts execution within a workflow.
+        For main workflow tasks, it registers the workflow identity in the state backend
+        for monitoring and tracking purposes.
+
+        :param caller: The invocation that called this task, if any
+        """
         if self.task.is_main_workflow_task():
-            # We are starting or retrying the current workflow
-            # modify/initialize state appropiately
-            # store state
-            ...
+            # Register this workflow run in the state backend for monitoring
+            self.app.state_backend.store_workflow_run(self.identity)
         else:
-            # It it's not the main task, then is just another tasks
-            # running within the same workflow
-            # we just addid to the state, or register it wwomehere
-            ...
+            # For non-main workflow tasks, we could track task execution here
+            # This is left for future implementation when task-level workflow
+            # tracking is needed
+            pass

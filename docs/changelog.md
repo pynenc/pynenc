@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- **Workflow Monitoring System**:
+
+  - Added workflow information storage when tasks run
+  - Implemented `get_all_workflows()`, `get_all_workflows_runs()`, and `get_workflow_runs()` methods in state backends
+  - Created workflow views for pynmon monitoring interface with list, detail, and runs pages
+
 - **Enhanced Pynmon Monitoring Interface**:
   - Complete visual redesign with minimalist, professional aesthetic
   - Dark navigation menu with light content area for optimal contrast and readability
@@ -37,6 +43,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Browser debugging capabilities for development workflow
 
 ### Fixed
+
+- **Date Serialization**: Fixed serialization of workflow dates
 
 - **Template Issues**:
   - Resolved duplicate headers in orchestrator overview

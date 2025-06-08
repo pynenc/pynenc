@@ -113,6 +113,7 @@ def setup_routes() -> None:
         orchestrator,
         state_backend,
         tasks,
+        workflows,
     )
 
     # Register the routes
@@ -123,6 +124,7 @@ def setup_routes() -> None:
     app.include_router(calls.router)
     app.include_router(state_backend.router)
     app.include_router(arg_cache.router)
+    app.include_router(workflows.router)
 
 
 def start_monitor(
