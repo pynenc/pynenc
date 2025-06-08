@@ -103,6 +103,25 @@ async def tasks_list(request: Request) -> HTMLResponse:
     )
 
 
+@router.get("/refresh", response_class=HTMLResponse)
+async def refresh_tasks_list(request: Request) -> HTMLResponse:
+    """Refresh the tasks list for HTMX partial updates."""
+    app = get_pynenc_instance()
+    logger.info(f"Refreshing tasks list for app: {app.app_id}")
+
+    # Get all registered tasks
+    tasks = list(app.tasks.values())
+    logger.info(f"Found {len(tasks)} tasks")
+
+    return templates.TemplateResponse(
+        "tasks/partials/list_content.html",
+        {
+            "request": request,
+            "tasks": tasks,
+        },
+    )
+
+
 @router.get("/{task_id}", response_class=HTMLResponse)
 async def task_detail(request: Request, task_id: str) -> HTMLResponse:
     """Display detailed information about a specific task."""
@@ -155,7 +174,7 @@ async def task_detail(request: Request, task_id: str) -> HTMLResponse:
             "tasks/detail.html",
             {
                 "request": request,
-                "title": f"Task {task_id}",
+                "title": "Task Details",
                 "app_id": app.app_id,
                 "task": task,
                 "task_extra": task_extra,

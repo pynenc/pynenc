@@ -569,7 +569,7 @@ async def invocation_detail(request: Request, invocation_id: str) -> HTMLRespons
             "invocations/detail.html",
             {
                 "request": request,
-                "title": f"Invocation {invocation_id}",
+                "title": "Invocation Details",
                 "app_id": app.app_id,
                 "invocation": invocation,
                 "call": call,

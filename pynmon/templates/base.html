@@ -194,8 +194,8 @@
         border-bottom: 1px solid var(--table-border);
         font-weight: 500;
         font-size: 12px;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
+        text-transform: none;
+        letter-spacing: normal;
         color: var(--text-secondary);
         padding: 0.5rem 0.75rem;
       }
@@ -345,8 +345,8 @@
         font-size: 11px;
         font-weight: 600;
         color: var(--text-secondary);
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
+        text-transform: none;
+        letter-spacing: normal;
         border-bottom: 2px solid var(--table-border);
         padding: 0.75rem 0.5rem;
       }
@@ -403,8 +403,8 @@
         font-size: 13px;
         font-weight: 600;
         color: var(--text-secondary);
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
+        text-transform: none;
+        letter-spacing: normal;
         margin-bottom: 0.75rem;
         border-bottom: 1px solid var(--table-border);
         padding-bottom: 0.5rem;
@@ -460,6 +460,139 @@
         font-size: 1.5rem;
       }
 
+      /* Pynmon Design System Classes */
+
+      /* Typography Hierarchy */
+      .page-title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+        color: var(--text-primary);
+      }
+
+      .section-header {
+        font-size: 1.1rem;
+        font-weight: 500;
+        color: #495057;
+      }
+
+      .compact-header {
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--text-secondary);
+        text-transform: none;
+        letter-spacing: normal;
+      }
+
+      .data-text {
+        font-size: 0.875rem;
+        color: var(--text-primary);
+      }
+
+      .metadata-text {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+      }
+
+      /* Component Classes */
+      .pynmon-card {
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 0.375rem;
+        box-shadow: none;
+      }
+
+      .pynmon-card-header {
+        background: #f8f9fa;
+        border-bottom: 1px solid var(--border-color);
+        padding: 0.75rem 1rem;
+        font-weight: 500;
+        color: #495057;
+      }
+
+      .pynmon-card-body {
+        padding: 1rem;
+      }
+
+      .pynmon-table {
+        margin-bottom: 0;
+        font-size: 0.875rem;
+      }
+
+      .pynmon-table th {
+        border-top: none;
+        border-bottom: 1px solid var(--border-color);
+        padding: 0.5rem 0.75rem;
+        font-weight: 500;
+        color: var(--text-secondary);
+        background: #f8f9fa;
+      }
+
+      .pynmon-table td {
+        padding: 0.5rem 0.75rem;
+        border-top: 1px solid var(--table-border);
+        vertical-align: middle;
+      }
+
+      .pynmon-table-compact th,
+      .pynmon-table-compact td {
+        padding: 0.375rem 0.5rem;
+        font-size: 0.8125rem;
+      }
+
+      .clickable-code {
+        background: #f8f9fa;
+        padding: 0.125rem 0.375rem;
+        border-radius: 0.25rem;
+        color: #0d6efd;
+        text-decoration: none;
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo,
+          monospace;
+        font-size: 0.875em;
+        transition: background-color 0.15s ease-in-out;
+      }
+
+      .clickable-code:hover {
+        background: #e9ecef;
+        color: #0a58ca;
+      }
+
+      .pynmon-action-btn {
+        font-size: 0.875rem;
+        padding: 0.375rem 0.75rem;
+        border-radius: 0.25rem;
+      }
+
+      .status-success {
+        background: #d1edcc;
+        color: #0f5132;
+        border: 1px solid #badbcc;
+      }
+
+      .status-error {
+        background: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c2c7;
+      }
+
+      .status-warning {
+        background: #fff3cd;
+        color: #664d03;
+        border: 1px solid #ffecb5;
+      }
+
+      .status-info {
+        background: #cff4fc;
+        color: #055160;
+        border: 1px solid #b6effb;
+      }
+
+      .status-muted {
+        background: #e2e3e5;
+        color: #41464b;
+        border: 1px solid #c4c8cc;
+      }
+
       /* Responsive */
       @media (max-width: 768px) {
         .container {
@@ -469,6 +602,133 @@
         .navbar-nav .nav-link {
           padding: 0.5rem;
         }
+      }
+
+      /* ===== PYNMON COMPACT DESIGN SYSTEM ===== */
+
+      /* Compact Typography */
+      .pynmon-title {
+        font-size: 1.1rem !important; /* Further reduced from 1.25rem */
+        font-weight: 500; /* Reduced weight */
+        margin-bottom: 0.5rem;
+      }
+
+      .compact-header {
+        font-size: 0.85rem !important; /* Further reduced from 1rem */
+        font-weight: 500;
+        margin-bottom: 0.4rem;
+      }
+
+      /* Compact Spacing */
+      .pynmon-container {
+        padding: 0.75rem; /* Reduced from Bootstrap's 1rem */
+      }
+
+      .pynmon-card {
+        margin-bottom: 0.75rem; /* Reduced from Bootstrap's 1rem */
+      }
+
+      .pynmon-card .card-header {
+        padding: 0.75rem; /* Reduced from Bootstrap's 1rem */
+      }
+
+      .pynmon-card .card-body {
+        padding: 0.75rem; /* Reduced from Bootstrap's 1rem */
+      }
+
+      .pynmon-row-compact {
+        margin-bottom: 0.5rem; /* Reduced from Bootstrap's mb-4 (1.5rem) */
+      }
+
+      /* Compact Timeline Styles */
+      .compact-timeline .compact-timeline-item {
+        margin-bottom: 0.75rem !important; /* Reduced from default spacing */
+        padding-bottom: 0.5rem;
+      }
+
+      .compact-timeline .compact-timeline-item:last-child {
+        margin-bottom: 0;
+      }
+
+      .compact-timeline-content {
+        padding-left: 0.5rem;
+      }
+
+      .compact-timeline-title {
+        margin-bottom: 0.25rem !important;
+        font-size: 0.875rem;
+      }
+
+      .compact-timeline .timeline-date {
+        margin-bottom: 0.25rem !important;
+        font-size: 0.75rem;
+      }
+
+      .compact-timeline .timeline-text {
+        margin-bottom: 0;
+        font-size: 0.8rem;
+      }
+
+      .compact-timeline .timeline-marker {
+        width: 0.75rem;
+        height: 0.75rem;
+        margin-top: 0.25rem;
+      }
+
+      /* Compact Table Styles */
+      .pynmon-table {
+        margin-bottom: 0;
+      }
+
+      .pynmon-table th,
+      .pynmon-table td {
+        padding: 0.375rem 0.75rem; /* Reduced from Bootstrap's 0.75rem 0.75rem */
+        border-top: 1px solid var(--table-border);
+        vertical-align: middle;
+      }
+
+      .pynmon-table th {
+        font-size: 0.85rem;
+        font-weight: 600;
+      }
+
+      .pynmon-table td {
+        font-size: 0.875rem;
+      }
+
+      /* Additional spacing reductions */
+      .pynmon-container .row {
+        margin-bottom: 0.75rem;
+      }
+
+      .pynmon-container .row:last-child {
+        margin-bottom: 0;
+      }
+
+      /* Form spacing reductions */
+      .pynmon-container .form-group {
+        margin-bottom: 0.75rem;
+      }
+
+      .pynmon-container .btn {
+        font-size: 0.875rem;
+        padding: 0.375rem 0.75rem;
+      }
+
+      /* List spacing reductions */
+      .pynmon-container .list-group-item {
+        padding: 0.5rem 0.75rem;
+      }
+
+      /* Alert spacing reductions */
+      .pynmon-container .alert {
+        padding: 0.75rem;
+        margin-bottom: 0.75rem;
+      }
+
+      /* Pagination spacing reductions */
+      .pynmon-container .pagination {
+        margin-bottom: 0.5rem;
       }
     </style>
 
@@ -608,7 +868,7 @@
     </nav>
 
     <div class="container mt-4">
-      <h1>{{ title }}</h1>
+      <h2 class="pynmon-title mb-3">{{ title }}</h2>
 
       {% block content %}
       <div class="row">

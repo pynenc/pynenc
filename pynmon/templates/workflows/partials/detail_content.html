@@ -1,0 +1,149 @@
+{% if task %}
+<div class="row pynmon-row-compact">
+  <div class="col-md-6">
+    <div class="card pynmon-card">
+      <div class="card-header pynmon-card-header compact-header">
+        Task information
+      </div>
+      <div class="card-body pynmon-card-body">
+        <table class="table pynmon-table">
+          <tbody>
+            <tr>
+              <th>Task ID:</th>
+              <td>
+                <a
+                  href="/tasks/{{ task.task_id }}"
+                  class="text-decoration-none"
+                >
+                  {{ task.task_id }}
+                </a>
+              </td>
+            </tr>
+            <tr>
+              <th>Module:</th>
+              <td>{{ task_extra.module }}</td>
+            </tr>
+            <tr>
+              <th>Function:</th>
+              <td>{{ task_extra.func_qualname }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card pynmon-card">
+      <div class="card-header pynmon-card-header compact-header">
+        Configuration
+      </div>
+      <div class="card-body pynmon-card-body">
+        <table class="table pynmon-table">
+          <tbody>
+            <tr>
+              <th>Registration Concurrency:</th>
+              <td>{{ task.conf.registration_concurrency.name }}</td>
+            </tr>
+            <tr>
+              <th>Running Concurrency:</th>
+              <td>{{ task.conf.running_concurrency.name }}</td>
+            </tr>
+            <tr>
+              <th>Max Retries:</th>
+              <td>{{ task.conf.max_retries }}</td>
+            </tr>
+            <tr>
+              <th>Call Result Cache:</th>
+              <td>{{ task.conf.call_result_cache }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h6 class="section-header">Workflow Runs</h6>
+  <div>
+    <span class="badge bg-primary me-2"
+      >{{ workflow_runs|length }} Total Runs</span
+    >
+    <a
+      href="/tasks/{{ workflow_task_id }}"
+      class="btn btn-sm btn-outline-info pynmon-action-btn"
+    >
+      View Task Details
+    </a>
+  </div>
+</div>
+{% else %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h6 class="section-header">Workflow Runs</h6>
+  <span class="badge bg-primary">{{ workflow_runs|length }} Total Runs</span>
+</div>
+{% endif %} {% if workflow_runs %}
+<div class="table-responsive">
+  <table class="table table-hover pynmon-table">
+    <thead>
+      <tr>
+        <th>Invocation ID</th>
+        <th>Parent Workflow</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for run in workflow_runs %}
+      <tr>
+        <td>
+          <a
+            href="/invocations/{{ run.workflow_invocation_id }}"
+            class="text-decoration-none"
+          >
+            <code class="clickable-code">{{ run.workflow_invocation_id }}</code>
+          </a>
+        </td>
+        <td>
+          {% if run.parent_workflow %}
+          <div>
+            <a
+              href="/workflows/{{ run.parent_workflow.workflow_task_id }}"
+              class="text-decoration-none text-muted"
+            >
+              {{ run.parent_workflow.workflow_task_id }}
+            </a>
+            <br />
+            <small class="metadata-text">
+              (<a
+                href="/invocations/{{ run.parent_workflow.workflow_invocation_id }}"
+                class="text-decoration-none"
+                ><code class="clickable-code"
+                  >{{ run.parent_workflow.workflow_invocation_id[:8] }}...</code
+                ></a
+              >)
+            </small>
+          </div>
+          {% else %}
+          <span class="text-muted">-</span>
+          {% endif %}
+        </td>
+        <td>
+          <a
+            href="/invocations?workflow_id={{ run.workflow_id }}"
+            class="btn btn-sm btn-outline-primary pynmon-action-btn"
+          >
+            View All Invocations
+          </a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="alert alert-info">
+  <h6>No workflow runs found</h6>
+  <p class="mb-0">This workflow type has not been executed yet.</p>
+</div>
+{% endif %}

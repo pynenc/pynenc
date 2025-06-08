@@ -8,7 +8,7 @@
         <span>Tasks</span>
         <button
           class="btn btn-sm btn-outline-primary"
-          hx-get="/tasks"
+          hx-get="/tasks/refresh"
           hx-target="#tasks-content"
           hx-swap="innerHTML"
         >
@@ -32,8 +32,6 @@
         </button>
       </div>
       <div class="card-body">
-        <h5>App ID: {{ app_id }}</h5>
-
         <div id="tasks-content">
           {% if tasks %}
           <div class="table-responsive">

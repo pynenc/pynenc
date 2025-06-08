@@ -1,4 +1,5 @@
 import logging
+import traceback
 from pathlib import Path
 from typing import Optional
 
@@ -28,6 +29,24 @@ templates = Jinja2Templates(directory=str(templates_dir))
 # Global reference to the monitored Pynenc app instance
 all_pynenc_instances: dict[str, Pynenc] = {}
 pynenc_instance: Optional[Pynenc] = None
+
+
+# Global exception handler to catch and log all unhandled exceptions
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Log all unhandled exceptions and return a 500 error."""
+    logger.error(f"Unhandled exception in {request.method} {request.url}: {exc}")
+    logger.error(f"Full traceback: {traceback.format_exc()}")
+
+    # Return a user-friendly error response
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Internal Server Error",
+            "message": f"An unexpected error occurred: {str(exc)}",
+            "path": str(request.url.path),
+        },
+    )
 
 
 @app.get("/", response_class=HTMLResponse)

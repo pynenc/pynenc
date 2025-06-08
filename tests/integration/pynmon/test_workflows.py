@@ -215,3 +215,81 @@ def test_workflow_execution_multiple_instances(pynmon_client: "PynmonClient") ->
     finally:
         app.runner.stop_runner_loop()
         runner_thread.join(timeout=1)
+
+
+def test_workflow_detail_view_error_reproduction(pynmon_client: "PynmonClient") -> None:
+    """
+    Test to reproduce the 500 error when accessing workflow detail views.
+
+    This test emulates the "View Details" button click scenario to capture
+    the actual error within the test context where logs are visible.
+    """
+    # Purge any existing data
+    app.purge()
+
+    # Execute a workflow to have data to work with
+    invocation = simple_workflow_task()
+
+    def run_in_thread() -> None:
+        app.runner.run()
+
+    runner_thread = threading.Thread(target=run_in_thread, daemon=True)
+    runner_thread.start()
+
+    try:
+        # Wait for workflow completion
+        result = invocation.result
+        assert result is not None
+        assert "workflow_id" in result
+        workflow_id = result["workflow_id"]
+
+        # Give some time for the workflow to be stored
+        time.sleep(0.2)
+
+        # Test the workflow list page first (this should work)
+        print("Testing workflow list page...")
+        response = pynmon_client.get("/workflows/")
+        print(f"Workflow list response status: {response.status_code}")
+        assert response.status_code == 200
+
+        # Test the workflow runs page (this should work)
+        print("Testing workflow runs page...")
+        response = pynmon_client.get("/workflows/runs")
+        print(f"Workflow runs response status: {response.status_code}")
+        assert response.status_code == 200
+
+        # Now test the problematic workflow detail view
+        print(
+            f"Testing workflow detail view for task_id: {simple_workflow_task.task_id}"
+        )
+        print(f"Workflow ID from result: {workflow_id}")
+
+        # This is where the 500 error occurs - let's capture it
+        response = pynmon_client.get(f"/workflows/{simple_workflow_task.task_id}")
+        print(f"Workflow detail response status: {response.status_code}")
+
+        if response.status_code != 200:
+            print("ERROR: Workflow detail view failed!")
+            print(f"Response status: {response.status_code}")
+            print(f"Response headers: {response.headers}")
+            print(f"Response content: {response.text[:500]}...")  # First 500 chars
+
+            # Try to get more debugging info
+            debug_response = pynmon_client.get("/workflows/debug/info")
+            print(f"Debug info response status: {debug_response.status_code}")
+            if debug_response.status_code == 200:
+                print(f"Debug info: {debug_response.text}")
+
+            # Also try to access the invocation directly if we can extract it
+            runs_response = pynmon_client.get("/workflows/runs")
+            if runs_response.status_code == 200:
+                print("Current workflow runs data available for debugging")
+
+        # The assertion will fail if there's a 500 error, showing us the issue
+        assert (
+            response.status_code == 200
+        ), f"Workflow detail view returned {response.status_code}"
+
+    finally:
+        app.runner.stop_runner_loop()
+        runner_thread.join(timeout=1)

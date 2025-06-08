@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- **Comprehensive Pynmon Design Guidelines**:
+
+  - Created detailed HTML/CSS instructions document to prevent UI issues from recurring
+  - Established anti-duplication patterns and template structure rules
+  - Defined compact typography hierarchy and spacing classes
+  - Added validation checklist for template development
+
 - **Workflow Monitoring System**:
 
   - Added workflow information storage when tasks run
@@ -47,8 +54,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **Date Serialization**: Fixed serialization of workflow dates
 
 - **Template Issues**:
+
   - Resolved duplicate headers in orchestrator overview
   - Fixed Material Icons implementation (replaced unsupported outlined variants)
+  - Fixed title duplication in workflow detail views (title appearing twice)
+  - Eliminated duplicate columns in workflow runs table (Workflow ID and Invocation ID showing same value)
+  - Fixed invocation detail title duplication and empty arguments display
+  - Fixed task detail title duplication and improved layout structure
+
+- **Typography and Spacing**:
+
+  - Reduced oversized title font sizes globally in Pynmon (from 1.5rem to 1.1rem)
+  - Implemented comprehensive spacing reduction throughout Pynmon interface
+  - Removed uppercase text transformations from table headers for better readability
+  - Added compact CSS classes for consistent design system
+  - Improved timeline styling with compact spacing for status displays
+
+- **User Experience**:
+  - Made invocation IDs clickable in workflow runs table for better navigation
+  - Enhanced empty state handling with descriptive text instead of empty containers
+  - Improved page title structure to avoid duplication between browser tab and content
   - Corrected filter tile background colors for proper visual differentiation
   - Improved status badge color mapping for better state distinction
 
