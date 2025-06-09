@@ -51,6 +51,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- **Critical Configuration Isolation Bug**: Fixed `ConfigTask` constructor that was mutating the original app configuration dictionary instead of creating a copy. This prevented task-specific configuration options from contaminating the global app configuration for subsequent tasks.
+
 - **Date Serialization**: Fixed serialization of workflow dates
 
 - **Template Issues**:
