@@ -6,9 +6,7 @@
         class="card-header d-flex justify-content-between align-items-center compact-header"
       >
         <span>Task Details</span>
-        <a href="/tasks" class="btn btn-sm btn-outline-secondary">
-          Back to Tasks
-        </a>
+        <a href="/tasks" class="pynmon-btn-nav"> Back to Tasks </a>
       </div>
       <div class="card-body">
         <div class="row pynmon-row-compact">
@@ -30,6 +28,28 @@
                       <th>Function:</th>
                       <td>{{ task_extra.func_qualname }}</td>
                     </tr>
+                    {% if workflow_info %}
+                    <tr>
+                      <th>Workflow Task:</th>
+                      <td>
+                        <span class="badge bg-primary">Yes</span>
+                        {% if workflow_info.force_new_workflow %}
+                        <span class="badge bg-info">Force New Workflow</span>
+                        {% endif %}
+                      </td>
+                    </tr>
+                    <tr>
+                      <th>Workflow Runs:</th>
+                      <td>
+                        <a
+                          href="{{ workflow_info.workflow_task_url }}"
+                          class="text-decoration-none"
+                        >
+                          {{ workflow_info.total_workflow_runs }} run(s)
+                        </a>
+                      </td>
+                    </tr>
+                    {% endif %}
                   </tbody>
                 </table>
               </div>
@@ -38,48 +58,108 @@
 
           <div class="col-md-6">
             <div class="card pynmon-card">
-              <div class="card-header compact-header">Configuration</div>
+              <div
+                class="card-header compact-header d-flex justify-content-between align-items-center"
+              >
+                Configuration {% if config_info.differences %}
+                <small class="text-muted"
+                  >({{ config_info.differences|length }} modified)</small
+                >
+                {% else %}
+                <small class="text-muted">(all defaults)</small>
+                {% endif %}
+              </div>
               <div class="card-body">
+                {% if config_info.differences %}
                 <table class="table pynmon-table">
                   <tbody>
+                    {% for key, value in config_info.differences.items() %}
                     <tr>
-                      <th>Registration Concurrency:</th>
-                      <td>{{ task.conf.registration_concurrency.name }}</td>
-                    </tr>
-                    <tr>
-                      <th>Running Concurrency:</th>
-                      <td>{{ task.conf.running_concurrency.name }}</td>
-                    </tr>
-                    <tr>
-                      <th>Key Arguments:</th>
+                      <th>{{ key|replace('_', ' ')|title }}:</th>
                       <td>
-                        {{ task.conf.key_arguments|join(', ') or 'None' }}
+                        {% if key in ['registration_concurrency',
+                        'running_concurrency'] %} {{ value.name }} {% elif key
+                        in ['key_arguments', 'disable_cache_args'] %} {{
+                        value|join(', ') or 'None' }} {% elif key == 'retry_for'
+                        %} {{ task_extra.retry_for|join(', ') }} {% else %} {{
+                        value }} {% endif %}
+                        <span class="badge bg-warning">Modified</span>
                       </td>
                     </tr>
-                    <tr>
-                      <th>Max Retries:</th>
-                      <td>{{ task.conf.max_retries }}</td>
-                    </tr>
-                    <tr>
-                      <th>Retry For Exceptions:</th>
-                      <td>{{ task_extra.retry_for|join(', ') }}</td>
-                    </tr>
-                    <tr>
-                      <th>Auto Parallel Batch Size:</th>
-                      <td>{{ task.conf.parallel_batch_size }}</td>
-                    </tr>
-                    <tr>
-                      <th>Call Result Cache:</th>
-                      <td>{{ task.conf.call_result_cache }}</td>
-                    </tr>
-                    <tr>
-                      <th>Disable Cache Args:</th>
-                      <td>
-                        {{ task.conf.disable_cache_args|join(', ') or 'None' }}
-                      </td>
-                    </tr>
+                    {% endfor %}
                   </tbody>
                 </table>
+
+                <button
+                  class="btn btn-sm btn-outline-secondary"
+                  data-bs-toggle="collapse"
+                  data-bs-target="#all-config"
+                >
+                  Show All Configuration
+                </button>
+
+                <div class="collapse mt-3" id="all-config">
+                  <table class="table pynmon-table table-sm">
+                    <tbody>
+                      {% for key, current_value in
+                      config_info.all_current.items() %}
+                      <tr>
+                        <th>{{ key|replace('_', ' ')|title }}:</th>
+                        <td>
+                          {% if key in ['registration_concurrency',
+                          'running_concurrency'] %} {{ current_value.name if
+                          current_value else 'None' }} {% elif key in
+                          ['key_arguments', 'disable_cache_args'] %} {{
+                          current_value|join(', ') if current_value else 'None'
+                          }} {% elif key == 'retry_for' %} {{
+                          task_extra.retry_for|join(', ') }} {% else %} {{
+                          current_value }} {% endif %} {% if key in
+                          config_info.differences %}
+                          <span class="badge bg-warning">Modified</span>
+                          {% else %}
+                          <span class="badge bg-secondary">Default</span>
+                          {% endif %}
+                        </td>
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+                {% else %}
+                <p class="text-muted">
+                  All configuration values are using defaults.
+                </p>
+
+                <button
+                  class="pynmon-toggle-btn"
+                  data-bs-toggle="collapse"
+                  data-bs-target="#default-config"
+                >
+                  Show Default Configuration
+                </button>
+
+                <div class="collapse mt-3" id="default-config">
+                  <table class="table pynmon-table table-sm">
+                    <tbody>
+                      {% for key, value in config_info.all_current.items() %}
+                      <tr>
+                        <th>{{ key|replace('_', ' ')|title }}:</th>
+                        <td>
+                          {% if key in ['registration_concurrency',
+                          'running_concurrency'] %} {{ value.name if value else
+                          'None' }} {% elif key in ['key_arguments',
+                          'disable_cache_args'] %} {{ value|join(', ') if value
+                          else 'None' }} {% elif key == 'retry_for' %} {{
+                          task_extra.retry_for|join(', ') }} {% else %} {{ value
+                          }} {% endif %}
+                          <span class="badge bg-secondary">Default</span>
+                        </td>
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+                {% endif %}
               </div>
             </div>
           </div>
@@ -109,9 +189,9 @@
                           {% if call and call.call_id %}
                           <a
                             href="/calls/?call_id={{ call.call_id|urlencode }}"
+                            title="{{ call.call_id }}"
                           >
-                            {{ call.call_id.split('#')[-1][:8] if '#' in
-                            call.call_id else call.call_id[:8] }}...
+                            {{ call.call_id }}
                           </a>
                           {% else %}
                           <span class="text-muted">Invalid ID</span>
@@ -120,7 +200,7 @@
                         <td>
                           {% if call and call.serialized_arguments %}
                           <button
-                            class="btn btn-sm btn-outline-secondary"
+                            class="pynmon-toggle-btn"
                             data-bs-toggle="collapse"
                             data-bs-target="#args-{{ loop.index }}"
                           >
@@ -134,13 +214,13 @@
                           {% if call and call.call_id %}
                           <a
                             href="/calls?call_id={{ call.call_id|urlencode }}"
-                            class="btn btn-sm btn-primary"
+                            class="pynmon-btn-nav"
                             >Details</a
                           >
                           {% else %}
-                          <button class="btn btn-sm btn-secondary" disabled>
+                          <span class="pynmon-btn-nav" style="opacity: 0.5">
                             Details
-                          </button>
+                          </span>
                           {% endif %}
                         </td>
                       </tr>

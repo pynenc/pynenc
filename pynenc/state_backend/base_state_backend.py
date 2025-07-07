@@ -403,3 +403,26 @@ class BaseStateBackend(ABC):
         :param workflow_task_id: Filter for specific workflow type
         :return: Iterator of workflow identities for runs
         """
+
+    @abstractmethod
+    def store_workflow_sub_invocation(
+        self, parent_workflow_id: str, sub_invocation_id: str
+    ) -> None:
+        """
+        Store a sub-invocation ID that runs inside a parent workflow.
+
+        This tracks which invocations (tasks or sub-workflows) are executed
+        within the context of a parent workflow for monitoring and debugging.
+
+        :param parent_workflow_id: The workflow ID that contains the sub-invocation
+        :param sub_invocation_id: The invocation ID of the task/sub-workflow running inside
+        """
+
+    @abstractmethod
+    def get_workflow_sub_invocations(self, workflow_id: str) -> Iterator[str]:
+        """
+        Retrieve all sub-invocation IDs that run inside a specific workflow.
+
+        :param workflow_id: The workflow ID to get sub-invocations for
+        :return: Iterator of invocation IDs that run inside the workflow
+        """

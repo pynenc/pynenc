@@ -39,6 +39,9 @@ class MemStateBackend(BaseStateBackend):
         self._workflow_runs: dict[str, list["WorkflowIdentity"]] = defaultdict(
             list
         )  # workflow_task_id -> runs
+        self._workflow_sub_invocations: dict[str, set[str]] = defaultdict(
+            set
+        )  # workflow_id -> sub_invocation_ids
         super().__init__(app)
 
     def purge(self) -> None:
@@ -49,6 +52,7 @@ class MemStateBackend(BaseStateBackend):
         self._exceptions.clear()
         self._workflow_types.clear()
         self._workflow_runs.clear()
+        self._workflow_sub_invocations.clear()
 
     def _upsert_invocation(self, invocation: "DistributedInvocation") -> None:
         """
@@ -255,3 +259,23 @@ class MemStateBackend(BaseStateBackend):
         :return: Iterator of workflow identities for runs
         """
         return iter(self._workflow_runs.get(workflow_task_id, []))
+
+    def store_workflow_sub_invocation(
+        self, parent_workflow_id: str, sub_invocation_id: str
+    ) -> None:
+        """
+        Store a sub-invocation ID that runs inside a parent workflow.
+
+        :param parent_workflow_id: The workflow ID that contains the sub-invocation
+        :param sub_invocation_id: The invocation ID of the task/sub-workflow running inside
+        """
+        self._workflow_sub_invocations[parent_workflow_id].add(sub_invocation_id)
+
+    def get_workflow_sub_invocations(self, workflow_id: str) -> Iterator[str]:
+        """
+        Retrieve all sub-invocation IDs that run inside a specific workflow.
+
+        :param workflow_id: The workflow ID to get sub-invocations for
+        :return: Iterator of invocation IDs that run inside the workflow
+        """
+        return iter(self._workflow_sub_invocations.get(workflow_id, set()))

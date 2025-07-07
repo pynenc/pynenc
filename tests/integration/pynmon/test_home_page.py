@@ -10,7 +10,7 @@ and real Pynenc app integ    # Execute tasks to populate the system with data
     assert hello_result.result == "Hello, Test User!"
     assert add_result.result == 40
 
-To debug: Set KEEP_ALIVE = 1 and run any test, then open http://localhost:8081
+To debug: Set KEEP_ALIVE = 0 and run any test, then open http://localhost:8081
 """
 
 from typing import TYPE_CHECKING

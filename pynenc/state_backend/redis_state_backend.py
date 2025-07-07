@@ -349,3 +349,26 @@ class RedisStateBackend(BaseStateBackend):
             for run_data in batch_data:
                 yield WorkflowIdentity.from_json(run_data.decode())
             start += batch_size
+
+    def store_workflow_sub_invocation(
+        self, parent_workflow_id: str, sub_invocation_id: str
+    ) -> None:
+        """
+        Store a sub-invocation ID that runs inside a parent workflow.
+
+        :param parent_workflow_id: The workflow ID that contains the sub-invocation
+        :param sub_invocation_id: The invocation ID of the task/sub-workflow running inside
+        """
+        sub_invocations_key = self.key.workflow_sub_invocations(parent_workflow_id)
+        self.client.sadd(sub_invocations_key, sub_invocation_id)
+
+    def get_workflow_sub_invocations(self, workflow_id: str) -> Iterator[str]:
+        """
+        Retrieve all sub-invocation IDs that run inside a specific workflow.
+
+        :param workflow_id: The workflow ID to get sub-invocations for
+        :return: Iterator of invocation IDs that run inside the workflow
+        """
+        sub_invocations_key = self.key.workflow_sub_invocations(workflow_id)
+        sub_invocation_ids = self.client.smembers(sub_invocations_key)
+        return (sid.decode() for sid in sub_invocation_ids)

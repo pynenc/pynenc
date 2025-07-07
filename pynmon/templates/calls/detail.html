@@ -7,13 +7,10 @@
       >
         <span>Call Details</span>
         <div>
-          <a href="/invocations" class="btn btn-sm btn-outline-secondary me-2">
+          <a href="/invocations" class="pynmon-btn-nav me-2">
             Back to Invocations
           </a>
-          <a
-            href="/tasks/{{ task.task_id }}"
-            class="btn btn-sm btn-outline-primary"
-          >
+          <a href="/tasks/{{ task.task_id }}" class="pynmon-btn-nav">
             View Task
           </a>
         </div>
@@ -75,7 +72,7 @@
                 {% if formatted_args %}
                 <div class="d-grid gap-2 mt-3">
                   <button
-                    class="btn btn-outline-primary"
+                    class="pynmon-toggle-btn"
                     data-bs-toggle="collapse"
                     data-bs-target="#full-args"
                   >
@@ -133,7 +130,7 @@
                         <td>
                           <a
                             href="/invocations/{{ invocation.invocation_id }}"
-                            class="btn btn-sm btn-primary"
+                            class="pynmon-btn-nav"
                             >Details</a
                           >
                         </td>

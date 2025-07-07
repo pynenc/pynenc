@@ -158,6 +158,8 @@ class MockStateBackend(BaseStateBackend):
         self._get_all_workflows_mock = MagicMock()
         self._get_all_workflows_runs_mock = MagicMock()
         self._get_workflow_runs_mock = MagicMock()
+        self._store_workflow_sub_invocation_mock = MagicMock()
+        self._get_workflow_sub_invocations_mock = MagicMock()
 
     def purge(self) -> None:
         return self._purge_mock()
@@ -221,6 +223,12 @@ class MockStateBackend(BaseStateBackend):
 
     def get_workflow_runs(self, *args: Any, **kwargs: Any) -> Any:
         return self._get_workflow_runs_mock(*args, **kwargs)
+
+    def store_workflow_sub_invocation(self, *args: Any, **kwargs: Any) -> None:
+        return self._store_workflow_sub_invocation_mock(*args, **kwargs)
+
+    def get_workflow_sub_invocations(self, *args: Any, **kwargs: Any) -> Any:
+        return self._get_workflow_sub_invocations_mock(*args, **kwargs)
 
     @staticmethod
     def get_all_app_infos(*args: Any, **kwargs: Any) -> Any:

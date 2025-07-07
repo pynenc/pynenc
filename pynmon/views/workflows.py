@@ -173,6 +173,95 @@ async def refresh_workflow_runs_list(request: Request) -> HTMLResponse:
     )
 
 
+# Route for workflow sub-invocations - must come before the /{workflow_task_id} route
+@router.get("/{workflow_id}/invocations", response_class=HTMLResponse)
+async def workflow_sub_invocations(request: Request, workflow_id: str) -> HTMLResponse:
+    """Display sub-invocations running within a specific workflow."""
+    app = get_pynenc_instance()
+    logger.info(f"Retrieving sub-invocations for workflow: {workflow_id}")
+
+    try:
+        # Get all sub-invocation IDs that run within this workflow
+        sub_invocation_ids = list(
+            app.state_backend.get_workflow_sub_invocations(workflow_id)
+        )
+        logger.info(
+            f"Found {len(sub_invocation_ids)} sub-invocations for workflow {workflow_id}"
+        )
+
+        # Retrieve the actual invocation objects
+        sub_invocations = []
+        sub_workflows = []
+
+        for invocation_id in sub_invocation_ids:
+            try:
+                invocation = app.orchestrator.get_invocation(invocation_id)
+                if not invocation:
+                    logger.warning(f"Could not find invocation {invocation_id}")
+                    continue
+
+                # Check if this invocation represents a sub-workflow
+                if invocation.is_main_workflow_task():
+                    # This is a sub-workflow - the main invocation of a new workflow
+                    sub_workflows.append(
+                        {
+                            "invocation": invocation,
+                            "workflow_id": invocation.workflow.workflow_id,
+                            "is_sub_workflow": True,
+                            "task_id": invocation.task.task_id,
+                        }
+                    )
+                else:
+                    # This is a regular task invocation within the workflow
+                    sub_invocations.append(
+                        {
+                            "invocation": invocation,
+                            "is_sub_workflow": False,
+                            "task_id": invocation.task.task_id,
+                        }
+                    )
+
+            except Exception as e:
+                logger.error(f"Error retrieving invocation {invocation_id}: {e}")
+                continue
+
+        # Try to get the workflow run information for context
+        workflow_run = None
+        try:
+            all_runs = list(app.state_backend.get_all_workflows_runs())
+            for run in all_runs:
+                if run.workflow_id == workflow_id:
+                    workflow_run = run
+                    break
+        except Exception as e:
+            logger.warning(f"Could not get workflow run info: {e}")
+
+        logger.info(
+            f"Retrieved {len(sub_invocations)} task invocations and {len(sub_workflows)} sub-workflows"
+        )
+
+    except Exception as e:
+        logger.error(f"Error retrieving sub-invocations for {workflow_id}: {e}")
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        sub_invocations = []
+        sub_workflows = []
+        workflow_run = None
+
+    return templates.TemplateResponse(
+        "workflows/sub_invocations.html",
+        {
+            "request": request,
+            "title": "Workflow Sub-Invocations",
+            "app_id": app.app_id,
+            "workflow_id": workflow_id,
+            "workflow_run": workflow_run,
+            "sub_invocations": sub_invocations,
+            "sub_workflows": sub_workflows,
+            "total_count": len(sub_invocations) + len(sub_workflows),
+        },
+    )
+
+
 # Important: This route must come AFTER all specific routes like '/refresh' and '/runs/refresh'
 # because FastAPI matches routes in order and '/{workflow_task_id}' would match anything
 @router.get("/{workflow_task_id}", response_class=HTMLResponse)

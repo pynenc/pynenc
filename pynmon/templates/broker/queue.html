@@ -7,13 +7,8 @@
       >
         <span>Broker Queue</span>
         <div>
-          <a href="/broker" class="btn btn-sm btn-outline-secondary me-2">
-            Back to Broker
-          </a>
-          <button
-            class="btn btn-sm btn-outline-primary"
-            onclick="window.location.reload()"
-          >
+          <a href="/broker" class="pynmon-btn-nav me-2"> Back to Broker </a>
+          <button class="pynmon-btn-nav" onclick="window.location.reload()">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               width="16"
@@ -94,7 +89,7 @@
                   </td>
                   <td>
                     <button
-                      class="btn btn-sm btn-outline-secondary"
+                      class="pynmon-toggle-btn"
                       data-bs-toggle="collapse"
                       data-bs-target="#args-{{ loop.index }}"
                     >
@@ -104,7 +99,7 @@
                   <td>
                     <a
                       href="/invocations/{{ invocation.invocation_id }}"
-                      class="btn btn-sm btn-primary"
+                      class="pynmon-btn-nav"
                       >Details</a
                     >
                   </td>

@@ -540,6 +540,104 @@
         font-size: 0.8125rem;
       }
 
+      /* ===== PYNMON UNIFIED TYPOGRAPHY SYSTEM ===== */
+
+      /* ID/Code Typography - Consistent monospace styling for all IDs and codes */
+      .pynmon-id,
+      .pynmon-code {
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo,
+          monospace;
+        font-size: 0.875rem;
+        background: #f8f9fa;
+        padding: 0.125rem 0.375rem;
+        border-radius: 0.25rem;
+        color: #0d6efd;
+        text-decoration: none;
+        transition: background-color 0.15s ease-in-out;
+      }
+
+      /* Hover state for interactive codes/IDs */
+      .pynmon-id:hover,
+      .pynmon-code:hover,
+      a.pynmon-id:hover,
+      a.pynmon-code:hover {
+        background: #e9ecef;
+        color: #0a58ca;
+        text-decoration: none;
+      }
+
+      /* Link Typography - Consistent styling for all internal links */
+      .pynmon-link {
+        color: #0d6efd;
+        text-decoration: none;
+        font-size: 0.875rem;
+        transition: color 0.15s ease-in-out;
+      }
+
+      .pynmon-link:hover {
+        color: #0a58ca;
+        text-decoration: underline;
+      }
+
+      /* Primary link with monospace styling for workflow/task IDs */
+      .pynmon-link-primary {
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo,
+          monospace;
+        font-size: 0.875rem;
+        background: #f8f9fa;
+        padding: 0.125rem 0.375rem;
+        border-radius: 0.25rem;
+        color: #0d6efd;
+        text-decoration: none;
+        transition: all 0.15s ease-in-out;
+      }
+
+      .pynmon-link-primary:hover {
+        background: #e9ecef;
+        color: #0a58ca;
+        text-decoration: none;
+      }
+
+      /* Table cell typography - Consistent sizing */
+      .pynmon-table td {
+        font-size: 0.875rem;
+        color: var(--text-primary);
+      }
+
+      .pynmon-table th {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        font-weight: 500;
+      }
+
+      /* Auto-apply styles to common elements */
+      .pynmon-table code,
+      .pynmon-card code {
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo,
+          monospace;
+        font-size: 0.875rem;
+        background: #f8f9fa;
+        padding: 0.125rem 0.375rem;
+        border-radius: 0.25rem;
+        color: #0d6efd;
+      }
+
+      .pynmon-table a,
+      .pynmon-card a {
+        color: #0d6efd;
+        text-decoration: none;
+        font-size: 0.875rem;
+        transition: color 0.15s ease-in-out;
+      }
+
+      .pynmon-table a:hover,
+      .pynmon-card a:hover {
+        color: #0a58ca;
+        text-decoration: underline;
+      }
+
+      /* ===== END UNIFIED TYPOGRAPHY SYSTEM ===== */
+
       .clickable-code {
         background: #f8f9fa;
         padding: 0.125rem 0.375rem;
@@ -557,10 +655,127 @@
         color: #0a58ca;
       }
 
-      .pynmon-action-btn {
+      /* ===== UNIFIED BUTTON SYSTEM ===== */
+
+      /* NAVIGATION BUTTONS - Go to different pages (blue accent) */
+      .pynmon-btn-nav {
+        display: inline-block;
         font-size: 0.875rem;
         padding: 0.375rem 0.75rem;
         border-radius: 0.25rem;
+        text-decoration: none;
+        transition: all 0.15s ease-in-out;
+        cursor: pointer;
+        border: 1px solid;
+        background: transparent;
+        font-weight: 400;
+        line-height: 1.5;
+        text-align: center;
+        vertical-align: middle;
+        border-color: #0d6efd;
+        color: #0d6efd;
+      }
+
+      .pynmon-btn-nav:hover {
+        background: #e7f1ff;
+        border-color: #0d6efd;
+        color: #0a58ca;
+        text-decoration: none;
+      }
+
+      .pynmon-btn-nav:focus,
+      .pynmon-btn-nav:active {
+        background: #e7f1ff !important;
+        border-color: #0a58ca !important;
+        color: #0a58ca !important;
+        text-decoration: none;
+        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+        outline: none;
+      }
+
+      /* TOGGLE BUTTONS - Show/hide content (grey) */
+      .pynmon-btn-toggle {
+        display: inline-block;
+        font-size: 0.875rem;
+        padding: 0.375rem 0.75rem;
+        border-radius: 0.25rem;
+        text-decoration: none;
+        transition: all 0.15s ease-in-out;
+        cursor: pointer;
+        border: 1px solid;
+        background: transparent;
+        font-weight: 400;
+        line-height: 1.5;
+        text-align: center;
+        vertical-align: middle;
+        border-color: #6c757d;
+        color: #6c757d;
+      }
+
+      .pynmon-btn-toggle:hover {
+        background: #f8f9fa;
+        border-color: #495057;
+        color: #495057;
+        text-decoration: none;
+      }
+
+      .pynmon-btn-toggle:focus,
+      .pynmon-btn-toggle:active {
+        background: #e9ecef !important;
+        border-color: #495057 !important;
+        color: #495057 !important;
+        text-decoration: none;
+        box-shadow: 0 0 0 0.25rem rgba(108, 117, 125, 0.25);
+        outline: none;
+      }
+
+      /* DISABLED STATE */
+      .pynmon-btn-nav:disabled,
+      .pynmon-btn-toggle:disabled {
+        background: transparent !important;
+        border-color: #6c757d !important;
+        color: #6c757d !important;
+        opacity: 0.65;
+        cursor: not-allowed;
+      }
+
+      /* LEGACY SUPPORT */
+      .pynmon-action-btn,
+      .pynmon-toggle-btn {
+        display: inline-block;
+        font-size: 0.875rem;
+        padding: 0.375rem 0.75rem;
+        border-radius: 0.25rem;
+        text-decoration: none;
+        transition: all 0.15s ease-in-out;
+        cursor: pointer;
+        border: 1px solid;
+        background: transparent;
+        font-weight: 400;
+        line-height: 1.5;
+        text-align: center;
+        vertical-align: middle;
+        border-color: #6c757d;
+        color: #6c757d;
+      }
+
+      .pynmon-action-btn:hover,
+      .pynmon-toggle-btn:hover {
+        background: #f8f9fa;
+        border-color: #495057;
+        color: #495057;
+        text-decoration: none;
+      }
+
+      .pynmon-action-btn:focus,
+      .pynmon-action-btn:active,
+      .pynmon-toggle-btn:focus,
+      .pynmon-toggle-btn:active {
+        background: #e9ecef;
+        border-color: #495057;
+        color: #495057;
+        text-decoration: none;
+        box-shadow: 0 0 0 0.25rem rgba(108, 117, 125, 0.25);
       }
 
       .status-success {

@@ -232,6 +232,17 @@ class Key:
         """
         return f"{self.prefix}workflow:runs:{workflow_task_id}"
 
+    def workflow_sub_invocations(self, workflow_id: str) -> str:
+        """
+        Get key for storing sub-invocation IDs that run inside a workflow.
+
+        This key automatizes purge as it follows the app-scoped prefix pattern.
+
+        :param workflow_id: ID of the workflow
+        :return: Redis key for workflow sub-invocations set
+        """
+        return f"{self.prefix}workflow:{workflow_id}:sub_invocations"
+
     @staticmethod
     def all_apps_info_key(app_id: str) -> str:
         """

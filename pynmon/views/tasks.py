@@ -1,7 +1,7 @@
 import logging
 import time
 import traceback
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
@@ -15,6 +15,73 @@ if TYPE_CHECKING:
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 logger = logging.getLogger("pynmon.views.tasks")
+
+
+def _get_config_differences(task: "Task") -> dict[str, dict[str, Any]]:
+    """
+    Get task configuration values that differ from defaults.
+
+    :param task: The task to analyze
+    :return: Dictionary with 'differences', 'defaults', and 'all_current' containing configuration info
+    """
+
+    from pynenc.conf.config_task import ConfigTask
+
+    # Use task_options (only explicitly set values) for differences
+    differences = task.conf.task_options.copy()
+
+    # Get all available ConfigField options using introspection
+    defaults = {}
+    all_current = {}
+
+    # Use task.conf.all_fields to get all configuration field names
+    for attr_name in task.conf.all_fields:
+        # Get the ConfigField from the class to access the default value
+        defaults[attr_name] = getattr(ConfigTask, attr_name)
+        # Get the current value from the task configuration instance
+        all_current[attr_name] = getattr(task.conf, attr_name)
+
+    return {
+        "differences": differences,
+        "defaults": defaults,
+        "all_current": all_current,
+    }
+
+
+def _get_workflow_context_info(task: "Task") -> dict[str, Any] | None:
+    """
+    Get workflow context information for a task if it's associated with workflows.
+
+    :param task: The task to check for workflow associations
+    :return: Workflow context information or None
+    """
+    app = task.app
+
+    try:
+        # Check if this task has any workflow runs
+        workflow_runs = list(app.state_backend.get_workflow_runs(task.task_id))
+
+        if not workflow_runs:
+            return None
+
+        # Get basic workflow information
+        total_runs = len(workflow_runs)
+        latest_run = workflow_runs[0] if workflow_runs else None
+
+        # Check if this task has the force_new_workflow flag
+        has_force_new_workflow = getattr(task.conf, "force_new_workflow", False)
+
+        return {
+            "is_workflow_task": True,
+            "force_new_workflow": has_force_new_workflow,
+            "total_workflow_runs": total_runs,
+            "latest_workflow_run": latest_run,
+            "workflow_task_url": f"/workflows/{task.task_id}",
+        }
+
+    except Exception as e:
+        logger.debug(f"Error getting workflow context for task {task.task_id}: {e}")
+        return None
 
 
 def _get_task_calls(
@@ -169,6 +236,10 @@ async def task_detail(request: Request, task_id: str) -> HTMLResponse:
         # Create additional task information for template
         task_extra = _create_task_extra_info(task)
 
+        # Get configuration differences and workflow context info
+        config_info = _get_config_differences(task)
+        workflow_info = _get_workflow_context_info(task)
+
         logger.info(f"Rendering template with {len(calls)} calls")
         return templates.TemplateResponse(
             "tasks/detail.html",
@@ -179,6 +250,8 @@ async def task_detail(request: Request, task_id: str) -> HTMLResponse:
                 "task": task,
                 "task_extra": task_extra,
                 "calls": calls,
+                "config_info": config_info,
+                "workflow_info": workflow_info,
             },
         )
     except Exception as e:
