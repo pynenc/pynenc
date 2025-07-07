@@ -4,27 +4,6 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.0.25] - 2025-07-07
-
-### Added
-
-- Workflow hierarchy visualization in Pynmon interface
-- Sub-workflow monitoring and parent-child relationship mapping
-- Unified button and typography system across all templates
-
-### Improved
-
-- Complete Pynmon UI coherence with consistent styling
-- Task detail views with proper workflow context
-- Unified button behaviors and visual feedback
-- Consolidated CSS architecture
-
-### Fixed
-
-- Inconsistent UI styling across different Pynmon pages
-- Button rendering and visibility issues
-- Malformed CSS causing layout problems
-
 ## [0.0.24] - 2025-06-07
 
 ### Added
@@ -35,12 +14,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Established anti-duplication patterns and template structure rules
   - Defined compact typography hierarchy and spacing classes
   - Added validation checklist for template development
+  - Workflow hierarchy visualization in Pynmon interface
+  - Sub-workflow monitoring and parent-child relationship mapping
+  - Unified button and typography system across all templates
 
 - **Workflow Monitoring System**:
 
   - Added workflow information storage when tasks run
   - Implemented `get_all_workflows()`, `get_all_workflows_runs()`, and `get_workflow_runs()` methods in state backends
   - Created workflow views for pynmon monitoring interface with list, detail, and runs pages
+  - Complete Pynmon UI coherence with consistent styling
 
 - **Enhanced Pynmon Monitoring Interface**:
   - Complete visual redesign with minimalist, professional aesthetic
