@@ -88,12 +88,11 @@ def test_redis_components() -> None:
 
 def test_redis_with_db() -> None:
     """Test redis() with db parameter"""
-    redis_url = "redis://localhost:6379"
     db = 5
-    app = PynencBuilder().redis(url=redis_url, db=db).build()
+    app = PynencBuilder().redis(db=db).build()
 
     assert isinstance(app.broker.conf, ConfigRedis)
-    assert app.broker.conf.redis_url == f"{redis_url}/{db}"
+    assert app.broker.conf.redis_db == db
 
 
 def test_memory_components() -> None:
@@ -468,7 +467,7 @@ def test_method_chaining() -> None:
     """Test complex method chaining with multiple configurations"""
     app = (
         PynencBuilder()
-        .redis(url="redis://localhost:6379", db=1)
+        .redis(url="redis://localhost:6379")
         .serializer("pickle")
         .multi_thread_runner(min_threads=2, max_threads=8)
         .logging_level("info")
@@ -480,7 +479,7 @@ def test_method_chaining() -> None:
     )
 
     # Check a sampling of the configurations
-    assert app.broker.conf.redis_url == "redis://localhost:6379/1"
+    assert app.broker.conf.redis_url == "redis://localhost:6379"
     assert app.conf.serializer_cls == "PickleSerializer"
     assert app.conf.runner_cls == "MultiThreadRunner"
     assert app.runner.conf.min_threads == 2
@@ -497,7 +496,7 @@ def test_complete_app_example() -> None:
     # This test demonstrates how the builder would be used in real code
     app = (
         PynencBuilder()
-        .redis(url="redis://localhost:6379", db=14)
+        .redis(db=14)
         .serializer("pickle")
         .multi_thread_runner(min_threads=1, max_threads=4)
         .logging_level("info")
@@ -527,7 +526,7 @@ def test_complete_app_example() -> None:
     assert app.conf.logging_level == "info"
     assert app.runner.conf.runner_loop_sleep_time_sec == 0.01
     assert app.orchestrator.conf.cycle_control is True
-    assert app.broker.conf.redis_url == "redis://localhost:6379/14"
+    assert app.broker.conf.redis_db == 14
 
 
 def test_trigger_modes() -> None:
