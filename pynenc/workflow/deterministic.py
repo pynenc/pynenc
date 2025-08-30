@@ -114,17 +114,20 @@ class DeterministicExecutor:
         :return: Base time for deterministic timestamps
         """
         base_time_key = "workflow:base_time"
-        base_time = self.app.state_backend.get_workflow_deterministic_value(
+        stored_base_time = self.app.state_backend.get_workflow_deterministic_value(
             self.workflow_identity, base_time_key
         )
 
-        if base_time is None:
+        if stored_base_time is None:
+            # Create new base time and store as ISO format string
             base_time = datetime.datetime.now(datetime.timezone.utc)
             self.app.state_backend.set_workflow_deterministic_value(
-                self.workflow_identity, base_time_key, base_time
+                self.workflow_identity, base_time_key, base_time.isoformat()
             )
-
-        return base_time
+            return base_time
+        else:
+            # Parse stored ISO format string back to datetime
+            return datetime.datetime.fromisoformat(stored_base_time)
 
     def get_operation_count(self, operation: str) -> int:
         """
@@ -164,13 +167,16 @@ class DeterministicExecutor:
         :return: Deterministic datetime with UTC timezone
         """
 
-        def time_generator() -> datetime.datetime:
+        def time_generator() -> str:
             base_time = self.get_base_time()
             # Use current sequence number to advance time deterministically
             sequence = self._operation_counters.get("time", 0) + 1
-            return base_time + datetime.timedelta(seconds=sequence)
+            current_time = base_time + datetime.timedelta(seconds=sequence)
+            return current_time.isoformat()
 
-        return self._deterministic_operation("time", time_generator)
+        # Get ISO format string from deterministic operation, then parse to datetime
+        iso_time = self._deterministic_operation("time", time_generator)
+        return datetime.datetime.fromisoformat(iso_time)
 
     def uuid(self) -> str:
         """

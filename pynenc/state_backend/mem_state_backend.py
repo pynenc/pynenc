@@ -1,5 +1,6 @@
+import itertools
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Iterator
 
 from pynenc.state_backend.base_state_backend import BaseStateBackend
 
@@ -34,6 +35,13 @@ class MemStateBackend(BaseStateBackend):
         self._exceptions: dict[str, Exception] = {}
         self._workflow_data: dict[str, dict[str, Any]] = defaultdict(dict)
         self._deterministic_values: dict[str, dict[str, Any]] = defaultdict(dict)
+        self._workflow_types: set[str] = set()  # Stores workflow_task_ids
+        self._workflow_runs: dict[str, list["WorkflowIdentity"]] = defaultdict(
+            list
+        )  # workflow_task_id -> runs
+        self._workflow_sub_invocations: dict[str, set[str]] = defaultdict(
+            set
+        )  # workflow_id -> sub_invocation_ids
         super().__init__(app)
 
     def purge(self) -> None:
@@ -42,6 +50,9 @@ class MemStateBackend(BaseStateBackend):
         self._history.clear()
         self._results.clear()
         self._exceptions.clear()
+        self._workflow_types.clear()
+        self._workflow_runs.clear()
+        self._workflow_sub_invocations.clear()
 
     def _upsert_invocation(self, invocation: "DistributedInvocation") -> None:
         """
@@ -212,3 +223,59 @@ class MemStateBackend(BaseStateBackend):
     @staticmethod
     def get_all_app_infos() -> dict[str, "AppInfo"]:
         return _APP_INFO_REGISTRY
+
+    def store_workflow_run(self, workflow_identity: "WorkflowIdentity") -> None:
+        """
+        Store a workflow run for tracking and monitoring.
+
+        :param workflow_identity: The workflow identity to store
+        """
+        self._workflow_types.add(workflow_identity.workflow_task_id)
+        self._workflow_runs[workflow_identity.workflow_task_id].append(
+            workflow_identity
+        )
+
+    def get_all_workflows(self) -> Iterator[str]:
+        """
+        Retrieve all workflow types (workflow_task_ids) stored in this state backend.
+
+        :return: Iterator of workflow task IDs representing different workflow types
+        """
+        return iter(self._workflow_types)
+
+    def get_all_workflows_runs(self) -> Iterator["WorkflowIdentity"]:
+        """
+        Retrieve workflow run identities from this state backend.
+
+        :return: Iterator of workflow identities for runs
+        """
+        return itertools.chain.from_iterable(self._workflow_runs.values())
+
+    def get_workflow_runs(self, workflow_task_id: str) -> Iterator["WorkflowIdentity"]:
+        """
+        Retrieve workflow run identities from this state backend.
+
+        :param workflow_task_id: Filter for specific workflow type
+        :return: Iterator of workflow identities for runs
+        """
+        return iter(self._workflow_runs.get(workflow_task_id, []))
+
+    def store_workflow_sub_invocation(
+        self, parent_workflow_id: str, sub_invocation_id: str
+    ) -> None:
+        """
+        Store a sub-invocation ID that runs inside a parent workflow.
+
+        :param parent_workflow_id: The workflow ID that contains the sub-invocation
+        :param sub_invocation_id: The invocation ID of the task/sub-workflow running inside
+        """
+        self._workflow_sub_invocations[parent_workflow_id].add(sub_invocation_id)
+
+    def get_workflow_sub_invocations(self, workflow_id: str) -> Iterator[str]:
+        """
+        Retrieve all sub-invocation IDs that run inside a specific workflow.
+
+        :param workflow_id: The workflow ID to get sub-invocations for
+        :return: Iterator of invocation IDs that run inside the workflow
+        """
+        return iter(self._workflow_sub_invocations.get(workflow_id, set()))

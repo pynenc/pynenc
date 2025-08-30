@@ -131,7 +131,7 @@ class Task(Generic[Params, Result]):
             To determine that, we check if the task_id of the workflow task is the same as the task_id of the current task.
         ```
         """
-        return self.invocation.workflow.workflow_task_id == self.task_id
+        return self.invocation.is_main_workflow_task()
 
     @cached_property
     def wf(self) -> WorkflowContext:

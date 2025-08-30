@@ -1,0 +1,66 @@
+{% if workflow_runs %}
+<div class="mb-3">
+  <span class="badge bg-primary">{{ workflow_runs|length }} Total Runs</span>
+</div>
+
+<div class="table-responsive">
+  <table class="table table-hover">
+    <thead>
+      <tr>
+        <th>Workflow Task ID</th>
+        <th>Workflow ID</th>
+        <th>Invocation ID</th>
+        <th>Parent Workflow</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for run in workflow_runs %}
+      <tr>
+        <td>
+          <a
+            href="/workflows/{{ run.workflow_task_id }}"
+            class="text-decoration-none"
+          >
+            <strong>{{ run.workflow_task_id }}</strong>
+          </a>
+        </td>
+        <td>
+          <span class="font-monospace">{{ run.workflow_id }}</span>
+        </td>
+        <td>
+          <span class="font-monospace text-muted"
+            >{{ run.workflow_invocation_id }}</span
+          >
+        </td>
+        <td>
+          {% if run.parent_workflow %}
+          <span class="font-monospace text-muted">
+            {{ run.parent_workflow.workflow_id[:8] }}...
+          </span>
+          {% else %}
+          <span class="text-muted">-</span>
+          {% endif %}
+        </td>
+        <td>
+          <a
+            href="/invocations?workflow_id={{ run.workflow_id }}"
+            class="btn btn-sm btn-outline-primary"
+          >
+            View Invocations
+          </a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="alert alert-info">
+  <h6>No workflow runs found</h6>
+  <p class="mb-0">
+    No workflow executions have been registered yet. Workflow runs will appear
+    here after workflows are executed at least once.
+  </p>
+</div>
+{% endif %}

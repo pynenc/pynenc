@@ -79,6 +79,18 @@ class BaseInvocation(ABC, Generic[Params, Result]):
             self.app.logger, self.task.task_id, self.invocation_id
         )
 
+    def is_main_workflow_task(self) -> bool:
+        """Check if the task is the main workflow task.
+
+        :return: True if the task is the main workflow task, False otherwise
+
+        ```{note}
+            All tasks run within a workflow, the main workflow task is just the first task in the workflow.
+            To determine that, we check if the task_id of the workflow task is the same as the task_id of the current task.
+        ```
+        """
+        return self.workflow.workflow_task_id == self.task.task_id
+
     @property
     def call(self) -> Call[Params, Result]:
         return self.identity.call

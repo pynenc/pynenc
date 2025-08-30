@@ -47,8 +47,10 @@ async def queue_view(
         invocation = app.broker.retrieve_invocation()
         if invocation:
             pending_invocations.append(invocation)
-            # Re-queue the invocation after retrieving it for display
-            app.broker.route_invocation(invocation)
+
+    for invocation in pending_invocations:
+        # Re-route the invocation back to the broker
+        app.broker.route_invocation(invocation)
 
     return templates.TemplateResponse(
         "broker/queue.html",

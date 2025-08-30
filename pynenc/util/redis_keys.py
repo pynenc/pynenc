@@ -211,6 +211,38 @@ class Key:
         """
         return f"{self.prefix}workflow:{workflow_id}:det:{key}"
 
+    def workflow_types(self) -> str:
+        """
+        Get key for storing workflow types set.
+
+        This key automatizes purge as it follows the app-scoped prefix pattern.
+
+        :return: Redis key for workflow types set
+        """
+        return f"{self.prefix}workflow:types"
+
+    def workflow_runs(self, workflow_task_id: str) -> str:
+        """
+        Get key for storing workflow runs list for a specific workflow type.
+
+        This key automatizes purge as it follows the app-scoped prefix pattern.
+
+        :param workflow_task_id: ID of the workflow task type
+        :return: Redis key for workflow runs list
+        """
+        return f"{self.prefix}workflow:runs:{workflow_task_id}"
+
+    def workflow_sub_invocations(self, workflow_id: str) -> str:
+        """
+        Get key for storing sub-invocation IDs that run inside a workflow.
+
+        This key automatizes purge as it follows the app-scoped prefix pattern.
+
+        :param workflow_id: ID of the workflow
+        :return: Redis key for workflow sub-invocations set
+        """
+        return f"{self.prefix}workflow:{workflow_id}:sub_invocations"
+
     @staticmethod
     def all_apps_info_key(app_id: str) -> str:
         """

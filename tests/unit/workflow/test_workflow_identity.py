@@ -131,4 +131,4 @@ def test_subworkflow_boundary_with_flag(runner: None) -> None:
     assert boundary1_inv.workflow.parent_workflow == entry_inv.workflow
 
     # Verify boundary_workflow_1_task_2 shares boundary_workflow_1's workflow
-    assert boundary1_task2_invs.workflow.parent_workflow == boundary1_inv.workflow
+    assert boundary1_task2_invs.workflow == boundary1_inv.workflow

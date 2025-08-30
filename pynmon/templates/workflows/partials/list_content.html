@@ -1,0 +1,62 @@
+{% if workflows %}
+<div class="table-responsive">
+  <table class="table table-hover">
+    <thead>
+      <tr>
+        <th>Workflow Task ID</th>
+        <th>Total Runs</th>
+        <th>Latest Run</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for workflow in workflows %}
+      <tr>
+        <td>
+          <a
+            href="/workflows/{{ workflow.workflow_task_id }}"
+            class="text-decoration-none"
+          >
+            <strong>{{ workflow.workflow_task_id }}</strong>
+          </a>
+        </td>
+        <td>
+          <span class="badge bg-primary">{{ workflow.run_count }}</span>
+        </td>
+        <td>
+          {% if workflow.latest_run %}
+          <small class="text-muted">
+            {{ workflow.latest_run.workflow_id[:8] }}...
+          </small>
+          {% else %}
+          <small class="text-muted">No runs</small>
+          {% endif %}
+        </td>
+        <td>
+          <a
+            href="/workflows/{{ workflow.workflow_task_id }}"
+            class="btn btn-sm btn-outline-primary"
+          >
+            View Details
+          </a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="mt-3">
+  <a href="/workflows/runs" class="btn btn-outline-secondary">
+    View All Workflow Runs
+  </a>
+</div>
+{% else %}
+<div class="alert alert-info">
+  <h6>No workflows found</h6>
+  <p class="mb-0">
+    No workflow executions have been registered yet. Workflows will appear here
+    after they are executed at least once.
+  </p>
+</div>
+{% endif %}

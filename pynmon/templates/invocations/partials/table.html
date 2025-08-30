@@ -1,0 +1,65 @@
+{% if invocations %}
+<div class="table-responsive">
+  <table class="table table-hover mb-0">
+    <thead>
+      <tr>
+        <th style="width: 25%">Invocation ID</th>
+        <th style="width: 20%">Task</th>
+        <th style="width: 25%">Call ID</th>
+        <th style="width: 10%">Status</th>
+        <th style="width: 8%">Retries</th>
+        <th style="width: 12%">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for invocation in invocations %}
+      <tr>
+        <td>
+          <a
+            href="/invocations/{{ invocation.invocation_id }}"
+            class="text-decoration-none"
+          >
+            <code class="text-primary">{{ invocation.invocation_id }}</code>
+          </a>
+        </td>
+        <td>
+          <a
+            href="/tasks/{{ invocation.task.task_id }}"
+            class="text-decoration-none"
+          >
+            {{ invocation.task.task_id.split('.')[-1] }}
+          </a>
+        </td>
+        <td>
+          <a
+            href="/calls/?call_id={{ invocation.call_id|urlencode }}"
+            class="text-decoration-none"
+          >
+            <code class="text-secondary">{{ invocation.call_id }}</code>
+          </a>
+        </td>
+        <td>
+          <span
+            class="badge {% if invocation.status.name == 'SUCCESS' %}bg-success {% elif invocation.status.name == 'FAILED' %}bg-danger {% elif invocation.status.name == 'RUNNING' %}bg-primary {% elif invocation.status.name == 'PENDING' %}bg-warning {% elif invocation.status.name == 'PAUSED' %}bg-info {% elif invocation.status.name == 'RETRY' %}bg-secondary {% else %}bg-dark{% endif %}"
+          >
+            {{ invocation.status.name }}
+          </span>
+        </td>
+        <td>{{ invocation.num_retries }}</td>
+        <td>
+          <a
+            href="/invocations/{{ invocation.invocation_id }}"
+            class="btn btn-sm btn-outline-primary"
+            >Details</a
+          >
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="alert alert-info m-3">
+  No invocations found matching the filters.
+</div>
+{% endif %}

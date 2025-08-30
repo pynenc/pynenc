@@ -5,17 +5,738 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{{ title }} - Pynenc Monitor</title>
 
-    <!-- Bootstrap CSS from CDN -->
+    <!-- Bootstrap CSS -->
     <link
       href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
       rel="stylesheet"
     />
 
+    <!-- Material Design Icons -->
+    <link
+      href="https://fonts.googleapis.com/icon?family=Material+Icons"
+      rel="stylesheet"
+    />
+
+    <!-- Custom CSS for Pynmon Design System -->
+    <style>
+      /* Compact Filter Forms */
+      .filter-form {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border: 1px solid #ced4da;
+        margin-bottom: 1rem;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+        overflow: hidden;
+      }
+
+      .filter-form .card-header {
+        background: linear-gradient(135deg, #ffffff 0%, #f1f3f4 100%);
+        border-bottom: 1px solid #ced4da;
+        font-size: 13px;
+        font-weight: 600;
+        padding: 0.75rem 1rem;
+        color: var(--text-primary);
+        border-radius: 0;
+        margin: 0;
+      }
+
+      .filter-form .card-body {
+        padding: 1.25rem;
+        background: transparent;
+      }
+
+      /* Design System Variables */
+      :root {
+        /* Navigation Menu (Dark Theme) */
+        --nav-bg: #2c3e50;
+        --nav-bg-secondary: #34495e;
+        --nav-active: #3498db;
+        --nav-hover: #4a5c6b;
+        --nav-text-primary: #ecf0f1;
+        --nav-text-secondary: #bdc3c7;
+        --nav-brand: #3498db;
+
+        /* Main Content (Light Theme) */
+        --content-bg: #f8f9fa;
+        --card-bg: #ffffff;
+        --border-color: #dee2e6;
+        --table-border: #e9ecef;
+        --text-primary: #212529;
+        --text-secondary: #6c757d;
+        --text-muted: #adb5bd;
+
+        /* Status Colors */
+        --error-red: #dc3545;
+        --success-green: #28a745;
+        --warning-orange: #ffc107;
+        --info-teal: #17a2b8;
+
+        /* Typography */
+        --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          sans-serif;
+      }
+
+      /* Body and Layout */
+      body {
+        background-color: var(--content-bg);
+        font-family: var(--font-family);
+        font-size: 14px;
+        color: var(--text-primary);
+      }
+
+      /* Navigation Menu */
+      .navbar {
+        background-color: var(--nav-bg) !important;
+        border-bottom: 1px solid var(--nav-bg);
+        padding: 0.75rem 1rem;
+      }
+
+      .navbar-brand {
+        color: var(--nav-brand) !important;
+        font-weight: 600;
+        font-size: 1.1rem;
+      }
+
+      .navbar-nav .nav-link {
+        color: var(--nav-text-primary) !important;
+        font-weight: 500;
+        font-size: 14px;
+        padding: 0.5rem 1rem;
+        border-radius: 4px;
+        margin: 0 2px;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+      }
+
+      .navbar-nav .nav-link:hover {
+        background-color: var(--nav-hover);
+        color: var(--nav-text-primary) !important;
+      }
+
+      .navbar-nav .nav-link.active {
+        background-color: var(--nav-hover);
+        color: var(--nav-text-primary) !important;
+        border-left: 2px solid var(--nav-text-secondary);
+        padding-left: 0.9rem;
+      }
+
+      .navbar-nav .nav-link .material-icons {
+        font-size: 18px;
+        margin-right: 0.5rem;
+        color: var(--nav-text-secondary);
+      }
+
+      /* App Dropdown */
+      .dropdown-menu {
+        background-color: var(--nav-bg-secondary);
+        border: 1px solid var(--nav-hover);
+        border-radius: 4px;
+      }
+
+      .dropdown-item {
+        color: var(--nav-text-primary);
+        font-size: 13px;
+      }
+
+      .dropdown-item:hover {
+        background-color: var(--nav-hover);
+        color: var(--nav-text-primary);
+      }
+
+      .dropdown-item.active {
+        background-color: var(--nav-active);
+        color: white;
+      }
+
+      /* Main Content */
+      .container {
+        max-width: 100%;
+        padding: 1rem;
+      }
+
+      .container h1 {
+        font-size: 24px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 1rem;
+      }
+
+      /* Cards */
+      .card {
+        background-color: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        box-shadow: none;
+        margin-bottom: 1rem;
+      }
+
+      .card-header {
+        background-color: var(--card-bg);
+        border-bottom: 1px solid var(--border-color);
+        font-size: 16px;
+        font-weight: 600;
+        padding: 1rem;
+        color: var(--text-primary);
+      }
+
+      .card-body {
+        padding: 1rem;
+      }
+
+      /* Tables */
+      .table {
+        color: var(--text-primary);
+        font-size: 14px;
+      }
+
+      .table th {
+        border-bottom: 1px solid var(--table-border);
+        font-weight: 500;
+        font-size: 12px;
+        text-transform: none;
+        letter-spacing: normal;
+        color: var(--text-secondary);
+        padding: 0.5rem 0.75rem;
+      }
+
+      .table td {
+        padding: 0.25rem 0.75rem;
+        border-bottom: 1px solid var(--table-border);
+        font-size: 12px;
+      }
+
+      .table-hover tbody tr:hover {
+        background-color: #f8f9fa;
+      }
+
+      /* Buttons */
+      .btn {
+        font-size: 12px;
+        padding: 0.375rem 0.75rem;
+        border-radius: 4px;
+        font-weight: 500;
+      }
+
+      .btn-primary {
+        background-color: var(--nav-active);
+        border-color: var(--nav-active);
+      }
+
+      .btn-outline-primary {
+        color: var(--nav-active);
+        border-color: var(--nav-active);
+      }
+
+      .btn-outline-primary:hover {
+        background-color: var(--nav-active);
+        border-color: var(--nav-active);
+      }
+
+      /* Status Badges */
+      .badge {
+        font-size: 11px;
+        font-weight: 500;
+      }
+
+      .bg-success {
+        background-color: var(--success-green) !important;
+      }
+      .bg-danger {
+        background-color: var(--error-red) !important;
+      }
+      .bg-warning {
+        background-color: var(--warning-orange) !important;
+      }
+      .bg-info {
+        background-color: var(--info-teal) !important;
+      }
+
+      /* Form Elements */
+      .form-control,
+      .form-select {
+        font-size: 14px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        padding: 0.375rem 0.75rem;
+      }
+
+      .form-label {
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--text-secondary);
+        margin-bottom: 0.25rem;
+      }
+
+      /* Compact Filter Forms */
+      .filter-form {
+        background-color: #e9ecef;
+        border: 1px solid var(--border-color);
+        margin-bottom: 1rem;
+        border-radius: 4px;
+      }
+
+      .filter-form .card-header {
+        background-color: #d6d8db;
+        border-bottom: 1px solid var(--table-border);
+        font-size: 13px;
+        font-weight: 600;
+        padding: 0.75rem;
+        color: var(--text-primary);
+      }
+
+      .filter-form .card-body {
+        padding: 1rem;
+      }
+
+      .filter-form .form-control,
+      .filter-form .form-select {
+        font-size: 12px;
+        padding: 0.375rem 0.75rem;
+        border: 1px solid var(--border-color);
+        border-radius: 3px;
+      }
+
+      .filter-form .status-select {
+        height: 120px; /* Taller for multiple selection */
+        resize: vertical;
+      }
+
+      .filter-form .form-text {
+        font-size: 10px;
+        margin-top: 0.25rem;
+        color: var(--text-muted);
+        line-height: 1.2;
+      }
+
+      .filter-form label {
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--text-secondary);
+        margin-bottom: 0.5rem;
+        display: block;
+      }
+
+      .filter-form .btn {
+        font-size: 12px;
+        padding: 0.5rem 1rem;
+        border-radius: 3px;
+        font-weight: 500;
+      }
+
+      /* Table Improvements */
+      .table code {
+        font-size: 11px;
+        background-color: transparent;
+        color: inherit;
+        padding: 0;
+        word-break: break-all;
+      }
+
+      .table .text-primary {
+        color: var(--nav-active) !important;
+      }
+
+      .table .text-secondary {
+        color: var(--text-secondary) !important;
+      }
+
+      .table th {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-secondary);
+        text-transform: none;
+        letter-spacing: normal;
+        border-bottom: 2px solid var(--table-border);
+        padding: 0.75rem 0.5rem;
+      }
+
+      .table td {
+        padding: 0.5rem;
+        font-size: 12px;
+        vertical-align: middle;
+        border-bottom: 1px solid var(--table-border);
+      }
+
+      /* Responsive adjustments */
+      @media (max-width: 768px) {
+        .col-md-3,
+        .col-md-9 {
+          flex: 0 0 100%;
+          max-width: 100%;
+        }
+
+        .filter-form {
+          margin-bottom: 1rem;
+        }
+      }
+
+      /* Alerts */
+      .alert {
+        border-radius: 4px;
+        font-size: 14px;
+      }
+
+      /* Improved Card System */
+      .metric-card {
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 1.25rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        transition: box-shadow 0.2s ease;
+      }
+
+      .metric-card:hover {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      }
+
+      .info-card {
+        background: #f8f9fa;
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        padding: 1rem;
+        border-left: 3px solid #17a2b8;
+      }
+
+      .section-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-secondary);
+        text-transform: none;
+        letter-spacing: normal;
+        margin-bottom: 0.75rem;
+        border-bottom: 1px solid var(--table-border);
+        padding-bottom: 0.5rem;
+      }
+
+      .metric-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+
+      .metric-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid #f1f3f4;
+      }
+
+      .metric-item:last-child {
+        border-bottom: none;
+      }
+
+      .metric-label {
+        font-size: 13px;
+        color: var(--text-secondary);
+        font-weight: 500;
+      }
+
+      .metric-value {
+        font-size: 14px;
+        color: var(--text-primary);
+        font-weight: 600;
+      }
+
+      /* Badge Item Styling for Status Lists */
+      .badge-item {
+        padding: 0.25rem 0;
+        font-size: 13px;
+      }
+
+      .badge-item .badge {
+        font-size: 11px;
+        padding: 0.375rem 0.5rem;
+        min-width: 80px;
+        text-align: center;
+      }
+
+      /* Page Headers */
+      .h4.text-primary {
+        color: var(--text-primary) !important;
+        font-weight: 600;
+        font-size: 1.5rem;
+      }
+
+      /* Pynmon Design System Classes */
+
+      /* Typography Hierarchy */
+      .page-title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+        color: var(--text-primary);
+      }
+
+      .section-header {
+        font-size: 1.1rem;
+        font-weight: 500;
+        color: #495057;
+      }
+
+      .compact-header {
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--text-secondary);
+        text-transform: none;
+        letter-spacing: normal;
+      }
+
+      .data-text {
+        font-size: 0.875rem;
+        color: var(--text-primary);
+      }
+
+      .metadata-text {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+      }
+
+      /* Component Classes */
+      .pynmon-card {
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 0.375rem;
+        box-shadow: none;
+      }
+
+      .pynmon-card-header {
+        background: #f8f9fa;
+        border-bottom: 1px solid var(--border-color);
+        padding: 0.75rem 1rem;
+        font-weight: 500;
+        color: #495057;
+      }
+
+      .pynmon-card-body {
+        padding: 1rem;
+      }
+
+      .pynmon-table {
+        margin-bottom: 0;
+        font-size: 0.875rem;
+      }
+
+      .pynmon-table th {
+        border-top: none;
+        border-bottom: 1px solid var(--border-color);
+        padding: 0.5rem 0.75rem;
+        font-weight: 500;
+        color: var(--text-secondary);
+        background: #f8f9fa;
+      }
+
+      .pynmon-table td {
+        padding: 0.5rem 0.75rem;
+        border-top: 1px solid var(--table-border);
+        vertical-align: middle;
+      }
+
+      .pynmon-table-compact th,
+      .pynmon-table-compact td {
+        padding: 0.375rem 0.5rem;
+        font-size: 0.8125rem;
+      }
+
+      .clickable-code {
+        background: #f8f9fa;
+        padding: 0.125rem 0.375rem;
+        border-radius: 0.25rem;
+        color: #0d6efd;
+        text-decoration: none;
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo,
+          monospace;
+        font-size: 0.875em;
+        transition: background-color 0.15s ease-in-out;
+      }
+
+      .clickable-code:hover {
+        background: #e9ecef;
+        color: #0a58ca;
+      }
+
+      .pynmon-action-btn {
+        font-size: 0.875rem;
+        padding: 0.375rem 0.75rem;
+        border-radius: 0.25rem;
+      }
+
+      .status-success {
+        background: #d1edcc;
+        color: #0f5132;
+        border: 1px solid #badbcc;
+      }
+
+      .status-error {
+        background: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c2c7;
+      }
+
+      .status-warning {
+        background: #fff3cd;
+        color: #664d03;
+        border: 1px solid #ffecb5;
+      }
+
+      .status-info {
+        background: #cff4fc;
+        color: #055160;
+        border: 1px solid #b6effb;
+      }
+
+      .status-muted {
+        background: #e2e3e5;
+        color: #41464b;
+        border: 1px solid #c4c8cc;
+      }
+
+      /* Responsive */
+      @media (max-width: 768px) {
+        .container {
+          padding: 0.5rem;
+        }
+
+        .navbar-nav .nav-link {
+          padding: 0.5rem;
+        }
+      }
+
+      /* ===== PYNMON COMPACT DESIGN SYSTEM ===== */
+
+      /* Compact Typography */
+      .pynmon-title {
+        font-size: 1.1rem !important; /* Further reduced from 1.25rem */
+        font-weight: 500; /* Reduced weight */
+        margin-bottom: 0.5rem;
+      }
+
+      .compact-header {
+        font-size: 0.85rem !important; /* Further reduced from 1rem */
+        font-weight: 500;
+        margin-bottom: 0.4rem;
+      }
+
+      /* Compact Spacing */
+      .pynmon-container {
+        padding: 0.75rem; /* Reduced from Bootstrap's 1rem */
+      }
+
+      .pynmon-card {
+        margin-bottom: 0.75rem; /* Reduced from Bootstrap's 1rem */
+      }
+
+      .pynmon-card .card-header {
+        padding: 0.75rem; /* Reduced from Bootstrap's 1rem */
+      }
+
+      .pynmon-card .card-body {
+        padding: 0.75rem; /* Reduced from Bootstrap's 1rem */
+      }
+
+      .pynmon-row-compact {
+        margin-bottom: 0.5rem; /* Reduced from Bootstrap's mb-4 (1.5rem) */
+      }
+
+      /* Compact Timeline Styles */
+      .compact-timeline .compact-timeline-item {
+        margin-bottom: 0.75rem !important; /* Reduced from default spacing */
+        padding-bottom: 0.5rem;
+      }
+
+      .compact-timeline .compact-timeline-item:last-child {
+        margin-bottom: 0;
+      }
+
+      .compact-timeline-content {
+        padding-left: 0.5rem;
+      }
+
+      .compact-timeline-title {
+        margin-bottom: 0.25rem !important;
+        font-size: 0.875rem;
+      }
+
+      .compact-timeline .timeline-date {
+        margin-bottom: 0.25rem !important;
+        font-size: 0.75rem;
+      }
+
+      .compact-timeline .timeline-text {
+        margin-bottom: 0;
+        font-size: 0.8rem;
+      }
+
+      .compact-timeline .timeline-marker {
+        width: 0.75rem;
+        height: 0.75rem;
+        margin-top: 0.25rem;
+      }
+
+      /* Compact Table Styles */
+      .pynmon-table {
+        margin-bottom: 0;
+      }
+
+      .pynmon-table th,
+      .pynmon-table td {
+        padding: 0.375rem 0.75rem; /* Reduced from Bootstrap's 0.75rem 0.75rem */
+        border-top: 1px solid var(--table-border);
+        vertical-align: middle;
+      }
+
+      .pynmon-table th {
+        font-size: 0.85rem;
+        font-weight: 600;
+      }
+
+      .pynmon-table td {
+        font-size: 0.875rem;
+      }
+
+      /* Additional spacing reductions */
+      .pynmon-container .row {
+        margin-bottom: 0.75rem;
+      }
+
+      .pynmon-container .row:last-child {
+        margin-bottom: 0;
+      }
+
+      /* Form spacing reductions */
+      .pynmon-container .form-group {
+        margin-bottom: 0.75rem;
+      }
+
+      .pynmon-container .btn {
+        font-size: 0.875rem;
+        padding: 0.375rem 0.75rem;
+      }
+
+      /* List spacing reductions */
+      .pynmon-container .list-group-item {
+        padding: 0.5rem 0.75rem;
+      }
+
+      /* Alert spacing reductions */
+      .pynmon-container .alert {
+        padding: 0.75rem;
+        margin-bottom: 0.75rem;
+      }
+
+      /* Pagination spacing reductions */
+      .pynmon-container .pagination {
+        margin-bottom: 0.5rem;
+      }
+    </style>
+
     <!-- HTMX for dynamic updates -->
     <script src="https://unpkg.com/htmx.org@1.9.2"></script>
   </head>
   <body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <nav class="navbar navbar-expand-lg">
       <div class="container-fluid">
         <a class="navbar-brand" href="/">Pynenc Monitor</a>
         <button
@@ -29,31 +750,85 @@
         <div class="collapse navbar-collapse" id="navbarNav">
           <ul class="navbar-nav me-auto">
             <li class="nav-item">
-              <a class="nav-link" href="/">Dashboard</a>
+              <a
+                class="nav-link {{ 'active' if request.url.path == '/' }}"
+                href="/"
+              >
+                <span class="material-icons">dashboard</span>
+                Dashboard
+              </a>
             </li>
             <li class="nav-item">
-              <a class="nav-link" href="/broker">Broker</a>
+              <a
+                class="nav-link {{ 'active' if '/broker' in request.url.path }}"
+                href="/broker"
+              >
+                <span class="material-icons">queue</span>
+                Broker
+              </a>
             </li>
             <li class="nav-item">
-              <a class="nav-link" href="/orchestrator">Orchestrator</a>
+              <a
+                class="nav-link {{ 'active' if '/orchestrator' in request.url.path }}"
+                href="/orchestrator"
+              >
+                <span class="material-icons">settings</span>
+                Orchestrator
+              </a>
             </li>
             <li class="nav-item">
-              <a class="nav-link" href="/state-backend">State Backend</a>
+              <a
+                class="nav-link {{ 'active' if '/state-backend' in request.url.path }}"
+                href="/state-backend"
+              >
+                <span class="material-icons">storage</span>
+                State Backend
+              </a>
             </li>
             <li class="nav-item">
-              <a class="nav-link" href="/arg-cache">Arg Cache</a>
+              <a
+                class="nav-link {{ 'active' if '/arg-cache' in request.url.path }}"
+                href="/arg-cache"
+              >
+                <span class="material-icons">cached</span>
+                Arg Cache
+              </a>
             </li>
             <li class="nav-item">
-              <a class="nav-link" href="/invocations">Invocations</a>
+              <a
+                class="nav-link {{ 'active' if '/invocations' in request.url.path and 'timeline' not in request.url.path }}"
+                href="/invocations"
+              >
+                <span class="material-icons">list</span>
+                Invocations
+              </a>
             </li>
             <li class="nav-item">
-              <a class="nav-link" href="/invocations/timeline">
-                <i class="fas fa-chart-line me-1"></i>
+              <a
+                class="nav-link {{ 'active' if '/timeline' in request.url.path }}"
+                href="/invocations/timeline"
+              >
+                <span class="material-icons">timeline</span>
                 Timeline
               </a>
             </li>
             <li class="nav-item">
-              <a class="nav-link" href="/tasks">Tasks</a>
+              <a
+                class="nav-link {{ 'active' if '/tasks' in request.url.path }}"
+                href="/tasks"
+              >
+                <span class="material-icons">task</span>
+                Tasks
+              </a>
+            </li>
+            <li class="nav-item">
+              <a
+                class="nav-link {{ 'active' if '/workflows' in request.url.path }}"
+                href="/workflows"
+              >
+                <span class="material-icons">workspaces</span>
+                Workflows
+              </a>
             </li>
           </ul>
 
@@ -76,7 +851,7 @@
                 {% for app_name in all_apps %}
                 <li>
                   <a
-                    class="dropdown-item {% if app_name == app_id %}active{% endif %}"
+                    class="dropdown-item {{ 'active' if app_name == app_id }}"
                     href="/switch-app/{{ app_name }}"
                   >
                     {{ app_name }} {% if app_name == app_id %}
@@ -93,7 +868,7 @@
     </nav>
 
     <div class="container mt-4">
-      <h1>{{ title }}</h1>
+      <h2 class="pynmon-title mb-3">{{ title }}</h2>
 
       {% block content %}
       <div class="row">

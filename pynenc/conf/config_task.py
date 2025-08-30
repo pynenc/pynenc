@@ -207,7 +207,7 @@ class ConfigTask(ConfigPynencBase):
         task_options: Optional[dict[str, Any]] = None,
     ) -> None:
         self.task_id = task_id
-        config_values = config_values or {}
+        config_values = dict(config_values or {})
         self.task_options = task_options or {}
         if task_options:
             config_values.update(task_options)

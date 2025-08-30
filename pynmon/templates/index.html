@@ -1,0 +1,93 @@
+{% extends "base.html" %} {% block content %}
+<div class="row">
+  <div class="col-lg-4 col-md-6 mb-3">
+    <div class="card">
+      <div class="card-header">System Overview</div>
+      <div class="card-body">
+        <h6 class="mb-3">Application: <strong>{{ app_id }}</strong></h6>
+        <div class="mb-2">
+          <small class="text-muted">Broker:</small><br />
+          <span class="badge bg-info">{{ broker_type }}</span>
+        </div>
+        <div class="mb-2">
+          <small class="text-muted">State Backend:</small><br />
+          <span class="badge bg-info">{{ state_backend_type }}</span>
+        </div>
+        <div class="mb-2">
+          <small class="text-muted">Runner:</small><br />
+          <span class="badge bg-info">{{ runner_type }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4 col-md-6 mb-3">
+    <div class="card">
+      <div class="card-header">Quick Actions</div>
+      <div class="card-body">
+        <div class="d-grid gap-2">
+          <a href="/tasks" class="btn btn-outline-primary btn-sm">
+            ✅ View Tasks
+          </a>
+          <a href="/invocations" class="btn btn-outline-primary btn-sm">
+            📋 View Invocations
+          </a>
+          <a
+            href="/invocations/timeline"
+            class="btn btn-outline-primary btn-sm"
+          >
+            📈 Timeline View
+          </a>
+          <a href="/broker" class="btn btn-outline-primary btn-sm">
+            🔗 Broker Status
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4 col-md-12 mb-3">
+    <div class="card">
+      <div class="card-header">System Management</div>
+      <div class="card-body">
+        <p class="text-muted small mb-3">
+          Monitor and manage your Pynenc application components.
+        </p>
+        <div class="d-grid gap-2">
+          <a href="/orchestrator" class="btn btn-outline-secondary btn-sm">
+            ⚙️ Orchestrator
+          </a>
+          <a href="/state-backend" class="btn btn-outline-secondary btn-sm">
+            💾 State Backend
+          </a>
+          <a href="/arg-cache" class="btn btn-outline-secondary btn-sm">
+            📝 Argument Cache
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header">⚠️ Danger Zone</div>
+      <div class="card-body">
+        <p class="text-muted mb-3">
+          <strong>Warning:</strong> The following action will permanently delete
+          all data from your Pynenc application.
+        </p>
+        <button
+          class="btn btn-danger btn-sm"
+          hx-post="/purge"
+          hx-confirm="⚠️ WARNING: This will purge ALL data from the broker, orchestrator, state backend, and argument cache. This operation cannot be undone! Continue?"
+          hx-swap="outerHTML"
+        >
+          🗑️ Purge All Application Data
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

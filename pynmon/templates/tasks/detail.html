@@ -1,9 +1,9 @@
 {% extends "base.html" %} {% block content %}
-<div class="row">
+<div class="pynmon-container">
   <div class="col-12">
-    <div class="card">
+    <div class="card pynmon-card">
       <div
-        class="card-header d-flex justify-content-between align-items-center"
+        class="card-header d-flex justify-content-between align-items-center compact-header"
       >
         <span>Task Details</span>
         <a href="/tasks" class="btn btn-sm btn-outline-secondary">
@@ -11,15 +11,17 @@
         </a>
       </div>
       <div class="card-body">
-        <h5>Task ID: {{ task.task_id }}</h5>
-
-        <div class="row mt-3">
+        <div class="row pynmon-row-compact">
           <div class="col-md-6">
-            <div class="card">
-              <div class="card-header">Basic Information</div>
+            <div class="card pynmon-card">
+              <div class="card-header compact-header">Basic Information</div>
               <div class="card-body">
-                <table class="table">
+                <table class="table pynmon-table">
                   <tbody>
+                    <tr>
+                      <th>Task ID:</th>
+                      <td><strong>{{ task.task_id }}</strong></td>
+                    </tr>
                     <tr>
                       <th>Module:</th>
                       <td>{{ task_extra.module }}</td>
@@ -35,10 +37,10 @@
           </div>
 
           <div class="col-md-6">
-            <div class="card">
-              <div class="card-header">Configuration</div>
+            <div class="card pynmon-card">
+              <div class="card-header compact-header">Configuration</div>
               <div class="card-body">
-                <table class="table">
+                <table class="table pynmon-table">
                   <tbody>
                     <tr>
                       <th>Registration Concurrency:</th>
@@ -83,14 +85,16 @@
           </div>
         </div>
 
-        <div class="row mt-3">
+        <div class="row pynmon-row-compact">
           <div class="col-12">
-            <div class="card">
-              <div class="card-header">Active Calls ({{ calls|length }})</div>
+            <div class="card pynmon-card">
+              <div class="card-header compact-header">
+                Active Calls ({{ calls|length }})
+              </div>
               <div class="card-body">
                 {% if calls %}
                 <div class="table-responsive">
-                  <table class="table table-hover">
+                  <table class="table table-hover pynmon-table">
                     <thead>
                       <tr>
                         <th>Call ID</th>

@@ -4,6 +4,103 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.24] - 2025-06-07
+
+### Added
+
+- **Comprehensive Pynmon Design Guidelines**:
+
+  - Created detailed HTML/CSS instructions document to prevent UI issues from recurring
+  - Established anti-duplication patterns and template structure rules
+  - Defined compact typography hierarchy and spacing classes
+  - Added validation checklist for template development
+  - Workflow hierarchy visualization in Pynmon interface
+  - Sub-workflow monitoring and parent-child relationship mapping
+  - Unified button and typography system across all templates
+
+- **Workflow Monitoring System**:
+
+  - Added workflow information storage when tasks run
+  - Implemented `get_all_workflows()`, `get_all_workflows_runs()`, and `get_workflow_runs()` methods in state backends
+  - Created workflow views for pynmon monitoring interface with list, detail, and runs pages
+  - Complete Pynmon UI coherence with consistent styling
+
+- **Enhanced Pynmon Monitoring Interface**:
+  - Complete visual redesign with minimalist, professional aesthetic
+  - Dark navigation menu with light content area for optimal contrast and readability
+  - Material Design Icons integration replacing emoji icons for consistency
+  - Comprehensive design system with structured color palette and typography guidelines
+
+### Improved
+
+- **User Interface Enhancements**:
+
+  - Redesigned filter forms with compact, horizontal layouts and improved visual hierarchy
+  - Enhanced table layouts with tighter row spacing and optimized column widths
+  - Improved status badge system with distinct colors for all invocation states
+  - Responsive grid layouts using Bootstrap for better mobile experience
+  - Reduced visual noise through selective use of colors and minimalist card designs
+
+- **HTMX Integration**:
+
+  - Added partial template refresh for invocation tables to improve performance
+  - Enhanced real-time updates without full page reloads
+  - Better user experience with targeted content updates
+
+- **Testing Infrastructure**:
+  - Comprehensive integration test suite for pynmon web interface
+  - Unit tests for view components and routing logic
+  - Test fixtures and utilities for reliable UI testing
+  - Browser debugging capabilities for development workflow
+
+### Fixed
+
+- **Critical Configuration Isolation Bug**: Fixed `ConfigTask` constructor that was mutating the original app configuration dictionary instead of creating a copy. This prevented task-specific configuration options from contaminating the global app configuration for subsequent tasks.
+
+- **Redis Builder Configuration Logic**: Fixed `PynencBuilder.redis()` method to properly handle conflicting configuration parameters. Now raises `ValueError` when both `url` and `db` parameters are specified, and ensures `redis_url` takes precedence over individual connection parameters as documented.
+
+- **Date Serialization**: Fixed serialization of workflow dates
+
+- **Template Issues**:
+
+  - Resolved duplicate headers in orchestrator overview
+  - Fixed Material Icons implementation (replaced unsupported outlined variants)
+  - Fixed title duplication in workflow detail views (title appearing twice)
+  - Eliminated duplicate columns in workflow runs table (Workflow ID and Invocation ID showing same value)
+  - Fixed invocation detail title duplication and empty arguments display
+  - Fixed task detail title duplication and improved layout structure
+
+- **Typography and Spacing**:
+
+  - Reduced oversized title font sizes globally in Pynmon (from 1.5rem to 1.1rem)
+  - Implemented comprehensive spacing reduction throughout Pynmon interface
+  - Removed uppercase text transformations from table headers for better readability
+  - Added compact CSS classes for consistent design system
+  - Improved timeline styling with compact spacing for status displays
+
+- **User Experience**:
+
+  - Made invocation IDs clickable in workflow runs table for better navigation
+  - Enhanced empty state handling with descriptive text instead of empty containers
+  - Improved page title structure to avoid duplication between browser tab and content
+  - Corrected filter tile background colors for proper visual differentiation
+  - Improved status badge color mapping for better state distinction
+
+- **Pynmon UI Simplification**:
+  - Replaced custom pynmon typography and button systems with standard Bootstrap components
+  - Removed complex unified design system (pynmon-btn-nav, pynmon-btn-toggle, pynmon-link-primary) in favor of consistent btn-sm Bootstrap classes
+  - Simplified template structure by removing over-engineered workflow hierarchy displays
+  - Streamlined navigation with standardized action buttons across all views
+  - Removed sub-workflow monitoring views and complex workflow context displays
+  - Eliminated custom CSS classes that duplicated Bootstrap functionality
+
+### Technical
+
+- **Code Quality**:
+  - Structured CSS organization with CSS variables for maintainable theming
+  - Improved template organization with reusable partial components
+  - Enhanced error handling and user feedback in web interface
+
 ## [0.0.23] - 2025-04-19
 
 ### Added

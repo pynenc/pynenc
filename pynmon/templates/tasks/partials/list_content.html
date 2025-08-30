@@ -1,0 +1,34 @@
+{% if tasks %}
+<div class="table-responsive">
+  <table class="table table-hover">
+    <thead>
+      <tr>
+        <th>Task ID</th>
+        <th>Module</th>
+        <th>Function</th>
+        <th>Concurrency Control</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for task in tasks %}
+      <tr>
+        <td>
+          <a href="/tasks/{{ task.task_id }}"> {{ task.task_id }} </a>
+        </td>
+        <td>{{ task.module }}</td>
+        <td>{{ task.func_qualname }}</td>
+        <td>{{ task.conf.registration_concurrency.name }}</td>
+        <td>
+          <a href="/tasks/{{ task.task_id }}" class="btn btn-sm btn-primary"
+            >Details</a
+          >
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="alert alert-info">No tasks found.</div>
+{% endif %}

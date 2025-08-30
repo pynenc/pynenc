@@ -5,7 +5,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Iterator, Optional
 
 from pynenc.conf.config_state_backend import ConfigStateBackend
 from pynenc.exceptions import InvocationNotFoundError
@@ -366,4 +366,63 @@ class BaseStateBackend(ABC):
         Retrieve all app information registered in this state backend.
 
         :return: Dictionary mapping app_id to app information
+        """
+
+    @abstractmethod
+    def store_workflow_run(self, workflow_identity: "WorkflowIdentity") -> None:
+        """
+        Store a workflow run for tracking and monitoring.
+
+        Maintains workflow type registry and specific workflow run instances.
+        This enables monitoring of workflow types and their execution history.
+
+        :param workflow_identity: The workflow identity to store
+        """
+
+    @abstractmethod
+    def get_all_workflows(self) -> Iterator[str]:
+        """
+        Retrieve all workflow types (workflow_task_ids) stored in this state backend.
+
+        :return: Iterator of workflow task IDs representing different workflow types
+        """
+
+    @abstractmethod
+    def get_all_workflows_runs(self) -> Iterator["WorkflowIdentity"]:
+        """
+        Retrieve workflow run identities from this state backend.
+
+        :return: Iterator of workflow identities for runs
+        """
+
+    @abstractmethod
+    def get_workflow_runs(self, workflow_task_id: str) -> Iterator["WorkflowIdentity"]:
+        """
+        Retrieve workflow run identities from this state backend.
+
+        :param workflow_task_id: Filter for specific workflow type
+        :return: Iterator of workflow identities for runs
+        """
+
+    @abstractmethod
+    def store_workflow_sub_invocation(
+        self, parent_workflow_id: str, sub_invocation_id: str
+    ) -> None:
+        """
+        Store a sub-invocation ID that runs inside a parent workflow.
+
+        This tracks which invocations (tasks or sub-workflows) are executed
+        within the context of a parent workflow for monitoring and debugging.
+
+        :param parent_workflow_id: The workflow ID that contains the sub-invocation
+        :param sub_invocation_id: The invocation ID of the task/sub-workflow running inside
+        """
+
+    @abstractmethod
+    def get_workflow_sub_invocations(self, workflow_id: str) -> Iterator[str]:
+        """
+        Retrieve all sub-invocation IDs that run inside a specific workflow.
+
+        :param workflow_id: The workflow ID to get sub-invocations for
+        :return: Iterator of invocation IDs that run inside the workflow
         """

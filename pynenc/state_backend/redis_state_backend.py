@@ -1,6 +1,6 @@
 import json
 from functools import cached_property
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Iterator
 
 import redis
 
@@ -291,3 +291,84 @@ class RedisStateBackend(BaseStateBackend):
                 app_info = AppInfo.from_json(app_info_data.decode())
                 result[app_id] = app_info
         return result
+
+    def store_workflow_run(self, workflow_identity: "WorkflowIdentity") -> None:
+        """
+        Store a workflow run for tracking and monitoring.
+
+        Maintains workflow type registry and specific workflow run instances.
+        This enables monitoring of workflow types and their execution history.
+
+        :param workflow_identity: The workflow identity to store
+        """
+        # Store workflow type using key that automatizes purge
+        workflow_types_key = self.key.workflow_types()
+        self.client.sadd(workflow_types_key, workflow_identity.workflow_task_id)
+
+        # Store workflow run using key that automatizes purge
+        workflow_runs_key = self.key.workflow_runs(workflow_identity.workflow_task_id)
+        self.client.lpush(workflow_runs_key, workflow_identity.to_json())
+
+    def get_all_workflows(self) -> Iterator[str]:
+        """
+        Retrieve all workflow types (workflow_task_ids) stored in this Redis state backend.
+
+        :return: Iterator of workflow task IDs representing different workflow types (task_ids)
+        """
+        workflow_types_key = self.key.workflow_types()
+        workflow_types = self.client.smembers(workflow_types_key)
+        return (wt.decode() for wt in workflow_types)
+
+    def get_all_workflows_runs(self) -> Iterator["WorkflowIdentity"]:
+        """
+        Retrieve workflow run identities from this Redis state backend.
+
+        :return: Iterator of workflow identities for runs
+        """
+        # Get runs for all workflow types - iterate through known workflow types
+        for workflow_types_task_id in self.get_all_workflows():
+            yield from self.get_workflow_runs(workflow_types_task_id)
+
+    def get_workflow_runs(self, workflow_task_id: str) -> Iterator["WorkflowIdentity"]:
+        """
+        Retrieve workflow run identities from this Redis state backend with pagination.
+
+        Uses configurable batch size to efficiently handle large datasets without
+        overwhelming memory usage by processing data in manageable chunks.
+
+        :param workflow_task_id: Filter for specific workflow type
+        :return: Iterator of workflow identities for runs
+        """
+        workflow_runs_key = self.key.workflow_runs(workflow_task_id)
+        batch_size = self.conf.pagination_batch_size
+
+        start = 0
+        while batch_data := self.client.lrange(
+            workflow_runs_key, start, start + batch_size - 1
+        ):
+            for run_data in batch_data:
+                yield WorkflowIdentity.from_json(run_data.decode())
+            start += batch_size
+
+    def store_workflow_sub_invocation(
+        self, parent_workflow_id: str, sub_invocation_id: str
+    ) -> None:
+        """
+        Store a sub-invocation ID that runs inside a parent workflow.
+
+        :param parent_workflow_id: The workflow ID that contains the sub-invocation
+        :param sub_invocation_id: The invocation ID of the task/sub-workflow running inside
+        """
+        sub_invocations_key = self.key.workflow_sub_invocations(parent_workflow_id)
+        self.client.sadd(sub_invocations_key, sub_invocation_id)
+
+    def get_workflow_sub_invocations(self, workflow_id: str) -> Iterator[str]:
+        """
+        Retrieve all sub-invocation IDs that run inside a specific workflow.
+
+        :param workflow_id: The workflow ID to get sub-invocations for
+        :return: Iterator of invocation IDs that run inside the workflow
+        """
+        sub_invocations_key = self.key.workflow_sub_invocations(workflow_id)
+        sub_invocation_ids = self.client.smembers(sub_invocations_key)
+        return (sid.decode() for sid in sub_invocation_ids)

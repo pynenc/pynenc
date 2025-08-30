@@ -1,0 +1,52 @@
+{% extends "base.html" %} {% block content %}
+<div class="pynmon-container">
+  <div class="row">
+    <div class="col-12">
+      <div class="card pynmon-card">
+        <div
+          class="card-header pynmon-card-header d-flex justify-content-between align-items-center"
+        >
+          <span class="compact-header">Overview</span>
+          <div>
+            <a
+              href="/workflows"
+              class="btn btn-sm btn-outline-secondary me-2 pynmon-action-btn"
+            >
+              ← Back to Workflows
+            </a>
+            <button
+              class="btn btn-sm btn-outline-primary pynmon-action-btn"
+              hx-get="/workflows/{{ workflow_task_id }}/refresh"
+              hx-target="#workflow-detail-content"
+              hx-swap="innerHTML"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                fill="currentColor"
+                class="bi bi-arrow-clockwise"
+                viewBox="0 0 16 16"
+              >
+                <path
+                  fill-rule="evenodd"
+                  d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"
+                />
+                <path
+                  d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"
+                />
+              </svg>
+              Refresh
+            </button>
+          </div>
+        </div>
+        <div class="card-body pynmon-card-body">
+          <div id="workflow-detail-content">
+            {% include "workflows/partials/detail_content.html" %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
