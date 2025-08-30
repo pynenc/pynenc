@@ -139,8 +139,8 @@
                   Arguments
                 </div>
                 <div class="card-body pynmon-card-body">
-                  {% if arguments and arguments.strip() %} {% with
-                  args=arguments, id_prefix='invocation-args' %} {% include
+                  {% if arguments %} {% with args=arguments,
+                  id_prefix='invocation-args' %} {% include
                   "partials/formatted_arguments.html" %} {% endwith%} {% else %}
                   <p class="text-muted data-text">No arguments provided</p>
                   {% endif %}

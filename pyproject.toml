@@ -55,6 +55,11 @@ types-redis = "4.6.0.2"
 types-PyYAML = "6.0.12.12"
 pre-commit = "^3.5.0"
 types-requests = "^2.32.0.20250602"
+# Monitor dependencies for testing pynmon views
+fastapi = "^0.115.11"
+jinja2 = ">=3.1.4,<4.0.0"
+python-multipart = ">=0.0.6,<0.1.0"
+uvicorn = "^0.34.0"
 
 
 [tool.poetry.group.docs]
@@ -136,10 +141,8 @@ module = "croniter.*"
 ignore_missing_imports = true
 follow_imports = "skip"
 
-[tool.pytest]
-log_cli = true
-
 [tool.pytest.ini_options]
+log_cli = true
 filterwarnings = [
     "ignore:Running in a secondary thread. Signal handling will be skipped.:UserWarning",
     "ignore::pytest.PytestUnhandledThreadExceptionWarning",

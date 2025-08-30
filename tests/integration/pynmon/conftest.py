@@ -6,6 +6,15 @@ Each test module defines its own app and tasks. The fixtures here start
 runners and set up pynmon clients that use the app from the test module.
 """
 
+# Skip all pynmon integration tests if monitor dependencies are not available
+import pytest
+
+pytest.importorskip("fastapi", reason="pynmon tests require monitor dependencies")
+pytest.importorskip("jinja2", reason="pynmon tests require monitor dependencies")
+
+# All imports below must come after pytest.importorskip calls
+# ruff: noqa: E402
+
 import os
 import threading
 import time
@@ -14,7 +23,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from typing import Any
 
-import pytest
 import requests
 import uvicorn
 

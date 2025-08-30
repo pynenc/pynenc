@@ -3,7 +3,7 @@ import logging
 import time
 import traceback
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Optional
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -23,7 +23,7 @@ logger = logging.getLogger("pynmon.views.invocations")
 @router.get("/", response_class=HTMLResponse)
 async def invocations_list(
     request: Request,
-    status: Optional[Union[str, list[str]]] = None,
+    status: Optional[str] = None,
     task_id: Optional[str] = None,
     limit: int = 50,
 ) -> HTMLResponse:
@@ -33,10 +33,7 @@ async def invocations_list(
     # Convert status to list format for consistent processing
     status_list = None
     if status:
-        if isinstance(status, str):
-            status_list = [status]
-        else:
-            status_list = status
+        status_list = [status]
 
     # Convert status strings to InvocationStatus enum values
     statuses = None
@@ -687,7 +684,7 @@ async def invocation_api(request: Request, invocation_id: str) -> JSONResponse:
 @router.get("/table", response_class=HTMLResponse)
 async def invocations_table(
     request: Request,
-    status: Optional[Union[str, list[str]]] = None,
+    status: Optional[str] = None,
     task_id: Optional[str] = None,
     limit: int = 50,
 ) -> HTMLResponse:
@@ -696,12 +693,9 @@ async def invocations_table(
     app = get_pynenc_instance()
 
     # Parse status parameter
-    if status is None:
-        status_list = None
-    elif isinstance(status, str):
-        status_list = [status] if status else None
-    else:
-        status_list = [s for s in status if s]
+    status_list = None
+    if status:
+        status_list = [status]
 
     # Convert to InvocationStatus objects
     statuses = None

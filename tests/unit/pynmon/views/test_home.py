@@ -4,6 +4,15 @@ Minimal tests for pynmon home view.
 Tests basic functionality using real in-memory Pynenc app.
 """
 
+# Skip all pynmon tests if monitor dependencies are not available
+import pytest
+
+pytest.importorskip("fastapi", reason="pynmon tests require monitor dependencies")
+pytest.importorskip("jinja2", reason="pynmon tests require monitor dependencies")
+
+# All imports below must come after pytest.importorskip calls
+# ruff: noqa: E402
+
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
