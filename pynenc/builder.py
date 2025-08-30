@@ -72,14 +72,27 @@ class PynencBuilder:
         and argument cache) to use Redis as their backend.
 
         :param str url:
-            The Redis URL to connect to.
+            The Redis URL to connect to. If specified, overrides all other connection
+            parameters including host, port, and db.
         :param Optional[int] db:
-            The Redis database number to use. If provided, it will be appended to the URL.
+            The Redis database number to use. Only valid when url is not provided.
+            If url is provided, the database should be specified in the URL itself.
 
         :return: The builder instance for method chaining.
+        :raises ValueError: If both url and db are provided, since url takes precedence.
         """
-        if url or db:
-            self._config["redis_url"] = f"{url}/{db}" if db else url
+        if url and db is not None:
+            raise ValueError(
+                "Cannot specify both 'url' and 'db' parameters. "
+                "When using 'url', specify the database in the URL (e.g., 'redis://host:port/db'). "
+                "The 'url' parameter overrides all other connection settings."
+            )
+
+        if url:
+            self._config["redis_url"] = url
+        elif db is not None:
+            self._config["redis_db"] = db
+
         self._config.update(
             {
                 "orchestrator_cls": "RedisOrchestrator",

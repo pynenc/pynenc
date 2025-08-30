@@ -2,17 +2,10 @@
 Integration tests for pynmon home page.
 
 Tests the complete home page functionality with real Redis backend
-and real Pynenc app integ    # Execute tasks to populate the system with data
-    hello_result = hello_task("Test User")
-    add_result = add_task(15, 25)
+and real Pynenc app integration.
 
-    # Verify tasks completed successfully
-    assert hello_result.result == "Hello, Test User!"
-    assert add_result.result == 40
-
-To debug: Set KEEP_ALIVE = 0 and run any test, then open http://localhost:8081
+To debug: Set KEEP_ALIVE = 1 and run any test, then open http://localhost:8081
 """
-
 from typing import TYPE_CHECKING
 
 from pynenc.builder import PynencBuilder
@@ -26,7 +19,7 @@ KEEP_ALIVE = 0
 # Configure app for testing (following pattern from test_status_trigger.py)
 app = (
     PynencBuilder()
-    .redis(url="redis://localhost:6379", db=15)  # Use test database for isolation
+    .redis(db=15)  # Use test database for isolation
     .thread_runner()
     .app_id("test-pynmon-app")
     .build()

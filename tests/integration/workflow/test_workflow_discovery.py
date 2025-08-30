@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 # Configure app for testing with Redis backend
 app = (
     PynencBuilder()
-    .redis(url="redis://localhost:6379", db=15)
+    .redis(db=15)
     .thread_runner()
     .app_id("test-workflow-discovery")
     .build()

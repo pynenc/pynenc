@@ -20,7 +20,7 @@ KEEP_ALIVE = 0
 # Configure app for testing with Redis backend
 app = (
     PynencBuilder()
-    .redis(url="redis://localhost:6379", db=15)  # Use test database for isolation
+    .redis(db=15)  # Use test database for isolation
     .thread_runner()
     .app_id("test-pynmon-calls-app")
     .build()

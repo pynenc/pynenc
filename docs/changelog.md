@@ -57,6 +57,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - **Critical Configuration Isolation Bug**: Fixed `ConfigTask` constructor that was mutating the original app configuration dictionary instead of creating a copy. This prevented task-specific configuration options from contaminating the global app configuration for subsequent tasks.
 
+- **Redis Builder Configuration Logic**: Fixed `PynencBuilder.redis()` method to properly handle conflicting configuration parameters. Now raises `ValueError` when both `url` and `db` parameters are specified, and ensures `redis_url` takes precedence over individual connection parameters as documented.
+
 - **Date Serialization**: Fixed serialization of workflow dates
 
 - **Template Issues**:
