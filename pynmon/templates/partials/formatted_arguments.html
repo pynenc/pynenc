@@ -9,7 +9,7 @@
           {% if value is mapping or value is string and value.startswith('{') or
           value is string and value.startswith('[') %}
           <button
-            class="pynmon-btn-toggle"
+            class="btn btn-sm btn-outline-secondary"
             data-bs-toggle="collapse"
             data-bs-target="#arg-value-{{ id_prefix }}-{{ loop.index }}"
           >

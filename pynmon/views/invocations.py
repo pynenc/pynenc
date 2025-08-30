@@ -3,7 +3,7 @@ import logging
 import time
 import traceback
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -14,7 +14,6 @@ from pynmon.app import get_pynenc_instance, templates
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
     from pynenc.call import Call
-    from pynenc.invocation.base_invocation import BaseInvocation
     from pynenc.invocation.dist_invocation import DistributedInvocation
 
 router = APIRouter(prefix="/invocations", tags=["invocations"])
@@ -563,9 +562,6 @@ async def invocation_detail(request: Request, invocation_id: str) -> HTMLRespons
             "func_qualname": task.func.__qualname__,
         }
 
-        # Get workflow context information
-        workflow_info = _get_invocation_workflow_context(invocation)
-
         logger.info(
             f"Rendering invocation detail template in {time.time() - start_time:.2f}s"
         )
@@ -579,7 +575,6 @@ async def invocation_detail(request: Request, invocation_id: str) -> HTMLRespons
                 "call": call,
                 "task": task,
                 "task_extra": task_extra,
-                "workflow_info": workflow_info,
                 "result": formatted_result,
                 "exception": formatted_exception,
                 "history": formatted_history,
@@ -751,29 +746,3 @@ async def invocations_table(
             "invocations": all_invocations,
         },
     )
-
-
-def _get_invocation_workflow_context(invocation: "BaseInvocation") -> dict[str, Any]:
-    """
-    Get workflow context information for an invocation.
-
-    Since every task runs within a workflow, this always returns workflow info.
-
-    :param invocation: The invocation to get workflow info for
-    :return: Dictionary with workflow context information
-    """
-    # Every invocation has a workflow - get the workflow ID
-    workflow_id = invocation.workflow.workflow_id
-
-    workflow_info = {
-        "workflow_id": workflow_id,
-        "is_in_workflow": True,
-        "is_main_workflow_task": invocation.is_main_workflow_task(),
-        "sub_invocations_url": f"/workflows/{workflow_id}/invocations",
-    }
-
-    # Add task ID and URL since invocation.task always exists
-    workflow_info["workflow_task_id"] = invocation.task.task_id
-    workflow_info["workflow_task_url"] = f"/tasks/{invocation.task.task_id}"
-
-    return workflow_info

@@ -77,11 +77,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Improved timeline styling with compact spacing for status displays
 
 - **User Experience**:
+
   - Made invocation IDs clickable in workflow runs table for better navigation
   - Enhanced empty state handling with descriptive text instead of empty containers
   - Improved page title structure to avoid duplication between browser tab and content
   - Corrected filter tile background colors for proper visual differentiation
   - Improved status badge color mapping for better state distinction
+
+- **Pynmon UI Simplification**:
+  - Replaced custom pynmon typography and button systems with standard Bootstrap components
+  - Removed complex unified design system (pynmon-btn-nav, pynmon-btn-toggle, pynmon-link-primary) in favor of consistent btn-sm Bootstrap classes
+  - Simplified template structure by removing over-engineered workflow hierarchy displays
+  - Streamlined navigation with standardized action buttons across all views
+  - Removed sub-workflow monitoring views and complex workflow context displays
+  - Eliminated custom CSS classes that duplicated Bootstrap functionality
 
 ### Technical
 

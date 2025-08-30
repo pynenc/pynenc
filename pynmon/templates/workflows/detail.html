@@ -8,11 +8,14 @@
         >
           <span class="compact-header">Overview</span>
           <div>
-            <a href="/workflows" class="pynmon-btn-nav me-2">
+            <a
+              href="/workflows"
+              class="btn btn-sm btn-outline-secondary me-2 pynmon-action-btn"
+            >
               ← Back to Workflows
             </a>
             <button
-              class="pynmon-btn-nav"
+              class="btn btn-sm btn-outline-primary pynmon-action-btn"
               hx-get="/workflows/{{ workflow_task_id }}/refresh"
               hx-target="#workflow-detail-content"
               hx-swap="innerHTML"

@@ -8,11 +8,11 @@
         >
           <span class="compact-header">All workflow runs</span>
           <div>
-            <a href="/workflows" class="pynmon-btn-nav me-2">
+            <a href="/workflows" class="btn btn-sm btn-outline-secondary me-2">
               ← Back to Workflows
             </a>
             <button
-              class="pynmon-btn-nav"
+              class="btn btn-sm btn-outline-primary"
               hx-get="/workflows/runs/refresh"
               hx-target="#workflow-runs-content"
               hx-swap="innerHTML"
@@ -85,10 +85,10 @@
                     </td>
                     <td>
                       <a
-                        href="/workflows/{{ run.workflow_id }}/invocations"
+                        href="/invocations?workflow_id={{ run.workflow_id }}"
                         class="btn btn-sm btn-outline-primary"
                       >
-                        View Sub-Invocations
+                        View Invocations
                       </a>
                     </td>
                   </tr>

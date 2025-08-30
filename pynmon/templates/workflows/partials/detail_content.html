@@ -70,7 +70,10 @@
     <span class="badge bg-primary me-2"
       >{{ workflow_runs|length }} Total Runs</span
     >
-    <a href="/tasks/{{ workflow_task_id }}" class="pynmon-btn-nav">
+    <a
+      href="/tasks/{{ workflow_task_id }}"
+      class="btn btn-sm btn-outline-info pynmon-action-btn"
+    >
       View Task Details
     </a>
   </div>
@@ -127,10 +130,10 @@
         </td>
         <td>
           <a
-            href="/workflows/{{ run.workflow_id }}/invocations"
-            class="pynmon-btn-nav"
+            href="/invocations?workflow_id={{ run.workflow_id }}"
+            class="btn btn-sm btn-outline-primary pynmon-action-btn"
           >
-            View Sub-Invocations
+            View All Invocations
           </a>
         </td>
       </tr>

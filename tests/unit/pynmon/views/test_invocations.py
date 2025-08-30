@@ -102,6 +102,11 @@ def test_invocations_list_with_status_filter() -> None:
         assert response.status_code == 200
         content = response.text
 
+        # Debug: print first 2000 chars of content to see what's there
+        print("Response content snippet:")
+        print(content[:2000])
+        print("..." if len(content) > 2000 else "")
+
         # Verify filtering worked by checking status badges
         # Should contain the SUCCESS status badge (handle whitespace in template)
         import re
