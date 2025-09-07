@@ -7,9 +7,6 @@ from pynenc import Pynenc
 config = {
     # "serializer_cls": "JsonSerializer",
     "runner_cls": "ThreadRunner",
-    # "orchestrator_cls": "RedisOrchestrator",
-    # "broker_cls": "RedisBroker",
-    # "state_backend_cls": "RedisStateBackend",
     "cycle_control": False,
     "blocking_control": False,
     # "runner_loop_sleep_time_sec": 0.01,

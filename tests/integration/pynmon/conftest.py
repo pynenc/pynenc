@@ -1,7 +1,7 @@
 """
 Fixtures for pynmon integration tests.
 
-This module provides fixtures for testing pynmon with real Redis backend.
+This module provides fixtures for testing pynmon with real backend.
 Each test module defines its own app and tasks. The fixtures here start
 runners and set up pynmon clients that use the app from the test module.
 """

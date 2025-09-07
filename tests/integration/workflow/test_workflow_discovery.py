@@ -13,14 +13,8 @@ from pynenc.builder import PynencBuilder
 if TYPE_CHECKING:
     pass
 
-# Configure app for testing with Redis backend
-app = (
-    PynencBuilder()
-    .redis(db=15)
-    .thread_runner()
-    .app_id("test-workflow-discovery")
-    .build()
-)
+# Configure app for testing with Memory backend
+app = PynencBuilder().memory().thread_runner().app_id("test-workflow-discovery").build()
 
 
 @app.task

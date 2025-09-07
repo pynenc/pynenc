@@ -1,7 +1,7 @@
 """
 Integration tests for pynmon home page.
 
-Tests the complete home page functionality with real Redis backend
+Tests the complete home page functionality with Memory backend
 and real Pynenc app integration.
 
 To debug: Set KEEP_ALIVE = 1 and run any test, then open http://localhost:8081
@@ -17,13 +17,7 @@ if TYPE_CHECKING:
 KEEP_ALIVE = 0
 
 # Configure app for testing (following pattern from test_status_trigger.py)
-app = (
-    PynencBuilder()
-    .redis(db=15)  # Use test database for isolation
-    .thread_runner()
-    .app_id("test-pynmon-app")
-    .build()
-)
+app = PynencBuilder().memory().thread_runner().app_id("test-pynmon-app").build()
 
 
 @app.task

@@ -1,7 +1,7 @@
 """
 Integration tests for pynmon calls view.
 
-Tests the complete calls functionality with real Redis backend
+Tests the complete calls functionality with real backend
 and real Pynenc app integration.
 """
 import threading
@@ -17,14 +17,8 @@ if TYPE_CHECKING:
 # Debug configuration - Set to 1 to keep server alive for browser debugging
 KEEP_ALIVE = 0
 
-# Configure app for testing with Redis backend
-app = (
-    PynencBuilder()
-    .redis(db=15)  # Use test database for isolation
-    .thread_runner()
-    .app_id("test-pynmon-calls-app")
-    .build()
-)
+# Configure app for testing with Memory backend
+app = PynencBuilder().memory().thread_runner().app_id("test-pynmon-calls-app").build()
 
 
 @app.task

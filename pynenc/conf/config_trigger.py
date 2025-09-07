@@ -1,7 +1,6 @@
 from cistell import ConfigField
 
 from pynenc.conf.config_base import ConfigPynencBase
-from pynenc.conf.config_redis import ConfigRedis
 
 
 class ConfigTrigger(ConfigPynencBase):
@@ -29,7 +28,3 @@ class ConfigTrigger(ConfigPynencBase):
     enable_scheduler = ConfigField(True)
     max_events_batch_size = ConfigField(100)
     event_retention_days = ConfigField(7)
-
-
-class ConfigTriggerRedis(ConfigTrigger, ConfigRedis):
-    """Specific Configuration for the Redis Trigger"""

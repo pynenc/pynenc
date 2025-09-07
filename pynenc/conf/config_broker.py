@@ -1,7 +1,6 @@
 from cistell import ConfigField
 
 from pynenc.conf.config_base import ConfigPynencBase
-from pynenc.conf.config_redis import ConfigRedis
 
 
 class ConfigBroker(ConfigPynencBase):
@@ -12,7 +11,3 @@ class ConfigBroker(ConfigPynencBase):
     """
 
     queue_timeout_sec = ConfigField(0.1)
-
-
-class ConfigBrokerRedis(ConfigBroker, ConfigRedis):
-    """Specific Configuration for the Redis Broker"""

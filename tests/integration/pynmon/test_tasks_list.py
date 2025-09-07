@@ -1,7 +1,7 @@
 """
 Integration tests for pynmon tasks page.
 
-Tests the complete tasks page functionality with real Redis backend
+Tests the complete tasks page functionality with Memory backend
 and real Pynenc app integration.
 """
 
@@ -13,13 +13,7 @@ from pynenc.builder import PynencBuilder
 KEEP_ALIVE = 0
 
 
-app = (
-    PynencBuilder()
-    .redis(db=15)  # Use test database for isolation, host configured via env vars
-    .thread_runner()
-    .app_id("test-pynmon-tasks-app")
-    .build()
-)
+app = PynencBuilder().memory().thread_runner().app_id("test-pynmon-tasks-app").build()
 
 
 @app.task

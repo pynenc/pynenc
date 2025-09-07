@@ -4,6 +4,74 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0] - 2025-09-07
+
+### Added
+
+- **Plugin System Architecture**:
+
+  - Introduced a comprehensive plugin system to support multiple backend implementations
+  - Created plugin interface for state backends, brokers, and orchestrators
+  - Enabled modular architecture for extending Pynenc with different storage and messaging systems
+
+- **MongoDB Plugin Support**:
+
+  - Added MongoDB as a new backend option through the plugin system
+  - MongoDB plugin provides state backend, broker, and orchestrator implementations
+  - Full feature parity with existing Redis functionality
+
+- **Enhanced PynencBuilder Plugin Integration**:
+
+  - Extended `PynencBuilder` with plugin method registration system via `register_plugin_method()`
+  - Added plugin validator registration through `register_plugin_validator()`
+  - Implemented dynamic method resolution for plugin-provided builder methods
+  - Enhanced error handling with helpful messages for missing plugin methods
+  - Added comprehensive test coverage for plugin system functionality
+
+- **Builder System Improvements**:
+  - Enhanced builder test coverage with comprehensive unit tests
+  - Added validation for enum synchronization between builder and configuration classes
+  - Added robust plugin method chaining and cleanup mechanisms
+
+### Changed
+
+- **Redis Extraction to Plugin**:
+
+  - **BREAKING CHANGE**: Redis is no longer included in the core Pynenc package
+  - Redis functionality has been extracted to a separate `pynenc-redis` plugin package
+  - Existing Redis-based applications will need to install `pynenc-redis` separately
+  - Redis configuration and functionality remains unchanged once the plugin is installed
+
+- **Plugin-Based Backend Selection**:
+
+  - Backend selection now uses plugin discovery mechanism
+  - Enhanced `PynencBuilder` to support plugin-based backend configuration
+  - Improved error messages when required plugins are missing
+
+- **Builder Architecture**:
+  - Modified builder to support dynamic method registration from plugins
+  - Added validation system for plugin-provided configuration
+  - Enhanced builder to gracefully handle missing plugin dependencies
+
+### Migration Guide
+
+- **For Redis Users**: Install the Redis plugin to maintain existing functionality:
+  ```bash
+  pip install pynenc-redis
+  ```
+- **For MongoDB Users**: Install the new MongoDB plugin:
+  ```bash
+  pip install pynenc-mongodb
+  ```
+- **Code Changes**: No changes required to existing code once appropriate plugins are installed
+
+### Technical
+
+- **Backward Compatibility**: Existing code remains functional with appropriate plugin installation
+- **Plugin Interface**: Standardized interface for all backend implementations
+- **Discovery Mechanism**: Automatic plugin discovery and registration system
+- **Builder Extensions**: Plugin methods can extend builder functionality seamlessly
+
 ## [0.0.24] - 2025-06-07
 
 ### Added

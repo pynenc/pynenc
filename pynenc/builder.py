@@ -1,8 +1,37 @@
-from typing import Any, Literal, Optional, Union
+"""
+Builder pattern implementation for configuring Pynenc applications with plugin support.
 
-from pynenc import Pynenc
+This module provides a fluent, chainable builder interface that can be extended by plugins
+through Python's entry points system. Plugins automatically register their builder methods
+when installed, enabling seamless integration of backend-specific functionality.
+
+Key components:
+- PynencBuilder: Core builder class with plugin support
+- Plugin registration system via entry points
+- Dynamic method resolution for plugin-provided methods
+- Validation system for plugin configurations
+"""
+
+import warnings
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, Optional, Union
+
 from pynenc.conf.config_pynenc import ArgumentPrintMode
 from pynenc.conf.config_task import ConcurrencyControlType
+
+# Entry points imports
+try:
+    from importlib.metadata import entry_points
+except ImportError:
+    entry_points = None  # type: ignore[assignment]
+
+try:
+    import pkg_resources
+except ImportError:
+    pkg_resources = None  # type: ignore[assignment]
+
+if TYPE_CHECKING:
+    from pynenc import Pynenc
 
 
 class PynencBuilder:
@@ -10,19 +39,30 @@ class PynencBuilder:
     A builder pattern implementation for creating and configuring Pynenc applications.
 
     This builder simplifies the configuration process by providing intuitive method chaining
-    to set up various components of a Pynenc application, including Redis connections,
-    runners, serializers, and performance tuning parameters.
+    to set up various components of a Pynenc application. Backend-specific methods are
+    provided by installed plugins through Python's entry points system.
+
+    The plugin system automatically discovers and registers methods from installed plugins,
+    enabling backend-specific configuration methods to become available when plugins are installed.
 
     :example:
     ```python
-    # Create a Pynenc application with Redis and MultiThreadRunner
+    # With backend plugins installed
     pynenc_app = (
         PynencBuilder()
         .app_id("my_application")
         .serializer("pickle")
-        .redis(url="redis://localhost:6379/14")
         .multi_thread_runner(min_threads=1, max_threads=4)
         .logging_level("info")
+        .build()
+    )
+
+    # Memory-based configuration for development
+    pynenc_app = (
+        PynencBuilder()
+        .app_id("my_application")
+        .memory()  # Built-in memory backend
+        .mem_arg_cache(min_size_to_cache=1024)
         .build()
     )
     ```
@@ -34,20 +74,155 @@ class PynencBuilder:
         "pickle": "PickleSerializer",
     }
     _MEMORY_ARG_CACHE = "MemArgCache"
-    _REDIS_ARG_CACHE = "RedisArgCache"
     _DISABLED_ARG_CACHE = "DisabledArgCache"
     _MEMORY_TRIGGER = "MemTrigger"
-    _REDIS_TRIGGER = "RedisTrigger"
     _DISABLED_TRIGGER = "DisabledTrigger"
     _VALID_CONCURRENCY_MODES = {"DISABLED", "TASK", "ARGUMENTS", "KEYS"}
 
+    # Plugin registration system
+    _plugin_methods: dict[str, Callable] = {}
+    _plugin_validators: list[Callable] = []
+    _plugins_loaded = False
+
     def __init__(self) -> None:
         """
-        Initialize a new PynencBuilder with an empty configuration dictionary.
+        Initialize a new PynencBuilder with plugin discovery and empty configuration.
+
+        Automatically discovers and loads plugin methods via entry points on first instantiation.
         """
         self._config: dict[str, Any] = {}
         self._using_memory_components = False
-        self._using_redis_components = False
+        self._plugin_components: set[str] = set()
+
+        # Auto-discover plugins on first builder instantiation
+        self._load_plugins()
+
+    @classmethod
+    def _load_plugins(cls) -> None:
+        """
+        Load and register plugin methods via Python entry points system.
+
+        Discovers all plugins registered under 'pynenc.plugins' entry point group
+        and registers their builder methods for dynamic resolution.
+        """
+        if cls._plugins_loaded:
+            return
+
+        cls._plugins_loaded = True
+
+        # Try to load plugins using available entry points mechanism
+        if entry_points is not None:
+            cls._load_plugins_importlib()
+        elif pkg_resources is not None:
+            cls._load_plugins_pkg_resources()
+        # If neither is available, continue without plugins
+
+    @classmethod
+    def _load_plugins_importlib(cls) -> None:
+        """Load plugins using importlib.metadata."""
+        if entry_points is None:
+            return
+
+        try:
+            # Try Python 3.10+ API first
+            try:
+                plugin_entries = list(entry_points(group="pynenc.plugins"))
+            except TypeError:
+                # Fallback to older API
+                eps = entry_points()
+                if hasattr(eps, "select"):
+                    plugin_entries = list(eps.select(group="pynenc.plugins"))
+                else:
+                    # For Python 3.8-3.9, entry_points() returns a dict-like object
+                    plugin_entries = list(eps.get("pynenc.plugins", []))  # type: ignore[attr-defined]
+
+            for ep in plugin_entries:
+                cls._register_plugin_from_entry_point(ep)
+        except Exception:
+            # Silently continue if plugin loading fails
+            pass
+
+    @classmethod
+    def _load_plugins_pkg_resources(cls) -> None:
+        """Load plugins using pkg_resources."""
+        if pkg_resources is None:
+            return
+
+        try:
+            for entry_point in pkg_resources.iter_entry_points("pynenc.plugins"):
+                cls._register_plugin_from_entry_point(entry_point)
+        except Exception:
+            # Silently continue if plugin loading fails
+            pass
+
+    @classmethod
+    def _register_plugin_from_entry_point(cls, entry_point: Any) -> None:
+        """Register a single plugin from an entry point."""
+        try:
+            plugin_class = entry_point.load()
+            # Plugins should have a register_builder_methods class method
+            if hasattr(plugin_class, "register_builder_methods"):
+                plugin_class.register_builder_methods(cls)
+        except Exception as e:
+            # Log plugin loading errors but don't fail the builder
+            warnings.warn(
+                f"Failed to load plugin {entry_point.name}: {e}",
+                UserWarning,
+                stacklevel=2,
+            )
+
+    @classmethod
+    def register_plugin_method(cls, method_name: str, method_func: Callable) -> None:
+        """
+        Register a plugin method to be available on PynencBuilder instances.
+
+        This allows plugins to extend the builder with their own configuration methods.
+        Plugins should call this during their registration process.
+
+        :param str method_name: Name of the method to register (e.g., 'redis', 'mongodb')
+        :param Callable method_func: The method function that takes builder as first argument
+        :raises ValueError: If method name conflicts with existing core methods
+        """
+        # Check for conflicts with core methods (but allow plugin method overrides)
+        if hasattr(cls, method_name) and method_name not in cls._plugin_methods:
+            raise ValueError(
+                f"Cannot register plugin method '{method_name}': conflicts with core method"
+            )
+
+        cls._plugin_methods[method_name] = method_func
+
+    @classmethod
+    def register_plugin_validator(cls, validator_func: Callable) -> None:
+        """
+        Register a plugin validator function that validates configuration before build().
+
+        Validators should raise ValueError if the configuration is invalid.
+
+        :param Callable validator_func: Function that takes (config: dict) and raises ValueError if invalid
+        """
+        cls._plugin_validators.append(validator_func)
+
+    def __getattr__(self, name: str) -> Callable:
+        """
+        Dynamic method resolution for plugin-registered methods.
+
+        This enables plugins to add methods that are automatically
+        available when the plugin is installed.
+
+        :param str name: Method name being accessed
+        :return: Bound method from plugin
+        :raises AttributeError: If method not found in plugins with helpful error message
+        """
+        if name in self._plugin_methods:
+            # Bind the plugin method to this instance
+            plugin_method = self._plugin_methods[name]
+            return lambda *args, **kwargs: plugin_method(self, *args, **kwargs)
+
+        # Provide helpful error message suggesting plugin installation
+        raise AttributeError(
+            f"'{self.__class__.__name__}' object has no attribute '{name}'. "
+            f"This method may be provided by a plugin. Check available plugins and ensure they are installed."
+        )
 
     def app_id(self, app_id: str) -> "PynencBuilder":
         """
@@ -56,54 +231,10 @@ class PynencBuilder:
         The application ID uniquely identifies this Pynenc application instance
         and is used in logging, monitoring, and component configuration.
 
-        :param str app_id:
-            The unique identifier for this application.
-
-        :return: The builder instance for method chaining.
+        :param str app_id: The unique identifier for this application
+        :return: The builder instance for method chaining
         """
         self._config["app_id"] = app_id
-        return self
-
-    def redis(self, url: str | None = None, db: int | None = None) -> "PynencBuilder":
-        """
-        Configure Redis components for the Pynenc application.
-
-        This sets up all Redis-related components (orchestrator, broker, state backend,
-        and argument cache) to use Redis as their backend.
-
-        :param str url:
-            The Redis URL to connect to. If specified, overrides all other connection
-            parameters including host, port, and db.
-        :param Optional[int] db:
-            The Redis database number to use. Only valid when url is not provided.
-            If url is provided, the database should be specified in the URL itself.
-
-        :return: The builder instance for method chaining.
-        :raises ValueError: If both url and db are provided, since url takes precedence.
-        """
-        if url and db is not None:
-            raise ValueError(
-                "Cannot specify both 'url' and 'db' parameters. "
-                "When using 'url', specify the database in the URL (e.g., 'redis://host:port/db'). "
-                "The 'url' parameter overrides all other connection settings."
-            )
-
-        if url:
-            self._config["redis_url"] = url
-        elif db is not None:
-            self._config["redis_db"] = db
-
-        self._config.update(
-            {
-                "orchestrator_cls": "RedisOrchestrator",
-                "broker_cls": "RedisBroker",
-                "state_backend_cls": "RedisStateBackend",
-                "arg_cache_cls": self._REDIS_ARG_CACHE,
-                "trigger_cls": self._REDIS_TRIGGER,
-            }
-        )
-        self._using_redis_components = True
-        self._using_memory_components = False
         return self
 
     def memory(self) -> "PynencBuilder":
@@ -116,7 +247,7 @@ class PynencBuilder:
 
         Note: In-memory components are only compatible with certain runners.
 
-        :return: The builder instance for method chaining.
+        :return: The builder instance for method chaining
         """
         self._config.update(
             {
@@ -128,90 +259,81 @@ class PynencBuilder:
             }
         )
         self._using_memory_components = True
-        self._using_redis_components = False
+        self._plugin_components.clear()  # Clear any plugin components
         return self
 
-    def arg_cache(
+    def mem_arg_cache(
         self,
-        mode: Literal["redis", "memory", "disabled"] = "redis",
-        min_size_to_cache: int = 1024,  # Default from ConfigArgCache
-        local_cache_size: int = 1024,  # Default from ConfigArgCache
+        min_size_to_cache: int = 1024,
+        local_cache_size: int = 1024,
     ) -> "PynencBuilder":
         """
-        Configure argument caching behavior.
+        Configure memory-based argument caching.
 
-        :param mode:
-            "redis": Use Redis for argument caching (requires redis() to be called)
-            "memory": Use in-memory argument caching (for testing/development)
-            "disabled": Disable argument caching completely
-        :param int min_size_to_cache:
-            Minimum string length (in characters) required to cache an argument.
-            Arguments smaller than this size will be passed directly.
-            Default is 1024 characters (roughly 1KB).
-        :param int local_cache_size:
-            Maximum number of items to cache locally.
-            Default is 1024.
+        This sets up in-memory argument caching for development and testing purposes.
+        Arguments larger than the specified threshold will be cached locally.
 
-        :return: The builder instance for method chaining.
-        :raises ValueError: If "redis" mode is selected without prior redis() configuration
+        :param int min_size_to_cache: Minimum string length required to cache an argument
+        :param int local_cache_size: Maximum number of items to cache locally
+        :return: The builder instance for method chaining
         """
-        if mode == "disabled":
-            self._config["arg_cache_cls"] = self._DISABLED_ARG_CACHE
-        elif mode == "memory":
-            self._config["arg_cache_cls"] = self._MEMORY_ARG_CACHE
-            self._using_memory_components = True
-        elif mode == "redis":
-            self._config["arg_cache_cls"] = self._REDIS_ARG_CACHE
-            if not self._using_redis_components and "redis_url" not in self._config:
-                raise ValueError(
-                    "Redis arg cache requires redis configuration. Call redis() first."
-                )
-
-        # Set the cache configuration values
-        self._config["min_size_to_cache"] = min_size_to_cache
-        self._config["local_cache_size"] = local_cache_size
-
+        self._config.update(
+            {
+                "arg_cache_cls": self._MEMORY_ARG_CACHE,
+                "min_size_to_cache": min_size_to_cache,
+                "local_cache_size": local_cache_size,
+            }
+        )
+        self._using_memory_components = True
         return self
 
-    def trigger(
+    def disable_arg_cache(self) -> "PynencBuilder":
+        """
+        Disable argument caching completely.
+
+        This turns off all argument caching functionality, which may be useful
+        for debugging or when caching is not desired.
+
+        :return: The builder instance for method chaining
+        """
+        self._config["arg_cache_cls"] = self._DISABLED_ARG_CACHE
+        return self
+
+    def mem_trigger(
         self,
-        mode: Literal["redis", "memory", "disabled"] = "redis",
-        scheduler_interval_seconds: int = 60,  # Default from ConfigTrigger
-        enable_scheduler: bool = True,  # Default from ConfigTrigger
+        scheduler_interval_seconds: int = 60,
+        enable_scheduler: bool = True,
     ) -> "PynencBuilder":
         """
-        Configure trigger behavior.
+        Configure memory-based trigger system.
 
-        :param mode:
-            "redis": Use Redis for trigger system (requires redis() to be called)
-            "memory": Use in-memory trigger system (for testing/development)
-            "disabled": Disable trigger functionality completely
-        :param int scheduler_interval_seconds:
-            Interval in seconds for the scheduler to check for time-based triggers.
-            Default is 60 seconds (1 minute).
-        :param bool enable_scheduler:
-            Whether to enable the scheduler for time-based triggers.
-            Default is True.
+        This sets up in-memory triggers for development and testing purposes.
+        Time-based triggers will be checked at the specified interval.
 
-        :return: The builder instance for method chaining.
-        :raises ValueError: If "redis" mode is selected without prior redis() configuration
+        :param int scheduler_interval_seconds: Interval for the scheduler to check time-based triggers
+        :param bool enable_scheduler: Whether to enable the scheduler for time-based triggers
+        :return: The builder instance for method chaining
         """
-        if mode == "disabled":
-            self._config["trigger_cls"] = self._DISABLED_TRIGGER
-        elif mode == "memory":
-            self._config["trigger_cls"] = self._MEMORY_TRIGGER
-            self._using_memory_components = True
-        elif mode == "redis":
-            self._config["trigger_cls"] = self._REDIS_TRIGGER
-            if not self._using_redis_components and "redis_url" not in self._config:
-                raise ValueError(
-                    "Redis trigger requires redis configuration. Call redis() first."
-                )
+        self._config.update(
+            {
+                "trigger_cls": self._MEMORY_TRIGGER,
+                "scheduler_interval_seconds": scheduler_interval_seconds,
+                "enable_scheduler": enable_scheduler,
+            }
+        )
+        self._using_memory_components = True
+        return self
 
-        # Set the trigger configuration values
-        self._config["scheduler_interval_seconds"] = scheduler_interval_seconds
-        self._config["enable_scheduler"] = enable_scheduler
+    def disable_trigger(self) -> "PynencBuilder":
+        """
+        Disable trigger functionality completely.
 
+        This turns off all trigger functionality, preventing any scheduled or
+        event-driven task execution.
+
+        :return: The builder instance for method chaining
+        """
+        self._config["trigger_cls"] = self._DISABLED_TRIGGER
         return self
 
     def multi_thread_runner(
@@ -226,14 +348,10 @@ class PynencBuilder:
         The MultiThreadRunner uses threads to execute tasks concurrently within
         the same process, providing efficient parallel execution with shared memory.
 
-        :param int min_threads:
-            The minimum number of threads to keep in the thread pool.
-        :param int max_threads:
-            The maximum number of threads allowed in the thread pool.
-        :param bool enforce_max_processes:
-            If True, enforces the maximum number of processes that can run concurrently.
-
-        :return: The builder instance for method chaining.
+        :param int min_threads: The minimum number of threads to keep in the thread pool
+        :param int max_threads: The maximum number of threads allowed in the thread pool
+        :param bool enforce_max_processes: If True, enforces the maximum number of processes
+        :return: The builder instance for method chaining
         """
         self._config["runner_cls"] = "MultiThreadRunner"
         self._config.update(
@@ -253,11 +371,8 @@ class PynencBuilder:
         for task execution, providing true parallel execution across multiple
         CPU cores, with isolated memory spaces.
 
-        :param int num_processes:
-            The number of processes to create in the process pool.
-            Default 0 will use the number of CPU cores.
-
-        :return: The builder instance for method chaining.
+        :param int num_processes: The number of processes to create in the process pool
+        :return: The builder instance for method chaining
         """
         self._config["runner_cls"] = "PersistentProcessRunner"
         self._config["num_processes"] = num_processes
@@ -272,13 +387,9 @@ class PynencBuilder:
         The ThreadRunner uses a thread pool to execute tasks concurrently within
         the same process, providing efficient parallel execution with shared memory.
 
-        :param int min_threads:
-            The minimum number of threads to keep in the thread pool.
-        :param int max_threads:
-            The maximum number of threads allowed in the thread pool.
-            Default 0 will use the number of CPU cores.
-
-        :return: The builder instance for method chaining.
+        :param int min_threads: The minimum number of threads to keep in the thread pool
+        :param int max_threads: The maximum number of threads allowed in the thread pool
+        :return: The builder instance for method chaining
         """
         self._config["runner_cls"] = "ThreadRunner"
         self._config.update(
@@ -296,7 +407,7 @@ class PynencBuilder:
         The ProcessRunner creates a new process for each task execution,
         providing isolated execution context for each task.
 
-        :return: The builder instance for method chaining.
+        :return: The builder instance for method chaining
         """
         self._config["runner_cls"] = "ProcessRunner"
         return self
@@ -308,7 +419,7 @@ class PynencBuilder:
         The DummyRunner executes tasks in the main thread of the application.
         This is useful for testing and debugging purposes.
 
-        :return: The builder instance for method chaining.
+        :return: The builder instance for method chaining
         """
         self._config["runner_cls"] = "DummyRunner"
         return self
@@ -320,10 +431,8 @@ class PynencBuilder:
         In development mode, tasks can be forced to run synchronously,
         making debugging and testing easier.
 
-        :param bool force_sync_tasks:
-            If True, forces all tasks to run synchronously in the same process.
-
-        :return: The builder instance for method chaining.
+        :param bool force_sync_tasks: If True, forces all tasks to run synchronously
+        :return: The builder instance for method chaining
         """
         self._config["dev_mode_force_sync_tasks"] = force_sync_tasks
         return self
@@ -332,11 +441,9 @@ class PynencBuilder:
         """
         Set the logging level for the application.
 
-        :param str level:
-            The logging level to use ("debug", "info", "warning", "error", "critical").
-
-        :return: The builder instance for method chaining.
-        :raises: ValueError if an invalid logging level is provided
+        :param str level: The logging level ("debug", "info", "warning", "error", "critical")
+        :return: The builder instance for method chaining
+        :raises ValueError: If an invalid logging level is provided
         """
         level = level.lower()
         if level not in self._VALID_LOG_LEVELS:
@@ -355,17 +462,10 @@ class PynencBuilder:
         """
         Configure runner performance tuning parameters.
 
-        These parameters control various aspects of the runner behavior,
-        allowing for fine-tuning of performance characteristics.
-
-        :param float runner_loop_sleep_time_sec:
-            Sleep time between runner loop iterations in seconds.
-        :param float invocation_wait_results_sleep_time_sec:
-            Sleep time when waiting for invocation results in seconds.
-        :param int min_parallel_slots:
-            Minimum number of parallel execution slots for tasks.
-
-        :return: The builder instance for method chaining.
+        :param float runner_loop_sleep_time_sec: Sleep time between runner loop iterations
+        :param float invocation_wait_results_sleep_time_sec: Sleep time when waiting for results
+        :param int min_parallel_slots: Minimum number of parallel execution slots
+        :return: The builder instance for method chaining
         """
         self._config.update(
             {
@@ -385,17 +485,10 @@ class PynencBuilder:
         """
         Configure task control parameters.
 
-        These parameters control various aspects of task dependency management
-        and execution control.
-
-        :param bool cycle_control:
-            Whether to enable cycle control for task dependencies.
-        :param bool blocking_control:
-            Whether to enable blocking control for concurrent tasks.
-        :param float queue_timeout_sec:
-            Timeout for queue operations in seconds.
-
-        :return: The builder instance for method chaining.
+        :param bool cycle_control: Whether to enable cycle control for task dependencies
+        :param bool blocking_control: Whether to enable blocking control for concurrent tasks
+        :param float queue_timeout_sec: Timeout for queue operations in seconds
+        :return: The builder instance for method chaining
         """
         self._config.update(
             {
@@ -410,15 +503,9 @@ class PynencBuilder:
         """
         Configure the serializer for task arguments and results.
 
-        The serializer is responsible for converting Python objects to and from
-        a serialized format for storage and transmission.
-
-        :param str serializer:
-            The serializer to use. Can be a shortname ("json", "pickle") or
-            the full class name (e.g., "JsonSerializer", "PickleSerializer").
-
-        :return: The builder instance for method chaining.
-        :raises: ValueError if an invalid serializer name is provided
+        :param str serializer: Serializer name ("json", "pickle") or full class name
+        :return: The builder instance for method chaining
+        :raises ValueError: If an invalid serializer name is provided
         """
         if serializer.lower() in self._SERIALIZER_MAP:
             cls_name = self._SERIALIZER_MAP[serializer.lower()]
@@ -439,20 +526,10 @@ class PynencBuilder:
     ) -> "PynencBuilder":
         """
         Configure concurrency control default behaviors for all tasks.
-        A task can override these settings by specifying the concurrency control
-        mode in the task decorator.
 
-        Concurrency control determines how tasks are scheduled and executed when
-        multiple instances of the same task are invoked concurrently.
-
-        :param Optional[Union[str, ConcurrencyControlType]] running_concurrency:
-            Controls the concurrency behavior of tasks at runtime. Can be a string
-            ("DISABLED", "TASK", "ARGUMENTS", "KEYS") or a ConcurrencyControlType enum value.
-        :param Optional[Union[str, ConcurrencyControlType]] registration_concurrency:
-            Controls the concurrency behavior of tasks at registration time. Can be a string
-            ("DISABLED", "TASK", "ARGUMENTS", "KEYS") or a ConcurrencyControlType enum value.
-
-        :return: The builder instance for method chaining.
+        :param Optional[Union[str, ConcurrencyControlType]] running_concurrency: Controls runtime concurrency behavior
+        :param Optional[Union[str, ConcurrencyControlType]] registration_concurrency: Controls registration concurrency behavior
+        :return: The builder instance for method chaining
         """
         if running_concurrency is not None:
             if isinstance(running_concurrency, ConcurrencyControlType):
@@ -476,10 +553,8 @@ class PynencBuilder:
         """
         Set the maximum time a task can remain in PENDING state.
 
-        :param float seconds:
-            Maximum time in seconds a task can remain in PENDING state before it expires.
-
-        :return: The builder instance for method chaining.
+        :param float seconds: Maximum time in seconds a task can remain in PENDING state
+        :return: The builder instance for method chaining
         """
         self._config["max_pending_seconds"] = seconds
         return self
@@ -490,20 +565,22 @@ class PynencBuilder:
         """
         Configure how task arguments are printed in logs.
 
-        :param Union[str, ArgumentPrintMode] mode:
-            The print mode to use. Can be a string
-            ("HIDDEN", "KEYS", "FULL", "TRUNCATED") or an ArgumentPrintMode enum value.
-        :param int truncate_length:
-            Maximum length for printed argument values when using TRUNCATED mode.
-            Default is 32.
-
-        :return: The builder instance for method chaining.
+        :param Union[str, ArgumentPrintMode] mode: The print mode to use
+        :param int truncate_length: Maximum length for printed argument values in TRUNCATED mode
+        :return: The builder instance for method chaining
+        :raises ValueError: If an invalid mode string is provided
         """
         if isinstance(mode, ArgumentPrintMode):
             arg_print_mode = mode
         else:
             mode_upper = mode.upper()
-            arg_print_mode = ArgumentPrintMode[mode_upper]
+            try:
+                arg_print_mode = ArgumentPrintMode[mode_upper]
+            except KeyError as ex:
+                valid_modes = [m.name for m in ArgumentPrintMode]
+                raise ValueError(
+                    f"Invalid argument print mode: {mode}. Valid options are: {', '.join(valid_modes)}"
+                ) from ex
 
         self._config["argument_print_mode"] = arg_print_mode
 
@@ -524,9 +601,7 @@ class PynencBuilder:
         """
         Configure logs to hide all task arguments.
 
-        Sets print_arguments=False, resulting in "<arguments hidden>" in logs.
-
-        :return: The builder instance for method chaining.
+        :return: The builder instance for method chaining
         """
         return self.argument_print_mode(ArgumentPrintMode.HIDDEN)
 
@@ -534,9 +609,7 @@ class PynencBuilder:
         """
         Configure logs to show only argument names.
 
-        Results in "args(key1, key2)" in logs.
-
-        :return: The builder instance for method chaining.
+        :return: The builder instance for method chaining
         """
         return self.argument_print_mode(ArgumentPrintMode.KEYS)
 
@@ -544,9 +617,7 @@ class PynencBuilder:
         """
         Configure logs to show complete argument values without truncation.
 
-        Results in "args(key1=value1, key2=value2)" in logs.
-
-        :return: The builder instance for method chaining.
+        :return: The builder instance for method chaining
         """
         return self.argument_print_mode(ArgumentPrintMode.FULL)
 
@@ -554,13 +625,8 @@ class PynencBuilder:
         """
         Configure logs to show truncated argument values.
 
-        Results in "args(key1=trunc_value1, key2=trunc_value2)" in logs, with truncation
-        based on the specified length.
-
-        :param int truncate_length:
-            Maximum length for printed argument values. Must be greater than 0.
-            Default is 32.
-        :return: The builder instance for method chaining.
+        :param int truncate_length: Maximum length for printed argument values
+        :return: The builder instance for method chaining
         """
         return self.argument_print_mode(ArgumentPrintMode.TRUNCATED, truncate_length)
 
@@ -568,25 +634,32 @@ class PynencBuilder:
         """
         Add arbitrary configuration values.
 
-        This method allows adding any custom configuration values that are not
-        covered by the specialized methods.
-
         For common configuration values, prefer using the dedicated methods
-        (like app_id(), logging_level(), etc.) instead of this generic method.
+        instead of this generic method.
 
-        :param Any kwargs:
-            Custom configuration values to add to the configuration.
-
-        :return: The builder instance for method chaining.
+        :param Any kwargs: Custom configuration values to add
+        :return: The builder instance for method chaining
         """
         self._config.update(kwargs)
         return self
 
+    def _validate_plugin_compatibility(self) -> None:
+        """
+        Validate plugin configurations before building.
+
+        Runs all registered plugin validators to ensure the configuration is valid.
+        """
+        for validator in self._plugin_validators:
+            try:
+                validator(self._config)
+            except Exception as e:
+                raise ValueError(f"Plugin configuration validation failed: {e}") from e
+
     def _validate_memory_compatibility(self) -> None:
         """
-        Validate that the selected runner is compatible with memory components if they are being used.
+        Validate that the selected runner is compatible with memory components.
 
-        :raises: ValueError if memory components are used with an incompatible runner
+        :raises ValueError: If memory components are used with an incompatible runner
         """
         if not self._using_memory_components:
             return
@@ -598,18 +671,21 @@ class PynencBuilder:
             raise ValueError(
                 f"Runner '{runner_cls}' is not compatible with in-memory components. "
                 f"Use one of these runners instead: {', '.join(memory_compatible_runners)} "
-                f"or configure Redis components using the redis() method."
+                f"or configure distributed components using an appropriate plugin."
             )
 
-    def build(self) -> Pynenc:
+    def build(self) -> "Pynenc":
         """
         Build and return a configured Pynenc instance.
 
         This method creates a new Pynenc instance using the configuration
         values that have been set through the builder methods.
 
-        :return: A configured Pynenc instance ready for use.
-        :raises: ValueError if the configuration is invalid
+        :return: A configured Pynenc instance ready for use
+        :raises ValueError: If the configuration is invalid
         """
+        from pynenc import Pynenc
+
         self._validate_memory_compatibility()
+        self._validate_plugin_compatibility()
         return Pynenc(config_values=self._config)

@@ -18,9 +18,15 @@ Pynenc integrates a range of functionalities and features to streamline distribu
 
 ## Current Implementations and Future Enhancements
 
-- **Current Implementations**: Pynenc currently utilizes Redis for distributed task management. An in-memory synchronous version is also available for development and testing, simplifying the local setup.
+- **Plugin Architecture**: Pynenc now uses a modular plugin system for backend implementations:
 
-- **Planned Extensions**: Future development aims to incorporate additional databases, message queues, and other technologies. This expansion will enhance Pynenc's adaptability and functionality in varied distributed environments.
+  - **Redis Plugin** (`pynenc-redis`): Production-ready distributed task management
+  - **MongoDB Plugin** (`pynenc-mongodb`): Document-based storage with full feature support
+  - **Memory Backend**: Built-in development/testing mode for local execution
+
+- **Extensible Design**: The plugin system allows easy integration of additional databases, message queues, and services, enabling seamless adaptation to diverse operational requirements.
+
+- **Planned Extensions**: Future development aims to incorporate additional backend plugins and technologies. This expansion will enhance Pynenc's adaptability and functionality in varied distributed environments.
 
 ## Performance Focus and Scalability
 
@@ -34,9 +40,9 @@ Pynenc emphasizes performance and scalability, essential traits for effective di
 
 Pynenc's growth is envisioned to be community-driven, encouraging contributions that enrich its capabilities:
 
-- **Integration of Message Brokers**: Plans include exploring integrations with various message brokers, broadening Pynenc's applicability.
-
-- **Community Contributions**: We welcome and encourage contributions from the community, ranging from new database integrations to advanced runner implementations.
+- **Plugin Development**: The community can develop plugins for various backends, message brokers, and storage systems.
+- **Integration of Message Brokers**: Plans include exploring integrations with various message brokers through the plugin system.
+- **Community Contributions**: We welcome and encourage contributions from the community, ranging from new backend plugins to advanced runner implementations.
 
 ## Conclusion
 

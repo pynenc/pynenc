@@ -410,6 +410,8 @@ class TaskInvocationCache(Generic[Result]):
             self.status_index[self.invocation_status[_id]].discard(_id)
             self.status_index[status].add(_id)
         self.invocation_status[_id] = status
+        # Update the invocation's cached status
+        invocation.update_status_cache(status)
 
     def clean_pending_status(
         self, invocation: "DistributedInvocation[Params, Result]"

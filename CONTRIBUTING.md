@@ -22,13 +22,9 @@ git clone https://github.com/YOUR_USERNAME/pynenc.git
 cd pynenc
 ```
 
-3. **Install Docker**: Ensure you have Docker installed on your system as it's used for running services such as Redis during integration tests.
+3. **Install Poetry**: pynenc uses Poetry for dependency management. Install Poetry as per the official documentation: [Poetry Installation](https://python-poetry.org/docs/#installation).
 
-- Docker Installation: [Get Docker](https://docs.docker.com/get-docker/)
-
-4. **Install Poetry**: pynenc uses Poetry for dependency management. Install Poetry as per the official documentation: [Poetry Installation](https://python-poetry.org/docs/#installation).
-
-5. **Set Up the Project**: Inside the project directory, set up your local development environment using Poetry and install pre-commit hooks.
+4. **Set Up the Project**: Inside the project directory, set up your local development environment using Poetry and install pre-commit hooks.
 
 ```bash
 # Install dependencies and set up the project
@@ -38,25 +34,17 @@ make install
 make install-pre-commit
 ```
 
-6. **Activate the Virtual Environment**: Use Poetry to activate the virtual environment.
+5. **Activate the Virtual Environment**: Use Poetry to activate the virtual environment.
 
 ```bash
 poetry shell
 ```
 
-7. **Start Development**: You're now ready to start development. Feel free to make changes, commit them, and push them to your fork.
+6. **Start Development**: You're now ready to start development. Feel free to make changes, commit them, and push them to your fork.
 
 ## Running Tests and Checking Coverage
 
 Maintaining a high standard of code quality is crucial, which includes thorough testing and good test coverage. Here's how to run tests and check coverage:
-
-### Starting Required Services
-
-The integration tests require an instance of Redis running. You can start it using Docker with:
-
-```bash
-make docker-redis
-```
 
 ### Running Tests
 

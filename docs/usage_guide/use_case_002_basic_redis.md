@@ -4,6 +4,14 @@
 
 This guide provides a concise overview of using `pynenc` with Redis for distributed task processing. For detailed setup and execution, refer to the full [basic_redis_example](https://github.com/pynenc/samples/tree/main/basic_redis_example).
 
+## Prerequisites
+
+This use case requires the Redis plugin:
+
+```bash
+pip install pynenc-redis
+```
+
 ## Key Concepts
 
 ### Initialization and Task Definition
@@ -40,7 +48,7 @@ from pynenc.builder import PynencBuilder
 
 app = (
     PynencBuilder()
-    .redis(url="redis://redis:6379")  # Matches docker-compose default
+    .redis(url="redis://redis:6379")  # Requires pynenc-redis plugin
     .process_runner()
     .serializer("json")
     .custom_config(app_id="app_basic_redis_example")
@@ -66,7 +74,7 @@ You can configure `pynenc` to use Redis in two ways:
 
 ### Using pyproject.toml
 
-Configure `pynenc` in `pyproject.toml` with the `ProcessRunner`:
+Configure `pynenc` in `pyproject.toml` with the `ProcessRunner`. Note that the Redis plugin classes are automatically available once `pynenc-redis` is installed:
 
 ```toml
 [tool.pynenc]
@@ -128,7 +136,7 @@ results = list(invocation_group.results)
 
 ## Redis and Docker
 
-For a containerized setup using Docker, the `Dockerfile` and `docker-compose.yml` are configured to include Redis and the Python environment. The `PynencBuilder` example above uses `redis://redis:6379`, which aligns with the default Redis service name in `docker-compose.yml`.
+For a containerized setup using Docker, the `Dockerfile` and `docker-compose.yml` are configured to include Redis and the Python environment. The `PynencBuilder` example above uses `redis://redis:6379`, which aligns with the default Redis service name in `docker-compose.yml`. Ensure the `pynenc-redis` plugin is included in your requirements.
 
 ## Development Mode
 

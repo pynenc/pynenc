@@ -6,7 +6,6 @@ from pynenc.call import Call
 from pynenc.invocation import DistributedInvocation
 from pynenc.orchestrator.base_orchestrator import BaseOrchestrator
 from pynenc.serializer.json_serializer import JsonSerializer
-from pynenc.state_backend.redis_state_backend import RedisStateBackend
 from tests import util
 from tests.conftest import MockPynenc
 from tests.integration.orchestrator.orchestrator_tasks import (
@@ -37,14 +36,7 @@ def app(request: "FixtureRequest") -> MockPynenc:
     test_module, test_name = util.get_module_name(request)
     app = MockPynenc(app_id=f"{test_module}.{test_name}")
     app.orchestrator = request.param(app)
-    # TODO: issue 90 remove the state backend from this tests
-    # ! https://github.com/pynenc/pynenc/issues/90
-    if "Redis" in app.orchestrator.__class__.__name__:
-        app.state_backend = RedisStateBackend(app)  # type: ignore
     app.serializer = JsonSerializer()
-    # TODO serializer needs to be fixed to JSON, otherwise it will crash
-    # or get the value from the task arguments direcly, not a hardcoded value!!!!
-
     app.purge()
     request.addfinalizer(app.purge)
     return app

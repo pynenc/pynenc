@@ -51,7 +51,7 @@ def test_waiting_for_results(test_vars: Vars) -> None:
     # inv1 waits for inv2 and inv3
     app.orchestrator.blocking_control.waiting_for_results(inv1, [inv2, inv3])
 
-    # Since we can't directly inspect Redis (or other impls), we'll verify indirectly
+    # Since we can't directly inspect the backend (or other impls), we'll verify indirectly
     # by checking that inv2 and inv3 are considered blocking when inv1 is waiting
     blocking = list(app.orchestrator.get_blocking_invocations(3))
     blocking_ids = {inv.invocation_id for inv in blocking}

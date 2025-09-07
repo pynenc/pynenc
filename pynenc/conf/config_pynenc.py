@@ -61,7 +61,7 @@ class ConfigPynenc(ConfigPynencBase):
         TRUNCATED (truncated values), HIDDEN (no args). Default TRUNCATED.
     :cvar float cached_status_time:
         Time in seconds to cache invocation status for non-final states. This helps
-        reduce Redis queries by avoiding repeated status checks within this time window.
+        reduce the amount of queries by avoiding repeated status checks within this time window.
         Final statuses are cached indefinitely since they never change. Default 0.1.
     """
 

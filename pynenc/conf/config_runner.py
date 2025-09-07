@@ -53,7 +53,7 @@ class ConfigThreadRunner(ConfigRunner):
 
     :cvar ConfigField[int] final_invocation_cache_size:
         Maximum number of final invocation entries stored in the runner's local cache (`final_invocations`).
-        This cache tracks completed invocations to avoid repeated Redis queries, and when the size exceeds
+        This cache tracks completed invocations to avoid repeated queries, and when the size exceeds
         this limit, the oldest entries are evicted to maintain bounded memory usage. A larger value reduces
         database pressure but increases memory consumption, while a smaller value saves memory at the cost
         of more frequent status checks.

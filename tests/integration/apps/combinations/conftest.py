@@ -15,7 +15,6 @@ from pynenc.orchestrator.base_orchestrator import BaseOrchestrator
 from pynenc.runner.base_runner import BaseRunner
 from pynenc.serializer.base_serializer import BaseSerializer
 from pynenc.state_backend.base_state_backend import BaseStateBackend
-from pynenc.util.redis_debug_client import patch_redis_client
 from tests import util
 from tests.integration.apps.combinations import tasks, tasks_async
 
@@ -33,9 +32,6 @@ def pytest_configure(config: Any) -> None:
         format="%(asctime)s.%(msecs)03d %(levelname)-8s %(name)s: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
-
-    # Ensure Redis debugging is enabled
-    patch_redis_client()
 
 
 @pytest.fixture(scope="function", autouse=True)

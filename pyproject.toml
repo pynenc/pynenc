@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pynenc"
-version = "0.0.24"
+version = "0.1.0"
 description = "A task management system for complex distributed orchestration"
 authors = ["Jose Diaz"]
 license = "MIT License"
@@ -25,10 +25,16 @@ packages = [
 [tool.poetry.scripts]
 pynenc = 'pynenc.__main__:main'
 
+# Plugin entry points for extending PynencBuilder
+# External plugins register their builder methods here:
+# Example: redis = "pynenc_redis.builder:RedisBuilderPlugin"
+[tool.poetry.plugins."pynenc.plugins"]
+# Core pynenc doesn't register any plugins
+# This section serves as documentation for plugin developers
+
 
 [tool.poetry.dependencies]
 python = ">=3.11.6"
-redis = ">=4.6.0"
 pyyaml = ">=6.0.1"
 typing-extensions = "^4.9.0"
 cistell = "0.0.7"
@@ -51,7 +57,6 @@ pytest-asyncio = "^0.25.3"
 pytest-timeout = "^2.2.0"
 coverage = { version = ">=7.2.6,<8.0", extras = ["toml"] }
 mypy = "1.7.0"
-types-redis = "4.6.0.2"
 types-PyYAML = "6.0.12.12"
 pre-commit = "^3.5.0"
 types-requests = "^2.32.0.20250602"

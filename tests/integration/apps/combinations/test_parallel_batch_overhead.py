@@ -449,9 +449,9 @@ def test_batch_parallelization_overhead(
             "RECOMMENDATIONS FOR REDUCING BATCH OVERHEAD:\n"
             "1. Increase batch size to reduce the number of batching operations\n"
             "2. Use arg_cache for shared arguments by ensuring min_size_to_cache is set appropriately\n"
-            "3. Consider optimizing the Redis broker connections (pipeline operations)\n"
-            "4. Check for slow Redis operations - consider using a dedicated Redis instance\n"
-            "5. Monitor Redis memory usage - high memory pressure can slow operations"
+            "3. Consider optimizing the broker connections (pipeline operations)\n"
+            "4. Check for slow operations - consider using a dedicated instance\n"
+            "5. Monitor memory usage - high memory pressure can slow operations"
         )
     elif bottleneck_factor > 2:
         app.logger.warning(

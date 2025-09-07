@@ -4,6 +4,24 @@
 
 This guide explores Pynenc's powerful trigger system, which enables declarative task scheduling and event-driven execution. The trigger system allows you to automatically execute tasks in response to various conditions, such as cron schedules, task statuses, results, exceptions, or custom events.
 
+## Prerequisites
+
+For distributed trigger functionality, you'll need a backend plugin:
+
+**Redis Backend**:
+
+```bash
+pip install pynenc-redis
+```
+
+**MongoDB Backend**:
+
+```bash
+pip install pynenc-mongodb
+```
+
+The memory-based trigger system is included with the core Pynenc package for development and testing.
+
 ## Scenario
 
 The trigger system addresses several common use cases in distributed task orchestration:
@@ -417,8 +435,9 @@ trigger = (
 
 ### Multiple Backends
 
-- **Memory-based**: For testing and development
-- **Redis-based**: For production-grade distributed systems
+- **Memory-based**: For testing and development (built-in)
+- **Redis-based**: For production-grade distributed systems (requires `pynenc-redis` plugin)
+- **MongoDB-based**: For document-based distributed systems (requires `pynenc-mongodb` plugin)
 
 ### Comprehensive Context Access
 

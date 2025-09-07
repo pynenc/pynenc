@@ -1,7 +1,6 @@
 from cistell import ConfigField
 
 from pynenc.conf.config_base import ConfigPynencBase
-from pynenc.conf.config_redis import ConfigRedis
 
 
 class ConfigArgCache(ConfigPynencBase):
@@ -20,7 +19,3 @@ class ConfigArgCache(ConfigPynencBase):
 
     min_size_to_cache = ConfigField(1024)  # 1KB
     local_cache_size = ConfigField(1024)
-
-
-class ConfigArgCacheRedis(ConfigArgCache, ConfigRedis):
-    """Specific Configuration for the Redis Argument Cache"""

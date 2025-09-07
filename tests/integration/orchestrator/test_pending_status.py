@@ -21,7 +21,7 @@ def test_pending_status_expiration(dummy_invocation: "DistributedInvocation") ->
     app.orchestrator.set_invocation_status(dummy_invocation, InvocationStatus.PENDING)
     sleep(0.2)  # enough to expire the pending seconds
     # ! Why checking twice?
-    # * The first check may still return PENDING for the redis orchestrator
+    # * The first check may still return PENDING for the orchestrator
     #   That is because the process to check pending timeout is async
     #   It will return existing status immediately, without waiting for pending validation
     assert app.orchestrator.get_invocation_status(dummy_invocation) in [

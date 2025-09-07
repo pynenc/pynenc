@@ -1,7 +1,7 @@
 """
 Integration tests for pynmon workflow views.
 
-Tests the workflow-related functionality with real Redis backend,
+Tests the workflow-related functionality with Memory backend,
 verifying workflow discovery and display capabilities.
 """
 import threading
@@ -16,10 +16,10 @@ if TYPE_CHECKING:
 # Debug configuration - Set to 1 to keep server alive for browser debugging
 KEEP_ALIVE = 0
 
-# Configure app for testing with Redis backend
+# Configure app for testing with Memory backend
 app = (
     PynencBuilder()
-    .redis()
+    .memory()
     .thread_runner()
     .app_id("test-pynmon-workflows")
     .serializer("json")

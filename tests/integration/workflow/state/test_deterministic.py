@@ -259,7 +259,7 @@ def test_cross_backend_storage_compatibility(
     """
     Test that deterministic value storage works consistently across backends.
 
-    This is the key integration test - verifying that both Memory and Redis
+    This is the key integration test - verifying that any
     backends store and retrieve deterministic values correctly.
 
     :param deterministic_mixed_workflow: Task fixture for testing backend compatibility

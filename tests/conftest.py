@@ -344,14 +344,6 @@ def dummy_invocation(dummy_task: "Task") -> "DistributedInvocation":
     return DistributedInvocation(Call(dummy_task), None)
 
 
-"""
-Shared test fixtures for Redis trigger system integration tests.
-
-This module provides fixtures that can be reused across different trigger tests
-to minimize code duplication and ensure consistent test environment setup.
-"""
-
-
 @pytest.fixture(scope="function")
 def runner(request: "FixtureRequest") -> Generator[None, None, None]:
     """

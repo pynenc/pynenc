@@ -109,7 +109,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         # First check cache for final statuses - they never change
         if self._cached_status and self._cached_status.is_final():
             return self._cached_status
-        # For non-final statuses, use a short cache (100ms) to avoid hammering Redis
+        # For non-final statuses, use a short cache (100ms) to reduce orchestrator load
         cache_ttl = self.app.conf.cached_status_time
         if self._cached_status and (time.time() - self._cached_status_time < cache_ttl):
             return self._cached_status
