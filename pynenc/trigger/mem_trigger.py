@@ -308,7 +308,7 @@ class MemTrigger(BaseTrigger):
                     if not self._condition_triggers[condition_id]:
                         del self._condition_triggers[condition_id]
 
-    def purge(self) -> None:
+    def _purge(self) -> None:
         """
         Purge all data from the in-memory trigger system.
 

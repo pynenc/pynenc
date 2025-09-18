@@ -258,7 +258,8 @@ def test_waiting_for_results_logs_warning_with_invocation(
 
     with patch.object(multi_thread_runner.logger, "warning") as mock_warning:
         multi_thread_runner.waiting_for_results(
-            running_invocation=mock_invocation, result_invocations=[]
+            running_invocation_id=mock_invocation.invocation_id,
+            result_invocation_ids=[],
         )
 
         # Verify warning was logged

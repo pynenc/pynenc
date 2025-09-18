@@ -17,7 +17,6 @@ if TYPE_CHECKING:
     from types import FrameType
 
     from pynenc.app import Pynenc
-    from pynenc.invocation.dist_invocation import DistributedInvocation
 
 
 class BaseRunner(ABC):
@@ -167,8 +166,8 @@ class BaseRunner(ABC):
     @abstractmethod
     def _waiting_for_results(
         self,
-        running_invocation: "DistributedInvocation",
-        result_invocation: list["DistributedInvocation"],
+        running_invocation_id: str,
+        result_invocation_ids: list[str],
         runner_args: Optional[dict[str, Any]] = None,
     ) -> None:
         """
@@ -188,49 +187,53 @@ class BaseRunner(ABC):
 
         Subclasses can define the waiting behavior of the running invocation in this method.
 
-        :param running_invocation: The invocation that is waiting for results.
-        :param result_invocation: A list of invocations whose results are being awaited.
+        :param running_invocation_id: The ID of the invocation that is waiting for results.
+        :param result_invocation_ids: A list of IDs of the invocations whose results are being awaited.
         :param runner_args: Additional arguments passed to the runner, specific to the runner's implementation.
         """
 
     def waiting_for_results(
         self,
-        running_invocation: Optional["DistributedInvocation"],
-        result_invocations: list["DistributedInvocation"],
+        running_invocation_id: Optional[str],
+        result_invocation_ids: list[str],
         runner_args: Optional[dict[str, Any]] = None,
     ) -> None:
         """
         Handles invocations that are waiting for results from other invocations.
         Pauses the current thread and registers it to wait for the results of specified invocations.
-        :param running_invocation: The invocation that is waiting for results.
-        :param result_invocations: A list of invocations whose results are being awaited.
+        :param running_invocation_id: The ID of the invocation that is waiting for results.
+        :param result_invocation_ids: A list of IDs of the invocations whose results are being awaited.
         :param runner_args: Additional arguments required for the ThreadRunner.
         """
-        if not running_invocation:
+        if not running_invocation_id:
             # running from outside this runner (user instantiate an app with this runner class,
             # but ask for an invocation result outside of the runner processes)
             self.app.logger.debug(
-                f"Waiting for {result_invocations=} from outside this runner"
+                f"Waiting for {result_invocation_ids=} from outside this runner"
             )
             time.sleep(self.conf.invocation_wait_results_sleep_time_sec)
             return
-        self._waiting_for_results(running_invocation, result_invocations, runner_args)
+        self._waiting_for_results(
+            running_invocation_id, result_invocation_ids, runner_args
+        )
 
     async def async_waiting_for_results(
         self,
-        running_invocation: Optional["DistributedInvocation"],
-        result_invocations: list["DistributedInvocation"],
+        running_invocation_id: Optional[str],
+        result_invocation_ids: list[str],
         runner_args: Optional[dict[str, Any]] = None,
     ) -> None:
-        if not running_invocation:
+        if not running_invocation_id:
             # running from outside this runner (user instantiate an app with this runner class,
             # but ask for an invocation result outside of the runner processes)
             self.logger.debug(
-                f"Async Waiting for {result_invocations=} from outside this runner"
+                f"Async Waiting for {result_invocation_ids=} from outside this runner"
             )
             await asyncio.sleep(self.conf.invocation_wait_results_sleep_time_sec)
             return
-        self._waiting_for_results(running_invocation, result_invocations, runner_args)
+        self._waiting_for_results(
+            running_invocation_id, result_invocation_ids, runner_args
+        )
 
     def run(self) -> None:
         """Starts the runner, initiating its main loop."""
@@ -298,11 +301,11 @@ class DummyRunner(BaseRunner):
 
     def _waiting_for_results(
         self,
-        running_invocation: "DistributedInvocation",
-        result_invocation: list["DistributedInvocation"],
+        running_invocation_id: str,
+        result_invocation_ids: list[str],
         runner_args: Optional[dict[str, Any]] = None,
     ) -> None:
-        del running_invocation, result_invocation, runner_args
-        # invocation.result() was called from outside a runner
-        # it will block and loop indefinetely until result is available
+        # Parameters are ids (string) to conform with BaseRunner interface.
+        del running_invocation_id, result_invocation_ids, runner_args
+        # invocation.result() was called from outside a runner; sleep briefly
         time.sleep(self.conf.invocation_wait_results_sleep_time_sec)

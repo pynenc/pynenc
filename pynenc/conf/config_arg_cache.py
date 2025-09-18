@@ -1,7 +1,7 @@
 from cistell import ConfigField
 
 from pynenc.conf.config_base import ConfigPynencBase
-from pynenc.conf.config_redis import ConfigRedis
+from pynenc.conf.config_sqlite import ConfigSQLite
 
 
 class ConfigArgCache(ConfigPynencBase):
@@ -22,5 +22,5 @@ class ConfigArgCache(ConfigPynencBase):
     local_cache_size = ConfigField(1024)
 
 
-class ConfigArgCacheRedis(ConfigArgCache, ConfigRedis):
-    """Specific Configuration for the Redis Argument Cache"""
+class ConfigArgCacheSQLite(ConfigArgCache, ConfigSQLite):
+    """SQLite-based argument cache configuration"""

@@ -1,7 +1,7 @@
 """
 Integration tests for pynmon invocations timeline.
 
-Tests the complete timeline functionality with real Redis backend,
+Tests the complete timeline functionality with memory backend,
 multiple tasks with different durations, and realistic timing scenarios.
 """
 
@@ -19,13 +19,9 @@ if TYPE_CHECKING:
 # Debug configuration - Set to 1 to keep server alive for browser debugging
 KEEP_ALIVE = 0
 
-# Configure app for testing with Redis backend
+# Configure app for testing with Memory backend
 app = (
-    PynencBuilder()
-    .redis(db=15)  # Use test database for isolation
-    .thread_runner()
-    .app_id("test-pynmon-timeline-app")
-    .build()
+    PynencBuilder().memory().thread_runner().app_id("test-pynmon-timeline-app").build()
 )
 
 

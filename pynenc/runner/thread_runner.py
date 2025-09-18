@@ -8,6 +8,7 @@ from typing import Any, NamedTuple, Optional
 from pynenc.conf.config_runner import ConfigThreadRunner
 from pynenc.invocation.dist_invocation import DistributedInvocation, InvocationStatus
 from pynenc.runner.base_runner import BaseRunner
+from pynenc.runner.runner_context import RunnerContext
 
 
 class ThreadInfo(NamedTuple):
@@ -23,11 +24,11 @@ class ThreadRunner(BaseRunner):
     This runner is suitable for I/O-bound tasks and scenarios where shared memory between tasks is required.
     """
 
-    wait_invocation: set["DistributedInvocation"]
+    wait_invocation_ids: set[str]
     threads: dict[str, ThreadInfo]
     max_threads: int
     waiting_threads: int
-    final_invocations: "OrderedDict[DistributedInvocation, None]"
+    final_invocation_ids: OrderedDict[str, None]
 
     @cached_property
     def conf(self) -> ConfigThreadRunner:
@@ -69,11 +70,11 @@ class ThreadRunner(BaseRunner):
         Internal method called when the ThreadRunner starts.
         Initializes the data infrastructures for managing invocations and threads.
         """
-        self.wait_invocation = set()
+        self.wait_invocation_ids = set()
         self.threads = {}
         self.max_threads = self.conf.max_threads or multiprocessing.cpu_count()
         self.waiting_threads = 0
-        self.final_invocations = OrderedDict()
+        self.final_invocation_ids = OrderedDict()
 
     def _on_stop(self) -> None:
         """
@@ -84,7 +85,7 @@ class ThreadRunner(BaseRunner):
         for thread_info in self.threads.values():
             thread_info.thread.join()
             self.app.orchestrator.set_invocation_status(
-                thread_info.invocation, InvocationStatus.RETRY
+                thread_info.invocation.invocation_id, InvocationStatus.RETRY
             )
 
     def _on_stop_runner_loop(self) -> None:
@@ -126,7 +127,11 @@ class ThreadRunner(BaseRunner):
 
         for invocation in invocations:
             try:
-                thread = threading.Thread(target=invocation.run, daemon=True)
+                thread = threading.Thread(
+                    target=invocation.run,
+                    daemon=True,
+                    args=[RunnerContext.from_runner(self)],
+                )
                 thread.start()
                 self.threads[invocation.invocation_id] = ThreadInfo(thread, invocation)
                 self.logger.debug(
@@ -139,18 +144,20 @@ class ThreadRunner(BaseRunner):
                 self.app.orchestrator.reroute_invocations({invocation})
 
         # Check waiting conditions
-        waiting_count = len(self.wait_invocation)
+        waiting_count = len(self.wait_invocation_ids)
         self.logger.debug(f"Checking {waiting_count} waiting conditions")
 
-        for inv in self.app.orchestrator.filter_final(list(self.wait_invocation)):
-            self.final_invocations[inv] = None  # Add to ordered set
-            self.wait_invocation.remove(inv)
+        for inv in self.app.orchestrator.filter_final(list(self.wait_invocation_ids)):
+            self.final_invocation_ids[inv] = None  # Add to ordered set
+            self.wait_invocation_ids.remove(inv)
             self.logger.debug(f"invocation={inv} on final status")
 
-        # Clean up final_invocations if over size limit
-        while len(self.final_invocations) > self.conf.final_invocation_cache_size:
-            old_inv, _ = self.final_invocations.popitem(last=False)  # Remove oldest
-            self.logger.debug(f"Evicted old final invocation {old_inv.invocation_id}")
+        # Clean up final_invocation_ids if over size limit
+        while len(self.final_invocation_ids) > self.conf.final_invocation_cache_size:
+            old_inv_id, _ = self.final_invocation_ids.popitem(
+                last=False
+            )  # Remove oldest
+            self.logger.debug(f"Evicted old final invocation {old_inv_id}")
 
         self.logger.debug(
             f"Finished loop iteration, sleeping for {self.conf.runner_loop_sleep_time_sec}s"
@@ -159,8 +166,8 @@ class ThreadRunner(BaseRunner):
 
     def _waiting_for_results(
         self,
-        running_invocation: "DistributedInvocation",
-        result_invocations: list["DistributedInvocation"],
+        running_invocation_id: str,
+        result_invocation_ids: list[str],
         runner_args: Optional[dict[str, Any]] = None,
     ) -> None:
         """
@@ -172,30 +179,29 @@ class ThreadRunner(BaseRunner):
         """
         del runner_args
         self.app.orchestrator.set_invocation_status(
-            running_invocation, InvocationStatus.PAUSED
+            running_invocation_id, InvocationStatus.PAUSED
         )
         self.logger.debug(
-            f"Pausing invocation {running_invocation.invocation_id} is waiting for others to finish"
+            f"Pausing invocation {running_invocation_id} is waiting for others to finish"
         )
 
         # Register dependencies collectively
-        self.wait_invocation.update(result_invocations)
+        self.wait_invocation_ids.update(result_invocation_ids)
         self.waiting_threads += 1
 
         # Poll final_invocations cache until all results are ready
         while not all(
-            result_inv in self.final_invocations for result_inv in result_invocations
+            result_inv in self.final_invocation_ids
+            for result_inv in result_invocation_ids
         ):
             self.logger.debug(
-                f"Polling for {running_invocation.invocation_id} waiting on {len(result_invocations)} results"
+                f"Polling for {running_invocation_id} waiting on {len(result_invocation_ids)} results"
             )
             time.sleep(self.conf.invocation_wait_results_sleep_time_sec)
 
         # All results are final, resume
         self.waiting_threads -= 1
-        self.logger.debug(
-            f"Resuming {running_invocation.invocation_id}, all results final"
-        )
+        self.logger.debug(f"Resuming {running_invocation_id}, all results final")
         self.app.orchestrator.set_invocation_status(
-            running_invocation, InvocationStatus.RUNNING
+            running_invocation_id, InvocationStatus.RUNNING
         )

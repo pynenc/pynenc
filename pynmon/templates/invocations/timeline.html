@@ -482,6 +482,7 @@
                   <tr>
                     <th>Status</th>
                     <th>Timestamp</th>
+                    <th>Runner Id</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -492,6 +493,7 @@
           <tr>
             <td><span class="badge bg-${getStatusClass(h.status)}">${h.status}</span></td>
             <td>${new Date(h.timestamp).toLocaleString()}</td>
+            <td><span class='text-muted' style='font-size:12px;'>${h.runner_context_summary}</span></td>
           </tr>
         `;
       });

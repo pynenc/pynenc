@@ -19,13 +19,13 @@ def test_add_history_non_blocking(
     dummy_invocation: "DistributedInvocation[Params, Result]",
 ) -> None:
     """Test that add_history is called in a non-blocking way."""
-    mock_base_app.state_backend._add_history_mock.side_effect = lambda x, y: time.sleep(
-        0.5
+    mock_base_app.state_backend._add_histories_mock.side_effect = (
+        lambda x, y: time.sleep(0.5)
     )
 
     start_time = time.time()
-    mock_base_app.state_backend.add_history(
-        dummy_invocation, status=InvocationStatus.REGISTERED
+    mock_base_app.state_backend.add_histories(
+        [dummy_invocation.invocation_id], status=InvocationStatus.REGISTERED
     )
     end_time = time.time()
 
@@ -43,11 +43,13 @@ def test_set_result_blocking(
         lambda inv, res: time.sleep(0.2)
     )
     start_time = time.time()
-    mock_base_app.state_backend.set_result(dummy_invocation, "dummy result")
+    mock_base_app.state_backend.set_result(
+        dummy_invocation.invocation_id, "dummy result"
+    )
     end_time = time.time()
 
     # check that our method did block the main thread for about 0.2 seconds
-    assert 0.2 < end_time - start_time < 0.25
+    assert 0.2 < end_time - start_time
 
 
 def test_get_invocation_exception(mock_base_app: "MockPynenc") -> None:

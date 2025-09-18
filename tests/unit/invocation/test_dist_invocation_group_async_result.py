@@ -38,7 +38,10 @@ async def test_async_final_invocations() -> None:
         task=add, invocations=[invocation0, invocation1]
     )
     # Force final status for both
-    app.orchestrator._mock_filter_final.return_value = [invocation0, invocation1]
+    app.orchestrator._mock_filter_final.return_value = [
+        invocation0.invocation_id,
+        invocation1.invocation_id,
+    ]
     # Patch get_final_result on both invocations via monkeypatch (or directly, if frozen, use object.__setattr__)
     # Here we use object.__setattr__ to bypass immutability:
     object.__setattr__(invocation0, "get_final_result", lambda: -13)

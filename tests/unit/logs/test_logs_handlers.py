@@ -1,22 +1,39 @@
 import threading
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
-from pynenc import Pynenc
+import pytest
+
 from pynenc.runner.thread_runner import ThreadRunner
+from tests.conftest import MockPynenc
 from tests.util import capture_logs
 
-app = Pynenc()
-app.runner = ThreadRunner(app)
-app.conf.logging_level = "DEBUG"
+if TYPE_CHECKING:
+    from _pytest.fixtures import FixtureRequest
+
+    from pynenc import Pynenc
+
+mock_app = MockPynenc()
 
 
-@app.task
+@mock_app.task
 def add(x: int, y: int) -> int:
     add.logger.info(f"(in task log)adding {x} + {y}")
     return x + y
 
 
-def test_task_runner_logs() -> None:
+@pytest.fixture
+def app(request: "FixtureRequest", app_instance: "Pynenc") -> "Pynenc":
+    app = app_instance
+    app.runner = ThreadRunner(app)
+    app._tasks = mock_app._tasks
+    app.conf.logging_level = "DEBUG"
+    add.app = app
+    app.purge()
+    request.addfinalizer(app.purge)
+    return app
+
+
+def test_task_runner_logs(app: "Pynenc") -> None:
     """
     Test that the logs will add runner, task and invocations ids
     """

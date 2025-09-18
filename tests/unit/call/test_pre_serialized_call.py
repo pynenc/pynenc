@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     pass
 
 
-app = PynencBuilder().serializer("pickle").build()
+app = PynencBuilder().serializer_pickle().build()
 
 
 @app.task

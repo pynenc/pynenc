@@ -61,11 +61,7 @@ class InvocationStatus(StrEnum):
         :return:
             True if the status is runnable by any broker, False otherwise.
         """
-        return self in {
-            InvocationStatus.REGISTERED,
-            InvocationStatus.REROUTED,
-            InvocationStatus.RETRY,
-        }
+        return self in InvocationStatus.get_available_for_run_statuses()
 
     def is_final(self) -> bool:
         """
@@ -83,3 +79,16 @@ class InvocationStatus(StrEnum):
         :return: A set containing all final statuses
         """
         return {cls.SUCCESS, cls.FAILED}
+
+    @classmethod
+    def get_available_for_run_statuses(cls) -> set["InvocationStatus"]:
+        """
+        Returns the set of statuses that are considered available for run.
+
+        :return: A set containing all statuses available for run
+        """
+        return {
+            cls.REGISTERED,
+            cls.REROUTED,
+            cls.RETRY,
+        }

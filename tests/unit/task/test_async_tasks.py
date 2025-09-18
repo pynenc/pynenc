@@ -44,7 +44,10 @@ async def test_async_results_final() -> None:
     # Force both invocations to be final.
     app.orchestrator._get_invocation_status_mock.return_value = InvocationStatus.SUCCESS
     # ! Patch _mock_filter_final as it is used for performance instead of individual status checks.
-    app.orchestrator._mock_filter_final.return_value = [invocation0, invocation1]
+    app.orchestrator._mock_filter_final.return_value = [
+        invocation0.invocation_id,
+        invocation1.invocation_id,
+    ]
     # Patch get_final_result on both invocations (using object.__setattr__ to bypass immutability)
     object.__setattr__(invocation0, "get_final_result", lambda: -13)
     object.__setattr__(invocation1, "get_final_result", lambda: -13)

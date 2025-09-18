@@ -274,7 +274,9 @@ class PreSerializedCall(Call[Params, Result]):
         )
 
     def __str__(self) -> str:
-        return f"PreSerializedCall(task={self.task}, other_args={self.other_args}, pre_serialized_args={list(self.pre_serialized_args.keys())})"
+        other_args = set(self.other_args.keys())
+        pre_serialized_args = set(self.pre_serialized_args.keys())
+        return f"PreSerializedCall(task={self.task}, {other_args=}, {pre_serialized_args=})"
 
     def __hash__(self) -> int:
         raise NotImplementedError(

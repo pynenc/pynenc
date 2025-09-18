@@ -198,7 +198,13 @@
                           </span>
                         </div>
                         <div class="timeline-date metadata-text">
-                          {{ entry.timestamp }}
+                          {{ entry.timestamp }} {% if
+                          entry.runner_context_summary %}
+                          <br />
+                          <span class="text-muted" style="font-size: 12px"
+                            >{{ entry.runner_context_summary }}</span
+                          >
+                          {% endif %}
                         </div>
                         {% if entry.execution_context %}
                         <div class="timeline-text data-text">

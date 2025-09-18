@@ -47,14 +47,6 @@ jobs:
   integration-tests:
     runs-on: ubuntu-latest
     container: python:3.11.7
-    services:
-      redis:
-        image: redis:7.2.3
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - name: Install Poetry
@@ -70,8 +62,6 @@ jobs:
           key: pydeps-${{ hashFiles('**/poetry.lock') }}
       - run: poetry install --no-interaction
       - name: Run integration tests with coverage
-        env:
-          PYNENC__REDIS_HOST: "redis"
         run: poetry run coverage run -m pytest tests/integration
       - run: poetry run coverage report
       - run: poetry run coverage html --show-contexts --title "Integration Test Coverage for ${{ github.sha }}"

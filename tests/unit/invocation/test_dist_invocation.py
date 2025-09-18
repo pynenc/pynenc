@@ -7,6 +7,7 @@ import pytest
 from pynenc.call import Call
 from pynenc.exceptions import InvocationError, RetryError
 from pynenc.invocation import DistributedInvocation, InvocationStatus
+from pynenc.runner import RunnerContext
 from tests.conftest import MockPynenc
 from tests.util import capture_logs
 
@@ -51,7 +52,7 @@ def test_max_retries() -> None:
 
     with capture_logs(app.logger) as log_buffer:
         with pytest.raises(RetryError):
-            invocation.run(runner_args={})
+            invocation.run(RunnerContext.from_runner(app.runner))
         assert "Invocation MAX-RETRY" in log_buffer.getvalue()
 
 
@@ -67,7 +68,7 @@ def test_reroute_on_running_control() -> None:
         app.orchestrator, "reroute_invocations"
     ) as mock_reroute_invocations:
         invocation: DistributedInvocation = add(1, 2)  # type: ignore
-        invocation.run()
+        invocation.run(RunnerContext.from_runner(app.runner))
         mock_is_authorized.assert_called_once()
         mock_reroute_invocations.assert_called_once_with({invocation})
 

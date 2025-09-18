@@ -18,13 +18,13 @@ if TYPE_CHECKING:
 # Debug configuration - Set to 1 to keep server alive for browser debugging
 KEEP_ALIVE = 0
 
-# Configure app for testing with Redis backend
+# Configure app for testing with Memory backend
 app = (
     PynencBuilder()
-    .redis()
+    .memory()
     .thread_runner()
     .app_id("test-pynmon-workflow-runs")
-    .serializer("json")
+    .serializer_json()
     .build()
 )
 

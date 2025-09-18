@@ -20,12 +20,12 @@ if (
 from pynenc import context
 from pynenc.conf.config_runner import ConfigPersistentProcessRunner
 from pynenc.runner.base_runner import BaseRunner
+from pynenc.runner.runner_context import RunnerContext
 
 if TYPE_CHECKING:
     from multiprocessing.synchronize import Event
 
     from pynenc.app import Pynenc
-    from pynenc.invocation.dist_invocation import DistributedInvocation
 
 
 def persistent_process_main(
@@ -56,7 +56,7 @@ def persistent_process_main(
             )
 
             try:
-                invocation.run()
+                invocation.run(RunnerContext.from_runner(app.runner))
             except Exception:
                 app.logger.exception(f"Error executing invocation {invocation_id}")
     except KeyboardInterrupt:
@@ -212,8 +212,8 @@ class PersistentProcessRunner(BaseRunner):
 
     def _waiting_for_results(
         self,
-        running_invocation: "DistributedInvocation",
-        result_invocations: list["DistributedInvocation"],
+        running_invocation_id: str,
+        result_invocation_ids: list[str],
         runner_args: Optional[dict[str, Any]] = None,
     ) -> None:
         """
@@ -221,6 +221,7 @@ class PersistentProcessRunner(BaseRunner):
         The invocation will just be marked as paused and the process will continue
         with other invocations.
         """
-        del running_invocation, result_invocations, runner_args
+        # Use ids to conform with BaseRunner signature.
+        del running_invocation_id, result_invocation_ids, runner_args
         time.sleep(self.conf.invocation_wait_results_sleep_time_sec)
         # We cannot mark as PAUSED as the runner will not resume

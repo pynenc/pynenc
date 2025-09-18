@@ -57,7 +57,7 @@ def _search_invocations_in_task(
     invocation_count = 0
     task_start = time.time()
 
-    for invocation in app.orchestrator.get_existing_invocations(task=task):
+    for invocation_id in app.orchestrator.get_existing_invocations(task=task):
         invocation_count += 1
 
         # Check timeout for each invocation batch (every 10 invocations)
@@ -66,6 +66,8 @@ def _search_invocations_in_task(
                 f"Task timeout reached after checking {invocation_count} invocations for task {task.task_id}"
             )
             return invocations, target_call, True
+
+        invocation = app.state_backend.get_invocation(invocation_id)
 
         # Check if this invocation has the call we're looking for
         if (

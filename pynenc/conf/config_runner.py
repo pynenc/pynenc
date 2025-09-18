@@ -1,6 +1,7 @@
 from cistell import ConfigField
 
 from pynenc.conf.config_base import ConfigPynencBase
+from pynenc.conf.config_sqlite import ConfigSQLite
 
 
 class ConfigRunner(ConfigPynencBase):
@@ -53,15 +54,15 @@ class ConfigThreadRunner(ConfigRunner):
 
     :cvar ConfigField[int] final_invocation_cache_size:
         Maximum number of final invocation entries stored in the runner's local cache (`final_invocations`).
-        This cache tracks completed invocations to avoid repeated Redis queries, and when the size exceeds
+        This cache tracks completed invocations to avoid repeated queries, and when the size exceeds
         this limit, the oldest entries are evicted to maintain bounded memory usage. A larger value reduces
         database pressure but increases memory consumption, while a smaller value saves memory at the cost
         of more frequent status checks.
         Default: 10,000.
     """
 
-    invocation_wait_results_sleep_time_sec = ConfigField(0.01)
-    runner_loop_sleep_time_sec = ConfigField(0.01)
+    invocation_wait_results_sleep_time_sec = ConfigField(0.1)
+    runner_loop_sleep_time_sec = ConfigField(0.1)
     min_threads = ConfigField(1)
     max_threads = ConfigField(0)
     final_invocation_cache_size = ConfigField(10000)
@@ -119,3 +120,7 @@ class ConfigPersistentProcessRunner(ConfigThreadRunner):
     """
 
     num_processes = ConfigField(0)
+
+
+class ConfigRunnerSQLite(ConfigRunner, ConfigSQLite):
+    """SQLite-based runner configuration"""

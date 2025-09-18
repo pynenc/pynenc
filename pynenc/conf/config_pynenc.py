@@ -61,7 +61,7 @@ class ConfigPynenc(ConfigPynencBase):
         TRUNCATED (truncated values), HIDDEN (no args). Default TRUNCATED.
     :cvar float cached_status_time:
         Time in seconds to cache invocation status for non-final states. This helps
-        reduce Redis queries by avoiding repeated status checks within this time window.
+        reduce the amount of queries by avoiding repeated status checks within this time window.
         Final statuses are cached indefinitely since they never change. Default 0.1.
     """
 
@@ -70,7 +70,7 @@ class ConfigPynenc(ConfigPynencBase):
     trigger_cls = ConfigField("DisabledTrigger")
     broker_cls = ConfigField("MemBroker")
     state_backend_cls = ConfigField("MemStateBackend")
-    serializer_cls = ConfigField("JsonSerializer")
+    serializer_cls = ConfigField("JsonPickleSerializer")
     arg_cache_cls = ConfigField("DisabledArgCache")
     runner_cls = ConfigField("DummyRunner")
     dev_mode_force_sync_tasks = ConfigField(False)

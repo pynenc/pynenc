@@ -1,4 +1,4 @@
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 
 import pytest
 
@@ -15,7 +15,8 @@ def add(x: int, y: int) -> int:
     return x + y
 
 
-def test_route_default() -> None:
+@patch("pynenc.trigger.disabled_trigger.DisabledTrigger.report_tasks_status")
+def test_route_default(mock_trigger_report_task_status: Mock) -> None:
     """Test that the orchestrator will route the task by default
 
     If there are no options:
@@ -25,11 +26,19 @@ def test_route_default() -> None:
     invocation = add(1, 3)
     assert isinstance(invocation, DistributedInvocation)
     # test that app.broker.route_invocation (MockBroker.route_invocation) has been called
-    mock_base_app.broker.route_invocation_mock.assert_called_once()
+    mock_base_app.broker.route_invocations_mock.assert_called_once()
     # test that app.orchestrator.set_invocation_status (MockBaseOrchestrator.set_invocation_status)
     # has been called with (result, InvocationStatus.REGISTERED)
-    mock_base_app.orchestrator._set_invocation_status_mock.assert_called_once_with(
-        invocation, InvocationStatus.REGISTERED
+    mock_base_app.orchestrator._register_new_invocations_mock.assert_called_once_with(
+        [invocation]
+    )
+    # This method do change the status internally, so it should also propagate it to the backend
+    mock_base_app.state_backend._add_histories_mock.assert_called_once_with(
+        [invocation.invocation_id], ANY
+    )
+    # And report the change to the triggers
+    mock_trigger_report_task_status.assert_called_once_with(
+        [invocation.invocation_id], InvocationStatus.REGISTERED
     )
 
 
@@ -54,10 +63,16 @@ def test_registration_concurrency(
     first_invocation = add_single_inv(1, 3)
 
     # Return previous as a pending match
+    # (we need to mock get_existing_invocations and get_invocation from state_backend)
     monkeypatch.setattr(
         type(mock_base_app.orchestrator),
         "get_existing_invocations",
-        lambda self, *args, **kwargs: iter([first_invocation]),
+        lambda self, *args, **kwargs: iter([first_invocation.invocation_id]),
+    )
+    monkeypatch.setattr(
+        type(mock_base_app.state_backend),
+        "get_invocation",
+        lambda self, *args, **kwargs: first_invocation,
     )
     next_invocation = add_single_inv(1, 3)
     assert first_invocation.invocation_id == next_invocation.invocation_id
@@ -136,7 +151,9 @@ def test_running_concurrency_task_control(mock_base_app: MockPynenc) -> None:
 @patch(
     "pynenc.orchestrator.base_orchestrator.BaseOrchestrator.is_candidate_to_run_by_concurrency_control"
 )
-@patch("pynenc.orchestrator.base_orchestrator.BaseOrchestrator._set_pending")
+@patch(
+    "pynenc.orchestrator.base_orchestrator.BaseOrchestrator.set_invocation_pending_status"
+)
 def test_get_blocking_invocations_to_run(
     mock_set_pending: Mock, mock_authorize_run: Mock, mock_base_app: MockPynenc
 ) -> None:
@@ -172,7 +189,9 @@ def test_get_blocking_invocations_to_run(
 @patch(
     "pynenc.orchestrator.base_orchestrator.BaseOrchestrator.is_candidate_to_run_by_concurrency_control"
 )
-@patch("pynenc.orchestrator.base_orchestrator.BaseOrchestrator._set_pending")
+@patch(
+    "pynenc.orchestrator.base_orchestrator.BaseOrchestrator.set_invocation_pending_status"
+)
 def test_get_blocking_invocations_to_run_disabled(
     mock_set_pending: Mock, mock_authorize_run: Mock, mock_base_app: MockPynenc
 ) -> None:
@@ -197,7 +216,9 @@ def test_get_blocking_invocations_to_run_disabled(
 @patch(
     "pynenc.orchestrator.base_orchestrator.BaseOrchestrator.is_candidate_to_run_by_concurrency_control"
 )
-@patch("pynenc.orchestrator.base_orchestrator.BaseOrchestrator._set_pending")
+@patch(
+    "pynenc.orchestrator.base_orchestrator.BaseOrchestrator.set_invocation_pending_status"
+)
 def test_get_blocking_invocations_to_run_handles_lock(
     mock_set_pending: Mock, mock_authorize_run: Mock, mock_base_app: MockPynenc
 ) -> None:
@@ -225,13 +246,13 @@ def test_get_blocking_invocations_to_run_handles_lock(
 def test_waiting_for_results_empty_invocations(mock_base_app: MockPynenc) -> None:
     """Test that waiting_for_results logs warning when called with empty result_invocations."""
     # Create a mock invocation as the caller
-    mock_caller = Mock(spec=DistributedInvocation)
+    mock_caller = Mock(spec=str)
 
     # Patch the logger to verify warning
     with patch.object(mock_base_app.logger, "warning") as mock_warning:
         # Call waiting_for_results with empty result_invocations
         mock_base_app.orchestrator.waiting_for_results(
-            caller_invocation=mock_caller, result_invocations=[]
+            caller_invocation_id=mock_caller, result_invocation_ids=[]
         )
 
         # Verify a warning was logged

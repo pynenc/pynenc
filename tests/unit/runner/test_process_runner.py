@@ -55,7 +55,7 @@ def test_on_start(runner: ProcessRunner) -> None:
 def test_on_stop(mock_process: Mock, runner: ProcessRunner) -> None:
     runner._on_start()
     mock_invocation = Mock(spec=DistributedInvocation)
-    runner.processes[mock_invocation] = mock_process
+    runner.inv_id_to_processes[mock_invocation.invocation_id] = mock_process
     runner._on_stop()
 
     mock_process.kill.assert_called_once()
@@ -69,7 +69,7 @@ def test_runner_loop_iteration(
     runner.runner_loop_iteration()
     runner.app.orchestrator.get_invocations_to_run.assert_called_once()
     mock_process.assert_called_once()
-    assert len(runner.processes) == 1
+    assert len(runner.inv_id_to_processes) == 1
 
 
 def test_runner_loop_iteration_pause_waiting_invocations(
@@ -82,8 +82,8 @@ def test_runner_loop_iteration_pause_waiting_invocations(
     runner._on_start()
     result_inv: DistributedInvocation = add_task(1, 2)  # type: ignore
     waiting_inv: DistributedInvocation = add_task(3, 4)  # type: ignore
-    runner.wait_invocation[result_inv] = {waiting_inv}
-    runner.processes[waiting_inv] = mock_process
+    runner.wait_invocation[result_inv.invocation_id] = {waiting_inv.invocation_id}
+    runner.inv_id_to_processes[waiting_inv.invocation_id] = mock_process
     app.orchestrator.get_invocations_to_run = Mock(return_value=[])  # type: ignore
     with patch("os.kill") as mock_kill:
         # test that is the result_inv is still running, the waiting_inv is paused
@@ -93,7 +93,7 @@ def test_runner_loop_iteration_pause_waiting_invocations(
         mock_kill.assert_called_with(ANY, signal.SIGSTOP)
         # test that is the result_inv is finished, the waiting_inv is resumed
         # _mock_filter_final returns the final invocation, should resume waiting ones
-        app.orchestrator._mock_filter_final.return_value = [result_inv]
+        app.orchestrator._mock_filter_final.return_value = [result_inv.invocation_id]
         runner.runner_loop_iteration()
         mock_kill.assert_called_with(ANY, signal.SIGCONT)
 
@@ -113,17 +113,20 @@ def test_waiting_for_results(
         return_value=[add_task(1, 2)],
     ) as mock_set_invocation_status:
         runner.waiting_for_results(
-            running_invocation,
-            [result_invocation],
+            running_invocation.invocation_id,
+            [result_invocation.invocation_id],
             {"wait_invocation": runner.wait_invocation},
         )
         # check that the invocation status is set to PAUSED
         mock_set_invocation_status.assert_called_once_with(
-            running_invocation, InvocationStatus.PAUSED
+            running_invocation.invocation_id, InvocationStatus.PAUSED
         )
         # check that the waiting invocation is stored in the wait_invocation dict
-        assert result_invocation in runner.wait_invocation
-        assert running_invocation in runner.wait_invocation[result_invocation]
+        assert result_invocation.invocation_id in runner.wait_invocation
+        assert (
+            running_invocation.invocation_id
+            in runner.wait_invocation[result_invocation.invocation_id]
+        )
 
 
 def test_waiting_for_results_returns_without_waiting_invocation(
@@ -139,11 +142,13 @@ def test_waiting_for_results_returns_without_waiting_invocation(
         return_value=[add_task(1, 2)],
     ) as mock_set_invocation_status:
         runner.waiting_for_results(
-            running_invocation, [], {"wait_invocation": runner.wait_invocation}
+            running_invocation.invocation_id,
+            [],
+            {"wait_invocation": runner.wait_invocation},
         )
         # check that the invocation status is set to PAUSED
         mock_set_invocation_status.assert_called_once_with(
-            running_invocation, InvocationStatus.PAUSED
+            running_invocation.invocation_id, InvocationStatus.PAUSED
         )
         # there was no invocation to wait, the wait_invocation dict should be empty
         assert len(runner.wait_invocation) == 0
@@ -163,10 +168,12 @@ def test_waiting_for_results_no_args_error(
         return_value=[add(1, 2)],
     ) as mock_set_invocation_status:
         with pytest.raises(RunnerError):
-            runner.waiting_for_results(running_invocation, [result_invocation])
+            runner.waiting_for_results(
+                running_invocation.invocation_id, [result_invocation.invocation_id]
+            )
         # check that the invocation status is set to PAUSED
         mock_set_invocation_status.assert_called_once_with(
-            running_invocation, InvocationStatus.PAUSED
+            running_invocation.invocation_id, InvocationStatus.PAUSED
         )
         # there was no invocation to wait, the wait_invocation dict should be empty
         assert len(runner.wait_invocation) == 0
@@ -192,11 +199,19 @@ def test_waiting_processes_property(
     inv3: DistributedInvocation = add_task(5, 6)  # type: ignore
     inv4: DistributedInvocation = add_task(7, 8)  # type: ignore
     # 2 invocations are waiting
-    runner.wait_invocation = {inv0: {inv1}, inv3: {inv4}}
+    runner.wait_invocation = {
+        inv0.invocation_id: {inv1.invocation_id},
+        inv3.invocation_id: {inv4.invocation_id},
+    }
     assert runner.waiting_processes == 2
     # 3 invocations waiting on the same invocation
-    runner.wait_invocation = {inv0: {inv1, inv3, inv4}}
+    runner.wait_invocation = {
+        inv0.invocation_id: {inv1.invocation_id, inv3.invocation_id, inv4.invocation_id}
+    }
     assert runner.waiting_processes == 3
     # 1 invocation waiting on 2 invocations
-    runner.wait_invocation = {inv0: {inv1}, inv3: {inv1}}
+    runner.wait_invocation = {
+        inv0.invocation_id: {inv1.invocation_id},
+        inv3.invocation_id: {inv1.invocation_id},
+    }
     assert runner.waiting_processes == 1

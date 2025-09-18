@@ -93,10 +93,8 @@ def test_execute_task_stores_invocation_id_only(
     expected_key = f"task_invocation:{call.call_id}"
 
     # Verify only the invocation_id is stored
-    stored_data = (
-        deterministic_executor.app.state_backend.get_workflow_deterministic_value(
-            deterministic_executor.workflow_identity, expected_key
-        )
+    stored_data = deterministic_executor.app.state_backend.get_workflow_data(
+        deterministic_executor.workflow_identity, expected_key
     )
 
     assert stored_data is not None

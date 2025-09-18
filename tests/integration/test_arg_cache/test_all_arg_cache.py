@@ -2,35 +2,18 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from pynenc.arg_cache.base_arg_cache import BaseArgCache
 from pynenc.serializer.constants import ReservedKeys
-from tests import util
 from tests.conftest import MockPynenc
 
 if TYPE_CHECKING:
-    from _pytest.fixtures import FixtureRequest
-    from _pytest.python import Metafunc
-
-
-def pytest_generate_tests(metafunc: "Metafunc") -> None:
-    """Generate test matrix for all non-mock ArgCache implementations."""
-    subclasses = [
-        c
-        for c in BaseArgCache.__subclasses__()
-        if "mock" not in c.__name__.lower() and "disabled" not in c.__name__.lower()
-    ]
-    if "app" in metafunc.fixturenames:
-        metafunc.parametrize("app", subclasses, indirect=True)
+    from pynenc import Pynenc
 
 
 @pytest.fixture
-def app(request: "FixtureRequest") -> MockPynenc:
+def app(app_instance: "Pynenc") -> "Pynenc":
     """Create a test app with the specified ArgCache implementation."""
-    app = MockPynenc(app_id="int-arg_cache" + util.get_unique_id())
-    app.arg_cache = request.param(app)
-    app.purge()
-    request.addfinalizer(app.purge)
-    return app
+    app_instance.purge()
+    return app_instance
 
 
 def test_store_and_retrieve(app: MockPynenc) -> None:

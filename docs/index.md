@@ -39,10 +39,36 @@ For more details on these features, refer to the {doc}`usage_guide/index`.
 
 ## Installation
 
-Pynenc can be easily installed using pip:
+Pynenc can be easily installed using pip. The core package provides the framework, and you'll need to install backend plugins separately:
+
+### Core Package
 
 ```bash
 pip install pynenc
+```
+
+### Backend Plugins
+
+Choose the backend that fits your needs:
+
+**Redis Backend** (recommended for production):
+
+```bash
+pip install pynenc-redis
+```
+
+**MongoDB Backend**:
+
+```bash
+pip install pynenc-mongodb
+```
+
+### Optional Features
+
+Include the monitoring web app:
+
+```bash
+pip install pynenc[monitor]
 ```
 
 Refer to the {doc}`getting_started/index` section for more detailed installation instructions.
@@ -61,7 +87,7 @@ def add(x: int, y: int) -> int:
     return x + y
 ```
 
-And get the result (requires a distributed runner, redis or dev mode):
+And get the result (requires a backend plugin like pynenc-redis, pynenc-mongodb, or dev mode):
 
 ```python
 result = add(1, 2).result
@@ -71,7 +97,13 @@ Get started quickly with a basic example in the {doc}`getting_started/index` sec
 
 ## Requirements
 
-Pynenc currently requires Redis for distributed task management. Future updates will expand its compatibility with other databases and message queues.
+Pynenc supports multiple backend options through its plugin system:
+
+- **Memory Backend**: Built-in, no additional requirements (for development/testing)
+- **Redis Backend**: Requires `pynenc-redis` plugin and a Redis server
+- **MongoDB Backend**: Requires `pynenc-mongodb` plugin and a MongoDB server
+
+The plugin architecture allows you to switch between backends or add new ones without changing your application code.
 
 ## Contact or Support
 

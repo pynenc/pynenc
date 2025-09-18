@@ -1,7 +1,7 @@
 """
 Integration tests for pynmon task detail page.
 
-Tests the complete task detail page functionality with real Redis backend
+Tests the complete task detail page functionality with Memory backend
 and real Pynenc app integration.
 """
 
@@ -15,7 +15,7 @@ KEEP_ALIVE = 0
 # Configure app for testing (following pattern from test_home_integration.py)
 app = (
     PynencBuilder()
-    .redis(db=15)  # Use test database for isolation
+    .memory()
     .thread_runner()
     .app_id("test-pynmon-task-detail-app")
     .build()

@@ -1,4 +1,4 @@
-.PHONY: install clean test test-unit test-integration coverage htmlcov pre-commit docker-redis combine-coverage
+.PHONY: install clean test test-unit test-integration coverage htmlcov pre-commit combine-coverage
 
 # Default Python version used in the project
 PYTHON_VERSION := 3.11.7
@@ -62,8 +62,3 @@ coverage:
 htmlcov:
 	@echo "Generating HTML coverage report..."
 	poetry run coverage html --show-contexts --title "Coverage Report"
-
-docker-redis:
-	@echo "Starting Redis container for integration tests..."
-	docker run --name redis-test -p 6379:6379 -d redis:7.2.3
-	@echo "Redis container started. To stop it later, run: docker stop redis-test && docker rm redis-test"

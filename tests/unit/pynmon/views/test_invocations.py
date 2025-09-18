@@ -13,38 +13,56 @@ pytest.importorskip("jinja2", reason="pynmon tests require monitor dependencies"
 # All imports below must come after pytest.importorskip calls
 # ruff: noqa: E402
 
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from pynenc import Pynenc
 from pynenc.arguments import Arguments
 from pynenc.call import Call
 from pynenc.invocation import DistributedInvocation
 from pynenc.invocation.status import InvocationStatus
 from pynmon.app import app as pynmon_app
 from pynmon.app import setup_routes
+from tests.conftest import MockPynenc
+
+if TYPE_CHECKING:
+    from _pytest.fixtures import FixtureRequest
+
+    from pynenc import Pynenc
 
 # Module level app and task setup
-test_app = Pynenc(app_id="test-invocations-app")
+mock_app = MockPynenc(app_id="test-invocations-app")
 
 
-@test_app.task
+@mock_app.task
 def add_task(x: int, y: int) -> int:
     """Simple addition task."""
     return x + y
 
 
-@test_app.task
+@mock_app.task
 def multiply_task(a: int, b: int) -> int:
     """Simple multiplication task."""
     return a * b
 
 
-def test_invocations_list_shows_invocations() -> None:
+@pytest.fixture
+def app(request: "FixtureRequest", app_instance: "Pynenc") -> "Pynenc":
+    app = app_instance
+    app._app_id = mock_app.app_id
+    app._tasks = mock_app._tasks
+    add_task.app = app
+    multiply_task.app = app
+    app.purge()
+    request.addfinalizer(app.purge)
+    return app
+
+
+def test_invocations_list_shows_invocations(app: "Pynenc") -> None:
     """Test that invocations list displays invocations."""
     # Clear any existing invocations
-    test_app.purge()
+    app.purge()
 
     # Create some invocations for testing
     call1: Call = Call(add_task, Arguments({"x": 5, "y": 3}))
@@ -54,16 +72,18 @@ def test_invocations_list_shows_invocations() -> None:
     invocation2: DistributedInvocation = DistributedInvocation(call2)
 
     # Store invocations in the orchestrator so they can be retrieved
-    test_app.orchestrator.set_invocation_status(
-        invocation1, InvocationStatus.REGISTERED
+    app.orchestrator.register_new_invocations([invocation1, invocation2])
+
+    # Set their status to REGISTERED
+    app.orchestrator.set_invocation_status(
+        invocation2.invocation_id, InvocationStatus.SUCCESS
     )
-    test_app.orchestrator.set_invocation_status(invocation2, InvocationStatus.SUCCESS)
 
     # Setup routes before creating test client
     setup_routes()
 
     # Patch pynmon to use our test app
-    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=test_app):
+    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=app):
         client = TestClient(pynmon_app)
         response = client.get("/invocations/")
 
@@ -78,10 +98,10 @@ def test_invocations_list_shows_invocations() -> None:
         assert "multiply_task" in content
 
 
-def test_invocations_list_with_status_filter() -> None:
+def test_invocations_list_with_status_filter(app: "Pynenc") -> None:
     """Test that invocations list actually filters by status."""
     # Clear any existing invocations
-    test_app.purge()
+    app.purge()
 
     # Create invocations with different statuses
     call1: Call = Call(add_task, Arguments({"x": 1, "y": 1}))
@@ -92,18 +112,21 @@ def test_invocations_list_with_status_filter() -> None:
     invocation2: DistributedInvocation = DistributedInvocation(call2)
     invocation3: DistributedInvocation = DistributedInvocation(call3)
 
-    # Set different statuses
-    test_app.orchestrator.set_invocation_status(
-        invocation1, InvocationStatus.REGISTERED
+    # register invocations in the orchestrator
+    app.orchestrator.register_new_invocations([invocation1, invocation2, invocation3])
+    # Set different statuses (to registered)
+    app.orchestrator.set_invocation_status(
+        invocation2.invocation_id, InvocationStatus.SUCCESS
     )
-    test_app.orchestrator.set_invocation_status(invocation2, InvocationStatus.SUCCESS)
-    test_app.orchestrator.set_invocation_status(invocation3, InvocationStatus.FAILED)
+    app.orchestrator.set_invocation_status(
+        invocation3.invocation_id, InvocationStatus.FAILED
+    )
 
     # Setup routes before creating test client
     setup_routes()
 
     # Patch pynmon to use our test app
-    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=test_app):
+    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=app):
         client = TestClient(pynmon_app)
 
         # Test filtering by SUCCESS status - should only show invocation2
@@ -152,10 +175,10 @@ def test_invocations_list_with_status_filter() -> None:
         ), f"Expected links for 1 unique invocation, found {len(unique_invocation_ids)}"
 
 
-def test_invocations_list_with_task_filter() -> None:
+def test_invocations_list_with_task_filter(app: "Pynenc") -> None:
     """Test that invocations list actually filters by task."""
     # Clear any existing invocations
-    test_app.purge()
+    app.purge()
 
     # Create invocations for different tasks
     call1: Call = Call(add_task, Arguments({"x": 1, "y": 1}))
@@ -164,18 +187,14 @@ def test_invocations_list_with_task_filter() -> None:
     invocation1: DistributedInvocation = DistributedInvocation(call1)
     invocation2: DistributedInvocation = DistributedInvocation(call2)
 
-    test_app.orchestrator.set_invocation_status(
-        invocation1, InvocationStatus.REGISTERED
-    )
-    test_app.orchestrator.set_invocation_status(
-        invocation2, InvocationStatus.REGISTERED
-    )
+    # register invocations in the orchestrator
+    app.orchestrator.register_new_invocations([invocation1, invocation2])
 
     # Setup routes before creating test client
     setup_routes()
 
     # Patch pynmon to use our test app
-    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=test_app):
+    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=app):
         client = TestClient(pynmon_app)
 
         # Filter by add_task - should only show invocation1
@@ -209,20 +228,20 @@ def test_invocations_list_with_task_filter() -> None:
         assert task_id in content
 
 
-def test_invocation_detail_shows_invocation_info() -> None:
+def test_invocation_detail_shows_invocation_info(app: "Pynenc") -> None:
     """Test that invocation detail displays complete invocation information."""
     # Create an invocation for testing
     call: Call = Call(add_task, Arguments({"x": 10, "y": 20}))
     invocation: DistributedInvocation = DistributedInvocation(call)
 
-    # Store invocation in the orchestrator
-    test_app.orchestrator.set_invocation_status(invocation, InvocationStatus.REGISTERED)
+    # register invocations in the orchestrator
+    app.orchestrator.register_new_invocations([invocation])
 
     # Setup routes before creating test client
     setup_routes()
 
     # Patch pynmon to use our test app
-    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=test_app):
+    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=app):
         client = TestClient(pynmon_app)
         response = client.get(f"/invocations/{invocation.invocation_id}")
 
@@ -245,13 +264,13 @@ def test_invocation_detail_shows_invocation_info() -> None:
         assert "20" in content  # y argument
 
 
-def test_invocation_detail_nonexistent_invocation() -> None:
+def test_invocation_detail_nonexistent_invocation(app: "Pynenc") -> None:
     """Test that invocation detail handles nonexistent invocations."""
     # Setup routes before creating test client
     setup_routes()
 
     # Patch pynmon to use our test app
-    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=test_app):
+    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=app):
         client = TestClient(pynmon_app)
         response = client.get("/invocations/nonexistent-id")
 
@@ -262,16 +281,16 @@ def test_invocation_detail_nonexistent_invocation() -> None:
         assert "not found" in content.lower() or "error" in content.lower()
 
 
-def test_invocations_timeline_basic() -> None:
+def test_invocations_timeline_basic(app: "Pynenc") -> None:
     """Test that invocations timeline loads without errors."""
     # Clear any existing invocations
-    test_app.purge()
+    app.purge()
 
     # Setup routes before creating test client
     setup_routes()
 
     # Patch pynmon to use our test app
-    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=test_app):
+    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=app):
         client = TestClient(pynmon_app)
         response = client.get("/invocations/timeline")
 
@@ -279,10 +298,10 @@ def test_invocations_timeline_basic() -> None:
         assert "text/html" in response.headers["content-type"]
 
 
-def test_orchestrator_status_filtering_logic() -> None:
+def test_orchestrator_status_filtering_logic(app: "Pynenc") -> None:
     """Test that the orchestrator correctly filters invocations by status."""
     # Clear any existing invocations
-    test_app.purge()
+    app.purge()
 
     # Create invocations with different statuses
     call1: Call = Call(add_task, Arguments({"x": 1, "y": 1}))
@@ -293,58 +312,58 @@ def test_orchestrator_status_filtering_logic() -> None:
     invocation2: DistributedInvocation = DistributedInvocation(call2)
     invocation3: DistributedInvocation = DistributedInvocation(call3)
 
-    # Set different statuses
-    test_app.orchestrator.set_invocation_status(
-        invocation1, InvocationStatus.REGISTERED
+    # register invocations in the orchestrator
+    app.orchestrator.register_new_invocations([invocation1, invocation2, invocation3])
+
+    # Set different statuses (to registered)
+    app.orchestrator.set_invocation_status(
+        invocation2.invocation_id, InvocationStatus.SUCCESS
     )
-    test_app.orchestrator.set_invocation_status(invocation2, InvocationStatus.SUCCESS)
-    test_app.orchestrator.set_invocation_status(invocation3, InvocationStatus.FAILED)
+    app.orchestrator.set_invocation_status(
+        invocation3.invocation_id, InvocationStatus.FAILED
+    )
 
     # Test filtering for SUCCESS status only
-    success_invocations = list(
-        test_app.orchestrator.get_existing_invocations(
+    success_invocation_ids = list(
+        app.orchestrator.get_existing_invocations(
             task=add_task, statuses=[InvocationStatus.SUCCESS]
         )
     )
 
-    assert len(success_invocations) == 1
-    assert success_invocations[0].invocation_id == invocation2.invocation_id
-    assert success_invocations[0].status == InvocationStatus.SUCCESS
+    assert len(success_invocation_ids) == 1
+    assert success_invocation_ids[0] == invocation2.invocation_id
 
     # Test filtering for multiple statuses
-    multiple_status_invocations = list(
-        test_app.orchestrator.get_existing_invocations(
+    multiple_status_invocation_ids = set(
+        app.orchestrator.get_existing_invocations(
             task=add_task,
             statuses=[InvocationStatus.REGISTERED, InvocationStatus.FAILED],
         )
     )
 
-    assert len(multiple_status_invocations) == 2
-    retrieved_ids = {inv.invocation_id for inv in multiple_status_invocations}
+    assert len(multiple_status_invocation_ids) == 2
     expected_ids = {invocation1.invocation_id, invocation3.invocation_id}
-    assert retrieved_ids == expected_ids
+    assert multiple_status_invocation_ids == expected_ids
 
     # Test no filter (should return all)
-    all_invocations = list(
-        test_app.orchestrator.get_existing_invocations(task=add_task)
-    )
+    all_invocations = list(app.orchestrator.get_existing_invocations(task=add_task))
     assert len(all_invocations) == 3
 
 
-def test_invocation_api_endpoint() -> None:
+def test_invocation_api_endpoint(app: "Pynenc") -> None:
     """Test that invocation API endpoint returns JSON data."""
     # Create an invocation for testing
     call: Call = Call(multiply_task, Arguments({"a": 3, "b": 4}))
     invocation: DistributedInvocation = DistributedInvocation(call)
 
-    # Store invocation in the orchestrator
-    test_app.orchestrator.set_invocation_status(invocation, InvocationStatus.REGISTERED)
+    # register invocations in the orchestrator
+    app.orchestrator.register_new_invocations([invocation])
 
     # Setup routes before creating test client
     setup_routes()
 
     # Patch pynmon to use our test app
-    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=test_app):
+    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=app):
         client = TestClient(pynmon_app)
         response = client.get(f"/invocations/{invocation.invocation_id}/api")
 
@@ -357,20 +376,20 @@ def test_invocation_api_endpoint() -> None:
         assert data["invocation_id"] == invocation.invocation_id
 
 
-def test_invocation_history_endpoint() -> None:
+def test_invocation_history_endpoint(app: "Pynenc") -> None:
     """Test that invocation history endpoint returns JSON data."""
     # Create an invocation for testing
     call: Call = Call(add_task, Arguments({"x": 1, "y": 2}))
     invocation: DistributedInvocation = DistributedInvocation(call)
 
-    # Store invocation in the orchestrator
-    test_app.orchestrator.set_invocation_status(invocation, InvocationStatus.REGISTERED)
+    # register invocations in the orchestrator
+    app.orchestrator.register_new_invocations([invocation])
 
     # Setup routes before creating test client
     setup_routes()
 
     # Patch pynmon to use our test app
-    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=test_app):
+    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=app):
         client = TestClient(pynmon_app)
         response = client.get(f"/invocations/{invocation.invocation_id}/history")
 

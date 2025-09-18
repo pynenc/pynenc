@@ -72,18 +72,14 @@ def test_state_backend_basic_operations(
     test_value = "test_value"
 
     # Test set
-    app.state_backend.set_workflow_deterministic_value(
-        workflow_identity, test_key, test_value
-    )
+    app.state_backend.set_workflow_data(workflow_identity, test_key, test_value)
 
     # Test get
-    retrieved = app.state_backend.get_workflow_deterministic_value(
-        workflow_identity, test_key
-    )
+    retrieved = app.state_backend.get_workflow_data(workflow_identity, test_key)
     assert retrieved == test_value
 
     # Test get non-existent returns None
-    non_existent = app.state_backend.get_workflow_deterministic_value(
+    non_existent = app.state_backend.get_workflow_data(
         workflow_identity, "non_existent"
     )
     assert non_existent is None

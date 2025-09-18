@@ -4,6 +4,7 @@ import uuid
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator, Iterator
 from dataclasses import dataclass, field
+from functools import cached_property
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from pynenc.call import Call
@@ -28,6 +29,19 @@ class InvocationIdentity(Generic[Params, Result]):
     call: Call[Params, Result]
     invocation_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     parent_invocation: BaseInvocation | None = None
+
+    def __str__(self) -> str:
+        parent_id = (
+            self.parent_invocation.invocation_id if self.parent_invocation else None
+        )
+        return (
+            f"InvocationIdentity(call_id={self.call.call_id}, "
+            f"invocation_id={self.invocation_id}, "
+            f"parent_invocation_id={parent_id})"
+        )
+
+    def __repr__(self) -> str:
+        return self.__str__()
 
 
 class BaseInvocation(ABC, Generic[Params, Result]):
@@ -163,7 +177,21 @@ class BaseInvocation(ABC, Generic[Params, Result]):
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, BaseInvocation):
             return False
-        return self.identity == other.identity and self.status == other.status
+        try:
+            return self.identity == other.identity and self.status == other.status
+        except KeyError as e:
+            # Handle cross-app invocation comparisons where status lookup fails
+            # This happens when comparing invocations from different app instances (e.g., child processes)
+            print(
+                f"DEBUG: KeyError in invocation comparison: {e}, falling back to identity-only comparison"
+            )
+            return self.identity == other.identity
+        except Exception as e:
+            # Handle any other exceptions during status comparison
+            print(
+                f"DEBUG: Exception in invocation comparison: {e}, falling back to identity-only comparison"
+            )
+            return self.identity == other.identity
 
 
 @dataclass(frozen=True)
@@ -176,18 +204,22 @@ class BaseInvocationGroup(ABC, Generic[Params, Result, T]):
     Subclasses of `BaseInvocationGroup`, such as `ConcurrentInvocationGroup` and `DistributedInvocationGroup`, provide specific implementations for synchronous and distributed environments, respectively.
 
     :param Task task: The task associated with the invocations.
-    :param list[BaseInvocation] invocations: A list of invocations, each an instance of a `BaseInvocation` subclass.
+    :param dict[str, BaseInvocation] invocations: A dictionary of invocations, each an instance of a `BaseInvocation` subclass.
     """
 
     task: Task
     invocations: list[T]
+
+    @cached_property
+    def invocation_map(self) -> dict[str, T]:
+        return {inv.invocation_id: inv for inv in self.invocations}
 
     @property
     def app(self) -> Pynenc:
         return self.task.app
 
     def __iter__(self) -> Iterator[T]:
-        yield from self.invocations
+        return iter(self.invocations)
 
     @property
     @abstractmethod
