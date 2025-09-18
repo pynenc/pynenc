@@ -29,9 +29,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Added comprehensive test coverage for plugin system functionality
 
 - **Builder System Improvements**:
+
   - Enhanced builder test coverage with comprehensive unit tests
   - Added validation for enum synchronization between builder and configuration classes
   - Added robust plugin method chaining and cleanup mechanisms
+
+- **Enhanced Invocation History**:
+  - Added `RunnerContext` class in `runner_context.py` to capture detailed runner execution context (hostname, PID, etc.) for task invocations.
+  - Updated `InvocationHistory` in `base_state_backend.py` to include runner context for improved debugging and monitoring of task executions.
 
 ### Changed
 
@@ -42,11 +47,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Existing Redis-based applications will need to install `pynenc-redis` separately
   - Redis configuration and functionality remains unchanged once the plugin is installed
 
+- **Orchestrator Architecture Optimization**:
+
+  - **BREAKING CHANGE**: Orchestrator now works exclusively with invocations, call and task IDs
+  - Objects are only serialized in the state backend to keep orchestrator lightweight
+  - Runners are now more lightweight as they retrieve invocations from state backend only when necessary
+  - Reduced memory consumption throughout Pynenc by using invocation_id in control structures
+  - Removed state backend dependencies from orchestrator integration tests
+
+- **Serializer**:
+
+  - Default serializer changed from JSON to `jsonpickle` to preserve Python object types (e.g., NamedTuple) when persisting state and results.
+  - Added `JsonPickleSerializer` implementation using the `jsonpickle` library.
+  - Security note: `jsonpickle` can reconstruct arbitrary Python objects on deserialization — use it only for trusted, internal persistence (local state backends).
+
 - **Plugin-Based Backend Selection**:
 
   - Backend selection now uses plugin discovery mechanism
   - Enhanced `PynencBuilder` to support plugin-based backend configuration
   - Improved error messages when required plugins are missing
+
+- **Move Redis to a plugging**:
+
+  - The Redis-related backend implementations were moved out of the core repository into plugin packages to simplify core distribution.
+  - For testing process-compatible (non-memory) runners we recommend using a shared SQLite-backed state backend to enable cross-process coordination without adding external dependencies to the core.
 
 - **Builder Architecture**:
   - Modified builder to support dynamic method registration from plugins
@@ -195,7 +219,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **App Discovery and Registration**:
 
   - Added `store_app_info` and `get_app_info` methods to state backends
-  - Implemented `get_all_app_infos` to discover registered apps in the system
+  - Implemented `discover_app_infos` to discover registered apps in the system
   - Enhanced `AppInfo` class with module path and variable name information
 
 - **Improved Monitoring Interface**:

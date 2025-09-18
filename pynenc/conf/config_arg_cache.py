@@ -1,6 +1,7 @@
 from cistell import ConfigField
 
 from pynenc.conf.config_base import ConfigPynencBase
+from pynenc.conf.config_sqlite import ConfigSQLite
 
 
 class ConfigArgCache(ConfigPynencBase):
@@ -19,3 +20,7 @@ class ConfigArgCache(ConfigPynencBase):
 
     min_size_to_cache = ConfigField(1024)  # 1KB
     local_cache_size = ConfigField(1024)
+
+
+class ConfigArgCacheSQLite(ConfigArgCache, ConfigSQLite):
+    """SQLite-based argument cache configuration"""

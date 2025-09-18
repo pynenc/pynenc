@@ -19,7 +19,7 @@ def test_arguments_str_repr_no_app() -> None:
     long_string = "long_string" * 10
     args = Arguments(kwargs={"a": 1, "b": long_string})
     assert str(args) == "args(a=..., b=...)"
-    assert repr(args) == f"Arguments({{'a': 1, 'b': '{long_string}'}})"
+    assert repr(args) in ("Arguments({'a', 'b'})", "Arguments({'b', 'a'})")
 
 
 def test_arguments_str_hidden(mock_app: Mock) -> None:

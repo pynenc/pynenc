@@ -24,7 +24,7 @@ app = (
     .memory()
     .thread_runner()
     .app_id("test-pynmon-workflow-runs")
-    .serializer("json")
+    .serializer_json()
     .build()
 )
 

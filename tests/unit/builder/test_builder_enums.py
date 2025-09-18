@@ -2,23 +2,6 @@ import pytest
 
 from pynenc.builder import PynencBuilder
 from pynenc.conf.config_pynenc import ArgumentPrintMode
-from pynenc.conf.config_task import ConcurrencyControlType
-
-
-def test_valid_concurrency_modes_matches_enum() -> None:
-    """
-    Test that _VALID_CONCURRENCY_MODES in PynencBuilder matches the values in ConcurrencyControlType.
-    """
-    # Get the enum values from ConcurrencyControlType
-    enum_values = set(ConcurrencyControlType.__members__.keys())
-
-    # Get the valid modes from PynencBuilder
-    builder_modes = PynencBuilder._VALID_CONCURRENCY_MODES
-
-    # Assert they match exactly
-    assert (
-        builder_modes == enum_values
-    ), f"_VALID_CONCURRENCY_MODES {builder_modes} does not match ConcurrencyControlType values {enum_values}"
 
 
 def test_argument_print_mode_should_accept_all_enum_values() -> None:

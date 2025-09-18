@@ -1,4 +1,7 @@
 import logging
+import os
+import signal
+import subprocess
 import time
 from collections import namedtuple
 from collections.abc import Generator
@@ -9,11 +12,19 @@ import pytest
 from _pytest.monkeypatch import MonkeyPatch
 
 from pynenc import Pynenc
+
+# Import all concrete implementations so they're available to __subclasses__()
+from pynenc.arg_cache import *  # noqa: F403, F401
 from pynenc.arg_cache.base_arg_cache import BaseArgCache
+from pynenc.broker import *  # noqa: F403, F401
 from pynenc.broker.base_broker import BaseBroker
+from pynenc.orchestrator import *  # noqa: F403, F401
 from pynenc.orchestrator.base_orchestrator import BaseOrchestrator
+from pynenc.runner import *  # noqa: F403, F401
 from pynenc.runner.base_runner import BaseRunner
+from pynenc.serializer import *  # noqa: F403, F401
 from pynenc.serializer.base_serializer import BaseSerializer
+from pynenc.state_backend import *  # noqa: F403, F401
 from pynenc.state_backend.base_state_backend import BaseStateBackend
 from tests import util
 from tests.integration.apps.combinations import tasks, tasks_async
@@ -73,11 +84,35 @@ def get_combination_id(combination: AppComponents) -> str:
 
 def pytest_generate_tests(metafunc: "Metafunc") -> None:
     def get_subclasses(cls: type, mem_cls: Optional[bool] = None) -> list[type]:
-        subclasses = []
-        for c in cls.__subclasses__():
+        """Get all subclasses recursively."""
+
+        def _get_all_subclasses(cls: type) -> set[type]:
+            """Recursively get all subclasses."""
+            subclasses = set()
+            for subclass in cls.__subclasses__():
+                subclasses.add(subclass)
+                subclasses.update(_get_all_subclasses(subclass))
+            return subclasses
+
+        all_subclasses = _get_all_subclasses(cls)
+        subclasses: list[type] = []
+
+        for c in all_subclasses:
             if "mock" in c.__name__.lower() or c.__name__.startswith("Dummy"):
                 continue
-            if mem_cls is not None and mem_cls != c.__name__.startswith("Mem"):
+
+            # Special case: All serializers are memory compatible and work with both
+            # memory and non-memory setups, so include them regardless of mem_cls
+            if issubclass(c, BaseSerializer):
+                subclasses.append(c)
+                continue
+
+            # For other classes, use the "Mem" and "SharedMemory" prefix conventions
+            # SharedMemory classes are also memory compatible (for testing process runners)
+            is_mem_compatible = c.__name__.startswith("Mem") or c.__name__.startswith(
+                "SharedMemory"
+            )
+            if mem_cls is not None and mem_cls != is_mem_compatible:
                 continue
             # if c.__name__.startswith("Process"):
             #     continue
@@ -92,41 +127,99 @@ def pytest_generate_tests(metafunc: "Metafunc") -> None:
         ]
 
     if "app" in metafunc.fixturenames:
-        # These runners can run with any combination of components (including memory components)
-        mem_compatible_runners_combinations = (
+        # Memory-compatible runners with pure Mem components only (no mixing with SharedMemory)
+        mem_combinations = (
             AppComponents(*x)
             for x in product(
-                get_subclasses(BaseArgCache, mem_cls=True),
-                get_subclasses(BaseBroker, mem_cls=True),
-                get_subclasses(BaseOrchestrator, mem_cls=True),
+                [
+                    c
+                    for c in get_subclasses(BaseArgCache, mem_cls=True)
+                    if c.__name__.startswith("Mem")
+                ],
+                [
+                    c
+                    for c in get_subclasses(BaseBroker, mem_cls=True)
+                    if c.__name__.startswith("Mem")
+                ],
+                [
+                    c
+                    for c in get_subclasses(BaseOrchestrator, mem_cls=True)
+                    if c.__name__.startswith("Mem")
+                ],
                 get_runners(mem_compatible=True),
-                get_subclasses(BaseSerializer, mem_cls=True),
-                get_subclasses(BaseStateBackend, mem_cls=True),
+                get_subclasses(BaseSerializer),
+                [
+                    c
+                    for c in get_subclasses(BaseStateBackend, mem_cls=True)
+                    if c.__name__.startswith("Mem")
+                ],
+            )
+        )
+        # Process-compatible runners with pure SQLite components only
+        sqlite_combinations = (
+            AppComponents(*x)
+            for x in product(
+                [
+                    c
+                    for c in get_subclasses(BaseArgCache)
+                    if c.__name__.startswith("SQLite")
+                ],
+                [
+                    c
+                    for c in get_subclasses(BaseBroker)
+                    if c.__name__.startswith("SQLite")
+                ],
+                [
+                    c
+                    for c in get_subclasses(BaseOrchestrator)
+                    if c.__name__.startswith("SQLite")
+                ],
+                # Call it with all the classes, including the memory exclusive runners (ThreadRunner)
+                # get_runners(mem_compatible=False),
+                get_subclasses(BaseRunner),
+                get_subclasses(BaseSerializer),
+                [
+                    c
+                    for c in get_subclasses(BaseStateBackend)
+                    if c.__name__.startswith("SQLite")
+                ],
             )
         )
 
-        # These runner cannot be used with memory components
-        # eg. ProcessRunner has different memory space for each task
-        not_mem_compatible_runner_combinations = (
-            AppComponents(*x)
-            for x in product(
-                get_subclasses(BaseArgCache, mem_cls=False),
-                get_subclasses(BaseBroker, mem_cls=False),
-                get_subclasses(BaseOrchestrator, mem_cls=False),
-                get_runners(mem_compatible=False),
-                get_subclasses(BaseSerializer, mem_cls=False),
-                get_subclasses(BaseStateBackend, mem_cls=False),
-            )
-        )
-        combinations = list(mem_compatible_runners_combinations) + list(
-            not_mem_compatible_runner_combinations
-        )
+        combinations = list(mem_combinations) + list(sqlite_combinations)
         ids = list(map(get_combination_id, combinations))
         metafunc.parametrize("app", combinations, ids=ids, indirect=True)
 
 
+def _cleanup_multiprocessing_children() -> None:
+    """Kill lingering Python multiprocessing child processes (spawn/resource_tracker) before app init."""
+    try:
+        # List all python processes
+        result = subprocess.run(
+            ["ps", "aux"], capture_output=True, text=True, check=True
+        )
+        for line in result.stdout.splitlines():
+            if "python" in line and (
+                "multiprocessing.spawn" in line
+                or "multiprocessing.resource_tracker" in line
+            ):
+                parts = line.split()
+                pid = int(parts[1])
+                try:
+                    # Send SIGKILL to the process
+                    os.kill(pid, signal.SIGKILL)
+                    logging.info(f"Killed lingering multiprocessing process {pid}")
+                except Exception as e:
+                    logging.warning(f"Failed to kill process {pid}: {e}")
+    except Exception as e:
+        logging.warning(f"Failed to cleanup multiprocessing children: {e}")
+
+
 @pytest.fixture
-def app(request: "FixtureRequest", monkeypatch: MonkeyPatch) -> Pynenc:
+def app(
+    request: "FixtureRequest", monkeypatch: MonkeyPatch, temp_sqlite_db_path: str
+) -> Pynenc:
+    _cleanup_multiprocessing_children()
     components: AppComponents = request.param
     test_module, test_name = util.get_module_name(request)
     monkeypatch.setenv("PYNENC__APP_ID", f"{test_module}.{test_name}")
@@ -138,8 +231,19 @@ def app(request: "FixtureRequest", monkeypatch: MonkeyPatch) -> Pynenc:
     monkeypatch.setenv("PYNENC__RUNNER_CLS", components.runner.__name__)
     monkeypatch.setenv("PYNENC__LOGGING_LEVEL", "debug")
     monkeypatch.setenv("PYNENC__ORCHESTRATOR__CYCLE_CONTROL", "True")
-    # Set logging level before app initialization
-    monkeypatch.setenv("PYNENC__LOGGING_LEVEL", "info")
+    monkeypatch.setenv("PYNENC__PRINT_ARGUMENTS", "False")
+
+    # Set shared SQLite database path for SQLite components
+    if any(
+        cls.__name__.startswith("SQLite")
+        for cls in [
+            components.arg_cache,
+            components.broker,
+            components.orchestrator,
+            components.state_backend,
+        ]
+    ):
+        monkeypatch.setenv("PYNENC__SQLITE_DB_PATH", temp_sqlite_db_path)
 
     app = Pynenc()
     app.purge()
@@ -147,110 +251,107 @@ def app(request: "FixtureRequest", monkeypatch: MonkeyPatch) -> Pynenc:
     return app
 
 
+def replace_tasks_app(app: Pynenc) -> None:
+    """Replace the .app attribute for all tasks in tasks and tasks_async modules."""
+    for mod in [tasks, tasks_async]:
+        for attr in dir(mod):
+            obj = getattr(mod, attr)
+            # Only update if it's a Task and has .app
+            if hasattr(obj, "app"):
+                obj.app = app
+
+
 @pytest.fixture(scope="function")
 def task_cycle(app: Pynenc) -> "Task":
-    # this replacing the app of the task works in multithreading
-
-    # but not in multi processing runner,
-    # the process start from scratch and reference the function
-    # with the mocked decorator
-    tasks.cycle_start.app = app
-    tasks.cycle_end.app = app
+    replace_tasks_app(app)
     return tasks.cycle_start
 
 
 @pytest.fixture(scope="function")
 def task_raise_exception(app: Pynenc) -> "Task":
-    tasks.raise_exception.app = app
+    replace_tasks_app(app)
     return tasks.raise_exception
 
 
 @pytest.fixture(scope="function")
 def task_sum(app: Pynenc) -> "Task":
-    tasks.sum.app = app
-    return tasks.sum
+    replace_tasks_app(app)
+    return tasks.sum_task
 
 
 @pytest.fixture(scope="function")
 def task_get_text(app: Pynenc) -> "Task":
-    tasks.get_text.app = app
+    replace_tasks_app(app)
     return tasks.get_text
 
 
 @pytest.fixture(scope="function")
 def task_get_upper(app: Pynenc) -> "Task":
-    tasks.get_text.app = app
-    tasks.get_upper.app = app
+    replace_tasks_app(app)
     return tasks.get_upper
 
 
 @pytest.fixture(scope="function")
 def task_direct_cycle(app: Pynenc) -> "Task":
-    tasks.direct_cycle.app = app
+    replace_tasks_app(app)
     return tasks.direct_cycle
 
 
 @pytest.fixture(scope="function")
 def task_retry_once(app: Pynenc) -> "Task":
-    tasks.retry_once.app = app
+    replace_tasks_app(app)
     return tasks.retry_once
 
 
 @pytest.fixture(scope="function")
 def task_sleep(app: Pynenc) -> "Task":
-    tasks.sleep_seconds.app = app
+    replace_tasks_app(app)
     return tasks.sleep_seconds
 
 
 @pytest.fixture(scope="function")
 def task_cpu_intensive_no_conc(app: Pynenc) -> "Task":
-    tasks.cpu_intensive_no_conc.app = app
+    replace_tasks_app(app)
     return tasks.cpu_intensive_no_conc
 
 
 @pytest.fixture(scope="function")
 def task_distribute_cpu_work(app: Pynenc) -> "Task":
-    tasks.distribute_cpu_work.app = app
+    replace_tasks_app(app)
     return tasks.distribute_cpu_work
 
 
 @pytest.fixture(scope="function")
 def task_async_add(app: Pynenc) -> "Task":
-    tasks_async.async_add.app = app
+    replace_tasks_app(app)
     return tasks_async.async_add
 
 
 @pytest.fixture(scope="function")
 def task_async_get_text(app: Pynenc) -> "Task":
-    tasks_async.async_get_text.app = app
+    replace_tasks_app(app)
     return tasks_async.async_get_text
 
 
 @pytest.fixture(scope="function")
 def task_async_get_upper(app: Pynenc) -> "Task":
-    tasks_async.async_get_upper.app = app
+    replace_tasks_app(app)
     return tasks_async.async_get_upper
 
 
 @pytest.fixture(scope="function")
 def task_async_fail(app: Pynenc) -> "Task":
-    tasks_async.async_fail.app = app
+    replace_tasks_app(app)
     return tasks_async.async_fail
 
 
 @pytest.fixture(scope="function")
 def task_async_sleep(app: Pynenc) -> "Task":
-    tasks_async.async_sleep_seconds.app = app
+    replace_tasks_app(app)
     return tasks_async.async_sleep_seconds
 
 
 @pytest.fixture(scope="function")
 def task_process_large_shared_arg(app: Pynenc) -> "Task":
-    tasks.process_large_shared_arg.app = app
+    replace_tasks_app(app)
     return tasks.process_large_shared_arg
-
-
-@pytest.fixture(scope="function")
-def task_batch_process_shared_data(app: Pynenc) -> "Task":
-    tasks.batch_process_shared_data.app = app
-    return tasks.batch_process_shared_data

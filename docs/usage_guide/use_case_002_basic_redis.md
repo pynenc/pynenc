@@ -50,7 +50,7 @@ app = (
     PynencBuilder()
     .redis(url="redis://redis:6379")  # Requires pynenc-redis plugin
     .process_runner()
-    .serializer("json")
+    .serializer_json()
     .custom_config(app_id="app_basic_redis_example")
     .build()
 )

@@ -1,13 +1,16 @@
+import os
+import tempfile
 import threading
 import time
 from collections.abc import Generator
 from functools import cached_property
+from logging import Logger
 from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock
 
 import pytest
 
-from pynenc import Pynenc
+from pynenc import Pynenc, PynencBuilder
 from pynenc.arg_cache.base_arg_cache import BaseArgCache
 from pynenc.broker.base_broker import BaseBroker
 from pynenc.call import Call
@@ -15,11 +18,14 @@ from pynenc.invocation import DistributedInvocation
 from pynenc.orchestrator.base_orchestrator import BaseBlockingControl, BaseOrchestrator
 from pynenc.runner.base_runner import BaseRunner
 from pynenc.state_backend.base_state_backend import BaseStateBackend
+from pynenc.task import Task
+from tests.util.log import create_test_logger
 
 if TYPE_CHECKING:
     from _pytest.fixtures import FixtureRequest
 
-    from pynenc.task import Task
+
+logger: Logger = create_test_logger("conftest")
 
 
 class MockBroker(BaseBroker):
@@ -66,11 +72,17 @@ class MockBlockingControl(BaseBlockingControl):
 class MockBaseOrchestrator(BaseOrchestrator):
     def __init__(self, app: "Pynenc") -> None:
         super().__init__(app)
+        self._register_new_invocations_mock = MagicMock()
+        self._any_non_final_invocations_mock = MagicMock()
+        self._get_call_invocation_ids_mock = MagicMock()
+        self._get_task_invocation_ids_mock = MagicMock()
+        self._get_invocation_call_id_mock = MagicMock()
         self._get_existing_invocations_mock = MagicMock()
         self._get_invocation_mock = MagicMock()
         self._set_invocation_status_mock = MagicMock()
         self._set_invocations_status_mock = MagicMock()
         self._set_invocation_pending_status_mock = MagicMock()
+        self._get_invocation_pending_timer_mock = MagicMock()
         self._get_invocation_status_mock = MagicMock()
         self._increment_invocation_retries_mock = MagicMock()
         self._get_invocation_retries_mock = MagicMock()
@@ -81,12 +93,25 @@ class MockBaseOrchestrator(BaseOrchestrator):
         self.blocking_control_mock = MockBlockingControl()
         self._mock_filter_by_status = MagicMock()
         self._mock_filter_final = MagicMock()
+        self._index_arguments_for_concurrency_control_mock = MagicMock()
+
+    def _register_new_invocations(self, *args: Any, **kwargs: Any) -> Any:
+        return self._register_new_invocations_mock(*args, **kwargs)
+
+    def any_non_final_invocations(self, *args: Any, **kwargs: Any) -> Any:
+        return self._any_non_final_invocations_mock(*args, **kwargs)
+
+    def get_call_invocation_ids(self, *args: Any, **kwargs: Any) -> Any:
+        return self._get_call_invocation_ids_mock(*args, **kwargs)
+
+    def get_invocation_call_id(self, *args: Any, **kwargs: Any) -> Any:
+        return self._get_invocation_call_id_mock(*args, **kwargs)
+
+    def get_task_invocation_ids(self, *args: Any, **kwargs: Any) -> Any:
+        return self._get_task_invocation_ids_mock(*args, **kwargs)
 
     def get_existing_invocations(self, *args: Any, **kwargs: Any) -> Any:
         return self._get_existing_invocations_mock(*args, **kwargs)
-
-    def get_invocation(self, *args: Any, **kwargs: Any) -> Any:
-        return self._get_invocation_mock(*args, **kwargs)
 
     def _set_invocation_status(self, *args: Any, **kwargs: Any) -> Any:
         return self._set_invocation_status_mock(*args, **kwargs)
@@ -97,6 +122,9 @@ class MockBaseOrchestrator(BaseOrchestrator):
     def _set_invocation_pending_status(self, *args: Any, **kwargs: Any) -> Any:
         return self._set_invocation_pending_status_mock(*args, **kwargs)
 
+    def get_invocation_pending_timer(self, *args: Any, **kwargs: Any) -> Any:
+        return self._get_invocation_pending_timer_mock(*args, **kwargs)
+
     def get_invocation_status(self, *args: Any, **kwargs: Any) -> Any:
         return self._get_invocation_status_mock(*args, **kwargs)
 
@@ -105,6 +133,9 @@ class MockBaseOrchestrator(BaseOrchestrator):
 
     def get_invocation_retries(self, *args: Any, **kwargs: Any) -> Any:
         return self._get_invocation_retries_mock(*args, **kwargs)
+
+    def index_arguments_for_concurrency_control(self, *args: Any, **kwargs: Any) -> Any:
+        return self._index_arguments_for_concurrency_control_mock(*args, **kwargs)
 
     def set_up_invocation_auto_purge(self, *args: Any, **kwargs: Any) -> Any:
         return self._set_up_invocation_auto_purge_mock(*args, **kwargs)
@@ -131,16 +162,16 @@ class MockBaseOrchestrator(BaseOrchestrator):
         return self._purge_mock(*args, **kwargs)
 
 
-_get_all_app_infos_mock = MagicMock()
+_discover_app_infos_mock = MagicMock()
 
 
 class MockStateBackend(BaseStateBackend):
     def __init__(self, app: "Pynenc") -> None:
         super().__init__(app)
         self._purge_mock = MagicMock()
-        self._upsert_invocation_mock = MagicMock()
+        self._upsert_invocations_mock = MagicMock()
         self._get_invocation_mock = MagicMock()
-        self._add_history_mock = MagicMock()
+        self._add_histories_mock = MagicMock()
         self._get_history_mock = MagicMock()
         self._set_result_mock = MagicMock()
         self._get_result_mock = MagicMock()
@@ -164,14 +195,14 @@ class MockStateBackend(BaseStateBackend):
     def purge(self) -> None:
         return self._purge_mock()
 
-    def _upsert_invocation(self, *args: Any, **kwargs: Any) -> Any:
-        return self._upsert_invocation_mock(*args, **kwargs)
+    def _upsert_invocations(self, *args: Any, **kwargs: Any) -> Any:
+        return self._upsert_invocations_mock(*args, **kwargs)
 
     def _get_invocation(self, *args: Any, **kwargs: Any) -> Any:
         return self._get_invocation_mock(*args, **kwargs)
 
-    def _add_history(self, *args: Any, **kwargs: Any) -> Any:
-        return self._add_history_mock(*args, **kwargs)
+    def _add_histories(self, *args: Any, **kwargs: Any) -> Any:
+        return self._add_histories_mock(*args, **kwargs)
 
     def _get_history(self, *args: Any, **kwargs: Any) -> Any:
         return self._get_history_mock(*args, **kwargs)
@@ -185,8 +216,8 @@ class MockStateBackend(BaseStateBackend):
     def _set_exception(self, *args: Any, **kwargs: Any) -> Any:
         return self._set_exception_mock(*args, **kwargs)
 
-    def _get_exception(self, invocation: DistributedInvocation) -> Exception:
-        return self._get_exception_mock(invocation)
+    def _get_exception(self, *args: Any, **kwargs: Any) -> Any:
+        return self._get_exception_mock(*args, **kwargs)
 
     def set_workflow_state(self, *args: Any, **kwargs: Any) -> Any:
         return self._set_workflow_state_mock(*args, **kwargs)
@@ -199,12 +230,6 @@ class MockStateBackend(BaseStateBackend):
 
     def get_app_info(self, *args: Any, **kwargs: Any) -> Any:
         return self._get_app_info_mock(*args, **kwargs)
-
-    def get_workflow_deterministic_value(self, *args: Any, **kwargs: Any) -> Any:
-        return self._get_workflow_deterministic_value_mock(*args, **kwargs)
-
-    def set_workflow_deterministic_value(self, *args: Any, **kwargs: Any) -> Any:
-        return self._set_workflow_deterministic_value_mock(*args, **kwargs)
 
     def get_workflow_data(self, *args: Any, **kwargs: Any) -> Any:
         return self._get_workflow_data_mock(*args, **kwargs)
@@ -231,8 +256,8 @@ class MockStateBackend(BaseStateBackend):
         return self._get_workflow_sub_invocations_mock(*args, **kwargs)
 
     @staticmethod
-    def get_all_app_infos(*args: Any, **kwargs: Any) -> Any:
-        return _get_all_app_infos_mock(*args, **kwargs)
+    def discover_app_infos(*args: Any, **kwargs: Any) -> Any:
+        return _discover_app_infos_mock(*args, **kwargs)
 
 
 class MockArgCache(BaseArgCache):
@@ -361,14 +386,52 @@ def runner(request: "FixtureRequest") -> Generator[None, None, None]:
     runner_thread = threading.Thread(target=app.runner.run, daemon=True)
     runner_thread.start()
     time.sleep(0.2)
-    app.logger.info("Runner thread started")
+    logger.info("Runner thread started")
 
     yield
 
     app.logger.info("Stopping runner thread...")
     app.runner.stop_runner_loop()
     runner_thread.join(timeout=1)
-    app.logger.info("Thread join completed")
+    logger.info("Thread join completed")
 
-    app.logger.info("Purging app data...")
+    logger.info("Purging app data...")
     app.purge()
+
+
+@pytest.fixture(scope="function")
+def temp_sqlite_db_path() -> Generator[str, None, None]:
+    """
+    Provides a temporary SQLite database path for testing.
+
+    :return: Path to a temporary SQLite database file
+    """
+    fd, path = tempfile.mkstemp(suffix=".db")
+    logger.info(f"Created temporary SQLite DB at: {path}")
+    os.close(fd)
+    try:
+        yield path
+    finally:
+        if os.path.exists(path):
+            logger.info(f"Removing temporary SQLite DB at: {path}")
+            os.remove(path)
+
+
+@pytest.fixture(params=["memory", "sqlite"], scope="function")
+def app_instance(request: "FixtureRequest", temp_sqlite_db_path: str) -> Pynenc:
+    """
+    Parametrized fixture that provides a Pynenc app instance for both memory and SQLite backends.
+
+    Runs each test twice: once with an in-memory backend, once with a SQLite backend.
+
+    :param request: pytest fixture request object
+    :param tmp_path: pytest fixture for temporary directory
+    :return: Pynenc app instance
+    :rtype: Pynenc
+    """
+    if request.param == "memory":
+        return PynencBuilder().memory().build()
+    elif request.param == "sqlite":
+        return PynencBuilder().sqlite(sqlite_db_path=str(temp_sqlite_db_path)).build()
+    else:
+        raise ValueError(f"Unknown app backend: {request.param}")

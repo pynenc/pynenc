@@ -3,7 +3,7 @@ import pytest
 from pynenc.builder import PynencBuilder
 from pynenc.conf.config_broker import ConfigBroker
 from pynenc.conf.config_orchestrator import ConfigOrchestrator
-from pynenc.serializer import JsonSerializer, PickleSerializer
+from pynenc.serializer import JsonPickleSerializer, JsonSerializer, PickleSerializer
 
 
 def test_dev_mode_should_configure_correctly() -> None:
@@ -46,32 +46,17 @@ def test_task_control_should_configure_correctly() -> None:
     assert app.broker.conf.queue_timeout_sec == 0.05
 
 
-def test_serializer_should_accept_shortnames() -> None:
+def test_serializer() -> None:
     """Test serializer configuration with shortnames."""
     # Test shortnames
-    app_json = PynencBuilder().serializer("json").build()
-    assert app_json.conf.serializer_cls == "JsonSerializer"
+    app_json = PynencBuilder().serializer_json().build()
     assert isinstance(app_json.serializer, JsonSerializer)
 
-    app_pickle = PynencBuilder().serializer("pickle").build()
-    assert app_pickle.conf.serializer_cls == "PickleSerializer"
+    app_pickle = PynencBuilder().serializer_pickle().build()
     assert isinstance(app_pickle.serializer, PickleSerializer)
 
-
-def test_serializer_should_accept_class_names() -> None:
-    """Test serializer configuration with class names."""
-    # Test full class names
-    app_json = PynencBuilder().serializer("JsonSerializer").build()
-    assert app_json.conf.serializer_cls == "JsonSerializer"
-
-    app_pickle = PynencBuilder().serializer("PickleSerializer").build()
-    assert app_pickle.conf.serializer_cls == "PickleSerializer"
-
-
-def test_serializer_should_reject_invalid_names() -> None:
-    """Test serializer validation."""
-    with pytest.raises(ValueError, match="Invalid serializer"):
-        PynencBuilder().serializer("invalid_serializer").build()
+    app_json_pickle = PynencBuilder().serializer_json_pickle().build()
+    assert isinstance(app_json_pickle.serializer, JsonPickleSerializer)
 
 
 def test_max_pending_seconds_should_configure_correctly() -> None:

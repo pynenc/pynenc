@@ -11,6 +11,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from pynenc import Pynenc
 from pynenc.invocation.status import InvocationStatus
 from pynenc.trigger.arguments import create_argument_filter
 from pynenc.trigger.arguments.argument_providers import StaticArgumentProvider
@@ -24,10 +25,9 @@ from pynenc.trigger.conditions import (
 from pynenc.trigger.mem_trigger import MemTrigger
 from pynenc.trigger.trigger_builder import TriggerBuilder
 from pynenc.trigger.trigger_definitions import TriggerDefinition
-from tests.conftest import MockPynenc
 
 # Create a test app instance
-app = MockPynenc()
+app = Pynenc(config_values={"trigger_cls": "MemTrigger"})
 
 
 @app.task
@@ -38,7 +38,11 @@ def add(x: int, y: int) -> int:
 @pytest.fixture
 def trigger() -> MemTrigger:
     """Create a MemTrigger instance with a mock app."""
-    return MemTrigger(app)
+    assert isinstance(app.trigger, MemTrigger)
+    # Recreating a fresh instance instead of purguing to re-register all conditions and crons
+    # return MemTrigger(app)
+    app.purge()
+    return app.trigger  # type: ignore
 
 
 def test_register_and_get_condition(trigger: MemTrigger) -> None:
@@ -186,7 +190,7 @@ def test_report_task_status(trigger: MemTrigger) -> None:
     # Force task conditions mapping
     trigger._source_task_conditions = {task_id: {condition.condition_id}}
 
-    trigger.report_tasks_status([invocation], status)  # type: ignore
+    trigger.report_tasks_status([invocation.invocation_id], status)  # type: ignore
 
     valid_conditions = trigger.get_valid_conditions()
     assert len(valid_conditions) == 1
@@ -384,4 +388,4 @@ def test_execute_task(trigger: MemTrigger) -> None:
 
     invocation = trigger.execute_task(task_id, arguments)
 
-    app.broker.route_invocation_mock.assert_called_with(invocation)
+    assert invocation.status == InvocationStatus.REGISTERED

@@ -16,8 +16,11 @@ import warnings
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Optional, Union
 
+from pynenc.arg_cache.mem_arg_cache import MemArgCache
 from pynenc.conf.config_pynenc import ArgumentPrintMode
 from pynenc.conf.config_task import ConcurrencyControlType
+from pynenc.serializer import JsonPickleSerializer, JsonSerializer, PickleSerializer
+from pynenc.trigger.mem_trigger import MemTrigger
 
 # Entry points imports
 try:
@@ -51,7 +54,7 @@ class PynencBuilder:
     pynenc_app = (
         PynencBuilder()
         .app_id("my_application")
-        .serializer("pickle")
+        .serializer_pickle()
         .multi_thread_runner(min_threads=1, max_threads=4)
         .logging_level("info")
         .build()
@@ -67,17 +70,6 @@ class PynencBuilder:
     )
     ```
     """
-
-    _VALID_LOG_LEVELS = ["debug", "info", "warning", "error", "critical"]
-    _SERIALIZER_MAP = {
-        "json": "JsonSerializer",
-        "pickle": "PickleSerializer",
-    }
-    _MEMORY_ARG_CACHE = "MemArgCache"
-    _DISABLED_ARG_CACHE = "DisabledArgCache"
-    _MEMORY_TRIGGER = "MemTrigger"
-    _DISABLED_TRIGGER = "DisabledTrigger"
-    _VALID_CONCURRENCY_MODES = {"DISABLED", "TASK", "ARGUMENTS", "KEYS"}
 
     # Plugin registration system
     _plugin_methods: dict[str, Callable] = {}
@@ -254,12 +246,40 @@ class PynencBuilder:
                 "orchestrator_cls": "MemOrchestrator",
                 "broker_cls": "MemBroker",
                 "state_backend_cls": "MemStateBackend",
-                "arg_cache_cls": self._MEMORY_ARG_CACHE,
-                "trigger_cls": self._MEMORY_TRIGGER,
+                "arg_cache_cls": MemArgCache.__name__,
+                "trigger_cls": MemTrigger.__name__,
             }
         )
         self._using_memory_components = True
         self._plugin_components.clear()  # Clear any plugin components
+        return self
+
+    def sqlite(self, sqlite_db_path: Optional[str] = None) -> "PynencBuilder":
+        """
+        Configure SQLite components for the Pynenc application.
+
+        This sets up all components (orchestrator, broker, state backend,
+        and argument cache) to use SQLite backends. This is primarily
+        for testing multiprocess scenarios on a single machine.
+
+        Note: SQLite will not work in distributed environments with independent DB files.
+
+        :param Optional[str] sqlite_db_path: Path to the SQLite database file. If None, uses the default location.
+        :return: The builder instance for method chaining
+        """
+        self._config.update(
+            {
+                "orchestrator_cls": "SQLiteOrchestrator",
+                "broker_cls": "SQLiteBroker",
+                "state_backend_cls": "SQLiteStateBackend",
+                "arg_cache_cls": "SQLiteArgCache",
+                "trigger_cls": "SQLiteTrigger",
+            }
+        )
+        self._using_memory_components = False
+        self._plugin_components.clear()  # Clear any plugin components
+        if sqlite_db_path:
+            self._config["sqlite_db_path"] = sqlite_db_path
         return self
 
     def mem_arg_cache(
@@ -279,7 +299,7 @@ class PynencBuilder:
         """
         self._config.update(
             {
-                "arg_cache_cls": self._MEMORY_ARG_CACHE,
+                "arg_cache_cls": MemArgCache.__name__,
                 "min_size_to_cache": min_size_to_cache,
                 "local_cache_size": local_cache_size,
             }
@@ -296,7 +316,7 @@ class PynencBuilder:
 
         :return: The builder instance for method chaining
         """
-        self._config["arg_cache_cls"] = self._DISABLED_ARG_CACHE
+        self._config["arg_cache_cls"] = "DisabledArgCache"
         return self
 
     def mem_trigger(
@@ -316,7 +336,7 @@ class PynencBuilder:
         """
         self._config.update(
             {
-                "trigger_cls": self._MEMORY_TRIGGER,
+                "trigger_cls": MemTrigger.__name__,
                 "scheduler_interval_seconds": scheduler_interval_seconds,
                 "enable_scheduler": enable_scheduler,
             }
@@ -333,7 +353,7 @@ class PynencBuilder:
 
         :return: The builder instance for method chaining
         """
-        self._config["trigger_cls"] = self._DISABLED_TRIGGER
+        self._config["trigger_cls"] = "DisabledTrigger"
         return self
 
     def multi_thread_runner(
@@ -446,9 +466,10 @@ class PynencBuilder:
         :raises ValueError: If an invalid logging level is provided
         """
         level = level.lower()
-        if level not in self._VALID_LOG_LEVELS:
+        _VALID_LOG_LEVELS = ["debug", "info", "warning", "error", "critical"]
+        if level not in _VALID_LOG_LEVELS:
             raise ValueError(
-                f"Invalid logging level: {level}. Valid options are: {', '.join(self._VALID_LOG_LEVELS)}"
+                f"Invalid logging level: {level}. Valid options are: {', '.join(_VALID_LOG_LEVELS)}"
             )
         self._config["logging_level"] = level
         return self
@@ -499,24 +520,31 @@ class PynencBuilder:
         )
         return self
 
-    def serializer(self, serializer: str) -> "PynencBuilder":
+    def serializer_json_pickle(self) -> "PynencBuilder":
         """
-        Configure the serializer for task arguments and results.
+        Configure the JSON-Pickle hybrid serializer
 
-        :param str serializer: Serializer name ("json", "pickle") or full class name
         :return: The builder instance for method chaining
-        :raises ValueError: If an invalid serializer name is provided
         """
-        if serializer.lower() in self._SERIALIZER_MAP:
-            cls_name = self._SERIALIZER_MAP[serializer.lower()]
-        elif serializer.endswith("Serializer"):
-            cls_name = serializer
-        else:
-            raise ValueError(
-                f"Invalid serializer: {serializer}. Valid options are: {', '.join(self._SERIALIZER_MAP.keys())} "
-                f"or a full class name ending with 'Serializer'"
-            )
-        self._config["serializer_cls"] = cls_name
+        self._config["serializer_cls"] = JsonPickleSerializer.__name__
+        return self
+
+    def serializer_json(self) -> "PynencBuilder":
+        """
+        Configure the JSON serializer
+
+        :return: The builder instance for method chaining
+        """
+        self._config["serializer_cls"] = JsonSerializer.__name__
+        return self
+
+    def serializer_pickle(self) -> "PynencBuilder":
+        """
+        Configure the Pickle serializer
+
+        :return: The builder instance for method chaining
+        """
+        self._config["serializer_cls"] = PickleSerializer.__name__
         return self
 
     def concurrency_control(

@@ -1,6 +1,7 @@
 from cistell import ConfigField
 
 from pynenc.conf.config_base import ConfigPynencBase
+from pynenc.conf.config_sqlite import ConfigSQLite
 
 
 class ConfigRunner(ConfigPynencBase):
@@ -60,8 +61,8 @@ class ConfigThreadRunner(ConfigRunner):
         Default: 10,000.
     """
 
-    invocation_wait_results_sleep_time_sec = ConfigField(0.01)
-    runner_loop_sleep_time_sec = ConfigField(0.01)
+    invocation_wait_results_sleep_time_sec = ConfigField(0.1)
+    runner_loop_sleep_time_sec = ConfigField(0.1)
     min_threads = ConfigField(1)
     max_threads = ConfigField(0)
     final_invocation_cache_size = ConfigField(10000)
@@ -119,3 +120,7 @@ class ConfigPersistentProcessRunner(ConfigThreadRunner):
     """
 
     num_processes = ConfigField(0)
+
+
+class ConfigRunnerSQLite(ConfigRunner, ConfigSQLite):
+    """SQLite-based runner configuration"""

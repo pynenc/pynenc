@@ -6,7 +6,7 @@ import pytest
 
 from pynenc import Pynenc
 from pynenc.invocation.dist_invocation import DistributedInvocation, InvocationStatus
-from pynenc.runner.thread_runner import ThreadRunner
+from pynenc.runner.thread_runner import ConfigThreadRunner, ThreadRunner
 
 app = Pynenc(config_values={"runner_cls": "ThreadRunner"})
 
@@ -28,16 +28,18 @@ def test_final_invocation_cache_clean_up() -> None:
     Uses capfd to capture stdout/stderr, including subprocess logs.
     """
     runner: ThreadRunner = app.runner  # type: ignore
-    runner.conf.final_invocation_cache_size = 10
+    conf: ConfigThreadRunner = runner.conf  # type: ignore
+    runner._on_start()  # initialize runner internals
+    conf.final_invocation_cache_size = 10
     # Start the runner in a separate thread
     runner_thread = threading.Thread(target=lambda: app.runner.run(), daemon=True)
     runner_thread.start()
 
     invocations = waiting.parallelize(
-        (i,) for i in range(app.runner.conf.final_invocation_cache_size * 2)
+        (i,) for i in range(conf.final_invocation_cache_size * 2)
     )
     _ = list(invocations.results)
-    assert len(runner.final_invocations) < runner.conf.final_invocation_cache_size * 2
+    assert len(runner.final_invocation_ids) < conf.final_invocation_cache_size * 2
 
     runner_thread.join(timeout=0.1)
 
@@ -75,9 +77,10 @@ def test_reroute_on_thread_start_failure(monkeypatch: pytest.MonkeyPatch) -> Non
 
     # Monkeypatch threading.Thread so that starting a thread always fails.
     class FakeThread:
-        def __init__(self, target: Any, daemon: Any) -> None:
+        def __init__(self, target: Any, daemon: Any, args: Any = None) -> None:
             self.target = target
             self.daemon = daemon
+            self.args = args
 
         def start(self) -> None:
             raise RuntimeError("Simulated thread start failure")
@@ -89,7 +92,9 @@ def test_reroute_on_thread_start_failure(monkeypatch: pytest.MonkeyPatch) -> Non
             return False
 
     monkeypatch.setattr(
-        threading, "Thread", lambda target, daemon: FakeThread(target, daemon)
+        threading,
+        "Thread",
+        lambda target, daemon, args=None: FakeThread(target, daemon, args),
     )
 
     # Force get_invocations_to_run to return our dummy invocation.

@@ -21,7 +21,10 @@ def test_task_execution(task_sum: Task) -> None:
     invocation = task_sum(1, 2)
     thread = threading.Thread(target=run_in_thread, daemon=True)
     thread.start()
+    ini = time()
     assert invocation.result == 3
+    elapsed = time() - ini
+    assert elapsed < 1, "Task took too long to execute"
     app.runner.stop_runner_loop()
     thread.join()
 
@@ -63,6 +66,11 @@ def test_task_running_concurrency(task_sleep: Task) -> None:
     assert max_fast_running_time > fast_invocation_sleep_seconds
 
     #####################################################################################
+    # INIT RUN: run an initial tasks just in case the backend needs to set things up
+    _ = task_sleep(seconds=0.1).result
+    #####################################################################################
+
+    #####################################################################################
     # CONTROL CHECK: fastes invocation should finish before max_fast_running_time
     start_fast = time()
     assert task_sleep(seconds=fast_invocation_sleep_seconds).result
@@ -96,15 +104,29 @@ def test_task_running_concurrency(task_sleep: Task) -> None:
     assert slow_invocation_sleep_seconds < slow_elapsed_time
     # fast invocation took more than max_fast_running_time
     assert max_fast_running_time < fast_elapsed_time
-    # 6.- check that only fast_invocation was rerouted in the history
+    # 6.- check that fast_invocation started running after slow_invocation ran for at least its sleep duration
+    # The history is written asynchronously in a thread to avoid delaying the orchestrator.
+    # We check that the fast invocation's RUNNING status is at least slow_invocation_sleep_seconds after the slow's RUNNING status.
     assert isinstance(slow_invocation, DistributedInvocation)
     assert isinstance(fast_invocation, DistributedInvocation)
-    slow_history = app.state_backend.get_history(slow_invocation)
-    fast_history = app.state_backend.get_history(fast_invocation)
-    slow_statuses = {h.status for h in slow_history}
-    fast_statuses = {h.status for h in fast_history}
-    assert InvocationStatus.REROUTED in fast_statuses
-    assert InvocationStatus.REROUTED not in slow_statuses
+    slow_history = app.state_backend.get_history(slow_invocation.invocation_id)
+    fast_history = app.state_backend.get_history(fast_invocation.invocation_id)
+    slow_running_history = [
+        h for h in slow_history if h.status == InvocationStatus.RUNNING
+    ]
+    assert slow_running_history, "No RUNNING status found for slow_invocation"
+    slow_running_timestamp = slow_running_history[0]._timestamp
+    fast_running_history = [
+        h for h in fast_history if h.status == InvocationStatus.RUNNING
+    ]
+    assert fast_running_history, "No RUNNING status found for fast_invocation"
+    fast_running_timestamp = fast_running_history[0]._timestamp
+    # The fast invocation should only start running after the slow invocation has run for at least its sleep duration
+    time_diff = (fast_running_timestamp - slow_running_timestamp).total_seconds()
+    assert time_diff > slow_invocation_sleep_seconds, (
+        f"Concurrency control failed: fast started {time_diff}s after slow started, "
+        f"but slow was expected to run for at least {slow_invocation_sleep_seconds}s"
+    )
     #####################################################################################
 
     app.runner.stop_runner_loop()

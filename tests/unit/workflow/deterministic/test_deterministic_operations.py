@@ -24,10 +24,8 @@ def test_stores_and_retrieves_values(
     assert call_count == 1
 
     # Verify value was stored with correct key
-    stored_value = (
-        deterministic_executor.app.state_backend.get_workflow_deterministic_value(
-            deterministic_executor.workflow_identity, "test:1"
-        )
+    stored_value = deterministic_executor.app.state_backend.get_workflow_data(
+        deterministic_executor.workflow_identity, "test:1"
     )
     assert stored_value == "generated_value_1"
 
@@ -55,19 +53,19 @@ def test_creates_unique_sequences(
 
     # Verify each stored with unique key
     assert (
-        deterministic_executor.app.state_backend.get_workflow_deterministic_value(
+        deterministic_executor.app.state_backend.get_workflow_data(
             deterministic_executor.workflow_identity, "test:1"
         )
         == "value_1"
     )
     assert (
-        deterministic_executor.app.state_backend.get_workflow_deterministic_value(
+        deterministic_executor.app.state_backend.get_workflow_data(
             deterministic_executor.workflow_identity, "test:2"
         )
         == "value_2"
     )
     assert (
-        deterministic_executor.app.state_backend.get_workflow_deterministic_value(
+        deterministic_executor.app.state_backend.get_workflow_data(
             deterministic_executor.workflow_identity, "test:3"
         )
         == "value_3"
@@ -161,19 +159,19 @@ def test_isolated_by_operation_type(
 
     # Verify independent sequences
     assert (
-        deterministic_executor.app.state_backend.get_workflow_deterministic_value(
+        deterministic_executor.app.state_backend.get_workflow_data(
             deterministic_executor.workflow_identity, "type_a:1"
         )
         == "type_a_value"
     )
     assert (
-        deterministic_executor.app.state_backend.get_workflow_deterministic_value(
+        deterministic_executor.app.state_backend.get_workflow_data(
             deterministic_executor.workflow_identity, "type_b:1"
         )
         == "type_b_value"
     )
     assert (
-        deterministic_executor.app.state_backend.get_workflow_deterministic_value(
+        deterministic_executor.app.state_backend.get_workflow_data(
             deterministic_executor.workflow_identity, "type_a:2"
         )
         == "type_a_value"

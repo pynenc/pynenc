@@ -23,7 +23,7 @@ from pynenc.runner import (
     ProcessRunner,
     ThreadRunner,
 )
-from pynenc.serializer import JsonSerializer, PickleSerializer
+from pynenc.serializer import JsonPickleSerializer, JsonSerializer, PickleSerializer
 from pynenc.state_backend import MemStateBackend
 from pynenc.trigger import DisabledTrigger, MemTrigger
 
@@ -287,32 +287,17 @@ def test_task_control_should_configure_correctly() -> None:
     assert app.broker.conf.queue_timeout_sec == 0.05
 
 
-def test_serializer_should_accept_shortnames() -> None:
+def test_serializers() -> None:
     """Test serializer configuration with shortnames."""
     # Test shortnames
-    app_json = PynencBuilder().serializer("json").build()
-    assert app_json.conf.serializer_cls == "JsonSerializer"
+    app_json_pickle = PynencBuilder().serializer_json_pickle().build()
+    assert isinstance(app_json_pickle.serializer, JsonPickleSerializer)
+
+    app_json = PynencBuilder().serializer_json().build()
     assert isinstance(app_json.serializer, JsonSerializer)
 
-    app_pickle = PynencBuilder().serializer("pickle").build()
-    assert app_pickle.conf.serializer_cls == "PickleSerializer"
+    app_pickle = PynencBuilder().serializer_pickle().build()
     assert isinstance(app_pickle.serializer, PickleSerializer)
-
-
-def test_serializer_should_accept_class_names() -> None:
-    """Test serializer configuration with class names."""
-    # Test full class names
-    app_json = PynencBuilder().serializer("JsonSerializer").build()
-    assert app_json.conf.serializer_cls == "JsonSerializer"
-
-    app_pickle = PynencBuilder().serializer("PickleSerializer").build()
-    assert app_pickle.conf.serializer_cls == "PickleSerializer"
-
-
-def test_serializer_should_reject_invalid_names() -> None:
-    """Test serializer validation."""
-    with pytest.raises(ValueError, match="Invalid serializer"):
-        PynencBuilder().serializer("invalid_serializer").build()
 
 
 def test_max_pending_seconds_should_configure_correctly() -> None:
@@ -419,7 +404,7 @@ def test_method_chaining_should_work_correctly() -> None:
     app = (
         PynencBuilder()
         .memory()
-        .serializer("pickle")
+        .serializer_pickle()
         .thread_runner(min_threads=2, max_threads=8)
         .logging_level("info")
         .runner_tuning(runner_loop_sleep_time_sec=0.01)
@@ -448,7 +433,7 @@ def test_complete_app_example_should_work() -> None:
     app = (
         PynencBuilder()
         .memory()
-        .serializer("pickle")
+        .serializer_pickle()
         .thread_runner(min_threads=1, max_threads=4)
         .logging_level("info")
         .runner_tuning(

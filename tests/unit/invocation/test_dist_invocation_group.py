@@ -33,7 +33,10 @@ def test_get_final_invocations() -> None:
         task=add, invocations=[invocation0, invocation1]
     )
     # filter final will return both invocations.
-    app.orchestrator._mock_filter_final.return_value = [invocation0, invocation1]
+    app.orchestrator._mock_filter_final.return_value = [
+        invocation0.invocation_id,
+        invocation1.invocation_id,
+    ]
     app.state_backend._get_result_mock.return_value = -13
     # Both invocations are final so results should be yielded immediately.
     assert list(invocation_group.results) == [-13, -13]
@@ -60,5 +63,6 @@ def test_get_pending_results() -> None:
         list(invocation_group.results)
     # Verify that the orchestrator waiting method was called once with the parent's value and the original list.
     app.orchestrator.waiting_for_results.assert_called_once_with(
-        invocation0.parent_invocation, [invocation0, invocation1]
+        invocation0.parent_invocation_id,
+        [invocation0.invocation_id, invocation1.invocation_id],
     )

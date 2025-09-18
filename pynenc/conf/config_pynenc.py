@@ -70,7 +70,7 @@ class ConfigPynenc(ConfigPynencBase):
     trigger_cls = ConfigField("DisabledTrigger")
     broker_cls = ConfigField("MemBroker")
     state_backend_cls = ConfigField("MemStateBackend")
-    serializer_cls = ConfigField("JsonSerializer")
+    serializer_cls = ConfigField("JsonPickleSerializer")
     arg_cache_cls = ConfigField("DisabledArgCache")
     runner_cls = ConfigField("DummyRunner")
     dev_mode_force_sync_tasks = ConfigField(False)

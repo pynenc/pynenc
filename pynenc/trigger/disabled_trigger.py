@@ -82,7 +82,7 @@ class DisabledTrigger(BaseTrigger):
 
     def report_tasks_status(
         self,
-        invocations: list["DistributedInvocation"],
+        invocation_ids: list[str],
         status: Optional["InvocationStatus"] = None,
     ) -> None:
         """No-op implementation for reporting task status."""
@@ -125,5 +125,8 @@ class DisabledTrigger(BaseTrigger):
     def clean_task_trigger_definitions(self, task_id: str) -> None:
         """No-op implementation for cleaning task trigger definitions."""
 
-    def purge(self) -> None:
+    def _purge(self) -> None:
         """No-op implementation for purging trigger data."""
+
+    def reload_task_conditions(self) -> None:
+        """No-op implementation for reloading task conditions."""

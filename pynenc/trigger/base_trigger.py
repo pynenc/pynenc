@@ -310,7 +310,7 @@ class BaseTrigger(ABC):
 
     def report_tasks_status(
         self,
-        invocations: list["DistributedInvocation"],
+        invocation_ids: list[str],
         status: Optional["InvocationStatus"] = None,
     ) -> None:
         """
@@ -319,12 +319,13 @@ class BaseTrigger(ABC):
         This method efficiently processes status changes for multiple invocations
         by batching context creation and condition validation.
 
-        :param invocations: List of invocations reporting status changes
+        :param invocation_ids: List of invocation IDs reporting status changes
         :param status: The new status for all invocations
         """
         condition_context_pairs: list[tuple[TriggerCondition, ConditionContext]] = []
-        for invocation in invocations:
+        for invocation_id in invocation_ids:
             # Create a status context for each invocation
+            invocation = self.app.state_backend.get_invocation(invocation_id)
             context = StatusContext.from_invocation(invocation, status)
             conditions = self.get_conditions_sourced_from_task(
                 context.task_id, StatusContext
@@ -354,7 +355,10 @@ class BaseTrigger(ABC):
             call_id=invocation.call.call_id,
             invocation_id=invocation.invocation_id,
             arguments=invocation.call.arguments,
-            status=invocation.status,
+            # get status directly from orchestrator to avoid caching
+            status=self.app.orchestrator.get_invocation_status(
+                invocation.invocation_id
+            ),
             result=result,
         )
 
@@ -657,11 +661,30 @@ class BaseTrigger(ABC):
         self.app.logger.info(f"Triggered task {task_id} with arguments {arguments}")
         return invocation
 
-    @abstractmethod
     def purge(self) -> None:
+        """Purges all the trigger data for the current self.app.app_id."""
+        self._purge()
+        self.reload_task_conditions()
+
+    @abstractmethod
+    def _purge(self) -> None:
+        """Purges all the trigger data for the current self.app.app_id."""
+
+    def reload_task_conditions(self) -> None:
         """
-        Purges all the trigger data for the current self.app.app_id.
-        ```{important}
-            This should only be used for testing purposes.
-        ```
+        Reload all task conditions from the current app's registered tasks.
+
+        This method clears the local condition and source-task mappings,
+        then iterates over all tasks in the app and re-registers their triggers and conditions.
+
+        :return: None
         """
+        # Clear local mappings
+        self._last_cron_execution_cache.clear()
+        self._registered_conditions = {}
+        self._source_task_conditions = defaultdict(set)
+
+        # Re-register triggers and conditions for each task
+        for task in self.app.tasks.values():
+            # This will re-register all triggers and their conditions for the task
+            self.register_task_triggers(task, getattr(task, "triggers", None))

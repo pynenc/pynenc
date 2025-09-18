@@ -1,6 +1,7 @@
 from cistell import ConfigField
 
 from pynenc.conf.config_base import ConfigPynencBase
+from pynenc.conf.config_sqlite import ConfigSQLite
 
 
 class ConfigOrchestrator(ConfigPynencBase):
@@ -33,3 +34,7 @@ class ConfigOrchestrator(ConfigPynencBase):
     cycle_control = ConfigField(True)
     blocking_control = ConfigField(True)
     auto_final_invocation_purge_hours = ConfigField(24.0)
+
+
+class ConfigOrchestratorSQLite(ConfigOrchestrator, ConfigSQLite):
+    """SQLite-based orchestrator configuration"""

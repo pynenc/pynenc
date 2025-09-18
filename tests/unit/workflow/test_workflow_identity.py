@@ -31,14 +31,14 @@ def test_workflow_identity_initialization(runner: None) -> None:
     assert parent_inv.workflow.workflow_task_id == parent_inv.task.task_id
     assert parent_inv.workflow.workflow_invocation_id == parent_inv.invocation_id
     assert parent_inv.workflow.parent_workflow is None
-    childs_inv = list(app.orchestrator.get_existing_invocations(child_task))
-    new_sub_inv = list(app.orchestrator.get_existing_invocations(new_sub_workflow))
-    assert len(childs_inv) == 1
-    child_inv = childs_inv[0]
+    childs_inv_ids = list(app.orchestrator.get_existing_invocations(child_task))
+    new_sub_inv_ids = list(app.orchestrator.get_existing_invocations(new_sub_workflow))
+    assert len(childs_inv_ids) == 1
+    child_inv = app.state_backend.get_invocation(childs_inv_ids[0])
     assert child_inv.workflow == parent_inv.workflow
 
-    assert len(new_sub_inv) == 1
-    new_sub_inv = new_sub_inv[0]
+    assert len(new_sub_inv_ids) == 1
+    new_sub_inv = app.state_backend.get_invocation(new_sub_inv_ids[0])
     assert new_sub_inv.workflow.workflow_task_id == new_sub_inv.task.task_id
     assert new_sub_inv.workflow.workflow_invocation_id == new_sub_inv.invocation_id
     assert new_sub_inv.workflow.parent_workflow == parent_inv.workflow
@@ -108,21 +108,21 @@ def test_subworkflow_boundary_with_flag(runner: None) -> None:
     assert entry_inv.result == (2, "workflow boundary test")
 
     # Get all relevant invocations
-    parent_invs = list(app.orchestrator.get_existing_invocations(parent_task))
-    boundary1_invs = list(
+    parent_inv_ids = list(app.orchestrator.get_existing_invocations(parent_task))
+    boundary1_inv_ids = list(
         app.orchestrator.get_existing_invocations(boundary_workflow_1)
     )
-    boundary1_task2_invs = list(
+    boundary1_task2_inv_ids = list(
         app.orchestrator.get_existing_invocations(boundary_workflow_1_task_2)
     )
 
-    assert len(parent_invs) == 1
-    assert len(boundary1_invs) == 1
-    assert len(boundary1_task2_invs) == 1
+    assert len(parent_inv_ids) == 1
+    assert len(boundary1_inv_ids) == 1
+    assert len(boundary1_task2_inv_ids) == 1
 
-    parent_inv = parent_invs[0]
-    boundary1_inv = boundary1_invs[0]
-    boundary1_task2_invs = boundary1_task2_invs[0]
+    parent_inv = app.state_backend.get_invocation(parent_inv_ids[0])
+    boundary1_inv = app.state_backend.get_invocation(boundary1_inv_ids[0])
+    boundary1_task2_inv = app.state_backend.get_invocation(boundary1_task2_inv_ids[0])
 
     # Parent task has no force_new_workflow flag, so it will inherit it from the main task
     assert parent_inv.workflow == entry_inv.workflow
@@ -131,4 +131,4 @@ def test_subworkflow_boundary_with_flag(runner: None) -> None:
     assert boundary1_inv.workflow.parent_workflow == entry_inv.workflow
 
     # Verify boundary_workflow_1_task_2 shares boundary_workflow_1's workflow
-    assert boundary1_task2_invs.workflow == boundary1_inv.workflow
+    assert boundary1_task2_inv.workflow == boundary1_inv.workflow

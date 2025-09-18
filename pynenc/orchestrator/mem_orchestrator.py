@@ -3,7 +3,7 @@ import threading
 from collections import OrderedDict, defaultdict, deque
 from collections.abc import Iterator
 from time import time
-from typing import TYPE_CHECKING, Any, Generic, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from pynenc.exceptions import CycleDetectedError, PendingInvocationLockError
 from pynenc.invocation.status import InvocationStatus
@@ -32,11 +32,7 @@ class MemCycleControl(BaseCycleControl):
 
     def __init__(self, app: "Pynenc") -> None:
         self.app = app
-        self.invocations: dict[str, "DistributedInvocation"] = {}
         self.calls: dict[str, "Call"] = {}
-        self.call_to_invocation: dict[
-            str, OrderedDict[str, "DistributedInvocation"]
-        ] = defaultdict(OrderedDict)
         self.edges: dict[str, set[str]] = defaultdict(set)
 
     def add_call_and_check_cycles(
@@ -55,29 +51,32 @@ class MemCycleControl(BaseCycleControl):
             raise CycleDetectedError.from_cycle([caller.call])
         if cycle := self.find_cycle_caused_by_new_invocation(caller, callee):
             raise CycleDetectedError.from_cycle(cycle)
-        self.invocations[caller.invocation_id] = caller
-        self.invocations[callee.invocation_id] = callee
         self.calls[caller.call_id] = caller.call
         self.calls[callee.call_id] = callee.call
-        self.call_to_invocation[caller.call_id][caller.invocation_id] = caller
-        self.call_to_invocation[callee.call_id][callee.invocation_id] = callee
         self.edges[caller.call_id].add(callee.call_id)
 
-    def clean_up_invocation_cycles(self, invocation: "DistributedInvocation") -> None:
+    def get_callees(self, caller_call_id: str) -> Iterator[str]:
+        """
+        Returns an iterator of direct callee call_ids for the given caller_call_id.
+
+        :param str caller_call_id: The call_id of the caller invocation.
+        :return: Iterator of callee call_ids.
+        :rtype: Iterator[str]
+        """
+        yield from self.edges.get(caller_call_id, set())
+
+    def clean_up_invocation_cycles(self, invocation_id: str) -> None:
         """
         Removes an invocation from the graph, along with any edges to or from the invocation.
 
-        :param DistributedInvocation invocation: The invocation to be removed from the graph.
+        :param str invocation_id: The ID of the invocation to be removed from the graph.
         """
-        call_id = invocation.call_id
-        if call_id in self.call_to_invocation:
-            self.call_to_invocation[call_id].pop(invocation.invocation_id, None)
-            if not self.call_to_invocation[call_id]:
-                del self.call_to_invocation[call_id]
-                if call_id in self.edges:
-                    del self.edges[call_id]
-                for edges in self.edges.values():
-                    edges.discard(call_id)
+        call_id = self.app.orchestrator.get_invocation_call_id(invocation_id)
+        if not self.app.orchestrator.any_non_final_invocations(call_id):
+            if call_id in self.edges:
+                del self.edges[call_id]
+            for edges in self.edges.values():
+                edges.discard(call_id)
 
     def find_cycle_caused_by_new_invocation(
         self, caller: "DistributedInvocation", callee: "DistributedInvocation"
@@ -148,45 +147,39 @@ class MemBlockingControl(BaseBlockingControl):
 
     def __init__(self, app: "Pynenc") -> None:
         self.app = app
-        self.invocations: dict[str, "DistributedInvocation"] = {}
         self.waiting_for: dict[str, set[str]] = defaultdict(set)
         self.waited_by: dict[str, set[str]] = OrderedDict()
 
     def waiting_for_results(
-        self,
-        caller_invocation: "DistributedInvocation[Params, Result]",
-        result_invocations: list["DistributedInvocation[Params, Result]"],
+        self, caller_invocation_id: str, result_invocation_ids: list[str]
     ) -> None:
         """
-        Registers that an invocation (waiter) is waiting for the results of other invocations (waited).
+        Notifies the system that an invocation is waiting for the results of other invocations.
 
-        :param DistributedInvocation[Params, Result] caller_invocation: The invocation waiting for results.
-        :param list[DistributedInvocation[Params, Result]] result_invocations: The invocations whose results are being waited for.
+        :param str caller_invocation_id: The ID of the invocation that is waiting.
+        :param list[str] result_invocation_ids: The IDs of the invocations being waited on.
         """
-        waiter = caller_invocation
-        for waited in result_invocations:
-            self.invocations[waited.invocation_id] = waited
-            self.waiting_for[waiter.invocation_id].add(waited.invocation_id)
-            if waited.invocation_id not in self.waited_by:
-                self.waited_by[waited.invocation_id] = set()
-            self.waited_by[waited.invocation_id].add(waiter.invocation_id)
+        waiter_id = caller_invocation_id
+        for waited_id in result_invocation_ids:
+            self.waiting_for[waiter_id].add(waited_id)
+            if waited_id not in self.waited_by:
+                self.waited_by[waited_id] = set()
+            self.waited_by[waited_id].add(waiter_id)
 
-    def release_waiters(self, invocation: "DistributedInvocation") -> None:
+    def release_waiters(self, waited_invocation_id: str) -> None:
         """
         Removes an invocation from the graph, along with any dependencies related to it.
 
-        :param DistributedInvocation invocation: The invocation that has finished and will no longer block other invocations.
+        :param str waited_invocation_id: The ID of the invocation that has finished and will no longer block other invocations.
         """
-        for waiter_id in self.waited_by.get(invocation.invocation_id, []):
-            self.waiting_for[waiter_id].discard(invocation.invocation_id)
+        for waiter_id in self.waited_by.get(waited_invocation_id, []):
+            self.waiting_for[waiter_id].discard(waited_invocation_id)
             if not self.waiting_for[waiter_id]:
                 del self.waiting_for[waiter_id]
-        self.waited_by.pop(invocation.invocation_id, None)
-        self.waiting_for.pop(invocation.invocation_id, None)
+        self.waited_by.pop(waited_invocation_id, None)
+        self.waiting_for.pop(waited_invocation_id, None)
 
-    def get_blocking_invocations(
-        self, max_num_invocations: int
-    ) -> Iterator["DistributedInvocation[Params, Result]"]:
+    def get_blocking_invocations(self, max_num_invocations: int) -> Iterator[str]:
         """
         Retrieves invocations that are blocking others but are not themselves waiting for any results.
 
@@ -198,10 +191,10 @@ class MemBlockingControl(BaseBlockingControl):
         for inv_id in list(self.waited_by.keys()):
             if inv_id not in self.waiting_for:
                 if self.app.orchestrator.get_invocation_status(
-                    self.invocations[inv_id]
+                    inv_id
                 ).is_available_for_run():
                     max_num_invocations -= 1
-                    yield self.invocations[inv_id]
+                    yield inv_id
                     if max_num_invocations == 0:
                         return
 
@@ -252,18 +245,28 @@ class ArgPair:
         return f"{self.__class__.__name__}({self.__str__()})"
 
 
-class TaskInvocationCache(Generic[Result]):
+class MemOrchestrator(BaseOrchestrator):
     """
-    A cache for storing and managing task invocations and their statuses.
+    A memory-based implementation of the Orchestrator,
+    managing task invocations and their lifecycle.
 
-    This class provides functionalities to track task invocations, including their arguments, statuses, retries, and auto-purge mechanisms.
+    This class provides an in-memory solution for orchestrating task invocations,
+    including cycle and blocking controls, as well as caching of invocation statuses and retries.
+
+    ```{warning}
+        This orchestrator is not intended for production use.
+        As it stores all invocations in the running process memory.
+    ```
 
     :param Pynenc app: The Pynenc application instance.
     """
 
     def __init__(self, app: "Pynenc") -> None:
         self.app = app
-        self.invocations: dict[str, "DistributedInvocation"] = {}
+        self.task_id_to_inv_id: dict[str, set[str]] = defaultdict(set)
+        self.call_id_to_inv_id: dict[str, set[str]] = defaultdict(set)
+        self.inv_id_to_call_id: dict[str, str] = {}
+        self.invocation_args: dict[str, set[ArgPair]] = defaultdict(set)
         self.args_index: dict[ArgPair, set[str]] = defaultdict(set)
         self.status_index: dict[InvocationStatus, set[str]] = defaultdict(set)
         self.pending_timer: dict[str, float] = {}
@@ -272,6 +275,40 @@ class TaskInvocationCache(Generic[Result]):
         self.invocation_retries: dict[str, int] = {}
         self.invocations_to_purge: deque[tuple[float, str]] = deque()
         self.locks: dict[str, threading.Lock] = {}
+
+        self._cycle_control: MemCycleControl | None = None
+        self._blocking_control: MemBlockingControl | None = None
+
+        super().__init__(app)
+
+    @property
+    def cycle_control(self) -> "MemCycleControl":
+        if not self._cycle_control:
+            self._cycle_control = MemCycleControl(self.app)
+        return self._cycle_control
+
+    @property
+    def blocking_control(self) -> "MemBlockingControl":
+        if not self._blocking_control:
+            self._blocking_control = MemBlockingControl(self.app)
+        return self._blocking_control
+
+    def _register_new_invocations(
+        self, invocations: list["DistributedInvocation[Params, Result]"]
+    ) -> None:
+        """Registers new invocations and sets them to REGISTERED status."""
+        for invocation in invocations:
+            if invocation.invocation_id in self.invocation_status:
+                continue
+            self.task_id_to_inv_id[invocation.task.task_id].add(
+                invocation.invocation_id
+            )
+            self.call_id_to_inv_id[invocation.call_id].add(invocation.invocation_id)
+            self.inv_id_to_call_id[invocation.invocation_id] = invocation.call_id
+            self._internal_set_invocation_status(
+                invocation.invocation_id, InvocationStatus.REGISTERED
+            )
+            self.invocation_retries[invocation.invocation_id] = 0
 
     def filter_by_key_arguments(self, key_arguments: dict[str, str]) -> set[str]:
         """
@@ -317,46 +354,77 @@ class TaskInvocationCache(Generic[Result]):
             matched_ids.update(self.status_index[status])
         return matched_ids
 
-    def get_invocation(self, invocation_id: str) -> Optional["DistributedInvocation"]:
-        """Retrieves an invocation by its ID."""
-        return self.invocations.get(invocation_id)
-
-    def get_invocations(
+    def get_existing_invocations(
         self,
-        key_arguments: dict[str, str] | None,
-        statuses: list[InvocationStatus] | None,
-    ) -> Iterator["DistributedInvocation"]:
+        task: "Task[Params, Result]",
+        key_serialized_arguments: dict[str, str] | None = None,
+        statuses: Optional[list["InvocationStatus"]] = None,
+    ) -> Iterator[str]:
         """
-        Retrieves invocations based on provided key arguments and/or status.
+        Retrieves invocation ids based on provided key arguments and/or status.
 
         :param dict[str, str] | None key_arguments: The key arguments to filter the invocations.
         :param list[InvocationStatus] | None status: The statuses to filter the invocations.
         :return: An iterator over the filtered invocations.
-        :rtype: Iterator[DistributedInvocation]
+        :rtype: Iterator[str]
         """
-        if key_arguments and statuses:
-            key_matches = self.filter_by_key_arguments(key_arguments)
+        task_matches = self.task_id_to_inv_id.get(task.task_id, set())
+        if key_serialized_arguments and statuses:
+            key_matches = self.filter_by_key_arguments(key_serialized_arguments)
             status_matches = self.filter_by_statuses(statuses)
-            invocation_ids = key_matches.intersection(status_matches)
-        elif key_arguments:
-            invocation_ids = self.filter_by_key_arguments(key_arguments)
+            yield from task_matches.intersection(key_matches).intersection(
+                status_matches
+            )
+        elif key_serialized_arguments:
+            key_matches = self.filter_by_key_arguments(key_serialized_arguments)
+            yield from task_matches.intersection(key_matches)
         elif statuses:
-            invocation_ids = self.filter_by_statuses(statuses)
+            status_matches = self.filter_by_statuses(statuses)
+            yield from task_matches.intersection(status_matches)
         else:
-            invocation_ids = set(self.invocations.keys())
+            yield from task_matches
 
-        for invocation_id in invocation_ids:
-            yield self.invocations[invocation_id]
+    def get_task_invocation_ids(self, task_id: str) -> Iterator[str]:
+        """
+        Retrieves all invocation ids for a given task id.
 
-    def set_up_invocation_auto_purge(
-        self, invocation: "DistributedInvocation[Params, Result]"
-    ) -> None:
+        :param str task_id: The task id to filter the invocations.
+        :return: An iterator over the invocation ids for the specified task.
+        :rtype: Iterator[str]
+        """
+        yield from self.task_id_to_inv_id.get(task_id, set())
+
+    def get_call_invocation_ids(self, call_id: str) -> Iterator[str]:
+        """Retrieves all invocation IDs associated with a specific call ID."""
+        yield from self.call_id_to_inv_id.get(call_id, set())
+
+    def get_invocation_call_id(self, invocation_id: str) -> str:
+        """Retrieves the call ID associated with a specific invocation ID."""
+        try:
+            return self.inv_id_to_call_id[invocation_id]
+        except Exception:
+            # TODO remove this
+            self.app.logger.error(
+                f"Error get_invocation_call_id for invocation ID {invocation_id}"
+            )
+            for inv_id, call_id in self.inv_id_to_call_id.items():
+                self.app.logger.error(f"inv_id: {inv_id} --> call_id: {call_id}")
+            raise
+
+    def any_non_final_invocations(self, call_id: str) -> bool:
+        """Checks if there are any non-final invocations for a specific call ID."""
+        for invocation_id in self.call_id_to_inv_id.get(call_id, set()):
+            if not self.invocation_status[invocation_id].is_final():
+                return True
+        return False
+
+    def set_up_invocation_auto_purge(self, invocation_id: str) -> None:
         """
         Sets up an invocation for automatic purging after a specified time.
 
-        :param DistributedInvocation[Params, Result] invocation: The invocation to be set up for auto-purge.
+        :param str invocation_id: The ID of the invocation to be set up for auto-purge.
         """
-        self.invocations_to_purge.append((time(), invocation.invocation_id))
+        self.invocations_to_purge.append((time(), invocation_id))
 
     def auto_purge(self) -> None:
         """
@@ -375,235 +443,152 @@ class TaskInvocationCache(Generic[Result]):
 
         :param str invocation_id: The ID of the invocation to be cleaned up.
         """
-        invocation = self.invocations.pop(invocation_id, None)
-        if invocation:
-            for key, value in invocation.serialized_arguments.items():
-                self.args_index[ArgPair(key, value)].discard(invocation_id)
+        self.clean_up_invocation_cycles(invocation_id)
+        self.release_waiters(invocation_id)
+
+        invocation = self.app.state_backend.get_invocation(invocation_id)
+        for key, value in invocation.serialized_arguments.items():
+            self.args_index[ArgPair(key, value)].discard(invocation_id)
+        self.status_index[self.invocation_status[invocation_id]].discard(invocation_id)
+        self.task_id_to_inv_id.get(invocation.task.task_id, set()).discard(
+            invocation_id
+        )
+        self.call_id_to_inv_id.get(invocation.call_id, set()).discard(invocation_id)
+        self.inv_id_to_call_id.pop(invocation_id, None)
+        if args := self.invocation_args.pop(invocation_id, None):
+            for arg in args:
+                self.args_index[arg].discard(invocation_id)
+        self.status_index[self.invocation_status[invocation_id]].discard(invocation_id)
+        self.pending_timer.pop(invocation_id, None)
+        self.pre_pending_status.pop(invocation_id, None)
+        self.invocation_status.pop(invocation_id, None)
+        self.invocation_retries.pop(invocation_id, None)
+
+    def _set_invocation_status(
+        self, invocation_id: str, status: InvocationStatus
+    ) -> None:
+        """Sets the status of a specific invocation."""
+        if status == InvocationStatus.PENDING:
+            raise ValueError("Cannot set multiple invocations to PENDING status")
+        self._internal_set_invocation_status(invocation_id, status)
+
+    def _internal_set_invocation_status(
+        self, invocation_id: str, status: InvocationStatus
+    ) -> None:
+        """Sets the status of a specific invocation."""
+        if status != InvocationStatus.PENDING:
+            self.clean_pending_status(invocation_id)
+        if invocation_id in self.invocation_status:
+            # already exists, remove previous status
             self.status_index[self.invocation_status[invocation_id]].discard(
                 invocation_id
             )
-            self.invocation_status.pop(invocation_id, None)
-            self.invocation_retries.pop(invocation_id, None)
-            self.pending_timer.pop(invocation_id, None)
-            self.pre_pending_status.pop(invocation_id, None)
+        self.status_index[status].add(invocation_id)
+        self.invocation_status[invocation_id] = status
 
-    def set_status(
-        self,
-        invocation: "DistributedInvocation[Params, Result]",
-        status: InvocationStatus,
+    def _set_invocations_status(
+        self, invocation_ids: list[str], status: InvocationStatus
     ) -> None:
-        """
-        Sets the status of a specific invocation.
+        for invocation_id in invocation_ids:
+            self._internal_set_invocation_status(invocation_id, status)
 
-        :param DistributedInvocation[Params, Result] invocation: The invocation whose status is to be set.
-        :param InvocationStatus status: The status to set for the invocation.
-        """
-        if status != InvocationStatus.PENDING:
-            self.clean_pending_status(invocation)
-        if (_id := invocation.invocation_id) not in self.invocations:
-            self.invocations[_id] = invocation
-            for key, value in invocation.serialized_arguments.items():
-                self.args_index[ArgPair(key, value)].add(_id)
-            self.status_index[status].add(_id)
-        else:
-            # already exists, remove previous status
-            self.status_index[self.invocation_status[_id]].discard(_id)
-            self.status_index[status].add(_id)
-        self.invocation_status[_id] = status
-        # Update the invocation's cached status
-        invocation.update_status_cache(status)
-
-    def clean_pending_status(
-        self, invocation: "DistributedInvocation[Params, Result]"
-    ) -> None:
-        """
-        Cleans the pending status of an invocation if it has exceeded the maximum pending time.
-
-        :param DistributedInvocation[Params, Result] invocation: The invocation whose pending status is to be cleaned.
-        """
-        self.pending_timer.pop(invocation.invocation_id, None)
-        self.pre_pending_status.pop(invocation.invocation_id, None)
-
-    def set_pending_status(
-        self, invocation: "DistributedInvocation[Params, Result]"
-    ) -> None:
+    def _set_invocation_pending_status(self, invocation_id: str) -> None:
         """
         Sets the status of an invocation to pending, handling any potential locking issues.
 
-        :param DistributedInvocation[Params, Result] invocation: The invocation to set to pending status.
+        :param str invocation_id: The ID of the invocation to set to pending status.
         :raises PendingInvocationLockError: If the invocation is already in pending status or cannot acquire a lock.
         """
-        invocation_id = invocation.invocation_id
         lock = self.locks.setdefault(invocation_id, threading.Lock())
         if not lock.acquire(False):
             raise PendingInvocationLockError(invocation_id)
         try:
             self.pending_timer[invocation_id] = time()
-            previous_status = self.invocation_status[invocation.invocation_id]
+            previous_status = self.invocation_status[invocation_id]
             if previous_status == InvocationStatus.PENDING:
                 raise PendingInvocationLockError(invocation_id)
             self.pre_pending_status[invocation_id] = previous_status
-            self.set_status(invocation, InvocationStatus.PENDING)
+            self._internal_set_invocation_status(
+                invocation_id, InvocationStatus.PENDING
+            )
         finally:
             lock.release()
 
-    def get_status(
-        self, invocation: "DistributedInvocation[Params, Result]"
-    ) -> InvocationStatus:
-        """
-        Retrieves the current status of an invocation, accounting for pending timeout.
+    def index_arguments_for_concurrency_control(
+        self,
+        invocation: "DistributedInvocation[Params, Result]",
+    ) -> None:
+        for key, value in invocation.serialized_arguments.items():
+            self.args_index[ArgPair(key, value)].add(invocation.invocation_id)
 
-        :param DistributedInvocation[Params, Result] invocation: The invocation to get the status for.
-        :return: The current status of the invocation.
-        :rtype: InvocationStatus
+    def clean_pending_status(self, invocation_id: str) -> None:
         """
-        status = self.invocation_status[invocation.invocation_id]
+        Cleans the pending status of an invocation if it has exceeded the maximum pending time.
+
+        :param str invocation_id: The ID of the invocation whose pending status is to be cleaned.
+        """
+        self.pending_timer.pop(invocation_id, None)
+        self.pre_pending_status.pop(invocation_id, None)
+
+    def get_invocation_pending_timer(self, invocation_id: str) -> Optional[float]:
+        """Retrieves the pending timer for a specific invocation."""
+        return self.pending_timer.get(invocation_id)
+
+    def get_invocation_status(self, invocation_id: str) -> InvocationStatus:
+        """Retrieves the current status of an invocation, accounting for pending timeout.:rtype: InvocationStatus"""
+        status = self.invocation_status[invocation_id]
         if status == InvocationStatus.PENDING:
-            elapsed = time() - self.pending_timer[invocation.invocation_id]
+            elapsed = time() - self.pending_timer[invocation_id]
             if elapsed > self.app.conf.max_pending_seconds:
-                pre_pending_status = self.pre_pending_status[invocation.invocation_id]
-                self.set_status(invocation, pre_pending_status)
+                pre_pending_status = self.pre_pending_status[invocation_id]
+                self._internal_set_invocation_status(invocation_id, pre_pending_status)
                 return pre_pending_status
         return status
 
-    def increase_retries(
-        self, invocation: "DistributedInvocation[Params, Result]"
-    ) -> None:
+    def increment_invocation_retries(self, invocation_id: str) -> None:
         """
         Increases the retry count for a given invocation.
 
-        :param DistributedInvocation[Params, Result] invocation: The invocation for which the retry count is to be increased.
+        :param str invocation_id: The ID of the invocation for which the retry count is to be increased.
         """
-        self.invocation_retries[invocation.invocation_id] = (
-            self.invocation_retries.get(invocation.invocation_id, 0) + 1
+        self.invocation_retries[invocation_id] = (
+            self.invocation_retries.get(invocation_id, 0) + 1
         )
 
-    def get_retries(self, invocation: "DistributedInvocation[Params, Result]") -> int:
+    def get_invocation_retries(self, invocation_id: str) -> int:
         """
         Retrieves the current number of retries for a given invocation.
 
-        :param DistributedInvocation[Params, Result] invocation: The invocation to get the retry count for.
+        :param str invocation_id: The ID of the invocation to get the retry count for.
         :return: The number of retries for the invocation.
         :rtype: int
         """
-        return self.invocation_retries.get(invocation.invocation_id, 0)
-
-
-class MemOrchestrator(BaseOrchestrator):
-    """
-    A memory-based implementation of the Orchestrator,
-    managing task invocations and their lifecycle.
-
-    This class provides an in-memory solution for orchestrating task invocations,
-    including cycle and blocking controls, as well as caching of invocation statuses and retries.
-
-    ```{warning}
-        This orchestrator is not intended for production use.
-        As it stores all invocations in the running process memory.
-    ```
-
-    :param Pynenc app: The Pynenc application instance.
-    """
-
-    def __init__(self, app: "Pynenc") -> None:
-        self.cache: dict[str, TaskInvocationCache] = defaultdict(
-            lambda: TaskInvocationCache(app)
-        )
-        self._cycle_control: MemCycleControl | None = None
-        self._blocking_control: MemBlockingControl | None = None
-        super().__init__(app)
-
-    @property
-    def cycle_control(self) -> "MemCycleControl":
-        if not self._cycle_control:
-            self._cycle_control = MemCycleControl(self.app)
-        return self._cycle_control
-
-    @property
-    def blocking_control(self) -> "MemBlockingControl":
-        if not self._blocking_control:
-            self._blocking_control = MemBlockingControl(self.app)
-        return self._blocking_control
-
-    def get_existing_invocations(
-        self,
-        task: "Task[Params, Result]",
-        key_serialized_arguments: dict[str, str] | None = None,
-        statuses: list[InvocationStatus] | None = None,
-    ) -> Iterator["DistributedInvocation"]:
-        return self.cache[task.task_id].get_invocations(
-            key_serialized_arguments, statuses
-        )
-
-    def get_invocation(self, invocation_id: str) -> Optional["DistributedInvocation"]:
-        """Retrieves an invocation by its ID."""
-        for task_cache in self.cache.values():
-            if invocation := task_cache.get_invocation(invocation_id):
-                return invocation
-        return None
-
-    def _set_invocation_status(
-        self,
-        invocation: "DistributedInvocation[Params, Result]",
-        status: InvocationStatus,
-    ) -> None:
-        self.cache[invocation.task.task_id].set_status(invocation, status)
-
-    def _set_invocations_status(
-        self, invocations: list["DistributedInvocation"], status: InvocationStatus
-    ) -> None:
-        """
-        Set the status of multiple invocations at once.
-
-        :param list[DistributedInvocation] invocations: The invocations to update.
-        :param InvocationStatus status: The status to set.
-        """
-        for invocation in invocations:
-            self.cache[invocation.task.task_id].set_status(invocation, status)
-
-    def _set_invocation_pending_status(
-        self, invocation: "DistributedInvocation[Params, Result]"
-    ) -> None:
-        self.cache[invocation.task.task_id].set_pending_status(invocation)
-
-    def set_up_invocation_auto_purge(
-        self, invocation: "DistributedInvocation[Params, Result]"
-    ) -> None:
-        self.cache[invocation.task.task_id].set_up_invocation_auto_purge(invocation)
-
-    def auto_purge(self) -> None:
-        for cache in self.cache.values():
-            cache.auto_purge()
-
-    def get_invocation_status(
-        self, invocation: "DistributedInvocation[Params, Result]"
-    ) -> InvocationStatus:
-        return self.cache[invocation.task.task_id].get_status(invocation)
-
-    def increment_invocation_retries(
-        self, invocation: "DistributedInvocation[Params, Result]"
-    ) -> None:
-        self.cache[invocation.task.task_id].increase_retries(invocation)
-
-    def get_invocation_retries(
-        self, invocation: "DistributedInvocation[Params, Result]"
-    ) -> int:
-        return self.cache[invocation.task.task_id].get_retries(invocation)
+        return self.invocation_retries.get(invocation_id, 0)
 
     def filter_by_status(
-        self,
-        invocations: list["DistributedInvocation"],
-        status_filter: set["InvocationStatus"] | None = None,
-    ) -> list["DistributedInvocation"]:
-        if not invocations or status_filter is None:
+        self, invocation_ids: list[str], status_filter: set["InvocationStatus"]
+    ) -> list[str]:
+        if not invocation_ids or status_filter is None:
             return []
         return [
-            inv
-            for inv in invocations
-            if self.get_invocation_status(inv) in status_filter
+            inv_id
+            for inv_id in invocation_ids
+            if self.get_invocation_status(inv_id) in status_filter
         ]
 
     def purge(self) -> None:
-        self.cache.clear()
         self._cycle_control = None
         self._blocking_control = None
+
+        self.task_id_to_inv_id.clear()
+        self.inv_id_to_call_id.clear()
+        self.call_id_to_inv_id.clear()
+        self.invocation_args.clear()
+        self.args_index.clear()
+        self.status_index.clear()
+        self.pending_timer.clear()
+        self.pre_pending_status.clear()
+        self.invocation_status.clear()
+        self.invocation_retries.clear()
+        self.invocations_to_purge.clear()
+        self.locks.clear()

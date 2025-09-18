@@ -48,9 +48,10 @@ def retry_once() -> int:
 
 
 @pytest.fixture
-def app(request: "FixtureRequest") -> Pynenc:
-    app = Pynenc(app_id="unit.test_mem_app")
+def app(request: "FixtureRequest", app_instance: Pynenc) -> Pynenc:
+    app = app_instance
     app.runner = ThreadRunner(app)
+    app._tasks = mock_all._tasks
     sum_task.app = app
     raise_exception.app = app
     get_text.app = app
@@ -62,7 +63,7 @@ def app(request: "FixtureRequest") -> Pynenc:
     return app
 
 
-def test_mem_execution(app: Pynenc) -> None:
+def test_thread_execution(app: Pynenc) -> None:
     """Test the whole lifecycle of a task execution"""
 
     def run_in_thread() -> None:
@@ -91,7 +92,7 @@ def test_raise_exception(app: Pynenc) -> None:
     thread.join()
 
 
-def test_mem_sub_invocation_dependency(app: Pynenc) -> None:
+def test_sub_invocation_dependency(app: Pynenc) -> None:
     """Test when an invocation requires the result of another invocation"""
 
     def run_in_thread() -> None:
@@ -123,8 +124,8 @@ def test_avoid_cycles(app: Pynenc) -> None:
 
     expected_error = (
         "A cycle was detected: Cycle detected:\n"
-        "- test_mem_app.get_upper_cycle()\n"
-        "- back to test_mem_app.get_upper_cycle()"
+        "- test_app_all_instances.get_upper_cycle()\n"
+        "- back to test_app_all_instances.get_upper_cycle()"
     )
 
     assert str(exc_info.value) == expected_error

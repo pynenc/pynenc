@@ -207,24 +207,11 @@ def test_state_backend_value_storage(deterministic_mixed_workflow: "Task") -> No
     # Debug: Check what's actually stored in the state backend
     workflow_identity = invocation.workflow
 
-    # If using MemStateBackend, inspect the stored values
-    if hasattr(app.state_backend, "_deterministic_values"):
-        stored_values = app.state_backend._deterministic_values.get(
-            workflow_identity.workflow_id, {}
-        )
-        print(f"DEBUG: Stored deterministic values: {list(stored_values.keys())}")
-
     # Check if ANY deterministic values were stored
-    _stored_random = app.state_backend.get_workflow_deterministic_value(
-        workflow_identity, "random:1"
-    )
-    _stored_time = app.state_backend.get_workflow_deterministic_value(
-        workflow_identity, "time:1"
-    )
-    _stored_uuid = app.state_backend.get_workflow_deterministic_value(
-        workflow_identity, "uuid:1"
-    )
-    stored_base_time = app.state_backend.get_workflow_deterministic_value(
+    _stored_random = app.state_backend.get_workflow_data(workflow_identity, "random:1")
+    _stored_time = app.state_backend.get_workflow_data(workflow_identity, "time:1")
+    _stored_uuid = app.state_backend.get_workflow_data(workflow_identity, "uuid:1")
+    stored_base_time = app.state_backend.get_workflow_data(
         workflow_identity, "workflow:base_time"
     )
 
@@ -237,10 +224,8 @@ def test_state_backend_value_storage(deterministic_mixed_workflow: "Task") -> No
         test_key = "test_storage_verification"
         test_value = "test_value_12345"
 
-        app.state_backend.set_workflow_deterministic_value(
-            workflow_identity, test_key, test_value
-        )
-        retrieved_value = app.state_backend.get_workflow_deterministic_value(
+        app.state_backend.set_workflow_data(workflow_identity, test_key, test_value)
+        retrieved_value = app.state_backend.get_workflow_data(
             workflow_identity, test_key
         )
 
@@ -285,19 +270,15 @@ def test_cross_backend_storage_compatibility(
     test_key = "test_custom_value"
     test_value = "test_data_12345"
 
-    app.state_backend.set_workflow_deterministic_value(
-        workflow_identity, test_key, test_value
-    )
-    retrieved_value = app.state_backend.get_workflow_deterministic_value(
-        workflow_identity, test_key
-    )
+    app.state_backend.set_workflow_data(workflow_identity, test_key, test_value)
+    retrieved_value = app.state_backend.get_workflow_data(workflow_identity, test_key)
 
     assert (
         retrieved_value == test_value
     ), "Custom value should be stored and retrieved correctly"
 
     # Test retrieving non-existent value
-    non_existent = app.state_backend.get_workflow_deterministic_value(
+    non_existent = app.state_backend.get_workflow_data(
         workflow_identity, "non_existent_key"
     )
     assert non_existent is None, "Non-existent value should return None"

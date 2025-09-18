@@ -133,4 +133,4 @@ class Arguments:
         return f"args({', '.join(items)})"
 
     def __repr__(self) -> str:
-        return f"Arguments({self.kwargs})"
+        return f"Arguments({set(self.kwargs.keys())})"

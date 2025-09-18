@@ -14,7 +14,7 @@ def test_method_chaining_should_work_correctly() -> None:
     app = (
         PynencBuilder()
         .memory()
-        .serializer("pickle")
+        .serializer_pickle()
         .thread_runner(min_threads=2, max_threads=8)
         .logging_level("info")
         .runner_tuning(runner_loop_sleep_time_sec=0.01)
@@ -43,7 +43,7 @@ def test_complete_app_example_should_work() -> None:
     app = (
         PynencBuilder()
         .memory()
-        .serializer("pickle")
+        .serializer_pickle()
         .thread_runner(min_threads=1, max_threads=4)
         .logging_level("info")
         .runner_tuning(

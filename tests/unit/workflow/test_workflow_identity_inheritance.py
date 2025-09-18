@@ -52,14 +52,14 @@ def test_workflow_inheritance_in_chain(runner: None) -> None:
 
     # Get invocations for all tasks in the chain
     chain_1_inv = chain_inv
-    chain_2_invs = list(app.orchestrator.get_existing_invocations(workflow_chain_2))
-    chain_3_invs = list(app.orchestrator.get_existing_invocations(workflow_chain_3))
+    chain_2_inv_ids = list(app.orchestrator.get_existing_invocations(workflow_chain_2))
+    chain_3_inv_ids = list(app.orchestrator.get_existing_invocations(workflow_chain_3))
 
-    assert len(chain_2_invs) == 1
-    assert len(chain_3_invs) == 1
+    assert len(chain_2_inv_ids) == 1
+    assert len(chain_3_inv_ids) == 1
 
-    chain_2_inv = chain_2_invs[0]
-    chain_3_inv = chain_3_invs[0]
+    chain_2_inv = app.state_backend.get_invocation(chain_2_inv_ids[0])
+    chain_3_inv = app.state_backend.get_invocation(chain_3_inv_ids[0])
 
     # Verify all tasks share the same workflow identity
     assert chain_1_inv.workflow == chain_2_inv.workflow

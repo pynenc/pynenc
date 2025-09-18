@@ -255,13 +255,13 @@ typing-extensions = ">=4.9.0,<5.0.0"
 
 [[package]]
 name = "click"
-version = "8.2.1"
+version = "8.3.0"
 description = "Composable command line interface toolkit"
 optional = false
 python-versions = ">=3.10"
 files = [
-    {file = "click-8.2.1-py3-none-any.whl", hash = "sha256:61a3265b914e850b85317d0b3109c7f8cd35a670f963866005d6ef1d5175a12b"},
-    {file = "click-8.2.1.tar.gz", hash = "sha256:27c491cc05d968d271d5a1db13e3b5a184636d9d930f148c50b038f0d0646202"},
+    {file = "click-8.3.0-py3-none-any.whl", hash = "sha256:9b9f285302c6e3064f4330c05f05b81945b2a39544279343e6e7c5f27a9baddc"},
+    {file = "click-8.3.0.tar.gz", hash = "sha256:e7b8232224eba16f4ebe410c25ced9f7875cb5f3263ffc93cc3e8da705e229c4"},
 ]
 
 [package.dependencies]
@@ -588,6 +588,24 @@ MarkupSafe = ">=2.0"
 i18n = ["Babel (>=2.7)"]
 
 [[package]]
+name = "jsonpickle"
+version = "4.1.1"
+description = "jsonpickle encodes/decodes any Python object to/from JSON"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "jsonpickle-4.1.1-py3-none-any.whl", hash = "sha256:bb141da6057898aa2438ff268362b126826c812a1721e31cf08a6e142910dc91"},
+    {file = "jsonpickle-4.1.1.tar.gz", hash = "sha256:f86e18f13e2b96c1c1eede0b7b90095bbb61d99fedc14813c44dc2f361dbbae1"},
+]
+
+[package.extras]
+cov = ["pytest-cov"]
+dev = ["black", "pyupgrade"]
+docs = ["furo", "rst.linker (>=1.9)", "sphinx (>=3.5)"]
+packaging = ["build", "setuptools (>=61.2)", "setuptools_scm[toml] (>=6.0)", "twine"]
+testing = ["PyYAML", "atheris (>=2.3.0,<2.4.0)", "bson", "ecdsa", "feedparser", "gmpy2", "numpy", "pandas", "pymongo", "pytest (>=6.0,!=8.1.*)", "pytest-benchmark", "pytest-benchmark[histogram]", "pytest-checkdocs (>=1.2.3)", "pytest-enabler (>=1.0.1)", "pytest-ruff (>=0.2.1)", "scikit-learn", "scipy", "scipy (>=1.9.3)", "simplejson", "sqlalchemy", "ujson"]
+
+[[package]]
 name = "markdown-it-py"
 version = "3.0.0"
 description = "Python port of markdown-it. Markdown parsing, done right!"
@@ -878,13 +896,13 @@ virtualenv = ">=20.10.0"
 
 [[package]]
 name = "pydantic"
-version = "2.11.7"
+version = "2.11.9"
 description = "Data validation using Python type hints"
 optional = false
 python-versions = ">=3.9"
 files = [
-    {file = "pydantic-2.11.7-py3-none-any.whl", hash = "sha256:dde5df002701f6de26248661f6835bbe296a47bf73990135c7d07ce741b9623b"},
-    {file = "pydantic-2.11.7.tar.gz", hash = "sha256:d989c3c6cb79469287b1569f7447a17848c998458d49ebe294e975b9baf0f0db"},
+    {file = "pydantic-2.11.9-py3-none-any.whl", hash = "sha256:c42dd626f5cfc1c6950ce6205ea58c93efa406da65f479dcb4029d5934857da2"},
+    {file = "pydantic-2.11.9.tar.gz", hash = "sha256:6b8ffda597a14812a7975c90b82a8a2e777d9257aba3453f973acd3c032a18e2"},
 ]
 
 [package.dependencies]
@@ -1493,13 +1511,13 @@ files = [
 
 [[package]]
 name = "types-requests"
-version = "2.32.4.20250809"
+version = "2.32.4.20250913"
 description = "Typing stubs for requests"
 optional = false
 python-versions = ">=3.9"
 files = [
-    {file = "types_requests-2.32.4.20250809-py3-none-any.whl", hash = "sha256:f73d1832fb519ece02c85b1f09d5f0dd3108938e7d47e7f94bbfa18a6782b163"},
-    {file = "types_requests-2.32.4.20250809.tar.gz", hash = "sha256:d8060de1c8ee599311f56ff58010fb4902f462a1470802cf9f6ed27bc46c4df3"},
+    {file = "types_requests-2.32.4.20250913-py3-none-any.whl", hash = "sha256:78c9c1fffebbe0fa487a418e0fa5252017e9c60d1a2da394077f1780f655d7e1"},
+    {file = "types_requests-2.32.4.20250913.tar.gz", hash = "sha256:abd6d4f9ce3a9383f269775a9835a4c24e5cd6b9f647d64f88aa4613c33def5d"},
 ]
 
 [package.dependencies]
@@ -1591,4 +1609,4 @@ monitor = ["fastapi", "jinja2", "python-multipart", "uvicorn"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.11.6"
-content-hash = "bde1f6a70075909bcd711fccfd93e686e77bce9e7a7c6a9cafc9acaa93695a84"
+content-hash = "e60844337d52fabd5b5d90317fb6176c100adfa8021cfadc2170b0a5178b3a07"

@@ -7,24 +7,12 @@ import pytest
 from pynenc.call import Call
 from pynenc.exceptions import PynencError
 from pynenc.invocation import DistributedInvocation, InvocationStatus
-from pynenc.state_backend.base_state_backend import BaseStateBackend
 from pynenc.util.subclasses import get_all_subclasses
-from tests import util
 from tests.conftest import MockPynenc
 
 if TYPE_CHECKING:
-    from _pytest.fixtures import FixtureRequest
-    from _pytest.python import Metafunc
-
+    from pynenc import Pynenc
     from pynenc.types import Params, Result
-
-
-def pytest_generate_tests(metafunc: "Metafunc") -> None:
-    subclasses = [
-        c for c in BaseStateBackend.__subclasses__() if "mock" not in c.__name__.lower()
-    ]
-    if "app" in metafunc.fixturenames:
-        metafunc.parametrize("app", subclasses, indirect=True)
 
 
 mock_app = MockPynenc()
@@ -36,25 +24,15 @@ def dummy() -> None:
 
 
 @pytest.fixture
-def app(request: "FixtureRequest") -> MockPynenc:
-    app = MockPynenc(app_id="int-state_backend" + util.get_unique_id())
-    app.state_backend = request.param(app)
-    app.purge()
-    request.addfinalizer(app.purge)
-    return app
-
-
-@pytest.fixture
-def invocation(app: MockPynenc) -> "DistributedInvocation[Params, Result]":
-    dummy.app = app
+def invocation(app_instance: "Pynenc") -> "DistributedInvocation[Params, Result]":
+    dummy.app = app_instance
     return DistributedInvocation(Call(dummy), None)
 
 
-def test_store_invocation(
-    app: MockPynenc, invocation: "DistributedInvocation[Params, Result]"
-) -> None:
+def test_store_invocation(invocation: "DistributedInvocation[Params, Result]") -> None:
     """Test that it will store and retrieve an invocation"""
-    app.state_backend.upsert_invocation(invocation)
+    app = invocation.app
+    app.state_backend.upsert_invocations([invocation])
     # upsert invocation is not blocking, so we need to wait for the async operation
     sleep(0.1)
     retrieved_invocation = app.state_backend.get_invocation(invocation.invocation_id)
@@ -62,53 +40,55 @@ def test_store_invocation(
 
 
 def test_store_history_status(
-    app: MockPynenc, invocation: "DistributedInvocation[Params, Result]"
+    invocation: "DistributedInvocation[Params, Result]",
 ) -> None:
     """Test that it will store and retrieve the status change history"""
+    app = invocation.app
 
     def _check_history(
         invocation_id: str, expected_statuses: list[InvocationStatus]
     ) -> None:
         app.state_backend.wait_for_invocation_async_operations(invocation_id)
-        history = app.state_backend.get_history(invocation)
+        history = app.state_backend.get_history(invocation.invocation_id)
         assert len(history) == len(expected_statuses)
         prev_datetime = datetime.min.replace(tzinfo=timezone.utc)
         for expected_status, inv_hist in zip(expected_statuses, history):
             assert inv_hist.timestamp > prev_datetime
-            assert inv_hist.invocation_id == invocation_id
             assert inv_hist.status == expected_status
             prev_datetime = inv_hist.timestamp
 
-    assert [] == app.state_backend.get_history(invocation)
-    app.state_backend.add_history(invocation, status=InvocationStatus.REGISTERED)
+    assert [] == app.state_backend.get_history(invocation.invocation_id)
+    app.state_backend.add_histories(
+        [invocation.invocation_id], status=InvocationStatus.REGISTERED
+    )
     _check_history(invocation.invocation_id, [InvocationStatus.REGISTERED])
-    app.state_backend.add_history(invocation, status=InvocationStatus.RUNNING)
+    app.state_backend.add_histories(
+        [invocation.invocation_id], status=InvocationStatus.RUNNING
+    )
     _check_history(
         invocation.invocation_id,
         [InvocationStatus.REGISTERED, InvocationStatus.RUNNING],
     )
 
 
-def test_store_result(
-    app: MockPynenc, invocation: "DistributedInvocation[Params, Result]"
-) -> None:
+def test_store_result(invocation: "DistributedInvocation[Params, Result]") -> None:
     """Test that it will store and retrieve a task result"""
-    app.state_backend.upsert_invocation(invocation)
-    app.state_backend.set_result(invocation, result="res_x")
-    assert "res_x" == app.state_backend.get_result(invocation)
+    app = invocation.app
+    app.state_backend.upsert_invocations([invocation])
+    app.state_backend.set_result(invocation.invocation_id, result="res_x")
+    assert "res_x" == app.state_backend.get_result(invocation.invocation_id)
 
 
-def test_set_exception(
-    app: MockPynenc, invocation: "DistributedInvocation[Params, Result]"
-) -> None:
+def test_set_exception(invocation: "DistributedInvocation[Params, Result]") -> None:
     """Test that can store and retrieve different types of exceptions"""
+    app = invocation.app
     test_exception = ValueError("Test exception message")
 
     # Store the exception using set_exception
-    app.state_backend.set_exception(invocation, test_exception)
+    app.state_backend.set_exception(invocation.invocation_id, test_exception)
 
     # Retrieve the stored exception using get_exception
-    retrieved_exception = app.state_backend.get_exception(invocation)
+    retrieved_exception = app.state_backend.get_exception(invocation.invocation_id)
 
     # Validate that the retrieved exception is the same as the stored one
     assert isinstance(retrieved_exception, ValueError)
@@ -116,9 +96,10 @@ def test_set_exception(
 
 
 def test_set_pynenc_exceptions(
-    app: MockPynenc, invocation: "DistributedInvocation[Params, Result]"
+    invocation: "DistributedInvocation[Params, Result]",
 ) -> None:
     """Test that can store and retrieve different types of exceptions"""
+    app = invocation.app
 
     def get_init_var_names(cls: type) -> Optional[set[str]]:
         for base in cls.mro():
@@ -154,10 +135,10 @@ def test_set_pynenc_exceptions(
         exception_instance = exception_cls(**filtered_fake_data)
 
         # Store the exception using set_exception
-        app.state_backend.set_exception(invocation, exception_instance)
+        app.state_backend.set_exception(invocation.invocation_id, exception_instance)
 
         # Retrieve the stored exception using get_exception
-        retrieved_exception = app.state_backend.get_exception(invocation)
+        retrieved_exception = app.state_backend.get_exception(invocation.invocation_id)
 
         # Validate that the retrieved exception is the same as the stored one
         assert isinstance(retrieved_exception, exception_cls)

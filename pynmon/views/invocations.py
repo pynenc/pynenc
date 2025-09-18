@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Optional
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
+from pynenc.exceptions import InvocationNotFoundError
 from pynenc.invocation.status import InvocationStatus
 from pynmon.app import get_pynenc_instance, templates
 
@@ -45,14 +46,14 @@ async def invocations_list(
         ]
 
     # Get all invocations across all tasks
-    all_invocations = []
+    all_invocation_ids = []
 
     # Find task by ID if specified
     if task_id:
         task = app.get_task(task_id)
         if task:
             # Get invocations for this specific task with filters
-            all_invocations = list(
+            all_invocation_ids = list(
                 app.orchestrator.get_existing_invocations(
                     task=task,
                     statuses=statuses,
@@ -61,16 +62,21 @@ async def invocations_list(
     else:
         # Get invocations from all tasks
         for task in app.tasks.values():
-            invocations = list(
+            invocation_ids = list(
                 app.orchestrator.get_existing_invocations(
                     task=task,
                     statuses=statuses,
                 )
             )
-            all_invocations.extend(invocations)
-            if len(all_invocations) >= limit:
-                all_invocations = all_invocations[:limit]
+            all_invocation_ids.extend(invocation_ids)
+            if len(all_invocation_ids) >= limit:
+                all_invocation_ids = all_invocation_ids[:limit]
                 break
+
+    # Parse actulal invocation objects
+    all_invocations = [
+        app.state_backend.get_invocation(inv_id) for inv_id in all_invocation_ids
+    ]
 
     # Get all possible statuses for filter dropdown
     all_statuses = [status.name.lower() for status in InvocationStatus]
@@ -175,19 +181,22 @@ def _collect_invocations_from_tasks(
     app: "Pynenc", tasks_to_check: list, limit: int
 ) -> list["DistributedInvocation"]:
     """Collect invocations from the specified tasks up to the limit."""
-    all_invocations = []
+    all_invocation_ids = []
     logger.info(f"Fetching invocations from {len(tasks_to_check)} tasks")
 
     for task in tasks_to_check:
-        invocations = list(app.orchestrator.get_existing_invocations(task=task))
-        all_invocations.extend(invocations)
+        invocation_ids = list(app.orchestrator.get_existing_invocations(task=task))
+        all_invocation_ids.extend(invocation_ids)
 
         # Limit the number to avoid overloading the browser
-        if len(all_invocations) >= limit:
-            all_invocations = all_invocations[:limit]
+        if len(all_invocation_ids) >= limit:
+            all_invocation_ids = all_invocation_ids[:limit]
             break
 
-    logger.info(f"Found {len(all_invocations)} invocations before time filtering")
+    logger.info(f"Found {len(all_invocation_ids)} invocations before time filtering")
+    all_invocations = [
+        app.state_backend.get_invocation(inv_id) for inv_id in all_invocation_ids
+    ]
     return all_invocations
 
 
@@ -203,7 +212,7 @@ def _filter_invocations_by_time(
 
     for invocation in all_invocations:
         # Try to get history for the invocation
-        history = app.state_backend.get_history(invocation)
+        history = app.state_backend.get_history(invocation.invocation_id)
 
         if not history:
             logger.debug(
@@ -389,7 +398,7 @@ def _get_invocation_result_and_exception(
     try:
         if invocation.status == InvocationStatus.SUCCESS:
             logger.info(f"Retrieving result for invocation {invocation_id}")
-            result = app.state_backend.get_result(invocation)
+            result = app.state_backend.get_result(invocation.invocation_id)
             # Format the result for display
             if isinstance(result, (dict, list)):
                 formatted_result = json.dumps(result, indent=2)
@@ -397,7 +406,7 @@ def _get_invocation_result_and_exception(
                 formatted_result = str(result)
         elif invocation.status == InvocationStatus.FAILED:
             logger.info(f"Retrieving exception for invocation {invocation_id}")
-            exception = app.state_backend.get_exception(invocation)
+            exception = app.state_backend.get_exception(invocation.invocation_id)
             # Format the exception for display
             formatted_exception = str(exception)
             if hasattr(exception, "__traceback__"):
@@ -415,7 +424,7 @@ def _get_invocation_result_and_exception(
 
 def _get_formatted_invocation_history(
     app: "Pynenc", invocation: "DistributedInvocation", invocation_id: str
-) -> list[dict[str, str | None]]:
+) -> list[dict]:
     """Get formatted history for an invocation with timeout protection."""
     try:
         logger.info(f"Retrieving history for invocation {invocation_id}")
@@ -423,7 +432,7 @@ def _get_formatted_invocation_history(
         max_history_time = 3  # Maximum time to spend retrieving history (3 seconds)
 
         # Get history with a timeout
-        history = app.state_backend.get_history(invocation)
+        history = app.state_backend.get_history(invocation.invocation_id)
 
         # Convert history items to a more template-friendly format
         formatted_history = []
@@ -432,11 +441,16 @@ def _get_formatted_invocation_history(
                 logger.warning("History retrieval timeout reached")
                 break
 
+            runner_context_summary = None
+            if entry.runner_context:
+                runner_context_summary = entry.runner_context.runner_id
+
             formatted_history.append(
                 {
                     "timestamp": entry.timestamp.isoformat(),
                     "status": entry.status.name if entry.status else "UNKNOWN",
-                    "execution_context": entry.execution_context,
+                    "running_context": entry.runner_context,
+                    "runner_context_summary": runner_context_summary,
                 }
             )
 
@@ -515,19 +529,7 @@ async def invocation_detail(request: Request, invocation_id: str) -> HTMLRespons
 
     try:
         # Use the direct method to get the invocation
-        invocation = app.orchestrator.get_invocation(invocation_id)
-
-        if not invocation:
-            logger.warning(f"No invocation found with ID: {invocation_id}")
-            return templates.TemplateResponse(
-                "shared/error.html",
-                {
-                    "request": request,
-                    "title": "Invocation Not Found",
-                    "message": f"No invocation found with ID: {invocation_id}",
-                },
-                status_code=404,
-            )
+        invocation = app.state_backend.get_invocation(invocation_id)
 
         # Get basic details
         task = invocation.task
@@ -583,6 +585,17 @@ async def invocation_detail(request: Request, invocation_id: str) -> HTMLRespons
                 else None,
             },
         )
+    except InvocationNotFoundError:
+        logger.warning(f"No invocation found with ID: {invocation_id}")
+        return templates.TemplateResponse(
+            "shared/error.html",
+            {
+                "request": request,
+                "title": "Invocation Not Found",
+                "message": f"No invocation found with ID: {invocation_id}",
+            },
+            status_code=404,
+        )
     except Exception as e:
         logger.error(f"Unexpected error in invocation_detail: {str(e)}")
         import traceback
@@ -610,14 +623,14 @@ async def invocation_history(request: Request, invocation_id: str) -> JSONRespon
 
     try:
         # Get the invocation
-        invocation = app.orchestrator.get_invocation(invocation_id)
+        invocation = app.state_backend.get_invocation(invocation_id)
         if not invocation:
             return JSONResponse(
                 {"error": f"No invocation found with ID: {invocation_id}"}, 404
             )
 
         # Get history
-        history = app.state_backend.get_history(invocation)
+        history = app.state_backend.get_history(invocation.invocation_id)
 
         # Convert to format needed for visualization
         formatted_history: list[dict] = []
@@ -627,11 +640,15 @@ async def invocation_history(request: Request, invocation_id: str) -> JSONRespon
             if timestamp.tzinfo is None:
                 timestamp = timestamp.replace(tzinfo=timezone.utc)
 
+            runner_context_summary = "N/A"
+            if entry.runner_context:
+                runner_context_summary = entry.runner_context.runner_id
+
             formatted_history.append(
                 {
                     "timestamp": timestamp.isoformat(),
-                    "status": entry.status.name if entry.status else "UNKNOWN",
-                    "execution_context": entry.execution_context,
+                    "status": entry.status.value,
+                    "runner_context_summary": runner_context_summary,
                 }
             )
 
@@ -655,7 +672,7 @@ async def invocation_api(request: Request, invocation_id: str) -> JSONResponse:
 
     try:
         # Get the invocation
-        invocation = app.orchestrator.get_invocation(invocation_id)
+        invocation = app.state_backend.get_invocation(invocation_id)
         if not invocation:
             return JSONResponse(
                 {"error": f"No invocation found with ID: {invocation_id}"}, 404

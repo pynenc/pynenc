@@ -98,7 +98,7 @@ async def test_dummy_runner_async_waiting_for_result(
         await runner.async_waiting_for_results(None, [])  # type: ignore
 
         log_output = log_buffer.getvalue()
-        assert "Async Waiting for result_invocations=" in log_output
+        assert "Async Waiting for result_invocation_ids=" in log_output
         assert "from outside this runner" in log_output
 
 
@@ -179,7 +179,9 @@ async def test_dummy_runner_async_waiting_for_results_running(
     monkeypatch.setattr(runner, "_waiting_for_results", fake_waiting_for_results)
 
     # Call async_waiting_for_results with a running invocation.
-    await runner.async_waiting_for_results(invocation, [invocation], None)
+    await runner.async_waiting_for_results(
+        invocation.invocation_id, [invocation.invocation_id], None
+    )
     assert (
         called
     ), "Expected _waiting_for_results to be called when running_invocation is provided"
