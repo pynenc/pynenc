@@ -30,5 +30,8 @@ def test_history_records_are_stored_and_ordered(app_instance: "Pynenc") -> None:
     backend._add_histories(["inv-1"], hist3)
 
     histories = backend.get_history("inv-1")
-    assert len(histories) == 3
-    assert {h.status for h in histories} == {hist1.status, hist2.status, hist3.status}
+    assert [hist.status for hist in histories] == [
+        hist1.status,
+        hist2.status,
+        hist3.status,
+    ]

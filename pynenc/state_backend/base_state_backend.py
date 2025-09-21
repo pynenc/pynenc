@@ -153,7 +153,7 @@ class BaseStateBackend(ABC, Generic[Params, Result]):
     @abstractmethod
     def _get_history(self, invocation_id: str) -> list["InvocationHistory"]:
         """
-        Retrieves the history of an invocation.
+        Retrieves the history of an invocation ordered by timestamp.
 
         :param str invocation_id: The ID of the invocation to get the history from
         :return: List of InvocationHistory records

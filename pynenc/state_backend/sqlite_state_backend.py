@@ -248,7 +248,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
             conn.commit()
 
     def _get_history(self, invocation_id: str) -> list["InvocationHistory"]:
-        """Get invocation history by invocation ID."""
+        """Retrieves the history of an invocation ordered by timestamp."""
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
                 f"""

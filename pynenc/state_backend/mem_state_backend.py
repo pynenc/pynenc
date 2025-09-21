@@ -76,12 +76,15 @@ class MemStateBackend(BaseStateBackend[Params, Result]):
 
     def _get_history(self, invocation_id: str) -> list["InvocationHistory"]:
         """
-        Retrieves the history of an invocation.
+        Retrieves the history of an invocation ordered by timestamp.
 
         :param str invocation_id: The ID of the invocation to get the history from
         :return: List of InvocationHistory records
         """
-        return self._history[invocation_id]
+        return sorted(
+            self._history.get(invocation_id, []),
+            key=lambda record: record.timestamp,
+        )
 
     def _get_result(self, invocation_id: str) -> Result:
         """
