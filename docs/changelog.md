@@ -35,8 +35,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Added robust plugin method chaining and cleanup mechanisms
 
 - **Enhanced Invocation History**:
+
   - Added `RunnerContext` class in `runner_context.py` to capture detailed runner execution context (hostname, PID, etc.) for task invocations.
   - Updated `InvocationHistory` in `base_state_backend.py` to include runner context for improved debugging and monitoring of task executions.
+
+- **Test Coverage for ArgCache Implementations**:
+  - Added `test_arg_cache_all_instances.py` to directly test abstract methods (`_store`, `_retrieve`, `_purge`) for all arg_cache implementations using the `app_instance` fixture.
 
 ### Changed
 

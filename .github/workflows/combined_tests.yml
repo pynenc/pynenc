@@ -26,7 +26,7 @@ jobs:
           key: pydeps-${{ hashFiles('**/poetry.lock') }}
       - run: poetry install --no-interaction
       - name: Run unit tests with coverage
-        run: poetry run coverage run -m pytest tests/unit
+        run: poetry run coverage run -m pytest pynenc_tests/unit
       - run: poetry run coverage report
       - run: poetry run coverage html --show-contexts --title "Unit Test Coverage for ${{ github.sha }}"
       - name: Upload unit test coverage HTML
@@ -62,7 +62,7 @@ jobs:
           key: pydeps-${{ hashFiles('**/poetry.lock') }}
       - run: poetry install --no-interaction
       - name: Run integration tests with coverage
-        run: poetry run coverage run -m pytest tests/integration
+        run: poetry run coverage run -m pytest pynenc_tests/integration
       - run: poetry run coverage report
       - run: poetry run coverage html --show-contexts --title "Integration Test Coverage for ${{ github.sha }}"
       - name: Upload integration test coverage HTML
