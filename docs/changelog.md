@@ -13,6 +13,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Introduced a comprehensive plugin system to support multiple backend implementations
   - Created plugin interface for state backends, brokers, and orchestrators
   - Enabled modular architecture for extending Pynenc with different storage and messaging systems
+  - Added automatic plugin loading at startup to ensure subclass discovery works without builder usage
+  - Added comprehensive test coverage for plugin loading functionality
 
 - **MongoDB Plugin Support**:
 

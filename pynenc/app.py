@@ -11,6 +11,7 @@ from pynenc.broker.base_broker import BaseBroker
 from pynenc.conf.config_pynenc import ConfigPynenc
 from pynenc.conf.config_task import ConcurrencyControlType
 from pynenc.orchestrator.base_orchestrator import BaseOrchestrator
+from pynenc.plugin_loader import load_all_plugins
 from pynenc.runner.base_runner import BaseRunner
 from pynenc.serializer.base_serializer import BaseSerializer
 from pynenc.state_backend.base_state_backend import BaseStateBackend
@@ -73,6 +74,7 @@ class Pynenc:
         self._runner_instance: Optional[BaseRunner] = None
         self._tasks: dict[str, Task] = {}
         self.logger.info(f"Initialized Pynenc app with id {self.app_id}")
+        load_all_plugins()
         self.state_backend.store_app_info(AppInfo.from_app(self))
 
     @classmethod
