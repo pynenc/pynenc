@@ -1,5 +1,3 @@
-import pytest
-
 from pynenc import Pynenc
 from pynenc.call import Call
 from pynenc.invocation import DistributedInvocation, InvocationStatus
@@ -18,16 +16,10 @@ def task1() -> None:
     ...
 
 
-@pytest.fixture
-def invocations() -> tuple[DistributedInvocation, DistributedInvocation]:
-    return (
-        DistributedInvocation(Call(task0), None),
-        DistributedInvocation(Call(task1), None),
-    )
+def test_get_blocking_invocations(app_instance: "Pynenc") -> None:
+    invocation0: DistributedInvocation = DistributedInvocation(Call(task0), None)
+    invocation1: DistributedInvocation = DistributedInvocation(Call(task1), None)
 
-
-def test_get_blocking_invocations(invocations: tuple, app_instance: "Pynenc") -> None:
-    invocation0, invocation1 = invocations
     graph = app_instance.orchestrator.blocking_control  # type: ignore
 
     # register new invocations in the orchestrator
@@ -37,7 +29,7 @@ def test_get_blocking_invocations(invocations: tuple, app_instance: "Pynenc") ->
     # graph.add_invocation_call(invocation1, invocation2)
     graph.waiting_for_results(invocation0.invocation_id, [invocation1.invocation_id])
 
-    invocation0.app.orchestrator._get_invocation_status_mock.return_value = (
+    invocation0.app.orchestrator._get_invocation_status_mock.return_value = (  # type: ignore
         InvocationStatus.REGISTERED
     )
 
