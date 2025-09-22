@@ -76,10 +76,10 @@ def test_causes_cycle(invocations: tuple, app_instance: "Pynenc") -> None:
 
     expected_error = (
         "A cycle was detected: Cycle detected:\n"
-        "- Call(task=test_cycle_control_all_instances.task2, arguments=<no_args>)\n"
-        "- Call(task=test_cycle_control_all_instances.task0, arguments=<no_args>)\n"
-        "- Call(task=test_cycle_control_all_instances.task1, arguments=<no_args>)\n"
-        "- back to Call(task=test_cycle_control_all_instances.task2, arguments=<no_args>)"
+        "- Call(task=pynenc_tests.unit.orchestrator.test_cycle_control_all_instances.task2, arguments=<no_args>)\n"
+        "- Call(task=pynenc_tests.unit.orchestrator.test_cycle_control_all_instances.task0, arguments=<no_args>)\n"
+        "- Call(task=pynenc_tests.unit.orchestrator.test_cycle_control_all_instances.task1, arguments=<no_args>)\n"
+        "- back to Call(task=pynenc_tests.unit.orchestrator.test_cycle_control_all_instances.task2, arguments=<no_args>)"
     )
 
     assert str(exc_info.value) == expected_error
