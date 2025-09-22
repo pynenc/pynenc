@@ -56,7 +56,7 @@ For a detailed guide and example, see {doc}`./use_case_001_basic_local_threaded`
 
 ## Use Case 2: Distributed System with Redis and Process Runner
 
-Explore setting up a distributed task processing system using `pynenc` with Redis. This use case demonstrates how to configure and run tasks in a distributed environment, leveraging Redis for task queuing and the ProcessRunner for executing tasks across multiple processes.
+Explore setting up a distributed task processing system using `pynenc` with Redis. This use case demonstrates how to configure and run tasks in a distributed environment, leveraging the Redis plugin for task queuing and the ProcessRunner for executing tasks across multiple processes.
 
 ```python
 import time
@@ -75,6 +75,12 @@ def sleep(x: int) -> int:
     time.sleep(x)
     add.logger.info(f"{sleep.task_id=} Done sleeping for {x} seconds")
     return x
+```
+
+**Prerequisites**: This use case requires the Redis plugin:
+
+```bash
+pip install pynenc-redis
 ```
 
 Configuration is key to integrating Redis with `pynenc`, as shown in the `pyproject.toml` setup. This setup enables tasks to be queued and processed in a truly distributed manner.

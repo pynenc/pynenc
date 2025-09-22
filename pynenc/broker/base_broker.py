@@ -14,40 +14,44 @@ if TYPE_CHECKING:
 
 class BaseBroker(ABC):
     """
-    An Abstract Base Class for Message Brokers in Pynenc**
+    Abstract base class for message brokers in Pynenc's plugin system.
 
-    This class serves as the foundational structure for implementing various message brokers.
-    It currently supports a simple FIFO queue and is extendable for more complex functionalities
-    like priority queues and integration with different databases and message queues.
+    This class serves as the foundational interface for implementing various message brokers
+    across different backend systems. The plugin architecture allows for flexible integration
+    with multiple storage and messaging solutions, each providing their own broker implementation.
 
-    :param Pynenc app: A reference to the Pynenc application.
+    The broker is responsible for routing task invocations through a message queue system,
+    supporting both FIFO and priority-based queuing strategies depending on the implementation.
+
+    :param Pynenc app: A reference to the Pynenc application instance.
 
     ```{note}
-    The `BaseBroker` is currently implemented with an in-memory queue (`MemBroker`) for testing and demonstration,
-    and a Redis-backed queue (`RedisBroker`) for production use.
+    Available broker implementations depend on installed plugins:
+    - **MemBroker**: Built-in memory-based broker for development and testing
+    - **RedisBroker**: Available with `pynenc-redis` plugin for production Redis deployments
+    - **MongoBroker**: Available with `pynenc-mongodb` plugin for MongoDB-based systems
     ```
 
     ```{attention}
-    The implementation is currently limited to a FIFO queue. Future enhancements will include support
-    for priority queues and compatibility with other databases and message queues like RabbitMQ.
+    Plugin-specific brokers may have different capabilities and performance characteristics.
+    Consult the documentation for your chosen backend plugin for implementation-specific details.
     ```
 
     ```{hint}
-    The class is designed to be flexible and expandable, allowing for easy integration of additional
-    features and message brokers in the future.
+    The plugin system allows for easy extension with custom broker implementations.
+    Create a custom broker by subclassing BaseBroker and implementing the abstract methods.
     ```
 
     ```{seealso}
-    For more advanced or production-ready features, refer to the specific implementations like `RedisBroker`.
+    For production deployments, consider Redis or MongoDB plugins which provide
+    persistent, distributed message queuing capabilities.
     ```
-
-    The `route_call` method creates a new invocation and routes it, demonstrating a basic usage of the broker.
 
     ### Examples
     ```{code-block} python
-        # Assuming `app` is an instance of Pynenc and `call` is a valid Call object
-        broker = BaseBroker(app)
-        invocation = broker.route_call(call)
+        # The broker is automatically selected based on your plugin configuration
+        # No direct instantiation needed - handled by Pynenc application
+        invocation = app.broker.route_call(call)
     ```
     """
 

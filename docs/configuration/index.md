@@ -76,7 +76,32 @@ In the first example, `test_field` in `ConfigChild` is overridden with "env_chil
 A specific configuration file can be indicated using the `PYNENC__FILEPATH` environment variable. Additionally, a file exclusive to a particular `ConfigBase` instance can be specified, e.g., `PYNENC__SOMECONFIG__FILEPATH` for `SomeConfig`.
 
 ```{note}
-   The configuration system is designed to be easily extendable, allowing users to create custom configuration classes that inherit from `ConfigBase`. This flexibility facilitates the modification of specific parts of the configuration as necessary for each system.
+   The configuration system is designed to be easily extendable, allowing users to create custom configuration classes that inherit from `ConfigBase`. This flexibility facilitates the modification of specific parts of the configuration as necessary for each system, including plugin-specific configurations.
+```
+
+## Plugin Configuration
+
+With Pynenc's plugin architecture, you can configure backend-specific settings for different plugins:
+
+### Redis Plugin Configuration
+
+When using the `pynenc-redis` plugin:
+
+```toml
+[tool.pynenc.redis]
+redis_host = "localhost"
+redis_port = 6379
+redis_db = 0
+```
+
+### MongoDB Plugin Configuration
+
+When using the `pynenc-mongodb` plugin:
+
+```toml
+[tool.pynenc.mongodb]
+connection_string = "mongodb://localhost:27017"
+database_name = "pynenc"
 ```
 
 ## Multi-Inheritance Support

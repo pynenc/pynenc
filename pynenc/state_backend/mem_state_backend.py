@@ -1,21 +1,21 @@
 import itertools
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any, Iterator
+from typing import TYPE_CHECKING, Any, Iterator, Optional
 
 from pynenc.state_backend.base_state_backend import BaseStateBackend
+from pynenc.types import Params, Result
 
 if TYPE_CHECKING:
     from pynenc.app import AppInfo, Pynenc
     from pynenc.invocation.dist_invocation import DistributedInvocation
     from pynenc.state_backend.base_state_backend import InvocationHistory
-    from pynenc.types import Params, Result
     from pynenc.workflow import WorkflowIdentity
 
 
 _APP_INFO_REGISTRY: dict[str, "AppInfo"] = {}
 
 
-class MemStateBackend(BaseStateBackend):
+class MemStateBackend(BaseStateBackend[Params, Result]):
     """
     A memory-based implementation of the state backend.
 
@@ -34,7 +34,6 @@ class MemStateBackend(BaseStateBackend):
         self._results: dict[str, Any] = {}
         self._exceptions: dict[str, Exception] = {}
         self._workflow_data: dict[str, dict[str, Any]] = defaultdict(dict)
-        self._deterministic_values: dict[str, dict[str, Any]] = defaultdict(dict)
         self._workflow_types: set[str] = set()  # Stores workflow_task_ids
         self._workflow_runs: dict[str, list["WorkflowIdentity"]] = defaultdict(
             list
@@ -54,94 +53,74 @@ class MemStateBackend(BaseStateBackend):
         self._workflow_runs.clear()
         self._workflow_sub_invocations.clear()
 
-    def _upsert_invocation(self, invocation: "DistributedInvocation") -> None:
-        """
-        Inserts or updates an invocation in the memory cache.
+    def _upsert_invocations(self, invocations: list["DistributedInvocation"]) -> None:
+        """Inserts or updates multiple invocations in the memory cache."""
+        for invocation in invocations:
+            self._cache[invocation.invocation_id] = invocation
 
-        :param DistributedInvocation invocation: The invocation object to upsert.
-        """
-        self._cache[invocation.invocation_id] = invocation
-
-    def _get_invocation(
-        self, invocation_id: str
-    ) -> "DistributedInvocation[Params, Result]":
+    def _get_invocation(self, invocation_id: str) -> Optional["DistributedInvocation"]:
         """
         Retrieves an invocation from the memory cache by its ID.
 
         :param str invocation_id: The ID of the invocation to retrieve.
         :return: The retrieved invocation object.
         """
-        return self._cache[invocation_id]
+        return self._cache.get(invocation_id)
 
-    def _add_history(
-        self,
-        invocation: "DistributedInvocation",
-        invocation_history: "InvocationHistory",
+    def _add_histories(
+        self, invocation_ids: list[str], invocation_history: "InvocationHistory"
     ) -> None:
-        """
-        Adds a history record to an invocation.
+        """Adds the same history record for a list of invocations."""
+        for invocation_id in invocation_ids:
+            self._history[invocation_id].append(invocation_history)
 
-        :param DistributedInvocation invocation: The invocation to add history for.
-        :param InvocationHistory invocation_history: The history record to add.
+    def _get_history(self, invocation_id: str) -> list["InvocationHistory"]:
         """
-        self._history[invocation.invocation_id].append(invocation_history)
+        Retrieves the history of an invocation ordered by timestamp.
 
-    def _get_history(
-        self, invocation: "DistributedInvocation[Params, Result]"
-    ) -> list["InvocationHistory"]:
+        :param str invocation_id: The ID of the invocation to get the history from
+        :return: List of InvocationHistory records
         """
-        Retrieves the history of an invocation.
+        return sorted(
+            self._history.get(invocation_id, []),
+            key=lambda record: record.timestamp,
+        )
 
-        :param DistributedInvocation invocation: The invocation to get the history for.
-        :return: A list of invocation history records.
-        """
-        return self._history[invocation.invocation_id]
-
-    def _set_result(
-        self, invocation: "DistributedInvocation[Params, Result]", result: "Result"
-    ) -> None:
-        """
-        Sets the result for an invocation.
-
-        :param DistributedInvocation invocation: The invocation to set the result for.
-        :param Result result: The result of the invocation.
-        """
-        self._results[invocation.invocation_id] = result
-
-    def _set_exception(
-        self,
-        invocation: "DistributedInvocation[Params, Result]",
-        exception: "Exception",
-    ) -> None:
-        """
-        Sets the exception for an invocation.
-
-        :param DistributedInvocation invocation: The invocation to set the exception for.
-        :param Exception exception: The exception to set.
-        """
-        self._exceptions[invocation.invocation_id] = exception
-
-    def _get_result(
-        self, invocation: "DistributedInvocation[Params, Result]"
-    ) -> "Result":
+    def _get_result(self, invocation_id: str) -> Result:
         """
         Retrieves the result of an invocation.
 
-        :param DistributedInvocation invocation: The invocation to get the result for.
-        :return: The result of the invocation.
+        :param str invocation_id: The ID of the invocation to get the result from
+        :return: The result value
         """
-        return self._results[invocation.invocation_id]
+        return self._results[invocation_id]
 
-    def _get_exception(
-        self, invocation: "DistributedInvocation[Params, Result]"
-    ) -> Exception:
+    def _set_result(self, invocation_id: str, result: Result) -> None:
+        """
+        Sets the result of an invocation.
+
+        :param str invocation_id: The ID of the invocation to set
+        :param object result: The result to set
+        """
+        self._results[invocation_id] = result
+
+    def _get_exception(self, invocation_id: str) -> "Exception":
         """
         Retrieves the exception of an invocation.
 
-        :param DistributedInvocation invocation: The invocation to get the exception for.
-        :return: The exception of the invocation.
+        :param str invocation_id: The ID of the invocation to get the exception from
+        :return: The exception object
         """
-        return self._exceptions[invocation.invocation_id]
+        return self._exceptions[invocation_id]
+
+    def _set_exception(self, invocation_id: str, exception: "Exception") -> None:
+        """
+        Sets the raised exception by an invocation ran.
+
+        :param str invocation_id: The ID of the invocation to set
+        :param Exception exception: The exception raised
+        """
+        self._exceptions[invocation_id] = exception
 
     def get_workflow_data(
         self, workflow_identity: "WorkflowIdentity", key: str, default: Any = None
@@ -172,34 +151,6 @@ class MemStateBackend(BaseStateBackend):
             self._workflow_data[workflow_id] = {}
         self._workflow_data[workflow_id][key] = value
 
-    def get_workflow_deterministic_value(
-        self, workflow: "WorkflowIdentity", key: str
-    ) -> Any:
-        """
-        Retrieve a deterministic value for workflow operations.
-
-        :param workflow: The workflow identity
-        :param key: Key identifying the deterministic value
-        :return: The stored value or None if not found
-        """
-        workflow_id = workflow.workflow_id
-        return self._deterministic_values.get(workflow_id, {}).get(key)
-
-    def set_workflow_deterministic_value(
-        self, workflow: "WorkflowIdentity", key: str, value: Any
-    ) -> None:
-        """
-        Store a deterministic value for workflow operations.
-
-        :param workflow: The workflow identity
-        :param key: Key identifying the deterministic value
-        :param value: The value to store
-        """
-        workflow_id = workflow.workflow_id
-        if workflow_id not in self._deterministic_values:
-            self._deterministic_values[workflow_id] = {}
-        self._deterministic_values[workflow_id][key] = value
-
     def store_app_info(self, app_info: "AppInfo") -> None:
         """
         Register this app's information in the state backend for discovery.
@@ -221,7 +172,7 @@ class MemStateBackend(BaseStateBackend):
         return _APP_INFO_REGISTRY[app_id]
 
     @staticmethod
-    def get_all_app_infos() -> dict[str, "AppInfo"]:
+    def discover_app_infos() -> dict[str, "AppInfo"]:
         return _APP_INFO_REGISTRY
 
     def store_workflow_run(self, workflow_identity: "WorkflowIdentity") -> None:
@@ -251,14 +202,14 @@ class MemStateBackend(BaseStateBackend):
         """
         return itertools.chain.from_iterable(self._workflow_runs.values())
 
-    def get_workflow_runs(self, workflow_task_id: str) -> Iterator["WorkflowIdentity"]:
+    def get_workflow_runs(self, workflow_type: str) -> Iterator["WorkflowIdentity"]:
         """
         Retrieve workflow run identities from this state backend.
 
-        :param workflow_task_id: Filter for specific workflow type
+        :param workflow_type: Filter for specific workflow type
         :return: Iterator of workflow identities for runs
         """
-        return iter(self._workflow_runs.get(workflow_task_id, []))
+        return iter(self._workflow_runs.get(workflow_type, []))
 
     def store_workflow_sub_invocation(
         self, parent_workflow_id: str, sub_invocation_id: str

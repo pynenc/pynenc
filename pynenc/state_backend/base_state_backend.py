@@ -5,16 +5,17 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Iterator, Optional
+from typing import TYPE_CHECKING, Any, Generic, Iterator, Optional
 
 from pynenc.conf.config_state_backend import ConfigStateBackend
-from pynenc.exceptions import InvocationNotFoundError
+from pynenc.exceptions import InvocationNotFoundError, PynencError
 from pynenc.invocation.status import InvocationStatus
+from pynenc.runner import RunnerContext
+from pynenc.types import Params, Result
 
 if TYPE_CHECKING:
     from pynenc.app import AppInfo, Pynenc
     from pynenc.invocation.dist_invocation import DistributedInvocation
-    from pynenc.types import Params, Result
     from pynenc.workflow import WorkflowIdentity
 
 
@@ -26,18 +27,16 @@ class InvocationHistory:
     Stores the invocation ID, timestamp, status, and execution context.
     Provides methods for serialization and deserialization to and from JSON.
 
-    :ivar invocation_id: Unique identifier of the invocation.
     :ivar _timestamp: Timestamp of the invocation history creation.
     :ivar status: Current status of the invocation.
     :ivar execution_context: Context of the execution, reserved for future use.
     """
 
-    invocation_id: str
     _timestamp: datetime = field(
         init=False, default_factory=lambda: datetime.now(timezone.utc)
     )
-    status: Optional["InvocationStatus"] = None
-    execution_context: Optional[Any] = None  # Todo on Runners
+    status: InvocationStatus
+    runner_context: Optional[RunnerContext] = None
 
     @property
     def timestamp(self) -> datetime:
@@ -52,10 +51,11 @@ class InvocationHistory:
         """
         return json.dumps(
             {
-                "invocation_id": self.invocation_id,
                 "_timestamp": self._timestamp.isoformat(),
-                "status": self.status.value if self.status else None,
-                "execution_context": self.execution_context,  # TODO
+                "status": self.status.value,
+                "runner_context": self.runner_context.to_json()
+                if self.runner_context
+                else None,
             }
         )
 
@@ -68,21 +68,20 @@ class InvocationHistory:
         :return: An instance of InvocationHistory.
         """
         hist_dict = json.loads(json_str)
-        history = cls(hist_dict["invocation_id"])
+        history = cls(InvocationStatus(hist_dict["status"]))
 
         timestamp = datetime.fromisoformat(hist_dict["_timestamp"])
         if timestamp.tzinfo is None:
             timestamp = timestamp.replace(tzinfo=timezone.utc)
-
         history._timestamp = timestamp
 
-        if hist_dict["status"] is not None:
-            history.status = InvocationStatus(hist_dict["status"])
-        history.execution_context = hist_dict["execution_context"]
+        if runner_ctx_json := hist_dict.get("runner_context"):
+            history.runner_context = RunnerContext.from_json(runner_ctx_json)
+
         return history
 
 
-class BaseStateBackend(ABC):
+class BaseStateBackend(ABC, Generic[Params, Result]):
     """
     Abstract base class for state backends in a distributed task system.
 
@@ -122,88 +121,128 @@ class BaseStateBackend(ABC):
         """Purges all store state backend data for the current application"""
 
     @abstractmethod
-    def _upsert_invocation(
-        self, invocation: "DistributedInvocation[Params, Result]"
+    def _upsert_invocations(
+        self, invocations: list["DistributedInvocation[Params, Result]"]
     ) -> None:
         """
-        Updates or inserts an invocation.
+        Updates or inserts multiple invocations.
 
-        :param DistributedInvocation invocation: The invocation to upsert.
+        :param list[DistributedInvocation] invocations: The invocations to upsert.
         """
 
     @abstractmethod
     def _get_invocation(self, invocation_id: str) -> Optional["DistributedInvocation"]:
-        """Retrieves an invocation by its ID."""
+        """
+        Retrieves an invocation by its ID.
+
+        :param str invocation_id: The ID of the invocation to retrieve.
+        :return: The invocation object if found, else None.
+        """
 
     @abstractmethod
-    def _add_history(
-        self,
-        invocation: "DistributedInvocation[Params, Result]",
-        invocation_history: InvocationHistory,
+    def _add_histories(
+        self, invocation_ids: list[str], invocation_history: "InvocationHistory"
     ) -> None:
-        """Adds a history record for an invocation."""
-
-    @abstractmethod
-    def _get_history(
-        self, invocation: "DistributedInvocation[Params, Result]"
-    ) -> list[InvocationHistory]:
         """
-        Retrieves the history of an invocation.
+        Adds a histories record for a list of invocations.
 
-        :param DistributedInvocation invocation: The invocation to get the history from
+        :param list[str] invocation_ids: The IDs of the invocations.
+        :param InvocationHistory invocation_history: The history record to add.
         """
 
     @abstractmethod
-    def _get_result(
-        self, invocation: "DistributedInvocation[Params, Result]"
-    ) -> "Result":
+    def _get_history(self, invocation_id: str) -> list["InvocationHistory"]:
+        """
+        Retrieves the history of an invocation ordered by timestamp.
+
+        :param str invocation_id: The ID of the invocation to get the history from
+        :return: List of InvocationHistory records
+        """
+
+    @abstractmethod
+    def _get_result(self, invocation_id: str) -> Result:
         """
         Retrieves the result of an invocation.
 
-        :param DistributedInvocation invocation: The invocation to get the result from
+        :param str invocation_id: The ID of the invocation to get the result from
+        :return: The result value
         """
 
     @abstractmethod
-    def _set_result(
-        self, invocation: "DistributedInvocation[Params, Result]", result: "Result"
-    ) -> None:
+    def _set_result(self, invocation_id: str, result: Result) -> None:
         """
         Sets the result of an invocation.
 
-        :param DistributedInvocation invocation: The invocation to set
+        :param str invocation_id: The ID of the invocation to set
         :param Result result: The result to set
         """
 
+    def serialize_exception(self, exception: Exception) -> str:
+        """
+        Serializes an exception into a string representation.
+
+        This method provides a default implementation for serializing exceptions using the `serialize` method.
+        It can be overridden by subclasses if specific handling for exceptions is required.
+
+        :param Exception exception: The exception to be serialized.
+        :return: A string representation of the serialized exception.
+        """
+        serialized_exception: dict[str, str | bool] = {
+            "error_name": exception.__class__.__name__
+        }
+        if isinstance(exception, PynencError):
+            serialized_exception["pynenc_error"] = True
+            serialized_exception["error_data"] = exception.to_json()
+        else:
+            serialized_exception["pynenc_error"] = False
+            serialized_exception["error_data"] = self.app.serializer.serialize(
+                exception
+            )
+        return json.dumps(serialized_exception)
+
+    def deserialize_exception(self, serialized: str) -> Exception:
+        """
+        Deserializes a string representation of an exception back into an Exception object.
+
+        This method provides a default implementation for deserializing exceptions using the `deserialize` method.
+        It can be overridden by subclasses if specific handling for exceptions is required.
+
+        :param str serialized: The string representation of the serialized exception.
+        :return: The deserialized Exception object.
+        """
+        serialized_exception = json.loads(serialized)
+        if serialized_exception["pynenc_error"]:
+            return PynencError.from_json(
+                serialized_exception["error_name"],
+                serialized_exception["error_data"],
+            )
+        return self.app.serializer.deserialize(serialized_exception["error_data"])
+
     @abstractmethod
-    def _get_exception(
-        self, invocation: "DistributedInvocation[Params, Result]"
-    ) -> "Exception":
+    def _get_exception(self, invocation_id: str) -> "Exception":
         """
         Retrieves the exception of an invocation.
 
-        :param DistributedInvocation invocation: The invocation to get the exception from
+        :param str invocation_id: The ID of the invocation to get the exception from
+        :return: The exception object
         """
 
     @abstractmethod
-    def _set_exception(
-        self,
-        invocation: "DistributedInvocation[Params, Result]",
-        exception: "Exception",
-    ) -> None:
+    def _set_exception(self, invocation_id: str, exception: "Exception") -> None:
         """
         Sets the raised exception by an invocation ran.
 
-        :param DistributedInvocation invocation: The invocation to set
+        :param str invocation_id: The ID of the invocation to set
         :param Exception exception: The exception raised
         """
 
-    def upsert_invocation(self, invocation: "DistributedInvocation") -> None:
+    def upsert_invocations(self, invocations: list["DistributedInvocation"]) -> None:
         """
-        Starts an asynchronous operation to update or insert an invocation.
+        Starts an asynchronous operation to update or insert invocations.
 
         :param DistributedInvocation invocation: The invocation to upsert.
         """
-        self._upsert_invocation(invocation)
+        self._upsert_invocations(invocations)
 
     def get_invocation(self, invocation_id: str) -> "DistributedInvocation":
         """
@@ -217,82 +256,74 @@ class BaseStateBackend(ABC):
             return invocation
         raise InvocationNotFoundError(invocation_id, "The invocation wasn't stored")
 
-    def add_history(
+    def add_histories(
         self,
-        invocation: "DistributedInvocation[Params, Result]",
-        status: Optional["InvocationStatus"] = None,
-        execution_context: Optional["Any"] = None,
+        invocation_ids: list[str],
+        status: "InvocationStatus",
+        runner_context: Optional["RunnerContext"] = None,
     ) -> None:
         """
         Adds a history record for an invocation.
 
-        :param DistributedInvocation invocation: The invocation to add history for.
+        :param str invocation_id: The invocation Id to add history for.
         :param Optional[InvocationStatus] status: The status of the invocation.
         :param Optional[Any] execution_context: The execution context of the invocation.
         """
-        invocation_history = InvocationHistory(
-            invocation.invocation_id, status, execution_context
-        )
+        invocation_history = InvocationHistory(status, runner_context)
         thread = threading.Thread(
-            target=self._add_history, args=(invocation, invocation_history)
+            target=self._add_histories, args=(invocation_ids, invocation_history)
         )
-        self.invocation_threads[invocation.invocation_id].append(thread)
+        for invocation_id in invocation_ids:
+            self.invocation_threads[invocation_id].append(thread)
         thread.start()
 
-    def get_history(
-        self, invocation: "DistributedInvocation[Params, Result]"
-    ) -> list[InvocationHistory]:
+    def get_history(self, invocation_id: str) -> list[InvocationHistory]:
         """
         Retrieves the history of an invocation.
 
-        :param DistributedInvocation invocation: The invocation to retrieve history for.
+        :param str invocation_id: The ID of the invocation to retrieve history for.
+
         :return: A list of invocation history records.
         """
         # todo fork open threads
-        return self._get_history(invocation)
+        return self._get_history(invocation_id)
 
-    def set_result(self, invocation: "DistributedInvocation", result: "Result") -> None:
+    def set_result(self, invocation_id: str, result: Result) -> None:
         """
         Sets the result of an invocation.
 
-        :param DistributedInvocation invocation: The invocation to set the result for.
+        :param str invocation_id: The ID of the invocation to set the result for.
         :param Result result: The result of the invocation.
         """
-        self._set_result(invocation, result)
+        self._set_result(invocation_id, result)
 
-    def get_result(
-        self, invocation: "DistributedInvocation[Params, Result]"
-    ) -> "Result":
+    def get_result(self, invocation_id: str) -> Result:
         """
         Retrieves the result of an invocation.
 
-        :param DistributedInvocation invocation: The invocation to retrieve the result for.
+        :param str invocation_id: The ID of the invocation to retrieve the result for.
         :return: The result of the invocation.
         """
         # insert result is block, no need for thread control
-        return self._get_result(invocation)
+        return self._get_result(invocation_id)
 
-    def set_exception(
-        self, invocation: "DistributedInvocation", exception: "Exception"
-    ) -> None:
+    def set_exception(self, invocation_id: str, exception: "Exception") -> None:
         """
         Sets the exception of an invocation.
 
-        :param DistributedInvocation invocation: The invocation to set the exception for.
+        :param str invocation_id: The ID of the invocation to set the exception for.
         :param Exception exception: The exception of the invocation.
         """
-        self._set_exception(invocation, exception)
+        self._set_exception(invocation_id, exception)
 
-    def get_exception(
-        self, invocation: "DistributedInvocation[Params, Result]"
-    ) -> Exception:
+    def get_exception(self, invocation_id: str) -> Exception:
         """
         Retrieves the exception of an invocation.
 
-        :param DistributedInvocation invocation: The invocation to retrieve the exception for.
+        :param str invocation_id: The ID of the invocation to retrieve the exception for.
         :return: The exception of the invocation.
         """
-        return self._get_exception(invocation)
+        return self._get_exception(invocation_id)
 
     @abstractmethod
     def set_workflow_data(
@@ -320,30 +351,6 @@ class BaseStateBackend(ABC):
         """
 
     @abstractmethod
-    def get_workflow_deterministic_value(
-        self, workflow: "WorkflowIdentity", key: str
-    ) -> Any:
-        """
-        Get a stored deterministic value for a workflow.
-
-        :param workflow_identity: Workflow identity
-        :param key: Value key
-        :return: Stored value or None if not found
-        """
-
-    @abstractmethod
-    def set_workflow_deterministic_value(
-        self, workflow: "WorkflowIdentity", key: str, value: Any
-    ) -> None:
-        """
-        Store a deterministic value for a workflow.
-
-        :param workflow_identity: Workflow identity
-        :param key: Value key
-        :param value: Value to store
-        """
-
-    @abstractmethod
     def store_app_info(self, app_info: "AppInfo") -> None:
         """
         Register this app's information in the state backend for discovery.
@@ -361,9 +368,10 @@ class BaseStateBackend(ABC):
 
     @staticmethod
     @abstractmethod
-    def get_all_app_infos() -> dict[str, "AppInfo"]:
+    def discover_app_infos() -> dict[str, "AppInfo"]:
         """
-        Retrieve all app information registered in this state backend.
+        This static method tries to discover all registered apps in the system.
+        We will try to connect to the backend with the default configuration.
 
         :return: Dictionary mapping app_id to app information
         """
@@ -396,11 +404,11 @@ class BaseStateBackend(ABC):
         """
 
     @abstractmethod
-    def get_workflow_runs(self, workflow_task_id: str) -> Iterator["WorkflowIdentity"]:
+    def get_workflow_runs(self, workflow_type: str) -> Iterator["WorkflowIdentity"]:
         """
         Retrieve workflow run identities from this state backend.
 
-        :param workflow_task_id: Filter for specific workflow type
+        :param workflow_type: Filter for specific workflow type
         :return: Iterator of workflow identities for runs
         """
 

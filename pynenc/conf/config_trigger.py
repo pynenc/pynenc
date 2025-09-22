@@ -1,7 +1,7 @@
 from cistell import ConfigField
 
 from pynenc.conf.config_base import ConfigPynencBase
-from pynenc.conf.config_redis import ConfigRedis
+from pynenc.conf.config_sqlite import ConfigSQLite
 
 
 class ConfigTrigger(ConfigPynencBase):
@@ -31,5 +31,5 @@ class ConfigTrigger(ConfigPynencBase):
     event_retention_days = ConfigField(7)
 
 
-class ConfigTriggerRedis(ConfigTrigger, ConfigRedis):
-    """Specific Configuration for the Redis Trigger"""
+class ConfigTriggerSQLite(ConfigTrigger, ConfigSQLite):
+    """SQLite-specific configuration for the Trigger component."""

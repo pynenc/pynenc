@@ -11,7 +11,6 @@ from pynenc.runner.thread_runner import ThreadRunner
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
-    from pynenc.invocation.dist_invocation import DistributedInvocation
 
 
 class ProcessState(Enum):
@@ -174,19 +173,20 @@ class MultiThreadRunner(BaseRunner):
         """
         self.logger.info("Stopping MultiThreadRunner loop")
         # Terminate all processes immediately
-        for key, proc in list(self.processes.items()):
-            try:
-                if proc.is_alive():
-                    proc.terminate()
-                    proc.join()
-                    self.processes.pop(key, None)
-                    self._safe_remove_shared_state(key)
-                    self.logger.info(f"Terminated process {key} during loop stop")
-            except AssertionError:
-                # We're trying to check a non-child process (likely ourselves)
-                self.logger.info(
-                    f"Skipping process {key} termination - not a child process"
-                )
+        if hasattr(self, "processes") and self.processes is not None:
+            for key, proc in list(self.processes.items()):
+                try:
+                    if proc.is_alive():
+                        proc.terminate()
+                        proc.join()
+                        self.processes.pop(key, None)
+                        self._safe_remove_shared_state(key)
+                        self.logger.info(f"Terminated process {key} during loop stop")
+                except AssertionError:
+                    # We're trying to check a non-child process (likely ourselves)
+                    self.logger.info(
+                        f"Skipping process {key} termination - not a child process"
+                    )
         self.logger.info("MultiThreadRunner loop stopped")
 
     def _cleanup_dead_processes(self) -> None:
@@ -255,8 +255,8 @@ class MultiThreadRunner(BaseRunner):
 
     def _waiting_for_results(
         self,
-        running_invocation: Optional["DistributedInvocation"],
-        result_invocations: list["DistributedInvocation"],
+        running_invocation_id: str,
+        result_invocation_ids: list[str],
         runner_args: Optional[dict[str, Any]] = None,
     ) -> None:
         """
@@ -266,5 +266,5 @@ class MultiThreadRunner(BaseRunner):
         should occur within a ThreadRunner process, which uses the context-set runner.
         The global context ensures each process handles its own results correctly.
         """
-        del running_invocation, result_invocations, runner_args
+        del running_invocation_id, result_invocation_ids, runner_args
         self.logger.warning(self.WAITING_FOR_RESULTS_WARNING)

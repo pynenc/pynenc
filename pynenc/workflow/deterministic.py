@@ -79,7 +79,7 @@ class DeterministicExecutor:
         operation_key = f"{operation}:{sequence}"
 
         # Check if we have a recorded value first
-        value = self.app.state_backend.get_workflow_deterministic_value(
+        value = self.app.state_backend.get_workflow_data(
             self.workflow_identity, operation_key
         )
 
@@ -89,19 +89,19 @@ class DeterministicExecutor:
 
         # Generate new value and store it
         value = generator()
-        self.app.state_backend.set_workflow_deterministic_value(
+        self.app.state_backend.set_workflow_data(
             self.workflow_identity, operation_key, value
         )
 
         # Update the total count in state backend for this operation type
         total_count_key = f"counter:{operation}"
         current_total = (
-            self.app.state_backend.get_workflow_deterministic_value(
+            self.app.state_backend.get_workflow_data(
                 self.workflow_identity, total_count_key
             )
             or 0
         )
-        self.app.state_backend.set_workflow_deterministic_value(
+        self.app.state_backend.set_workflow_data(
             self.workflow_identity, total_count_key, max(current_total, sequence)
         )
 
@@ -114,14 +114,14 @@ class DeterministicExecutor:
         :return: Base time for deterministic timestamps
         """
         base_time_key = "workflow:base_time"
-        stored_base_time = self.app.state_backend.get_workflow_deterministic_value(
+        stored_base_time = self.app.state_backend.get_workflow_data(
             self.workflow_identity, base_time_key
         )
 
         if stored_base_time is None:
             # Create new base time and store as ISO format string
             base_time = datetime.datetime.now(datetime.timezone.utc)
-            self.app.state_backend.set_workflow_deterministic_value(
+            self.app.state_backend.set_workflow_data(
                 self.workflow_identity, base_time_key, base_time.isoformat()
             )
             return base_time
@@ -215,7 +215,7 @@ class DeterministicExecutor:
         # Use call_id as the unique key - no need for additional hashing
         task_invocation_key = f"task_invocation:{call.call_id}"
         # Check if we already have a recorded invocation ID
-        cached_invocation_id = self.app.state_backend.get_workflow_deterministic_value(
+        cached_invocation_id = self.app.state_backend.get_workflow_data(
             self.workflow_identity, task_invocation_key
         )
         if cached_invocation_id is not None:
@@ -224,7 +224,7 @@ class DeterministicExecutor:
         # Execute the task and record the invocation ID
         invocation = task(*args, **kwargs)
         # Store only the invocation ID for future replays
-        self.app.state_backend.set_workflow_deterministic_value(
+        self.app.state_backend.set_workflow_data(
             self.workflow_identity, task_invocation_key, invocation.invocation_id
         )
         return invocation  # type: ignore[return-value]

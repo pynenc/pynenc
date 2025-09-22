@@ -29,6 +29,11 @@ class WorkflowIdentity:
         """Get the unique identifier for this workflow."""
         return self.workflow_invocation_id
 
+    @property
+    def workflow_type(self) -> str:
+        """Get the type of the workflow, derived from the defining task ID."""
+        return self.workflow_task_id
+
     @classmethod
     def from_invocation(cls, invocation: "InvocationIdentity") -> "WorkflowIdentity":
         """

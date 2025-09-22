@@ -38,15 +38,18 @@ def _get_task_calls(
         invocations_gen = app.orchestrator.get_existing_invocations(task=task)
         logger.info("Got invocations generator")
 
-        for invocation in invocations_gen:
+        for invocation_id in invocations_gen:
             if time.time() - start_time > timeout:
                 logger.warning("Timeout reached when processing invocations")
                 break
 
             invocation_count += 1
-            logger.debug(
-                f"Processing invocation {invocation_count}: {invocation.invocation_id}"
-            )
+            logger.debug(f"Processing invocation {invocation_count}: {invocation_id}")
+
+            invocation = app.state_backend.get_invocation(invocation_id)
+            if invocation is None:
+                logger.warning(f"Invocation not found: {invocation_id}")
+                continue
 
             if invocation.call not in calls:
                 calls.append(invocation.call)

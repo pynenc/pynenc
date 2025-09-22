@@ -71,8 +71,8 @@ def _check_monitor_dependencies() -> bool:
 
 def get_all_available_apps(args: PynencCLINamespace) -> dict[str, "AppInfo"]:
     """Get all available apps in the current environment."""
-    if not hasattr(args, "app_instance") or not args.app_instance:
+    if not args.app_instance:
         from pynenc.app import Pynenc
 
-        return Pynenc().state_backend.get_all_app_infos()
-    return args.app_instance.state_backend.get_all_app_infos()
+        return Pynenc().state_backend.discover_app_infos()
+    return args.app_instance.state_backend.discover_app_infos()

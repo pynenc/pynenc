@@ -4,6 +4,112 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0] - 2025-09-07
+
+### Added
+
+- **Plugin System Architecture**:
+
+  - Introduced a comprehensive plugin system to support multiple backend implementations
+  - Created plugin interface for state backends, brokers, and orchestrators
+  - Enabled modular architecture for extending Pynenc with different storage and messaging systems
+  - Added automatic plugin loading at startup to ensure subclass discovery works without builder usage
+  - Added comprehensive test coverage for plugin loading functionality
+
+- **MongoDB Plugin Support**:
+
+  - Added MongoDB as a new backend option through the plugin system
+  - MongoDB plugin provides state backend, broker, and orchestrator implementations
+  - Full feature parity with existing Redis functionality
+
+- **Enhanced PynencBuilder Plugin Integration**:
+
+  - Extended `PynencBuilder` with plugin method registration system via `register_plugin_method()`
+  - Added plugin validator registration through `register_plugin_validator()`
+  - Implemented dynamic method resolution for plugin-provided builder methods
+  - Enhanced error handling with helpful messages for missing plugin methods
+  - Added comprehensive test coverage for plugin system functionality
+
+- **Builder System Improvements**:
+
+  - Enhanced builder test coverage with comprehensive unit tests
+  - Added validation for enum synchronization between builder and configuration classes
+  - Added robust plugin method chaining and cleanup mechanisms
+
+- **Enhanced Invocation History**:
+
+  - Added `RunnerContext` class in `runner_context.py` to capture detailed runner execution context (hostname, PID, etc.) for task invocations.
+  - Updated `InvocationHistory` in `base_state_backend.py` to include runner context for improved debugging and monitoring of task executions.
+
+- **Test Coverage for ArgCache Implementations**:
+
+  - Added `test_arg_cache_all_instances.py` to directly test abstract methods (`_store`, `_retrieve`, `_purge`) for all arg_cache implementations using the `app_instance` fixture.
+
+- **Improved Argument String Representation**:
+
+  - Enhanced argument string formatting for better debugging and logging of task parameters.
+
+- **Enhanced Cycle Exception Handling**:
+  - Improved detection and handling of cyclic dependencies in task execution graphs.
+
+### Changed
+
+- **Redis Extraction to Plugin**:
+
+  - **BREAKING CHANGE**: Redis is no longer included in the core Pynenc package
+  - Redis functionality has been extracted to a separate `pynenc-redis` plugin package
+  - Existing Redis-based applications will need to install `pynenc-redis` separately
+  - Redis configuration and functionality remains unchanged once the plugin is installed
+
+- **Orchestrator Architecture Optimization**:
+
+  - **BREAKING CHANGE**: Orchestrator now works exclusively with invocations, call and task IDs
+  - Objects are only serialized in the state backend to keep orchestrator lightweight
+  - Runners are now more lightweight as they retrieve invocations from state backend only when necessary
+  - Reduced memory consumption throughout Pynenc by using invocation_id in control structures
+  - Removed state backend dependencies from orchestrator integration tests
+
+- **Serializer**:
+
+  - Default serializer changed from JSON to `jsonpickle` to preserve Python object types (e.g., NamedTuple) when persisting state and results.
+  - Added `JsonPickleSerializer` implementation using the `jsonpickle` library.
+  - Security note: `jsonpickle` can reconstruct arbitrary Python objects on deserialization — use it only for trusted, internal persistence (local state backends).
+
+- **Plugin-Based Backend Selection**:
+
+  - Backend selection now uses plugin discovery mechanism
+  - Enhanced `PynencBuilder` to support plugin-based backend configuration
+  - Improved error messages when required plugins are missing
+
+- **Move Redis to a plugging**:
+
+  - The Redis-related backend implementations were moved out of the core repository into plugin packages to simplify core distribution.
+  - For testing process-compatible (non-memory) runners we recommend using a shared SQLite-backed state backend to enable cross-process coordination without adding external dependencies to the core.
+
+- **Builder Architecture**:
+  - Modified builder to support dynamic method registration from plugins
+  - Added validation system for plugin-provided configuration
+  - Enhanced builder to gracefully handle missing plugin dependencies
+
+### Migration Guide
+
+- **For Redis Users**: Install the Redis plugin to maintain existing functionality:
+  ```bash
+  pip install pynenc-redis
+  ```
+- **For MongoDB Users**: Install the new MongoDB plugin:
+  ```bash
+  pip install pynenc-mongodb
+  ```
+- **Code Changes**: No changes required to existing code once appropriate plugins are installed
+
+### Technical
+
+- **Backward Compatibility**: Existing code remains functional with appropriate plugin installation
+- **Plugin Interface**: Standardized interface for all backend implementations
+- **Discovery Mechanism**: Automatic plugin discovery and registration system
+- **Builder Extensions**: Plugin methods can extend builder functionality seamlessly
+
 ## [0.0.24] - 2025-06-07
 
 ### Added
@@ -127,7 +233,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **App Discovery and Registration**:
 
   - Added `store_app_info` and `get_app_info` methods to state backends
-  - Implemented `get_all_app_infos` to discover registered apps in the system
+  - Implemented `discover_app_infos` to discover registered apps in the system
   - Enhanced `AppInfo` class with module path and variable name information
 
 - **Improved Monitoring Interface**:

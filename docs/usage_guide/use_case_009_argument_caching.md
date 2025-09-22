@@ -4,6 +4,22 @@
 
 This guide demonstrates Pynenc's argument caching system, which optimizes task execution by caching large serialized arguments. This feature is particularly useful when working with large objects frequently passed between tasks.
 
+## Prerequisites
+
+For Redis-based caching in distributed environments, install the Redis plugin:
+
+```bash
+pip install pynenc-redis
+```
+
+For MongoDB-based caching, install the MongoDB plugin:
+
+```bash
+pip install pynenc-mongodb
+```
+
+The memory-based cache is included with the core Pynenc package.
+
 ## Scenario
 
 The argument caching scenario illustrates how to:
@@ -60,7 +76,7 @@ import numpy as np
 
 app = (
     PynencBuilder()
-    .redis(url="redis://localhost:6379")   # Required for Redis caching
+    .redis(url="redis://localhost:6379")   # Requires pynenc-redis plugin
     .arg_cache(
         mode="redis",                      # Sets RedisArgCache; options: "redis", "memory", "disabled"
         min_size_to_cache=1024,            # Cache arguments larger than 1KB
@@ -81,7 +97,8 @@ result = process_array(large_array)
 
 The `.arg_cache()` method allows selecting one of the following modes:
 
-- `"redis"`: (Default; requires `.redis()` configuration)
+- `"redis"`: (Default; requires `.redis()` configuration and `pynenc-redis` plugin)
+- `"mongodb"`: (Requires `.mongodb()` configuration and `pynenc-mongodb` plugin)
 - `"memory"`: For local testing or development purposes
 - `"disabled"`: Completely disables argument caching
 
@@ -104,7 +121,7 @@ result = process_data(large_bytes, disable_cache_args=["data"])
 ## Features
 
 - **Automatic Caching**: Large arguments automatically cached based on the defined size threshold.
-- **Multiple Backends**: Supports Redis (distributed) and memory-based (local) caching.
+- **Multiple Backends**: Supports Redis (distributed), MongoDB (distributed), and memory-based (local) caching.
 - **Cache Sharing**: Shared cache across processes using runner-level storage.
 - **Smart Detection**: Avoids redundant serialization of identical objects.
 - **LRU Cache**: Maintains recently used items within configured limits.

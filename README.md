@@ -80,7 +80,13 @@ Pynenc addresses the complex challenges of task management in distributed enviro
 
 - **Cycle Detection**: Automatically detects cyclical dependencies among tasks and raises exceptions to prevent endless loops in task execution.
 
-- **Modularity and Extensibility**: Pynenc is built with modularity at its core, supporting various components such as orchestrators, brokers, state backends, runners, and serializers. Currently compatible with Redis and a development/test mode using an in-memory synchronous version, Pynenc is designed to be extensible. Future plans include support for additional databases, queues, and services, enabling easy customization and adaptation to different operational needs and environments.
+- **Modular Plugin Architecture**: Pynenc is built with modularity at its core, supporting various backend implementations through a plugin system. Choose from:
+
+  - **Redis Plugin** (`pynenc-redis`): Production-ready distributed task management
+  - **MongoDB Plugin** (`pynenc-mongodb`): Document-based storage with full feature support
+  - **Memory Backend**: Built-in development/testing mode for local execution
+
+  The plugin system allows easy extension with additional databases, message queues, and services, enabling customization for different operational needs and environments.
 
 - **Direct Task Execution**: Use `@app.direct_task` for tasks that return results directly instead of invocations.
 
@@ -88,19 +94,59 @@ Pynenc addresses the complex challenges of task management in distributed enviro
 
 ## Installation
 
-Installing Pynenc is a simple process that can be done using pip. Just run the following command in your terminal:
+Installing Pynenc is a simple process. The core package provides the framework, and you'll need to install backend plugins separately:
+
+### Core Package
 
 ```bash
 pip install pynenc
 ```
 
-Include optional monitoring web app:
+### Backend Plugins
+
+Choose the backend that fits your needs:
+
+**Redis Backend** (recommended for production):
+
+```bash
+pip install pynenc-redis
+```
+
+**MongoDB Backend**:
+
+```bash
+pip install pynenc-mongodb
+```
+
+### Optional Features
+
+Include the monitoring web app:
 
 ```bash
 pip install pynenc[monitor]
 ```
 
-This command will download and install Pynenc along with its dependencies. Once the installation is complete, you can start using Pynenc in your Python projects.
+### Complete Installation Examples
+
+For a Redis-based setup with monitoring:
+
+```bash
+pip install pynenc pynenc-redis pynenc[monitor]
+```
+
+For a MongoDB-based setup:
+
+```bash
+pip install pynenc pynenc-mongodb
+```
+
+For development/testing (memory backend only):
+
+```bash
+pip install pynenc
+```
+
+This modular approach allows you to install only the components you need, keeping your dependencies minimal and focused.
 
 For more detailed instructions and advanced installation options, please refer to the [Pynenc Documentation](https://docs.pynenc.org/).
 
@@ -136,7 +182,7 @@ To get started with Pynenc, here's a simple example that demonstrates the creati
      pynenc --app=tasks.app runner start
      ```
 
-     Check for the [basic_redis_example](https://github.com/pynenc/samples/tree/main/basic_redis_example)
+     Check for the [basic_redis_example](https://github.com/pynenc/samples/tree/main/basic_redis_example) (requires `pynenc-redis` plugin)
 
    - **Synchronously:**
      For test or local demonstration, to try synchronous execution, you can set the environment variable `PYNENC__DEV_MODE_FORCE_SYNC_TASKS=True` to force tasks to run in the same thread.
@@ -198,9 +244,22 @@ pynenc --app your_app_module monitor --host 127.0.0.1 --port 8000
 
 ## Requirements
 
-To use Pynenc in a distributed system, the current primary requirement is:
+Pynenc supports multiple backend options through its plugin system:
 
-- **Redis**: As of now, Pynenc requires a Redis server to handle distributed task management. Ensure that you have Redis installed and running in your environment.
+### Backend Options
+
+- **Memory Backend**: Built-in, no additional requirements (for development/testing)
+- **Redis Backend**: Requires `pynenc-redis` plugin and a Redis server
+- **MongoDB Backend**: Requires `pynenc-mongodb` plugin and a MongoDB server
+
+### Production Deployment
+
+For distributed systems, choose either:
+
+- **Redis**: Install `pynenc-redis` and ensure Redis server is running
+- **MongoDB**: Install `pynenc-mongodb` and ensure MongoDB server is running
+
+The plugin architecture allows you to switch between backends or add new ones without changing your application code.
 
 Future Updates:
 

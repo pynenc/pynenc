@@ -6,21 +6,22 @@ from typing import TYPE_CHECKING, Any, NamedTuple, Optional
 from pynenc.exceptions import RunnerError
 from pynenc.invocation import InvocationStatus
 from pynenc.runner.base_runner import BaseRunner
+from pynenc.runner.runner_context import RunnerContext
 
 if TYPE_CHECKING:
-    from pynenc.invocation.dist_invocation import DistributedInvocation
+    pass
 
 
 class ClassifiedInvocations(NamedTuple):
     """
-    Categorized invocations based on their status.
+    Categorized invocation IDs based on their status.
 
-    :param final: List of invocations that have reached their final status
-    :param non_final: List of invocations that are still in progress
+    :param final: List of invocation IDs that have reached their final status
+    :param non_final: List of invocation IDs that are still in progress
     """
 
-    final: list["DistributedInvocation"]
-    non_final: list["DistributedInvocation"]
+    final: list[str]
+    non_final: list[str]
 
 
 class ProcessRunner(BaseRunner):
@@ -31,8 +32,10 @@ class ProcessRunner(BaseRunner):
     This runner is suitable for CPU-bound tasks and scenarios where task isolation is essential.
     """
 
-    wait_invocation: dict["DistributedInvocation", set["DistributedInvocation"]]
-    processes: dict["DistributedInvocation", Process]
+    wait_invocation: dict[
+        str, set[str]
+    ]  # Maps invocation_id to set of waiting invocation_ids
+    inv_id_to_processes: dict[str, Process]
     manager: Manager  # type: ignore
     runner_cache: dict
 
@@ -97,7 +100,7 @@ class ProcessRunner(BaseRunner):
         self.manager = Manager()
         self.wait_invocation = self.manager.dict()  # type: ignore
         self.runner_cache = self._runner_cache or self.manager.dict()  # type: ignore
-        self.processes = {}
+        self.inv_id_to_processes = {}
         self.max_processes = cpu_count()
 
     def _on_stop(self) -> None:
@@ -106,12 +109,12 @@ class ProcessRunner(BaseRunner):
         Terminates all running processes and updates their invocation statuses.
         """
         self.logger.info("Stopping ProcessRunner")
-        for invocation, process in self.processes.items():
+        for invocation_id, process in self.inv_id_to_processes.items():
             process.kill()
             self.app.orchestrator.set_invocation_status(
-                invocation, InvocationStatus.RETRY
+                invocation_id, InvocationStatus.RETRY
             )
-            self.logger.info(f"Killing invocation {invocation.invocation_id}")
+            self.logger.info(f"Killing invocation {invocation_id}")
         self.manager.shutdown()  # type: ignore
         self.logger.info("ProcessRunner stopped")
 
@@ -121,8 +124,9 @@ class ProcessRunner(BaseRunner):
         Clears the wait_invocation dictionary.
         """
         self.logger.info("Stopping ProcessRunner loop")
-        self.wait_invocation.clear()
-        self.wait_invocation = {}
+        if hasattr(self, "wait_invocation") and self.wait_invocation is not None:
+            self.wait_invocation.clear()
+            self.wait_invocation = {}
         self.logger.info("ProcessRunner loop stopped")
 
     @property
@@ -131,54 +135,69 @@ class ProcessRunner(BaseRunner):
         Returns the number of available process slots for new invocations.
         :return: An integer representing available process slots.
         """
-        for invocation in list(self.processes.keys()):
-            if not self.processes[invocation].is_alive():
-                self.processes[invocation].join()
-                del self.processes[invocation]
+        for invocation_id in list(self.inv_id_to_processes):
+            if not self.inv_id_to_processes[invocation_id].is_alive():
+                self.inv_id_to_processes[invocation_id].join()
+                del self.inv_id_to_processes[invocation_id]
         # discount waiting processes, they should do nothing
         # until the blocking invocation is finished
         # otherwise, running one worker with one process
         # will be lock indefintely until the blocking invocation runs
-        return self.max_parallel_slots - len(self.processes)  # - self.waiting_processes
+        return self.max_parallel_slots - len(self.inv_id_to_processes)
 
     def clasify_waiting_invocations(
         self,
     ) -> ClassifiedInvocations:
-        """Will classify the waiting invocation into final and non finals"""
-        waiting_invocations = list(self.wait_invocation.keys())
-        if not waiting_invocations:
+        """Will classify the waiting invocation IDs into final and non finals"""
+        waiting_invocation_ids = list(self.wait_invocation.keys())
+        if not waiting_invocation_ids:
             return ClassifiedInvocations([], [])
-        final_invocations = self.app.orchestrator.filter_final(waiting_invocations)
-        non_final_invocations = [
-            inv for inv in waiting_invocations if inv not in final_invocations
+        final_invocation_ids = self.app.orchestrator.filter_final(
+            waiting_invocation_ids
+        )
+        non_final_invocation_ids = [
+            inv_id
+            for inv_id in waiting_invocation_ids
+            if inv_id not in final_invocation_ids
         ]
-        return ClassifiedInvocations(final_invocations, non_final_invocations)
+        return ClassifiedInvocations(final_invocation_ids, non_final_invocation_ids)
 
     def handle_waiting_invocations(self) -> None:
         """Handle the waiting invocations"""
         classified = self.clasify_waiting_invocations()
         # Pause processes waiting for non-final invocations
-        for invocation in classified.non_final:
-            for waiting_invocation in self.wait_invocation.get(invocation, []):
-                pid = self.processes.get(waiting_invocation)
-                if pid and pid.pid:
-                    os.kill(pid.pid, signal.SIGSTOP)
+        for invocation_id in classified.non_final:
+            for waiting_invocation_id in self.wait_invocation.get(invocation_id, []):
+                if waiting_process := self.inv_id_to_processes.get(
+                    waiting_invocation_id
+                ):
+                    if waiting_process.pid:
+                        os.kill(waiting_process.pid, signal.SIGSTOP)
+                        self.logger.info(
+                            f"{waiting_invocation_id=} waiting for {invocation_id=}, pausing process {waiting_process.pid}"
+                        )
         # Get the invocations that are waiting in finalized ones
-        to_resume_invocations: set[DistributedInvocation] = set()
-        for invocation in classified.final:
-            if waiting_invocations := self.wait_invocation.get(invocation, set()):
-                to_resume_invocations.update(waiting_invocations)
-                self.wait_invocation[invocation] = set()
-                self.logger.info(f"{invocation=} finalized, resuming waiting ones")
+        to_resume_invocation_ids: set[str] = set()
+        for invocation_id in classified.final:
+            if waiting_invocation_ids := self.wait_invocation.get(invocation_id, set()):
+                to_resume_invocation_ids.update(waiting_invocation_ids)
+                self.wait_invocation[invocation_id] = set()
+                self.logger.info(f"{invocation_id=} finalized, resuming waiting ones")
         # Resume the processes waiting for finalized invocations
         # and set their status to RUNNING
-        if to_resume_invocations:
-            for waiting_invocation in to_resume_invocations:
-                pid = self.processes.get(waiting_invocation)
-                if pid and pid.pid:
-                    os.kill(pid.pid, signal.SIGCONT)
+        if to_resume_invocation_ids:
+            for waiting_invocation_id in to_resume_invocation_ids:
+                # Find the process for this waiting invocation ID
+                if waiting_process := self.inv_id_to_processes.get(
+                    waiting_invocation_id
+                ):
+                    if waiting_process.pid:
+                        os.kill(waiting_process.pid, signal.SIGCONT)
+                        self.logger.info(
+                            f"{waiting_invocation_id=} resuming process {waiting_process.pid}"
+                        )
             self.app.orchestrator.set_invocations_status(
-                list(to_resume_invocations), InvocationStatus.RUNNING
+                list(to_resume_invocation_ids), InvocationStatus.RUNNING
             )
 
     def runner_loop_iteration(self) -> None:
@@ -194,7 +213,10 @@ class ProcessRunner(BaseRunner):
             invocation.app.runner = self
             process = Process(
                 target=invocation.run,
-                kwargs={"runner_args": self.runner_args},
+                kwargs={
+                    "runner_args": self.runner_args,
+                    "runner_ctx": RunnerContext.from_runner(self),
+                },
                 daemon=True,
             )
             self.app.logger.info(
@@ -205,7 +227,7 @@ class ProcessRunner(BaseRunner):
                 f"Running invocation {invocation.invocation_id} on {process.pid=}"
             )
             if process.pid:
-                self.processes[invocation] = process
+                self.inv_id_to_processes[invocation.invocation_id] = process
             else:
                 # Optionally, raise an exception or log error if process.pid is not available.
                 raise RunnerError("Failed to start process: PID not available")
@@ -213,29 +235,29 @@ class ProcessRunner(BaseRunner):
 
     def _waiting_for_results(
         self,
-        running_invocation: "DistributedInvocation",
-        result_invocations: list["DistributedInvocation"],
+        running_invocation_id: str,
+        result_invocation_ids: list[str],
         runner_args: Optional[dict[str, Any]] = None,
     ) -> None:
         """
         Handles invocations that are waiting for results from other invocations.
         Pauses the running process and registers it to wait for the results of specified invocations.
-        :param running_invocation: The invocation that is waiting for results.
-        :param result_invocations: A list of invocations whose results are being awaited.
+        :param running_invocation_id: The ID of the invocation that is waiting for results.
+        :param result_invocation_ids: A list of IDs of invocations whose results are being awaited.
         :param runner_args: Additional arguments required for the ProcessRunner.
         """
         self.app.orchestrator.set_invocation_status(
-            running_invocation, InvocationStatus.PAUSED
+            running_invocation_id, InvocationStatus.PAUSED
         )
-        if not result_invocations:
+        if not result_invocation_ids:
             return
         if not runner_args:
             raise RunnerError("runner_args should be defined for ProcessRunner")
         self.parse_args(runner_args)
-        for result_invocation in result_invocations:
-            current_waiters = set(self.wait_invocation.get(result_invocation, set()))
-            current_waiters.add(running_invocation)
-            self.wait_invocation[result_invocation] = current_waiters
+        for result_inv_id in result_invocation_ids:
+            current_waiters = set(self.wait_invocation.get(result_inv_id, set()))
+            current_waiters.add(running_invocation_id)
+            self.wait_invocation[result_inv_id] = current_waiters
             self.logger.debug(
-                f"Invocation {running_invocation.invocation_id} is waiting for invocation {result_invocation.invocation_id} to finish"
+                f"Invocation {running_invocation_id} is waiting for invocation {result_inv_id} to finish"
             )

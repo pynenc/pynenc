@@ -48,11 +48,12 @@ async def workflows_list(request: Request) -> HTMLResponse:
 
         # Get workflow runs for each type
         workflows_with_runs = []
-        for workflow_task_id in workflow_types:
-            runs = list(app.state_backend.get_workflow_runs(workflow_task_id))
+        for workflow_type in workflow_types:
+            runs = list(app.state_backend.get_workflow_runs(workflow_type))
             workflows_with_runs.append(
                 {
-                    "workflow_task_id": workflow_task_id,
+                    # The workflow type is the same as the workflow_task_id
+                    "workflow_task_id": workflow_type,
                     "run_count": len(runs),
                     "latest_run": runs[0] if runs else None,
                 }

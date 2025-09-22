@@ -3,11 +3,10 @@ import inspect
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, Optional
 
-from pynenc.conf.config_pynenc import ArgumentPrintMode
+from pynenc.conf.config_pynenc import ArgumentPrintMode, ConfigPynenc
 
 if TYPE_CHECKING:
     from pynenc import Pynenc
-    from pynenc.conf.config_pynenc import ConfigPynenc
     from pynenc.types import Args, Func
 
 
@@ -105,32 +104,29 @@ class Arguments:
         return f"{str_value[:conf.truncate_arguments_length]}..."
 
     def __str__(self) -> str:
-        if not self._app:
-            # Fallback behavior when no app is available
-            return f"args({', '.join(f'{k}=...' for k in self.kwargs)})"
-        conf = self._app.conf
+        if not self.kwargs:
+            return "<no_args>"
+
+        # Fallback to default config if app is not set
+        conf = self._app.conf if self._app else ConfigPynenc()
 
         if not conf.print_arguments:
             return "<arguments hidden>"
-
-        if not self.kwargs:
-            return "<no_args>"
 
         mode = conf.argument_print_mode
         if mode == ArgumentPrintMode.HIDDEN:
             return "<arguments hidden>"
 
         if mode == ArgumentPrintMode.KEYS:
-            return f"args({', '.join(self.kwargs.keys())})"
-
+            return "{" + ", ".join(self.kwargs.keys()) + "}"
         items = []
         for k, v in self.kwargs.items():
             if mode == ArgumentPrintMode.FULL:
-                items.append(f"{k}={v}")
+                items.append(f"{k}:{v}")
             else:  # TRUNCATED
-                items.append(f"{k}={self._format_value(conf, v)}")
+                items.append(f"{k}:{self._format_value(conf, v)}")
 
-        return f"args({', '.join(items)})"
+        return "{" + ", ".join(items) + "}"
 
     def __repr__(self) -> str:
-        return f"Arguments({self.kwargs})"
+        return f"Arguments({set(self.kwargs.keys())}, id={self.args_id})"
