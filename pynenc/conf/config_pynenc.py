@@ -55,7 +55,7 @@ class ConfigPynenc(ConfigPynencBase):
     :cvar bool print_arguments:
         If True, prints task arguments in logs. Default False.
     :cvar int truncate_arguments_length:
-        Maximum length for printed arguments. If 0, no truncation. Default 100.
+        Maximum length for printed arguments. If 0, no truncation. Default 32.
     :cvar ArgumentPrintMode argument_print_mode:
         How to print arguments: FULL (all args), KEYS (only names),
         TRUNCATED (truncated values), HIDDEN (no args). Default TRUNCATED.

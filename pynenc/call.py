@@ -155,7 +155,7 @@ class Call(Generic[Params, Result]):
         )
 
     def __str__(self) -> str:
-        return f"Call(call_id={self.call_id}, task={self.task}, arguments={self.arguments})"
+        return f"Call(task={self.task.task_id}, arguments={self.arguments})"
 
     def __repr__(self) -> str:
         return self.__str__()

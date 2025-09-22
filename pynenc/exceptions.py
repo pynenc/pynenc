@@ -246,12 +246,7 @@ class CycleDetectedError(PynencError):
 
     @staticmethod
     def _format_cycle(cycle: list["Call"]) -> str:
-        calls_repr = []
-        for call in cycle:
-            task = call.task
-            func_repr = f"{task.func.__module__}.{task.func.__name__}"
-            args_repr = ", ".join(f"{k}:{v}" for k, v in call.arguments.kwargs.items())
-            calls_repr.append(f"{func_repr}({args_repr})")
+        calls_repr = [str(call) for call in cycle]
 
         calls_repr.append(f"back to {calls_repr[0]}")  # Closing the cycle
 

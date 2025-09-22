@@ -42,7 +42,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Updated `InvocationHistory` in `base_state_backend.py` to include runner context for improved debugging and monitoring of task executions.
 
 - **Test Coverage for ArgCache Implementations**:
+
   - Added `test_arg_cache_all_instances.py` to directly test abstract methods (`_store`, `_retrieve`, `_purge`) for all arg_cache implementations using the `app_instance` fixture.
+
+- **Improved Argument String Representation**:
+
+  - Enhanced argument string formatting for better debugging and logging of task parameters.
+
+- **Enhanced Cycle Exception Handling**:
+  - Improved detection and handling of cyclic dependencies in task execution graphs.
 
 ### Changed
 

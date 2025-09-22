@@ -124,8 +124,8 @@ def test_avoid_cycles(app: Pynenc) -> None:
 
     expected_error = (
         "A cycle was detected: Cycle detected:\n"
-        "- test_app_all_instances.get_upper_cycle()\n"
-        "- back to test_app_all_instances.get_upper_cycle()"
+        "- Call(task=test_app_all_instances.get_upper_cycle, arguments=<no_args>)\n"
+        "- back to Call(task=test_app_all_instances.get_upper_cycle, arguments=<no_args>)"
     )
 
     assert str(exc_info.value) == expected_error

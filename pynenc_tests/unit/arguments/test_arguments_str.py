@@ -18,8 +18,11 @@ def test_arguments_str_repr_no_app() -> None:
     """Test string representation without app instance."""
     long_string = "long_string" * 10
     args = Arguments(kwargs={"a": 1, "b": long_string})
-    assert str(args) == "args(a=..., b=...)"
-    assert repr(args) in ("Arguments({'a', 'b'})", "Arguments({'b', 'a'})")
+    assert str(args) == "{a:1, b:long_stringlong_stringlong_strin...}"
+    assert repr(args) in (
+        f"Arguments({{'a', 'b'}}, id={args.args_id})",
+        f"Arguments({{'b', 'a'}}, id={args.args_id})",
+    )
 
 
 def test_arguments_str_hidden(mock_app: Mock) -> None:
@@ -40,7 +43,7 @@ def test_arguments_str_keys(mock_app: Mock) -> None:
     """Test keys-only mode."""
     args = Arguments(kwargs={"a": 1, "b": "long_string" * 10}, app=mock_app)
     mock_app.conf.argument_print_mode = ArgumentPrintMode.KEYS
-    assert str(args) == "args(a, b)"
+    assert str(args) == "{a, b}"
 
 
 def test_arguments_str_truncated(mock_app: Mock) -> None:
@@ -51,15 +54,15 @@ def test_arguments_str_truncated(mock_app: Mock) -> None:
 
     # Test with default truncation
     mock_app.conf.truncate_arguments_length = 32
-    assert str(args) == f"args(a=1, b={long_string[:32]}...)"
+    assert str(args) == f"{{a:1, b:{long_string[:32]}...}}"
 
     # Test with no truncation
     mock_app.conf.truncate_arguments_length = 0
-    assert str(args) == f"args(a=1, b={long_string})"
+    assert str(args) == f"{{a:1, b:{long_string}}}"
 
     # Test with short truncation
     mock_app.conf.truncate_arguments_length = 10
-    assert str(args) == f"args(a=1, b={long_string[:10]}...)"
+    assert str(args) == f"{{a:1, b:{long_string[:10]}...}}"
 
 
 def test_arguments_str_full(mock_app: Mock) -> None:
@@ -67,7 +70,7 @@ def test_arguments_str_full(mock_app: Mock) -> None:
     long_string = "long_string" * 10
     args = Arguments(kwargs={"a": 1, "b": long_string}, app=mock_app)
     mock_app.conf.argument_print_mode = ArgumentPrintMode.FULL
-    assert str(args) == f"args(a=1, b={long_string})"
+    assert str(args) == f"{{a:1, b:{long_string}}}"
 
 
 def test_arguments_str_empty(mock_app: Mock) -> None:

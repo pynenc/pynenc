@@ -7,6 +7,7 @@ import pytest
 
 from pynenc.arguments import Arguments
 from pynenc.call import Call
+from pynenc.conf.config_pynenc import ArgumentPrintMode
 from pynenc.exceptions import CycleDetectedError
 from pynenc.invocation import DistributedInvocation, InvocationStatus
 from pynenc.runner import DummyRunner, RunnerContext
@@ -75,6 +76,9 @@ def mock_register_task_run() -> "Generator[MagicMock, None, None]":
 
 def test_causes_cycles(test_vars: Vars, mock_register_task_run: MagicMock) -> None:
     """Test that it will raise an exception on cycles"""
+    test_vars.app.conf.print_arguments = True
+    test_vars.app.conf.argument_print_mode = ArgumentPrintMode.FULL
+
     test_vars.app.orchestrator.register_new_invocations(
         [test_vars.inv1, test_vars.inv2]
     )
@@ -92,10 +96,10 @@ def test_causes_cycles(test_vars: Vars, mock_register_task_run: MagicMock) -> No
 
     expected_error = (
         "A cycle was detected: Cycle detected:\n"
-        "- pynenc_tests.integration.orchestrator.orchestrator_tasks.dummy_mirror(arg:c)\n"
-        "- pynenc_tests.integration.orchestrator.orchestrator_tasks.dummy_mirror(arg:a)\n"
-        "- pynenc_tests.integration.orchestrator.orchestrator_tasks.dummy_mirror(arg:b)\n"
-        "- back to pynenc_tests.integration.orchestrator.orchestrator_tasks.dummy_mirror(arg:c)"
+        "- Call(task=pynenc_tests.integration.orchestrator.orchestrator_tasks.dummy_mirror, arguments={arg:c})\n"
+        "- Call(task=pynenc_tests.integration.orchestrator.orchestrator_tasks.dummy_mirror, arguments={arg:a})\n"
+        "- Call(task=pynenc_tests.integration.orchestrator.orchestrator_tasks.dummy_mirror, arguments={arg:b})\n"
+        "- back to Call(task=pynenc_tests.integration.orchestrator.orchestrator_tasks.dummy_mirror, arguments={arg:c})"
     )
 
     assert str(exc_info.value) == expected_error
