@@ -26,6 +26,11 @@ jobs:
       - name: Run pre-commit on all files
         run: pre-commit run --all-files
 
+      - name: Show poetry.lock diff if changed
+        if: failure()
+        run: |
+          git diff --exit-code poetry.lock || (echo "::group::poetry.lock diff" && git --no-pager diff poetry.lock && echo "::endgroup::")
+
       - name: Cache pre-commit environments
         uses: actions/cache@v4
         with:
