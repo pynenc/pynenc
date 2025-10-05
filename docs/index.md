@@ -51,7 +51,7 @@ pip install pynenc
 
 Choose the backend that fits your needs:
 
-**Redis Backend** (recommended for production):
+**Redis Backend**:
 
 ```bash
 pip install pynenc-redis

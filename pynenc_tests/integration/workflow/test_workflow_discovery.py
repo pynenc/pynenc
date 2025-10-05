@@ -61,7 +61,7 @@ def test_get_all_workflows_single_workflow() -> None:
         assert "workflow_id" in result
 
         # Test get_all_workflows returns the workflow type
-        workflows = list(app.state_backend.get_all_workflows())
+        workflows = list(app.state_backend.get_all_workflow_types())
         assert len(workflows) >= 1
         assert simple_workflow.task_id in workflows
     finally:
@@ -97,7 +97,7 @@ def test_get_all_workflows_multiple_workflows() -> None:
         assert "workflow_id" in result2
 
         # Test get_all_workflows returns both workflow types
-        workflows = list(app.state_backend.get_all_workflows())
+        workflows = list(app.state_backend.get_all_workflow_types())
         assert simple_workflow.task_id in workflows
         assert another_workflow.task_id in workflows
     finally:
@@ -106,7 +106,7 @@ def test_get_all_workflows_multiple_workflows() -> None:
         runner_thread.join(timeout=1)
 
 
-def test_get_all_workflows_runs() -> None:
+def test_get_all_workflow_runs() -> None:
     """Test getting all workflow runs for a specific workflow type."""
     # Purge any existing data
     app.purge()

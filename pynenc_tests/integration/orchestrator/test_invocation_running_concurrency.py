@@ -11,16 +11,16 @@ if TYPE_CHECKING:
 logger = create_test_logger(__name__)
 
 
-def test_no_concurrency_default(task_sum: "Task") -> None:
+def test_no_concurrency_default(task_sum_io: "Task") -> None:
     """Test that the orchestrator will return the invocation to run by default
 
     If there are no options:
      - The orchestrator will get the registered task
     """
-    app = task_sum.app
+    app = task_sum_io.app
 
-    fake_running_invocation = task_sum(0, 0)
-    trying_to_run_invocation = task_sum(1, 1)
+    fake_running_invocation = task_sum_io(0, 0)
+    trying_to_run_invocation = task_sum_io(1, 1)
 
     assert isinstance(fake_running_invocation, DistributedInvocation)
     assert isinstance(trying_to_run_invocation, DistributedInvocation)
@@ -39,11 +39,11 @@ def test_no_concurrency_default(task_sum: "Task") -> None:
     assert invocations_to_run == [trying_to_run_invocation]
 
 
-def test_running_concurrency_type_task(task_sum: "Task") -> None:
+def test_running_concurrency_type_task(task_sum_io: "Task") -> None:
     """Test that if `task.conf.running_concurrency=ConcurrencyControlType.task` is set
     it will not return an invocation of the same task to run while there is another running
     """
-    app = task_sum.app
+    app = task_sum_io.app
 
     # We cannot directly change the config of the task to set running_concurrency to TASK
     # And that is because on serialization, we only store the options that are passed by parameter to the task
@@ -59,8 +59,8 @@ def test_running_concurrency_type_task(task_sum: "Task") -> None:
     # This way, when the task is deserialized, it will have running_concurrency=
     os.environ["PYNENC__RUNNING_CONCURRENCY"] = "task"
 
-    fake_running_invocation = task_sum(0, 0)
-    trying_to_run_invocation = task_sum(1, 1)
+    fake_running_invocation = task_sum_io(0, 0)
+    trying_to_run_invocation = task_sum_io(1, 1)
 
     assert isinstance(trying_to_run_invocation, DistributedInvocation)
     assert isinstance(fake_running_invocation, DistributedInvocation)

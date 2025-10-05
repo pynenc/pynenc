@@ -1,3 +1,13 @@
+"""
+Pytest configuration and automated mocks for Pynenc testing.
+
+Key components:
+- MockPynenc: Automated mock app with dynamic dependency mocking (only abstract methods)
+- runner: Fixture to run app.runner in a thread
+- temp_sqlite_db_path: Fixture for temporary SQLite DB
+- app_instance: Parametrized fixture for memory/sqlite backends
+"""
+
 import os
 import tempfile
 import threading
@@ -6,19 +16,16 @@ from collections.abc import Generator
 from functools import cached_property
 from logging import Logger
 from typing import TYPE_CHECKING, Any
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from pynenc import Pynenc, PynencBuilder
 from pynenc.arg_cache.base_arg_cache import BaseArgCache
 from pynenc.broker.base_broker import BaseBroker
-from pynenc.call import Call
-from pynenc.invocation import DistributedInvocation
 from pynenc.orchestrator.base_orchestrator import BaseBlockingControl, BaseOrchestrator
 from pynenc.runner.base_runner import BaseRunner
 from pynenc.state_backend.base_state_backend import BaseStateBackend
-from pynenc.task import Task
 from pynenc_tests.util.log import create_test_logger
 
 if TYPE_CHECKING:
@@ -28,345 +35,87 @@ if TYPE_CHECKING:
 logger: Logger = create_test_logger("conftest")
 
 
-class MockBroker(BaseBroker):
-    def __init__(self, app: "Pynenc") -> None:
-        super().__init__(app)
-        self.route_invocation_mock = MagicMock()
-        self.route_invocations_mock = MagicMock()
-        self.retrieve_invocation_mock = MagicMock()
-        self.count_invocations_mock = MagicMock()
-        self.purge_mock = MagicMock()
-
-    def route_invocation(self, *args: Any, **kwargs: Any) -> None:
-        self.route_invocation_mock(*args, **kwargs)
-
-    def route_invocations(self, *args: Any, **kwargs: Any) -> None:
-        self.route_invocations_mock(*args, **kwargs)
-
-    def retrieve_invocation(self, *args: Any, **kwargs: Any) -> Any:
-        return self.retrieve_invocation_mock(*args, **kwargs)
-
-    def count_invocations(self) -> Any:
-        return self.count_invocations_mock()
-
-    def purge(self) -> None:
-        self.purge_mock()
-
-
-class MockBlockingControl(BaseBlockingControl):
-    def __init__(self) -> None:
-        self.release_waiters_mock = MagicMock()
-        self.waiting_for_results_mock = MagicMock()
-        self.get_blocking_invocations_mock = MagicMock()
-
-    def release_waiters(self, *args: Any, **kwargs: Any) -> Any:
-        return self.release_waiters_mock(*args, **kwargs)
-
-    def waiting_for_results(self, *args: Any, **kwargs: Any) -> Any:
-        return self.waiting_for_results_mock(*args, **kwargs)
-
-    def get_blocking_invocations(self, *args: Any, **kwargs: Any) -> Any:
-        return self.get_blocking_invocations_mock(*args, **kwargs)
-
-
-class MockBaseOrchestrator(BaseOrchestrator):
-    def __init__(self, app: "Pynenc") -> None:
-        super().__init__(app)
-        self._register_new_invocations_mock = MagicMock()
-        self._any_non_final_invocations_mock = MagicMock()
-        self._get_call_invocation_ids_mock = MagicMock()
-        self._get_task_invocation_ids_mock = MagicMock()
-        self._get_invocation_call_id_mock = MagicMock()
-        self._get_existing_invocations_mock = MagicMock()
-        self._get_invocation_mock = MagicMock()
-        self._set_invocation_status_mock = MagicMock()
-        self._set_invocations_status_mock = MagicMock()
-        self._set_invocation_pending_status_mock = MagicMock()
-        self._get_invocation_pending_timer_mock = MagicMock()
-        self._get_invocation_status_mock = MagicMock()
-        self._increment_invocation_retries_mock = MagicMock()
-        self._get_invocation_retries_mock = MagicMock()
-        self._set_up_invocation_auto_purge_mock = MagicMock()
-        self._purge_mock = MagicMock()
-        self._cycle_control_mock = MagicMock()
-        self._auto_purge_mock = MagicMock()
-        self.blocking_control_mock = MockBlockingControl()
-        self._mock_filter_by_status = MagicMock()
-        self._mock_filter_final = MagicMock()
-        self._index_arguments_for_concurrency_control_mock = MagicMock()
-
-    def _register_new_invocations(self, *args: Any, **kwargs: Any) -> Any:
-        return self._register_new_invocations_mock(*args, **kwargs)
-
-    def any_non_final_invocations(self, *args: Any, **kwargs: Any) -> Any:
-        return self._any_non_final_invocations_mock(*args, **kwargs)
-
-    def get_call_invocation_ids(self, *args: Any, **kwargs: Any) -> Any:
-        return self._get_call_invocation_ids_mock(*args, **kwargs)
-
-    def get_invocation_call_id(self, *args: Any, **kwargs: Any) -> Any:
-        return self._get_invocation_call_id_mock(*args, **kwargs)
-
-    def get_task_invocation_ids(self, *args: Any, **kwargs: Any) -> Any:
-        return self._get_task_invocation_ids_mock(*args, **kwargs)
-
-    def get_existing_invocations(self, *args: Any, **kwargs: Any) -> Any:
-        return self._get_existing_invocations_mock(*args, **kwargs)
-
-    def _set_invocation_status(self, *args: Any, **kwargs: Any) -> Any:
-        return self._set_invocation_status_mock(*args, **kwargs)
-
-    def _set_invocations_status(self, *args: Any, **kwargs: Any) -> Any:
-        return self._set_invocations_status_mock(*args, **kwargs)
-
-    def _set_invocation_pending_status(self, *args: Any, **kwargs: Any) -> Any:
-        return self._set_invocation_pending_status_mock(*args, **kwargs)
-
-    def get_invocation_pending_timer(self, *args: Any, **kwargs: Any) -> Any:
-        return self._get_invocation_pending_timer_mock(*args, **kwargs)
-
-    def get_invocation_status(self, *args: Any, **kwargs: Any) -> Any:
-        return self._get_invocation_status_mock(*args, **kwargs)
-
-    def increment_invocation_retries(self, *args: Any, **kwargs: Any) -> Any:
-        return self._increment_invocation_retries_mock(*args, **kwargs)
-
-    def get_invocation_retries(self, *args: Any, **kwargs: Any) -> Any:
-        return self._get_invocation_retries_mock(*args, **kwargs)
-
-    def index_arguments_for_concurrency_control(self, *args: Any, **kwargs: Any) -> Any:
-        return self._index_arguments_for_concurrency_control_mock(*args, **kwargs)
-
-    def set_up_invocation_auto_purge(self, *args: Any, **kwargs: Any) -> Any:
-        return self._set_up_invocation_auto_purge_mock(*args, **kwargs)
-
-    def filter_by_status(self, *args: Any, **kwargs: Any) -> Any:
-        return self._mock_filter_by_status(*args, **kwargs)
-
-    def filter_final(self, *args: Any, **kwargs: Any) -> Any:
-        return self._mock_filter_final(*args, **kwargs)
-
-    @property
-    def cycle_control(self) -> Any:
-        return self._cycle_control_mock
-
-    @property
-    def blocking_control(self) -> Any:
-        return self.blocking_control_mock
-
-    @property
-    def auto_purge(self) -> Any:
-        return self._auto_purge_mock
-
-    def purge(self, *args: Any, **kwargs: Any) -> Any:
-        return self._purge_mock(*args, **kwargs)
-
-
-_discover_app_infos_mock = MagicMock()
-
-
-class MockStateBackend(BaseStateBackend):
-    def __init__(self, app: "Pynenc") -> None:
-        super().__init__(app)
-        self._purge_mock = MagicMock()
-        self._upsert_invocations_mock = MagicMock()
-        self._get_invocation_mock = MagicMock()
-        self._add_histories_mock = MagicMock()
-        self._get_history_mock = MagicMock()
-        self._set_result_mock = MagicMock()
-        self._get_result_mock = MagicMock()
-        self._set_exception_mock = MagicMock()
-        self._get_exception_mock = MagicMock()
-        self._set_workflow_state_mock = MagicMock()
-        self._get_workflow_state_mock = MagicMock()
-        self._store_app_info_mock = MagicMock()
-        self._get_app_info_mock = MagicMock()
-        self._get_workflow_deterministic_value_mock = MagicMock()
-        self._set_workflow_deterministic_value_mock = MagicMock()
-        self._get_workflow_data_mock = MagicMock()
-        self._set_workflow_data_mock = MagicMock()
-        self._store_workflow_run_mock = MagicMock()
-        self._get_all_workflows_mock = MagicMock()
-        self._get_all_workflows_runs_mock = MagicMock()
-        self._get_workflow_runs_mock = MagicMock()
-        self._store_workflow_sub_invocation_mock = MagicMock()
-        self._get_workflow_sub_invocations_mock = MagicMock()
-
-    def purge(self) -> None:
-        return self._purge_mock()
-
-    def _upsert_invocations(self, *args: Any, **kwargs: Any) -> Any:
-        return self._upsert_invocations_mock(*args, **kwargs)
-
-    def _get_invocation(self, *args: Any, **kwargs: Any) -> Any:
-        return self._get_invocation_mock(*args, **kwargs)
-
-    def _add_histories(self, *args: Any, **kwargs: Any) -> Any:
-        return self._add_histories_mock(*args, **kwargs)
-
-    def _get_history(self, *args: Any, **kwargs: Any) -> Any:
-        return self._get_history_mock(*args, **kwargs)
-
-    def _set_result(self, *args: Any, **kwargs: Any) -> Any:
-        return self._set_result_mock(*args, **kwargs)
-
-    def _get_result(self, *args: Any, **kwargs: Any) -> Any:
-        return self._get_result_mock(*args, **kwargs)
-
-    def _set_exception(self, *args: Any, **kwargs: Any) -> Any:
-        return self._set_exception_mock(*args, **kwargs)
-
-    def _get_exception(self, *args: Any, **kwargs: Any) -> Any:
-        return self._get_exception_mock(*args, **kwargs)
-
-    def set_workflow_state(self, *args: Any, **kwargs: Any) -> Any:
-        return self._set_workflow_state_mock(*args, **kwargs)
-
-    def get_workflow_state(self, *args: Any, **kwargs: Any) -> Any:
-        return self._get_workflow_state_mock(*args, **kwargs)
-
-    def store_app_info(self, *args: Any, **kwargs: Any) -> Any:
-        return self._store_app_info_mock(*args, **kwargs)
-
-    def get_app_info(self, *args: Any, **kwargs: Any) -> Any:
-        return self._get_app_info_mock(*args, **kwargs)
-
-    def get_workflow_data(self, *args: Any, **kwargs: Any) -> Any:
-        return self._get_workflow_data_mock(*args, **kwargs)
-
-    def set_workflow_data(self, *args: Any, **kwargs: Any) -> None:
-        return self._set_workflow_data_mock(*args, **kwargs)
-
-    def store_workflow_run(self, *args: Any, **kwargs: Any) -> None:
-        return self._store_workflow_run_mock(*args, **kwargs)
-
-    def get_all_workflows(self, *args: Any, **kwargs: Any) -> Any:
-        return self._get_all_workflows_mock(*args, **kwargs)
-
-    def get_all_workflows_runs(self, *args: Any, **kwargs: Any) -> Any:
-        return self._get_all_workflows_runs_mock(*args, **kwargs)
-
-    def get_workflow_runs(self, *args: Any, **kwargs: Any) -> Any:
-        return self._get_workflow_runs_mock(*args, **kwargs)
-
-    def store_workflow_sub_invocation(self, *args: Any, **kwargs: Any) -> None:
-        return self._store_workflow_sub_invocation_mock(*args, **kwargs)
-
-    def get_workflow_sub_invocations(self, *args: Any, **kwargs: Any) -> Any:
-        return self._get_workflow_sub_invocations_mock(*args, **kwargs)
-
-    @staticmethod
-    def discover_app_infos(*args: Any, **kwargs: Any) -> Any:
-        return _discover_app_infos_mock(*args, **kwargs)
-
-
-class MockArgCache(BaseArgCache):
-    def __init__(self, app: "Pynenc") -> None:
-        super().__init__(app)
-        # Reset all mocks in init to ensure clean state
-        self._store_mock = MagicMock()
-        self._retrieve_mock = MagicMock()
-        self._purge_mock = MagicMock()
-
-    def _store(self, *args: Any, **kwargs: Any) -> None:
-        self._store_mock(*args, **kwargs)
-
-    def _retrieve(self, *args: Any, **kwargs: Any) -> str:
-        return self._retrieve_mock(*args, **kwargs)
-
-    def _purge(self) -> None:
-        self._purge_mock()
-
-
-class MockRunner(BaseRunner):
-    def __init__(self, app: "Pynenc") -> None:
-        super().__init__(app)
-        self._on_start_mock = MagicMock()
-        self._on_stop_mock = MagicMock()
-        self._on_stop_runner_loop_mock = MagicMock()
-        self.runner_loop_iteration_mock = MagicMock()
-        self._waiting_for_results_mock = MagicMock()
-        self._max_parallel_slots = 2
-
-    @staticmethod
-    def mem_compatible() -> bool:
-        return True
-
-    def _on_start(self) -> None:
-        return self._on_start_mock()
-
-    def _on_stop(self) -> None:
-        return self._on_stop_mock()
-
-    def _on_stop_runner_loop(self) -> None:
-        return self._on_stop_runner_loop_mock()
-
-    def runner_loop_iteration(self) -> None:
-        return self.runner_loop_iteration_mock()
-
-    def _waiting_for_results(self, *args: Any, **kwargs: Any) -> None:
-        return self._waiting_for_results_mock(*args, **kwargs)
-
-    @property
-    def max_parallel_slots(self) -> int:
-        return self._max_parallel_slots
-
-    @property
-    def cache(self) -> dict:
-        if self._runner_cache is None:
-            self._runner_cache = {}
-        return self._runner_cache
+def patch_abstract_methods(cls: type) -> type:
+    """Create a subclass with abstract methods mocked."""
+    abstract_methods: set[str] = getattr(cls, "__abstractmethods__", set())
+    attrs: dict[str, Any] = {}
+
+    for name in abstract_methods:
+        func = getattr(cls, name, None)
+        if func and getattr(func, "__code__", None) and func.__code__.co_flags & 0x80:
+            attrs[name] = AsyncMock()
+        else:
+            attrs[name] = MagicMock()
+
+    patched_cls = type(f"Patched{cls.__name__}", (cls,), attrs)
+    patched_cls._patched_methods = list(attrs.keys())  # type: ignore
+    return patched_cls
+
+
+@pytest.fixture(autouse=True)
+def reset_mock_classes() -> Generator[None, None, None]:
+    """Reset all mocked methods between tests."""
+    yield
+
+    for mock_cls in [
+        MockBroker,
+        MockBlockingControl,
+        MockBaseOrchestrator,
+        MockStateBackend,
+        MockArgCache,
+        MockRunner,
+    ]:
+        for method_name in getattr(mock_cls, "_patched_methods", []):
+            getattr(mock_cls, method_name).reset_mock()
+
+
+MockBroker = patch_abstract_methods(BaseBroker)  # type: ignore[misc]
+MockBlockingControl = patch_abstract_methods(BaseBlockingControl)  # type: ignore[misc]
+MockBaseOrchestrator = patch_abstract_methods(BaseOrchestrator)  # type: ignore[misc]
+MockStateBackend = patch_abstract_methods(BaseStateBackend)  # type: ignore[misc]
+MockArgCache = patch_abstract_methods(BaseArgCache)  # type: ignore[misc]
+MockRunner = patch_abstract_methods(BaseRunner)  # type: ignore[misc]
 
 
 class MockPynenc(Pynenc):
+    """
+    Automated mock Pynenc app for testing.
+
+    Only abstract methods of dependencies are mocked, concrete logic is preserved.
+    This allows tests to use real invocation objects and await their methods.
+
+    :param str app_id: Application identifier
+    """
+
     def __init__(self, app_id: str = "mock_pynenc") -> None:
         super().__init__(app_id=app_id)
-        self._runner_instance: MockRunner = MockRunner(self)
+        self._runner_instance = MockRunner(self)  # type: ignore[misc]
+        # Ensure runner.cache is always a real dict for all tests
+        self._runner_instance.cache = {}  # type: ignore
 
     @cached_property
-    def broker(self) -> MockBroker:
-        return MockBroker(self)
+    def broker(self):  # type: ignore
+        return MockBroker(self)  # type: ignore[misc]
 
     @cached_property
-    def orchestrator(self) -> MockBaseOrchestrator:
-        return MockBaseOrchestrator(self)
+    def orchestrator(self):  # type: ignore
+        return MockBaseOrchestrator(self)  # type: ignore[misc]
 
     @cached_property
-    def state_backend(self) -> MockStateBackend:
-        return MockStateBackend(self)
+    def state_backend(self):  # type: ignore
+        return MockStateBackend(self)  # type: ignore[misc]
 
     @cached_property
-    def arg_cache(self) -> MockArgCache:
-        return MockArgCache(self)
+    def arg_cache(self):  # type: ignore
+        return MockArgCache(self)  # type: ignore[misc]
 
-    @property  # type: ignore
-    def runner(self) -> MockRunner:
+    @property
+    def runner(self):  # type: ignore
         return self._runner_instance
 
     @runner.setter
-    def runner(
-        self, runner_instance: MockRunner
-    ) -> None:  # This matches the base setter signature
+    def runner(self, runner_instance) -> None:  # type: ignore[no-untyped-def,override]
         self._runner_instance = runner_instance
-
-
-@pytest.fixture
-def mock_base_app() -> MockPynenc:
-    return MockPynenc()
-
-
-def dummy() -> None:
-    ...
-
-
-@pytest.fixture
-def dummy_task(mock_base_app: MockPynenc) -> "Task":
-    return mock_base_app.task(dummy)
-
-
-@pytest.fixture
-def dummy_invocation(dummy_task: "Task") -> "DistributedInvocation":
-    return DistributedInvocation(Call(dummy_task), None)
 
 
 @pytest.fixture(scope="function")
@@ -434,4 +183,11 @@ def app_instance(request: "FixtureRequest", temp_sqlite_db_path: str) -> Pynenc:
     elif request.param == "sqlite":
         return PynencBuilder().sqlite(sqlite_db_path=str(temp_sqlite_db_path)).build()
     else:
+        raise ValueError(f"Unknown app backend: {request.param}")
+    if request.param == "memory":
+        return PynencBuilder().memory().build()
+    elif request.param == "sqlite":
+        return PynencBuilder().sqlite(sqlite_db_path=str(temp_sqlite_db_path)).build()
+    else:
+        raise ValueError(f"Unknown app backend: {request.param}")
         raise ValueError(f"Unknown app backend: {request.param}")

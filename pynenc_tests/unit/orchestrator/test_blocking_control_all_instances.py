@@ -29,7 +29,7 @@ def test_get_blocking_invocations(app_instance: "Pynenc") -> None:
     # graph.add_invocation_call(invocation1, invocation2)
     graph.waiting_for_results(invocation0.invocation_id, [invocation1.invocation_id])
 
-    invocation0.app.orchestrator._get_invocation_status_mock.return_value = (  # type: ignore
+    invocation0.app.orchestrator.get_invocation_status.return_value = (  # type: ignore
         InvocationStatus.REGISTERED
     )
 

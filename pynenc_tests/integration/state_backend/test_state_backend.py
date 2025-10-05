@@ -1,6 +1,7 @@
+import inspect
 from datetime import datetime, timezone
 from time import sleep
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -95,22 +96,22 @@ def test_set_exception(invocation: "DistributedInvocation[Params, Result]") -> N
     assert str(retrieved_exception) == "Test exception message"
 
 
-def test_set_pynenc_exceptions(
-    invocation: "DistributedInvocation[Params, Result]",
-) -> None:
+def test_set_pynenc_exceptions(app_instance: "Pynenc") -> None:
     """Test that can store and retrieve different types of exceptions"""
-    app = invocation.app
+    app = app_instance
+    dummy.app = app_instance
 
-    def get_init_var_names(cls: type) -> Optional[set[str]]:
-        for base in cls.mro():
-            if "__init__" in base.__dict__:
-                init_method = base.__init__  # type: ignore
-                if hasattr(init_method, "__code__"):
-                    return set(init_method.__code__.co_varnames)
-        return None
+    def get_init_var_names(cls: type) -> list[str]:
+        sig = inspect.signature(cls.__init__)  # type: ignore
+        # Only include positional or keyword arguments (not *args/**kwargs)
+        return [
+            p
+            for p, param in sig.parameters.items()
+            if p != "self"
+            and param.kind in (param.POSITIONAL_OR_KEYWORD, param.KEYWORD_ONLY)
+        ]
 
     for exception_cls in get_all_subclasses(PynencError):
-        # Generate fake data for the exception
         fake_data = {
             "invocation_id": "fake_invocation_id",
             "task_id": "fake_task_id",
@@ -119,7 +120,8 @@ def test_set_pynenc_exceptions(
             "new_call_id": "fake_new_call_id",
             "diff": "fake_diff",
             "call_ids": ["fake_call_id_1", "fake_call_id_2"],
-            # Add more fake data for other fields if needed
+            "final_status": InvocationStatus.FAILED,
+            "new_status": InvocationStatus.SUCCESS,
         }
         # Filter out the keys that are not in the __init__ of the exception class
         if init_params := get_init_var_names(exception_cls):
@@ -133,6 +135,9 @@ def test_set_pynenc_exceptions(
 
         # Create an instance of the exception
         exception_instance = exception_cls(**filtered_fake_data)
+
+        # Create a new invocation, as final status and result should only be set once
+        invocation = DistributedInvocation(Call(dummy), None)  # type: ignore
 
         # Store the exception using set_exception
         app.state_backend.set_exception(invocation.invocation_id, exception_instance)

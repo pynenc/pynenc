@@ -27,11 +27,14 @@ class InvocationStatus(StrEnum):
     :cvar RUNNING:
         The task call is currently running.
 
-    :cvar SUCCESS:
-        The task call finished without errors.
-
     :cvar PAUSED:
         The task call execution is paused.
+
+    :cvar RESUMED:
+        The task call execution has been resumed.
+
+    :cvar SUCCESS:
+        The task call finished without errors.
 
     :cvar SCHEDULED:
         A task has been registered to run at a specific time. This is a subtype of REGISTERED.
@@ -47,8 +50,9 @@ class InvocationStatus(StrEnum):
     REROUTED = auto()
     PENDING = auto()
     RUNNING = auto()
-    SUCCESS = auto()
     PAUSED = auto()
+    RESUMED = auto()
+    SUCCESS = auto()
     SCHEDULED = auto()
     FAILED = auto()
     RETRY = auto()

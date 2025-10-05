@@ -4,10 +4,14 @@ from pynenc.conf.config_arg_cache import ConfigArgCache
 from pynenc.serializer.constants import ReservedKeys
 from pynenc_tests.conftest import MockArgCache, MockPynenc
 
-mock_base_app = MockPynenc()
+
+@pytest.fixture
+def mock_base_app() -> MockPynenc:
+    """Fixture to provide a fresh MockPynenc instance for each test."""
+    return MockPynenc()
 
 
-def test_base_arg_cache_conf() -> None:
+def test_base_arg_cache_conf(mock_base_app: "MockPynenc") -> None:
     """Test that the arg cache configuration is properly loaded."""
     # Create an instance of BaseArgCache
     arg_cache = MockArgCache(app=mock_base_app)
@@ -18,7 +22,7 @@ def test_base_arg_cache_conf() -> None:
     assert conf.min_size_to_cache == 1024
 
 
-def test_cache_large_argument() -> None:
+def test_cache_large_argument(mock_base_app: "MockPynenc") -> None:
     """Test that large arguments are properly cached."""
     arg_cache = MockArgCache(app=mock_base_app)
 
@@ -30,16 +34,16 @@ def test_cache_large_argument() -> None:
     assert arg_cache.is_cache_key(key)
 
     # Check it was stored
-    arg_cache._store_mock.assert_called_once()
+    arg_cache._store.assert_called_once()
 
     # Deserialize should retrieve from cache
     result = arg_cache.deserialize(key)
     assert result == large_data
     # No need to call _retrive as exists in data cache
-    arg_cache._retrieve_mock.assert_not_called()
+    arg_cache._retrieve.assert_not_called()
 
 
-def test_skip_small_argument() -> None:
+def test_skip_small_argument(mock_base_app: "MockPynenc") -> None:
     """Test that small arguments bypass the cache."""
     arg_cache = MockArgCache(app=mock_base_app)
 
@@ -51,10 +55,10 @@ def test_skip_small_argument() -> None:
     assert not arg_cache.is_cache_key(result)
 
     # Check storage wasn't called
-    arg_cache._store_mock.assert_not_called()
+    arg_cache._store.assert_not_called()
 
 
-def test_disable_cache_flag() -> None:
+def test_disable_cache_flag(mock_base_app: "MockPynenc") -> None:
     """Test that disable_cache flag bypasses caching regardless of size."""
     arg_cache = MockArgCache(app=mock_base_app)
 
@@ -66,10 +70,10 @@ def test_disable_cache_flag() -> None:
     assert not arg_cache.is_cache_key(result)
 
     # Check storage wasn't called
-    arg_cache._store_mock.assert_not_called()
+    arg_cache._store.assert_not_called()
 
 
-def test_cache_key_format() -> None:
+def test_cache_key_format(mock_base_app: "MockPynenc") -> None:
     """Test that cache keys are properly formatted."""
     arg_cache = MockArgCache(app=mock_base_app)
     test_data = "x" * arg_cache.conf.min_size_to_cache
@@ -80,7 +84,7 @@ def test_cache_key_format() -> None:
     assert key.startswith(ReservedKeys.ARG_CACHE.value)  # Should have proper prefix
 
 
-def test_purge() -> None:
+def test_purge(mock_base_app: "MockPynenc") -> None:
     """Test that purge clears all caches."""
     arg_cache = MockArgCache(app=mock_base_app)
 
@@ -99,15 +103,15 @@ def test_purge() -> None:
     assert len(arg_cache._deserialized_cache) == 0
 
     # Check backend purge was called
-    arg_cache._purge_mock.assert_called_once()
+    arg_cache._purge.assert_called_once()
 
 
-def test_cache_miss_handling() -> None:
+def test_cache_miss_handling(mock_base_app: "MockPynenc") -> None:
     """Test handling of local cache misses. should call ._retrieve of subclass"""
     arg_cache = MockArgCache(app=mock_base_app)
 
     # Set up mock to raise KeyError
-    arg_cache._retrieve_mock.side_effect = Exception("Abort on _retrieve call")
+    arg_cache._retrieve.side_effect = Exception("Abort on _retrieve call")
 
     # Try to deserialize non-existent key
     non_existent_key = f"{ReservedKeys.ARG_CACHE.value}:nonexistent"
@@ -115,10 +119,10 @@ def test_cache_miss_handling() -> None:
         arg_cache.deserialize(non_existent_key)
 
     # Verify _retrieve was called with the key
-    arg_cache._retrieve_mock.assert_called_once_with(non_existent_key)
+    arg_cache._retrieve.assert_called_once_with(non_existent_key)
 
 
-def test_cache_key_passthrough() -> None:
+def test_cache_key_passthrough(mock_base_app: "MockPynenc") -> None:
     """Test that passing a cache key to serialize returns the same key without re-serializing."""
     arg_cache = MockArgCache(app=mock_base_app)
 
@@ -127,7 +131,7 @@ def test_cache_key_passthrough() -> None:
     cache_key = arg_cache.serialize(large_data)
 
     # Reset mock counters
-    arg_cache._store_mock.reset_mock()
+    arg_cache._store.reset_mock()
 
     # Now pass the cache key to serialize again
     result = arg_cache.serialize(cache_key)
@@ -136,14 +140,14 @@ def test_cache_key_passthrough() -> None:
     assert result == cache_key
 
     # Verify _store wasn't called - no new serialization
-    arg_cache._store_mock.assert_not_called()
+    arg_cache._store.assert_not_called()
 
     # Also test that deserializing works correctly
     deserialized = arg_cache.deserialize(cache_key)
     assert deserialized == large_data
 
 
-def test_cache_key_in_complex_structure() -> None:
+def test_cache_key_in_complex_structure(mock_base_app: "MockPynenc") -> None:
     """Test that cache keys inside complex structures are preserved during serialization."""
     arg_cache = MockArgCache(app=mock_base_app)
 
@@ -155,7 +159,7 @@ def test_cache_key_in_complex_structure() -> None:
     key2 = arg_cache.serialize(large_data2)
 
     # Reset mocks
-    arg_cache._store_mock.reset_mock()
+    arg_cache._store.reset_mock()
 
     # Create a complex structure with cache keys
     complex_data = {

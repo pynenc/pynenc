@@ -229,8 +229,6 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
         """
         with sqlite_conn(self.sqlite_db_path) as conn:
             # Use the timestamp and status attributes from InvocationHistory as part of the PK
-            history_ts = invocation_history._timestamp
-            history_status = invocation_history.status
             for invocation_id in invocation_ids:
                 conn.execute(
                     f"""
@@ -240,8 +238,8 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
                     """,
                     (
                         invocation_id,
-                        history_ts,
-                        history_status,
+                        invocation_history._timestamp,
+                        invocation_history.status,
                         invocation_history.to_json(),
                     ),
                 )
@@ -344,18 +342,18 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
                 return self.app.serializer.deserialize(row[0])
             return default
 
-    def get_all_workflows(self) -> Iterator[str]:
+    def get_all_workflow_types(self) -> Iterator[str]:
         """Retrieve all workflow IDs."""
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
-                f"SELECT DISTINCT workflow_id FROM {Tables.WORKFLOWS}"
+                f"SELECT DISTINCT workflow_type FROM {Tables.WORKFLOWS}"
             )
             cursor_rows = cursor.fetchall()
             cursor.close()
             for row in cursor_rows:
                 yield row[0]
 
-    def get_all_workflows_runs(self) -> Iterator["WorkflowIdentity"]:
+    def get_all_workflow_runs(self) -> Iterator["WorkflowIdentity"]:
         """Retrieve all stored workflows."""
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(f"SELECT workflow_json FROM {Tables.WORKFLOWS}")

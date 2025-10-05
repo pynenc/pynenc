@@ -1,7 +1,6 @@
 import multiprocessing
 import threading
 import time
-from collections import OrderedDict
 from functools import cached_property
 from typing import Any, NamedTuple, Optional
 
@@ -24,11 +23,9 @@ class ThreadRunner(BaseRunner):
     This runner is suitable for I/O-bound tasks and scenarios where shared memory between tasks is required.
     """
 
-    wait_invocation_ids: set[str]
     threads: dict[str, ThreadInfo]
     max_threads: int
-    waiting_threads: int
-    final_invocation_ids: OrderedDict[str, None]
+    waiting_invocation_ids: set[str]
 
     @cached_property
     def conf(self) -> ConfigThreadRunner:
@@ -70,11 +67,9 @@ class ThreadRunner(BaseRunner):
         Internal method called when the ThreadRunner starts.
         Initializes the data infrastructures for managing invocations and threads.
         """
-        self.wait_invocation_ids = set()
         self.threads = {}
+        self.waiting_invocation_ids = set()
         self.max_threads = self.conf.max_threads or multiprocessing.cpu_count()
-        self.waiting_threads = 0
-        self.final_invocation_ids = OrderedDict()
 
     def _on_stop(self) -> None:
         """
@@ -108,9 +103,15 @@ class ThreadRunner(BaseRunner):
                 alive_threads[k] = thread_info
             else:
                 thread_info.thread.join()
+                self.waiting_invocation_ids.discard(
+                    thread_info.invocation.invocation_id
+                )
         self.threads = alive_threads
-        # Do not count waiting threads.
-        return self.max_parallel_slots - len(self.threads)
+        # Only count threads not waiting
+        running_threads = [
+            k for k in self.threads if k not in self.waiting_invocation_ids
+        ]
+        return self.max_parallel_slots - len(running_threads)
 
     def runner_loop_iteration(self) -> None:
         """
@@ -143,22 +144,6 @@ class ThreadRunner(BaseRunner):
                 )
                 self.app.orchestrator.reroute_invocations({invocation})
 
-        # Check waiting conditions
-        waiting_count = len(self.wait_invocation_ids)
-        self.logger.debug(f"Checking {waiting_count} waiting conditions")
-
-        for inv in self.app.orchestrator.filter_final(list(self.wait_invocation_ids)):
-            self.final_invocation_ids[inv] = None  # Add to ordered set
-            self.wait_invocation_ids.remove(inv)
-            self.logger.debug(f"invocation={inv} on final status")
-
-        # Clean up final_invocation_ids if over size limit
-        while len(self.final_invocation_ids) > self.conf.final_invocation_cache_size:
-            old_inv_id, _ = self.final_invocation_ids.popitem(
-                last=False
-            )  # Remove oldest
-            self.logger.debug(f"Evicted old final invocation {old_inv_id}")
-
         self.logger.debug(
             f"Finished loop iteration, sleeping for {self.conf.runner_loop_sleep_time_sec}s"
         )
@@ -178,30 +163,4 @@ class ThreadRunner(BaseRunner):
         :param runner_args: Additional arguments required for the ThreadRunner.
         """
         del runner_args
-        self.app.orchestrator.set_invocation_status(
-            running_invocation_id, InvocationStatus.PAUSED
-        )
-        self.logger.debug(
-            f"Pausing invocation {running_invocation_id} is waiting for others to finish"
-        )
-
-        # Register dependencies collectively
-        self.wait_invocation_ids.update(result_invocation_ids)
-        self.waiting_threads += 1
-
-        # Poll final_invocations cache until all results are ready
-        while not all(
-            result_inv in self.final_invocation_ids
-            for result_inv in result_invocation_ids
-        ):
-            self.logger.debug(
-                f"Polling for {running_invocation_id} waiting on {len(result_invocation_ids)} results"
-            )
-            time.sleep(self.conf.invocation_wait_results_sleep_time_sec)
-
-        # All results are final, resume
-        self.waiting_threads -= 1
-        self.logger.debug(f"Resuming {running_invocation_id}, all results final")
-        self.app.orchestrator.set_invocation_status(
-            running_invocation_id, InvocationStatus.RUNNING
-        )
+        self.waiting_invocation_ids.add(running_invocation_id)

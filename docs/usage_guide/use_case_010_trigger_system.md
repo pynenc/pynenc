@@ -20,7 +20,13 @@ pip install pynenc-redis
 pip install pynenc-mongodb
 ```
 
-The memory-based trigger system is included with the core Pynenc package for development and testing.
+**RabbitMQ Backend**:
+
+```bash
+pip install pynenc-rabbitmq
+```
+
+The memory-based and SQLite-based trigger systems are included with the core Pynenc package for development and testing.
 
 ## Scenario
 
@@ -435,9 +441,11 @@ trigger = (
 
 ### Multiple Backends
 
-- **Memory-based**: For testing and development (built-in)
+- **Memory-based**: For testing and development (built-in, single-host only, not suitable for distributed systems; only compatible with ThreadRunner for memory save)
+- **SQLite-based**: For testing on a single host (built-in, not suitable for distributed systems; compatible with any runner that shares the same database file)
 - **Redis-based**: For production-grade distributed systems (requires `pynenc-redis` plugin)
 - **MongoDB-based**: For document-based distributed systems (requires `pynenc-mongodb` plugin)
+- **RabbitMQ-based**: For message queue-based distributed systems (requires `pynenc-rabbitmq` plugin)
 
 ### Comprehensive Context Access
 

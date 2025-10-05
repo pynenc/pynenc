@@ -52,6 +52,7 @@ def mock_app() -> MockPynenc:
 
 def test_check_object_identity(mock_app: MockPynenc) -> None:
     """Test object identity cache lookup."""
+    mock_app.runner.cache = {}
     cache = LocalArgCache(mock_app)
     obj = TestObject("test")
     key = f"{ReservedKeys.ARG_CACHE.value}:test_key"
@@ -66,6 +67,7 @@ def test_check_object_identity(mock_app: MockPynenc) -> None:
 
 def test_check_object_hash(mock_app: MockPynenc) -> None:
     """Test object hash cache lookup."""
+    mock_app.runner.cache = {}
     cache = LocalArgCache(mock_app)
     obj = TestObject("test")
     key = f"{ReservedKeys.ARG_CACHE.value}:test_key"
@@ -93,6 +95,7 @@ def test_check_object_hash_unhashable(mock_app: MockPynenc) -> None:
 
 def test_check_fingerprint(mock_app: MockPynenc) -> None:
     """Test fingerprint cache lookup."""
+    mock_app.runner.cache = {}
     cache = LocalArgCache(mock_app)
     obj = TestObject("test")
     serialized = "x" * 200
@@ -115,6 +118,7 @@ def test_check_fingerprint(mock_app: MockPynenc) -> None:
 
 def test_check_exact_match(mock_app: MockPynenc) -> None:
     """Test exact match cache lookup."""
+    mock_app.runner.cache = {}
     cache = LocalArgCache(mock_app)
     obj = TestObject("test")
     serialized = "test_serialized"
@@ -139,6 +143,7 @@ def test_check_exact_match(mock_app: MockPynenc) -> None:
 
 def test_store_new_value(mock_app: MockPynenc) -> None:
     """Test storing new value and updating all caches."""
+    mock_app.runner.cache = {}
     cache = LocalArgCache(mock_app)
     obj = TestObject("test")
     serialized = "test_serialized"
@@ -162,6 +167,7 @@ def test_store_new_value(mock_app: MockPynenc) -> None:
 
 def test_serialize_integration(mock_app: MockPynenc) -> None:
     """Test full serialization flow with different cache scenarios."""
+    mock_app.runner.cache = {}
     cache = LocalArgCache(mock_app)
     obj = TestObject("test")
 
@@ -183,6 +189,7 @@ def test_serialize_integration(mock_app: MockPynenc) -> None:
 
 def test_serialize_fingerprint_cache_hit(mock_app: MockPynenc) -> None:
     """Test serialization using fingerprint cache."""
+    mock_app.runner.cache = {}
     cache = LocalArgCache(mock_app)
     obj = TestObject("test")
     serialized = "x" * 200  # Long enough to trigger caching
@@ -208,6 +215,7 @@ def test_serialize_fingerprint_cache_hit(mock_app: MockPynenc) -> None:
 
 def test_serialize_exact_match_cache_hit(mock_app: MockPynenc) -> None:
     """Test serialization using exact match cache."""
+    mock_app.runner.cache = {}
     cache = LocalArgCache(mock_app)
     obj = TestObject("test")
     serialized = "test_serialized"
@@ -234,6 +242,7 @@ def test_serialize_exact_match_cache_hit(mock_app: MockPynenc) -> None:
 
 def test_deserialize_caching(mock_app: MockPynenc) -> None:
     """Test that deserialize properly uses and updates caches."""
+    mock_app.runner.cache = {}
     cache = LocalArgCache(mock_app)
     test_value = '"test_value"'  # JSON-encoded string
     cache_key = f"{ReservedKeys.ARG_CACHE.value}:test_key"
@@ -260,6 +269,7 @@ def test_deserialize_caching(mock_app: MockPynenc) -> None:
 
 def test_deserialize_unhashable_object(mock_app: MockPynenc) -> None:
     """Test deserialize handling of unhashable objects."""
+    mock_app.runner.cache = {}
     cache = LocalArgCache(mock_app)
     cache_key = f"{ReservedKeys.ARG_CACHE.value}:test_key"
 
@@ -285,6 +295,7 @@ def test_deserialize_unhashable_object(mock_app: MockPynenc) -> None:
 
 def test_cache_size_limit_obj_id(mock_app: MockPynenc) -> None:
     """Test LRU eviction in object identity cache."""
+    mock_app.runner.cache = {}
     cache = LocalArgCache(mock_app)
     cache.conf.local_cache_size = 2  # Set small cache size
 
@@ -312,6 +323,7 @@ def test_cache_size_limit_obj_id(mock_app: MockPynenc) -> None:
 
 def test_cache_size_limit_all_caches(mock_app: MockPynenc) -> None:
     """Test LRU eviction in all cache types."""
+    mock_app.runner.cache = {}
     cache = LocalArgCache(mock_app)
     cache.conf.local_cache_size = 2
 
@@ -350,6 +362,7 @@ def test_cache_size_limit_all_caches(mock_app: MockPynenc) -> None:
 
 def test_deserialize_cache_hit(mock_app: MockPynenc) -> None:
     """Test that deserialize uses deserialized cache when available."""
+    mock_app.runner.cache = {}
     cache = LocalArgCache(mock_app)
     cache_key = f"{ReservedKeys.ARG_CACHE.value}:test_key"
     cached_obj = TestObject("test")

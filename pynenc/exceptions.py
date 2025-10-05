@@ -8,7 +8,7 @@ from .util.subclasses import get_all_subclasses
 
 if TYPE_CHECKING:
     from .call import Call
-    from .invocation import BaseInvocation
+    from .invocation import BaseInvocation, InvocationStatus
 
 
 class PynencError(Exception):
@@ -276,3 +276,39 @@ class ConfigMultiInheritanceError(ConfigError):
 
 class AlreadyInitializedError(PynencError):
     """Error raised when trying to change the class of a component after it was initialized"""
+
+
+class InvocationOnFinalStatusError(PynencError):
+    """Error raised when trying to change the status of an invocation that is already in a final status"""
+
+    def __init__(
+        self,
+        invocation_id: str,
+        final_status: "InvocationStatus",
+        new_status: "InvocationStatus",
+    ) -> None:
+        self.invocation_id = invocation_id
+        self.final_status = final_status
+        self.new_status = new_status
+        message = f"Cannot change {invocation_id=} {final_status=} to {new_status=}"
+        super().__init__(message)
+
+    def __str__(self) -> str:
+        return f"InvocationError({self.invocation_id})"
+
+    def _to_json_dict(self) -> dict[str, Any]:
+        return {
+            "invocation_id": self.invocation_id,
+            "final_status": self.final_status,
+            "new_status": self.new_status,
+        }
+
+    @classmethod
+    def _from_json_dict(
+        cls, json_dict: dict[str, Any]
+    ) -> "InvocationOnFinalStatusError":
+        return cls(
+            json_dict["invocation_id"],
+            json_dict["final_status"],
+            json_dict["new_status"],
+        )

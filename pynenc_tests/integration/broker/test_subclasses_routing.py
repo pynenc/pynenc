@@ -33,3 +33,16 @@ def test_routing(app_instance: "Pynenc") -> None:
         retrieved_inv_a.invocation_id,
         retrieved_inv_b.invocation_id,
     }
+
+
+def test_broker_purge(app_instance: "Pynenc") -> None:
+    """Test that purge removes all invocations"""
+    app = app_instance
+    dummy.app = app
+    call: Call = Call(dummy)
+    _ = app.broker.route_call(call)
+    inv2: DistributedInvocation = DistributedInvocation(call, None)
+    app.broker.route_invocation(inv2)
+    assert app.broker.count_invocations() == 2
+    app.broker.purge()
+    assert app.broker.count_invocations() == 0

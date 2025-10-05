@@ -29,7 +29,7 @@ def test_batch_parallelization_overhead(task_process_large_shared_arg: Task) -> 
     app.conf.argument_print_mode = ArgumentPrintMode.TRUNCATED
     app.conf.print_arguments = False
 
-    large_data = "x" * 20_000_000  # 20 MB
+    large_data = "x" * 10_000_000  # 10 MB
 
     # Start runner thread
     runner_thread = threading.Thread(target=lambda: app.runner.run(), daemon=True)
@@ -81,7 +81,7 @@ def test_arg_cache_effect_on_task_start(task_process_large_shared_arg: Task) -> 
     if isinstance(app.arg_cache, DisabledArgCache):
         pytest.skip("Skipping test due to disabled arg_cache")
 
-    large_data = "x" * 20_000_000  # 20 MB of data
+    large_data = "x" * 10_000_000  # 10 MB of data
     backup_arg_cache = app.arg_cache
     app.arg_cache = DisabledArgCache(app)
 
@@ -142,7 +142,7 @@ def batch_process_shared_data(
         app.arg_cache = DisabledArgCache(app)
     t0 = time.perf_counter()
     invocation_group = app.get_task(
-        "pynenc_tests.integration.apps.combinations.tasks.process_large_shared_arg"
+        "pynenc_tests.integration.combinations.tasks.process_large_shared_arg"
     ).parallelize(param_iter=[{"large_data": large_data} for _ in range(num_tasks)])
     results = {
         inv.invocation_id: inv.result - t0 for inv in invocation_group.invocations

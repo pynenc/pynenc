@@ -8,6 +8,7 @@ from pynenc.conf.config_orchestrator import ConfigOrchestrator
 from pynenc.conf.config_task import ConcurrencyControlType
 from pynenc.exceptions import (
     InvocationConcurrencyWithDifferentArgumentsError,
+    InvocationOnFinalStatusError,
     PendingInvocationLockError,
     TaskParallelProcessingError,
 )
@@ -196,20 +197,6 @@ class BaseOrchestrator(ABC):
         """
 
     @abstractmethod
-    def _set_invocations_status(
-        self, invocation_ids: list[str], status: InvocationStatus
-    ) -> None:
-        """
-        Set the status of multiple invocations at once.
-
-        Default implementation sets status for each invocation sequentially.
-        Subclasses should override this with more efficient batch implementations.
-
-        :param list[str] invocation_ids: The invocations to update.
-        :param InvocationStatus status: The status to set.
-        """
-
-    @abstractmethod
     def _set_invocation_pending_status(self, invocation_id: str) -> None:
         """
         Sets the status of an invocation to pending.
@@ -217,6 +204,7 @@ class BaseOrchestrator(ABC):
             Pending can only be set by the orchestrator
         ```
         :param str invocation_id: The ID of the invocation to update.
+        :raises InvocationOnFinalStatusError: If the invocation is already in a final status.
         """
 
     def set_invocation_pending_status(self, invocation_id: str) -> None:
@@ -226,6 +214,8 @@ class BaseOrchestrator(ABC):
             Pending can only be set by the orchestrator
         ```
         :param str invocation_id: The ID of the invocation to mark as pending.
+        :raises InvocationOnFinalStatusError: If the invocation is already in a final status.
+        :raises PendingInvocationLockError: If the invocation is already pending.
         """
         self._set_invocation_pending_status(invocation_id)
         self.app.state_backend.add_histories(
@@ -278,9 +268,14 @@ class BaseOrchestrator(ABC):
         """
         Retrieves the status of a specific invocation id.
 
+        note::
+            This method should be cached specially final status that cannot change.
+            For filtering by status, use `filter_by_status` instead.
+
         :param str invocation_id: The id of the invocation whose status is to be retrieved.
         :return: The current status of the invocation.
         :rtype: InvocationStatus
+        :raises KeyError: If the invocation ID does not exist.
         """
 
     @abstractmethod
@@ -442,6 +437,7 @@ class BaseOrchestrator(ABC):
         invocation_id: str,
         status: "InvocationStatus",
         runner_ctx: Optional["RunnerContext"] = None,
+        ignore_final_status_error: bool = False,
     ) -> None:
         """
         Sets the status of a specific invocation.
@@ -449,31 +445,34 @@ class BaseOrchestrator(ABC):
         :param DistributedInvocation[Params, Result] invocation: The invocation to update.
         :param InvocationStatus status: The new status to set for the invocation.
         """
-        if status == InvocationStatus.PENDING:
-            self._set_invocation_pending_status(invocation_id)
-        else:
-            if status.is_final():
-                self.release_waiters(invocation_id)
-                self.clean_up_invocation_cycles(invocation_id)
-                self.set_up_invocation_auto_purge(invocation_id)
-            # TODO! on previous fail, this should still change status to running
-            self._set_invocation_status(invocation_id, status)
+        if previous_status := self.get_invocation_status(invocation_id):
+            if previous_status == status:
+                self.app.logger.debug(
+                    f"Invocation {invocation_id} is already in status {status}, no change needed."
+                )
+                return
+            if previous_status.is_final() and not ignore_final_status_error:
+                raise InvocationOnFinalStatusError(
+                    invocation_id, previous_status, status
+                )
+        try:
+            if status == InvocationStatus.PENDING:
+                self._set_invocation_pending_status(invocation_id)
+            else:
+                if status.is_final():
+                    self.release_waiters(invocation_id)
+                    self.clean_up_invocation_cycles(invocation_id)
+                    self.set_up_invocation_auto_purge(invocation_id)
+                # TODO! on previous fail, this should still change status to running
+                self._set_invocation_status(invocation_id, status)
+        except InvocationOnFinalStatusError:
+            if not ignore_final_status_error:
+                raise
+            self.app.logger.warning(
+                f"Invocation {invocation_id} is already in a final status, cannot change to {status}"
+            )
         self.app.state_backend.add_histories([invocation_id], status, runner_ctx)
         self.app.trigger.report_tasks_status([invocation_id], status)
-
-    def set_invocations_status(
-        self,
-        invocation_ids: list[str],
-        status: "InvocationStatus",
-    ) -> None:
-        """
-        Sets the status for a list of invocations.
-
-        :param list[str] invocation_ids: The invocation_ids to update.
-        :param InvocationStatus status: The new status to set for the invocations.
-        """
-        self._set_invocations_status(invocation_ids, status)
-        self.app.trigger.report_tasks_status(invocation_ids, status)
 
     def set_invocation_run(
         self,

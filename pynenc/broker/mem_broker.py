@@ -62,7 +62,8 @@ class MemBroker(BaseBroker):
         :return:
             The next invocation from the queue, or None if the queue is empty.
         """
-        if self._queue and (inv := self._queue.pop()):
+        if self._queue:
+            inv = self._queue.popleft()
             return DistributedInvocation.from_json(self.app, inv)
         return None
 

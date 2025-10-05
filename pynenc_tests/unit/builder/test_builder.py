@@ -534,8 +534,3 @@ def test_trigger_configuration_with_disabled_trigger() -> None:
 
     assert app.conf.trigger_cls == "DisabledTrigger"
     assert isinstance(app.trigger, DisabledTrigger)
-
-
-def test_redis_trigger_import() -> None:
-    """Test Redis trigger functionality."""
-    pytest.skip("RedisTrigger not available in current implementation")

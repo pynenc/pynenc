@@ -10,17 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - **Plugin System Architecture**:
 
-  - Introduced a comprehensive plugin system to support multiple backend implementations
+  - Introduced a plugin system to support multiple backend implementations
   - Created plugin interface for state backends, brokers, and orchestrators
   - Enabled modular architecture for extending Pynenc with different storage and messaging systems
   - Added automatic plugin loading at startup to ensure subclass discovery works without builder usage
-  - Added comprehensive test coverage for plugin loading functionality
-
-- **MongoDB Plugin Support**:
-
-  - Added MongoDB as a new backend option through the plugin system
-  - MongoDB plugin provides state backend, broker, and orchestrator implementations
-  - Full feature parity with existing Redis functionality
+  - Added test coverage for plugin loading functionality
 
 - **Enhanced PynencBuilder Plugin Integration**:
 
@@ -50,7 +44,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Enhanced argument string formatting for better debugging and logging of task parameters.
 
 - **Enhanced Cycle Exception Handling**:
+
   - Improved detection and handling of cyclic dependencies in task execution graphs.
+
+- **New Exception: InvocationOnFinalStatusError**:
+
+  - Introduced `InvocationOnFinalStatusError` exception, raised when attempting to modify the status of an invocation that is already in a final state within the orchestrator.
+
+- **New Invocation Status: Resumed**:
+
+  - Added `Resumed` status to explicitly track the PAUSED-RESUME cycle in runners like the process runner, where processes executing invocations that wait for other invocations can be paused and resumed.
+
+- **Retry Logic for SQLite Connection**:
+
+  - Implemented retry logic in SQLite connection handling to improve reliability and handle transient connection issues.
 
 ### Changed
 
@@ -87,9 +94,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - For testing process-compatible (non-memory) runners we recommend using a shared SQLite-backed state backend to enable cross-process coordination without adding external dependencies to the core.
 
 - **Builder Architecture**:
+
   - Modified builder to support dynamic method registration from plugins
   - Added validation system for plugin-provided configuration
   - Enhanced builder to gracefully handle missing plugin dependencies
+
+- **Removed set_invocations_status Method**:
+
+  - Removed `set_invocations_status` to handle only one invocation at a time, as individual checks are required and not suitable for batch processing.
+
+- **Removed Pause-Resume for ThreadRunner Invocations**:
+
+  - Eliminated pause-resume functionality for invocations in ThreadRunner, as threads are not subprocesses and cannot be truly paused; this prevented issues where final invocations were incorrectly overwritten with `Resumed` status due to timing mismatches between waiting threads and status updates.
+
+- **Simplified MockPynenc for Testing**:
+
+  - Streamlined `MockPynenc` by removing manual definitions and automatically mocking only the abstract methods of Pynenc base classes, improving test maintainability and reducing boilerplate.
+
+### Fixed
+
+- **MemBroker FIFO Fix**:
+
+  - Fixed MemBroker to use FIFO (First In, First Out) ordering instead of FILO (First In, Last Out), ensuring correct task processing order.
 
 ### Migration Guide
 
@@ -127,7 +153,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **Workflow Monitoring System**:
 
   - Added workflow information storage when tasks run
-  - Implemented `get_all_workflows()`, `get_all_workflows_runs()`, and `get_workflow_runs()` methods in state backends
+  - Implemented `get_all_workflow_types()`, `get_all_workflow_runs()`, and `get_workflow_runs()` methods in state backends
   - Created workflow views for pynmon monitoring interface with list, detail, and runs pages
   - Complete Pynmon UI coherence with consistent styling
 

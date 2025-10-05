@@ -23,28 +23,28 @@ class Vars:
 
 
 @pytest.fixture
-def test_vars(task_concat: "Task") -> Vars:
+def test_vars_bc(task_concat_io: "Task") -> Vars:
     """Set up test invocations for blocking control tests."""
     inv1: DistributedInvocation = DistributedInvocation(
-        Call(task_concat, Arguments({"arg0": "a", "arg1": "a"})), None
+        Call(task_concat_io, Arguments({"arg0": "a", "arg1": "a"})), None
     )
     inv2: DistributedInvocation = DistributedInvocation(
-        Call(task_concat, Arguments({"arg0": "a", "arg1": "b"})), None
+        Call(task_concat_io, Arguments({"arg0": "a", "arg1": "b"})), None
     )
     inv3: DistributedInvocation = DistributedInvocation(
-        Call(task_concat, Arguments({"arg0": "b", "arg1": "b"})), None
+        Call(task_concat_io, Arguments({"arg0": "b", "arg1": "b"})), None
     )
-    app = task_concat.app
+    app = task_concat_io.app
     # Set initial statuses
     app.orchestrator.register_new_invocations([inv1, inv2, inv3])
     expected_ids = {inv1.invocation_id, inv2.invocation_id, inv3.invocation_id}
-    return Vars(app, task_concat, inv1, inv2, inv3, expected_ids)
+    return Vars(app, task_concat_io, inv1, inv2, inv3, expected_ids)
 
 
-def test_waiting_for_results(test_vars: Vars) -> None:
+def test_waiting_for_results(test_vars_bc: Vars) -> None:
     """Test that waiting_for_results correctly registers dependencies."""
-    app = test_vars.app
-    inv1, inv2, inv3 = test_vars.inv1, test_vars.inv2, test_vars.inv3
+    app = test_vars_bc.app
+    inv1, inv2, inv3 = test_vars_bc.inv1, test_vars_bc.inv2, test_vars_bc.inv3
 
     # inv1 waits for inv2 and inv3
     app.orchestrator.blocking_control.waiting_for_results(
@@ -65,16 +65,16 @@ def test_waiting_for_results(test_vars: Vars) -> None:
     ), "inv1 should not be blocking (it's waiting)"
 
 
-def test_get_blocking_invocations_max_limit(test_vars: Vars) -> None:
+def test_get_blocking_invocations_max_limit(test_vars_bc: Vars) -> None:
     """Test that get_blocking_invocations respects max_num_invocations."""
-    app = test_vars.app
-    inv1, inv2, inv3 = test_vars.inv1, test_vars.inv2, test_vars.inv3
+    app = test_vars_bc.app
+    inv1, inv2, inv3 = test_vars_bc.inv1, test_vars_bc.inv2, test_vars_bc.inv3
 
     # No dependencies initially, all should be "not waiting"
     blocking_ids = set(app.orchestrator.get_blocking_invocations(2))
     assert len(blocking_ids) <= 2, f"Expected at most 2, got {len(blocking_ids)}"
     assert blocking_ids.issubset(
-        test_vars.expected_ids
+        test_vars_bc.expected_ids
     ), "Blocking IDs should match test vars"
 
     # Make inv1 wait on inv2 and inv3
@@ -98,10 +98,10 @@ def test_get_blocking_invocations_max_limit(test_vars: Vars) -> None:
     }, "Should yield both inv2 and inv3"
 
 
-def test_get_blocking_invocations_empty(test_vars: Vars) -> None:
+def test_get_blocking_invocations_empty(test_vars_bc: Vars) -> None:
     """Test get_blocking_invocations when all invocations are waiting."""
-    app = test_vars.app
-    inv1, inv2, inv3 = test_vars.inv1, test_vars.inv2, test_vars.inv3
+    app = test_vars_bc.app
+    inv1, inv2, inv3 = test_vars_bc.inv1, test_vars_bc.inv2, test_vars_bc.inv3
 
     # Create a circular wait to ensure no invocations are "not waiting"
     app.orchestrator.waiting_for_results(inv1.invocation_id, [inv2.invocation_id])
@@ -112,10 +112,10 @@ def test_get_blocking_invocations_empty(test_vars: Vars) -> None:
     assert len(blocking) == 0, "Expected no blocking invocations in a circular wait"
 
 
-def test_release_waiters(test_vars: Vars) -> None:
+def test_release_waiters(test_vars_bc: Vars) -> None:
     """Test that release_waiters updates blocking status."""
-    app = test_vars.app
-    inv1, inv2, inv3 = test_vars.inv1, test_vars.inv2, test_vars.inv3
+    app = test_vars_bc.app
+    inv1, inv2, inv3 = test_vars_bc.inv1, test_vars_bc.inv2, test_vars_bc.inv3
 
     # inv1 waits on inv2 and inv3
     app.orchestrator.waiting_for_results(

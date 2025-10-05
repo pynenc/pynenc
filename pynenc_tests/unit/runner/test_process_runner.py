@@ -56,6 +56,12 @@ def test_on_stop(mock_process: Mock, runner: ProcessRunner) -> None:
     runner._on_start()
     mock_invocation = Mock(spec=DistributedInvocation)
     runner.inv_id_to_processes[mock_invocation.invocation_id] = mock_process
+
+    # Ensure the mock orchestrator returns a non-final status
+    runner.app.orchestrator.get_invocation_status.return_value = (  # type: ignore
+        InvocationStatus.RUNNING
+    )
+
     runner._on_stop()
 
     mock_process.kill.assert_called_once()
@@ -87,13 +93,13 @@ def test_runner_loop_iteration_pause_waiting_invocations(
     app.orchestrator.get_invocations_to_run = Mock(return_value=[])  # type: ignore
     with patch("os.kill") as mock_kill:
         # test that is the result_inv is still running, the waiting_inv is paused
-        # _mock_filter_final returns no final invocation, should stop waiting ones
-        app.orchestrator._mock_filter_final.return_value = []
+        # filter_by_status returns no final invocation, should stop waiting ones
+        app.orchestrator.filter_by_status.return_value = []
         runner.runner_loop_iteration()
         mock_kill.assert_called_with(ANY, signal.SIGSTOP)
         # test that is the result_inv is finished, the waiting_inv is resumed
-        # _mock_filter_final returns the final invocation, should resume waiting ones
-        app.orchestrator._mock_filter_final.return_value = [result_inv.invocation_id]
+        # filter_by_status returns the final invocation, should resume waiting ones
+        app.orchestrator.filter_by_status.return_value = [result_inv.invocation_id]
         runner.runner_loop_iteration()
         mock_kill.assert_called_with(ANY, signal.SIGCONT)
 

@@ -49,6 +49,16 @@ class TriggerDefinition:
         self.argument_provider = argument_provider
         self.trigger_id = self._generate_trigger_id()
 
+    def __eq__(self, value: object) -> bool:
+        if not isinstance(value, TriggerDefinition):
+            return False
+        return (
+            self.task_id == value.task_id
+            and self.condition_ids == value.condition_ids
+            and self.logic == value.logic
+            and self.argument_provider == value.argument_provider
+        )
+
     def _generate_trigger_id(self) -> str:
         """
         Generate a deterministic ID based on the trigger content.

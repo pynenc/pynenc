@@ -6,12 +6,11 @@ the in-memory implementation.
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 from unittest.mock import Mock, patch
 
 import pytest
 
-from pynenc import Pynenc
 from pynenc.invocation.status import InvocationStatus
 from pynenc.trigger.arguments import create_argument_filter
 from pynenc.trigger.arguments.argument_providers import StaticArgumentProvider
@@ -22,10 +21,13 @@ from pynenc.trigger.conditions import (
     StatusCondition,
     ValidCondition,
 )
-from pynenc.trigger.mem_trigger import MemTrigger
 from pynenc.trigger.trigger_builder import TriggerBuilder
 from pynenc.trigger.trigger_definitions import TriggerDefinition
 from pynenc_tests.conftest import MockPynenc
+
+if TYPE_CHECKING:
+    from pynenc import Pynenc
+    from pynenc.trigger import BaseTrigger
 
 # Create a test app instance
 app = MockPynenc()
@@ -37,13 +39,13 @@ def add(x: int, y: int) -> int:
 
 
 @pytest.fixture
-def trigger(app_instance: "Pynenc") -> MemTrigger:
+def trigger(app_instance: "Pynenc") -> "BaseTrigger":
     """Create a MemTrigger instance with a mock app."""
     add.app = app_instance
     return app_instance.trigger  # type: ignore
 
 
-def test_register_and_get_condition(trigger: MemTrigger) -> None:
+def test_register_and_get_condition(trigger: "BaseTrigger") -> None:
     """Test registering and retrieving a condition."""
     condition = CronCondition("0 * * * *")
     trigger.register_condition(condition)
@@ -52,7 +54,7 @@ def test_register_and_get_condition(trigger: MemTrigger) -> None:
     assert retrieved == condition
 
 
-def test_register_and_get_trigger(trigger: MemTrigger) -> None:
+def test_register_and_get_trigger(trigger: "BaseTrigger") -> None:
     """Test registering and retrieving a trigger definition."""
     condition = CronCondition("0 * * * *")
     trigger.register_condition(condition)
@@ -68,7 +70,7 @@ def test_register_and_get_trigger(trigger: MemTrigger) -> None:
     assert retrieved == trigger_def
 
 
-def test_get_triggers_for_condition(trigger: MemTrigger) -> None:
+def test_get_triggers_for_condition(trigger: "BaseTrigger") -> None:
     """Test getting triggers associated with a condition."""
     condition = CronCondition("0 * * * *")
     trigger.register_condition(condition)
@@ -85,7 +87,7 @@ def test_get_triggers_for_condition(trigger: MemTrigger) -> None:
     assert triggers[0] == trigger_def
 
 
-def test_get_conditions_sourced_from_task(trigger: MemTrigger) -> None:
+def test_get_conditions_sourced_from_task(trigger: "BaseTrigger") -> None:
     """Test getting conditions sourced from a specific task."""
     task_id = add.task_id
     # Create a status condition that watches the task
@@ -100,7 +102,7 @@ def test_get_conditions_sourced_from_task(trigger: MemTrigger) -> None:
     assert conditions[0].condition_id == condition.condition_id
 
 
-def test_record_and_get_valid_condition(trigger: MemTrigger) -> None:
+def test_record_and_get_valid_condition(trigger: "BaseTrigger") -> None:
     """Test recording and retrieving valid conditions."""
     condition = CronCondition("0 * * * *")
     context = CronContext()
@@ -113,7 +115,7 @@ def test_record_and_get_valid_condition(trigger: MemTrigger) -> None:
     assert valid_conditions[valid_condition.valid_condition_id] == valid_condition
 
 
-def test_clear_valid_conditions(trigger: MemTrigger) -> None:
+def test_clear_valid_conditions(trigger: "BaseTrigger") -> None:
     """Test clearing a valid condition."""
     condition = CronCondition("0 * * * *")
     context = CronContext()
@@ -126,7 +128,7 @@ def test_clear_valid_conditions(trigger: MemTrigger) -> None:
     assert len(trigger.get_valid_conditions()) == 0
 
 
-def test_check_time_based_triggers(trigger: MemTrigger) -> None:
+def test_check_time_based_triggers(trigger: "BaseTrigger") -> None:
     """Test checking time-based triggers."""
     # Create a CronCondition
     cron_condition = CronCondition("0 * * * *")  # Every hour
@@ -153,7 +155,7 @@ def test_check_time_based_triggers(trigger: MemTrigger) -> None:
             )
 
 
-def test_emit_event(trigger: MemTrigger) -> None:
+def test_emit_event(trigger: "BaseTrigger") -> None:
     """Test emitting an event."""
     # Create an EventCondition
     event_code = "test_event"
@@ -174,7 +176,7 @@ def test_emit_event(trigger: MemTrigger) -> None:
     )
 
 
-def test_report_task_status(trigger: MemTrigger) -> None:
+def test_report_task_status(trigger: "BaseTrigger") -> None:
     """Test reporting a task status change."""
     # Create a StatusCondition
     task_id = add.task_id
@@ -198,7 +200,7 @@ def test_report_task_status(trigger: MemTrigger) -> None:
     )
 
 
-def test_register_task_triggers(trigger: MemTrigger) -> None:
+def test_register_task_triggers(trigger: "BaseTrigger") -> None:
     """Test registering triggers for a task."""
     # Create a mock task
     task = Mock()
@@ -215,7 +217,7 @@ def test_register_task_triggers(trigger: MemTrigger) -> None:
     assert len(conditions) == 1
     assert any(isinstance(c, CronCondition) for c in conditions)
 
-    # Verify trigger was registered using public API
+    # Verify trigger was registered using public API (works for both MemTrigger and SQLiteTrigger)
     all_triggers = []
     for cond in conditions:
         all_triggers.extend(trigger.get_triggers_for_condition(cond.condition_id))
@@ -224,7 +226,7 @@ def test_register_task_triggers(trigger: MemTrigger) -> None:
 
 
 def test_register_task_triggers_should_register_triggers_for_task(
-    trigger: MemTrigger,
+    trigger: "BaseTrigger",
 ) -> None:
     """Test that register_task_triggers registers triggers for a task using public API."""
     # Arrange
@@ -248,7 +250,7 @@ def test_register_task_triggers_should_register_triggers_for_task(
     assert all_triggers[0].task_id == task.task_id
 
 
-def test_distributed_cron_execution(trigger: MemTrigger) -> None:
+def test_distributed_cron_execution(trigger: "BaseTrigger") -> None:
     """Test distributed cron execution with multiple runners."""
     # Create a CronCondition
     cron_condition = CronCondition("* * * * *")  # Every minute
@@ -307,7 +309,7 @@ def test_cron_should_trigger_after_time() -> None:
     assert condition.is_satisfied_by(context2) is True
 
 
-def test_optimistic_locking_for_cron_execution(trigger: MemTrigger) -> None:
+def test_optimistic_locking_for_cron_execution(trigger: "BaseTrigger") -> None:
     """Test the optimistic locking mechanism for cron execution."""
     # Override the store_last_cron_execution method to implement correct optimistic locking behavior
     original_store = trigger.store_last_cron_execution
@@ -368,7 +370,7 @@ def test_optimistic_locking_for_cron_execution(trigger: MemTrigger) -> None:
         assert trigger.get_last_cron_execution(condition_id) == later_time
 
 
-def test_trigger_loop_iteration(trigger: MemTrigger) -> None:
+def test_trigger_loop_iteration(trigger: "BaseTrigger") -> None:
     """Test processing a trigger loop iteration."""
     # Set up task, condition, and trigger
     task_id = "test_task"
@@ -405,7 +407,7 @@ def test_trigger_loop_iteration(trigger: MemTrigger) -> None:
                 assert len(trigger.get_valid_conditions()) == 0
 
 
-def test_execute_task(trigger: MemTrigger) -> None:
+def test_execute_task(trigger: "BaseTrigger") -> None:
     """Test executing a task with arguments."""
     # Set up task and arguments
     task_id = add.task_id

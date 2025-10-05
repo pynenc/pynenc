@@ -35,8 +35,8 @@ class MemStateBackend(BaseStateBackend[Params, Result]):
         self._exceptions: dict[str, Exception] = {}
         self._workflow_data: dict[str, dict[str, Any]] = defaultdict(dict)
         self._workflow_types: set[str] = set()  # Stores workflow_task_ids
-        self._workflow_runs: dict[str, list["WorkflowIdentity"]] = defaultdict(
-            list
+        self._workflow_runs: dict[str, set["WorkflowIdentity"]] = defaultdict(
+            set
         )  # workflow_task_id -> runs
         self._workflow_sub_invocations: dict[str, set[str]] = defaultdict(
             set
@@ -182,11 +182,9 @@ class MemStateBackend(BaseStateBackend[Params, Result]):
         :param workflow_identity: The workflow identity to store
         """
         self._workflow_types.add(workflow_identity.workflow_task_id)
-        self._workflow_runs[workflow_identity.workflow_task_id].append(
-            workflow_identity
-        )
+        self._workflow_runs[workflow_identity.workflow_task_id].add(workflow_identity)
 
-    def get_all_workflows(self) -> Iterator[str]:
+    def get_all_workflow_types(self) -> Iterator[str]:
         """
         Retrieve all workflow types (workflow_task_ids) stored in this state backend.
 
@@ -194,7 +192,7 @@ class MemStateBackend(BaseStateBackend[Params, Result]):
         """
         return iter(self._workflow_types)
 
-    def get_all_workflows_runs(self) -> Iterator["WorkflowIdentity"]:
+    def get_all_workflow_runs(self) -> Iterator["WorkflowIdentity"]:
         """
         Retrieve workflow run identities from this state backend.
 

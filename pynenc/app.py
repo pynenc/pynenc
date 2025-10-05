@@ -122,6 +122,7 @@ class Pynenc:
         return self._tasks[task_id]
 
     def __getstate__(self) -> dict:
+        """Return the serializable state of the app for pickling or multiprocessing."""
         # Return state as a dictionary and a secondary value as a tuple
         return {
             "app_id": self.app_id,
@@ -132,6 +133,7 @@ class Pynenc:
         }
 
     def __setstate__(self, state: dict) -> None:
+        """Restore the app state after unpickling or process spawn."""
         # Restore instance attributes
         self._app_id = state["app_id"]
         object.__setattr__(self, "_app_id", self._app_id)
@@ -140,6 +142,7 @@ class Pynenc:
         self.reporting = state["reporting"]
         # self._tasks = state.get("tasks", {})
         self._runner_instance = None
+        load_all_plugins()  # Ensure plugins are loaded in subprocess
 
     @cached_property
     def conf(self) -> ConfigPynenc:

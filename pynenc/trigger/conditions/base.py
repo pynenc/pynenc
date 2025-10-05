@@ -308,6 +308,9 @@ class TriggerCondition(Generic[C], ABC):
         """
         return False
 
+    def __eq__(self, other: object) -> bool:
+        raise NotImplementedError("Not implemented for Conditions")
+
 
 class ValidCondition:
     """
@@ -327,6 +330,11 @@ class ValidCondition:
         """
         self.condition = condition
         self.context = context
+
+    def __eq__(self, value: object) -> bool:
+        if not isinstance(value, ValidCondition):
+            return False
+        return self.condition == value.condition and self.context == value.context
 
     @property
     def valid_condition_id(self) -> str:

@@ -133,6 +133,17 @@ class CronCondition(TriggerCondition[CronContext]):
                 "Use minute-level precision (5 fields) instead."
             )
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, CronCondition):
+            return False
+        return (
+            self.cron_expression == other.cron_expression
+            and self.check_window_seconds == other.check_window_seconds
+            and self.min_interval_seconds == other.min_interval_seconds
+            and self.precision_tolerance_seconds == other.precision_tolerance_seconds
+            and self.strict_timing == other.strict_timing
+        )
+
     @property
     def condition_id(self) -> str:
         """

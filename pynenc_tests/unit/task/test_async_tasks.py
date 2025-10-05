@@ -42,9 +42,9 @@ async def test_async_results_final() -> None:
         task=add, invocations=[invocation0, invocation1]
     )
     # Force both invocations to be final.
-    app.orchestrator._get_invocation_status_mock.return_value = InvocationStatus.SUCCESS
-    # ! Patch _mock_filter_final as it is used for performance instead of individual status checks.
-    app.orchestrator._mock_filter_final.return_value = [
+    app.orchestrator.get_invocation_status.return_value = InvocationStatus.SUCCESS
+    # ! Patch filter_by_status as it is used for performance instead of individual status checks.
+    app.orchestrator.filter_by_status.return_value = [
         invocation0.invocation_id,
         invocation1.invocation_id,
     ]
@@ -67,8 +67,8 @@ async def test_async_results_pending_exception(monkeypatch: pytest.MonkeyPatch) 
         task=add, invocations=[invocation0, invocation1]
     )
     # Force pending status for both invocations.
-    app.orchestrator._mock_filter_final.return_value = []
-    app.orchestrator._get_invocation_status_mock.return_value = InvocationStatus.PENDING
+    app.orchestrator.filter_by_status.return_value = []
+    app.orchestrator.get_invocation_status.return_value = InvocationStatus.PENDING
 
     async def dummy_wait(parent: Any, invs: Any, runner_args: Any = None) -> None:
         raise Exception("Abort waiting loop")

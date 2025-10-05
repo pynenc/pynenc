@@ -1,5 +1,8 @@
 from typing import TYPE_CHECKING
 
+import pytest
+
+from pynenc.exceptions import InvocationOnFinalStatusError, PendingInvocationLockError
 from pynenc.invocation import InvocationStatus
 from pynenc_tests.conftest import MockPynenc
 
@@ -51,6 +54,20 @@ def test_set_pending_status(app_instance: "Pynenc") -> None:
     )
 
 
+def test_set_pending_only_once(app_instance: "Pynenc") -> None:
+    """Test that trying to set pending twice would raise PendingInvocationLockError."""
+    # Setup
+    inv: "DistributedInvocation" = dummy_task()  # type: ignore
+    app_instance.orchestrator._register_new_invocations([inv])
+    invocation_id = inv.invocation_id
+
+    app_instance.orchestrator._set_invocation_pending_status(invocation_id)
+    # Test / Assertions
+    with pytest.raises(PendingInvocationLockError) as exc_info:
+        app_instance.orchestrator._set_invocation_pending_status(invocation_id)
+        assert exc_info.value.invocation_id == invocation_id
+
+
 def test_registering_an_invocation_set_register_status(app_instance: "Pynenc") -> None:
     inv: "DistributedInvocation" = dummy_task()  # type: ignore
     app_instance.orchestrator._register_new_invocations([inv])
@@ -58,3 +75,47 @@ def test_registering_an_invocation_set_register_status(app_instance: "Pynenc") -
         app_instance.orchestrator.get_invocation_status(inv.invocation_id)
         == InvocationStatus.REGISTERED
     )
+
+
+def test_cannot_change_final_status(app_instance: "Pynenc") -> None:
+    """Check that any attempt to change status from a final state raises InvocationOnFinalStatusError."""
+    inv: "DistributedInvocation" = dummy_task()  # type: ignore
+    app_instance.orchestrator._register_new_invocations([inv])
+    invocation_id = inv.invocation_id
+    app_instance.orchestrator._set_invocation_status(
+        invocation_id, InvocationStatus.SUCCESS
+    )
+    with pytest.raises(InvocationOnFinalStatusError) as exc_info:
+        app_instance.orchestrator._set_invocation_status(
+            invocation_id, InvocationStatus.PAUSED
+        )
+        assert exc_info.value.invocation_id == invocation_id
+        assert exc_info.value.final_status == InvocationStatus.SUCCESS
+        assert exc_info.value.new_status == InvocationStatus.PAUSED
+
+    with pytest.raises(InvocationOnFinalStatusError) as exc_info:
+        app_instance.orchestrator.set_invocation_status(
+            invocation_id, InvocationStatus.FAILED
+        )
+        assert exc_info.value.invocation_id == invocation_id
+        assert exc_info.value.final_status == InvocationStatus.SUCCESS
+        assert exc_info.value.new_status == InvocationStatus.FAILED
+
+    app_instance.orchestrator.set_invocation_status(
+        invocation_id, InvocationStatus.SUCCESS
+    )
+
+
+def test_set_pending_cannot_change_final_status(app_instance: "Pynenc") -> None:
+    """Check that any attempt to change status to pending from a final state raises InvocationOnFinalStatusError."""
+    inv: "DistributedInvocation" = dummy_task()  # type: ignore
+    app_instance.orchestrator._register_new_invocations([inv])
+    invocation_id = inv.invocation_id
+    app_instance.orchestrator._set_invocation_status(
+        invocation_id, InvocationStatus.SUCCESS
+    )
+    with pytest.raises(InvocationOnFinalStatusError) as exc_info:
+        app_instance.orchestrator._set_invocation_pending_status(invocation_id)
+        assert exc_info.value.invocation_id == invocation_id
+        assert exc_info.value.final_status == InvocationStatus.SUCCESS
+        assert exc_info.value.new_status == InvocationStatus.PENDING

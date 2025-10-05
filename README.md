@@ -82,9 +82,11 @@ Pynenc addresses the complex challenges of task management in distributed enviro
 
 - **Modular Plugin Architecture**: Pynenc is built with modularity at its core, supporting various backend implementations through a plugin system. Choose from:
 
+  - **Memory Backend**: Built-in development/testing mode for local execution (single-host only, not suitable for distributed systems; only compatible with ThreadRunner for memory save)
+  - **SQLite Backend**: Built-in backend for testing on a single host (not suitable for distributed systems; compatible with any runner that shares the same database file)
   - **Redis Plugin** (`pynenc-redis`): Production-ready distributed task management
   - **MongoDB Plugin** (`pynenc-mongodb`): Document-based storage with full feature support
-  - **Memory Backend**: Built-in development/testing mode for local execution
+  - **RabbitMQ Plugin** (`pynenc-rabbitmq`): Message queue-based broker for distributed task orchestration
 
   The plugin system allows easy extension with additional databases, message queues, and services, enabling customization for different operational needs and environments.
 
@@ -118,6 +120,12 @@ pip install pynenc-redis
 pip install pynenc-mongodb
 ```
 
+**RabbitMQ Backend**:
+
+```bash
+pip install pynenc-rabbitmq
+```
+
 ### Optional Features
 
 Include the monitoring web app:
@@ -140,7 +148,13 @@ For a MongoDB-based setup:
 pip install pynenc pynenc-mongodb
 ```
 
-For development/testing (memory backend only):
+For a RabbitMQ-based setup:
+
+```bash
+pip install pynenc pynenc-rabbitmq
+```
+
+For development/testing (memory or SQLite backend only):
 
 ```bash
 pip install pynenc
@@ -248,9 +262,11 @@ Pynenc supports multiple backend options through its plugin system:
 
 ### Backend Options
 
-- **Memory Backend**: Built-in, no additional requirements (for development/testing)
+- **Memory Backend**: Built-in, no additional requirements (for development/testing, single-host only, not suitable for distributed systems; only compatible with ThreadRunner for memory save)
+- **SQLite Backend**: Built-in, no additional requirements (for testing on a single host, not suitable for distributed systems; compatible with any runner that shares the same database file)
 - **Redis Backend**: Requires `pynenc-redis` plugin and a Redis server
 - **MongoDB Backend**: Requires `pynenc-mongodb` plugin and a MongoDB server
+- **RabbitMQ Backend**: Requires `pynenc-rabbitmq` plugin and a RabbitMQ server
 
 ### Production Deployment
 
@@ -258,6 +274,7 @@ For distributed systems, choose either:
 
 - **Redis**: Install `pynenc-redis` and ensure Redis server is running
 - **MongoDB**: Install `pynenc-mongodb` and ensure MongoDB server is running
+- **RabbitMQ**: Install `pynenc-rabbitmq` and ensure RabbitMQ server is running
 
 The plugin architecture allows you to switch between backends or add new ones without changing your application code.
 

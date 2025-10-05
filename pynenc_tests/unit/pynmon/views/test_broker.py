@@ -44,7 +44,7 @@ def task_two(duration: int) -> str:
 
 
 @pytest.fixture
-def app(request: "FixtureRequest", app_instance: "Pynenc") -> "Pynenc":
+def app_broker(request: "FixtureRequest", app_instance: "Pynenc") -> "Pynenc":
     app = app_instance
     app._app_id = mock_app.app_id
     app._tasks = mock_app._tasks
@@ -55,13 +55,13 @@ def app(request: "FixtureRequest", app_instance: "Pynenc") -> "Pynenc":
     return app
 
 
-def test_broker_overview_shows_broker_info(app: "Pynenc") -> None:
+def test_broker_overview_shows_broker_info(app_broker: "Pynenc") -> None:
     """Test that broker overview displays broker information."""
     # Setup routes before creating test client
     setup_routes()
 
     # Patch pynmon to use our test app
-    with patch("pynmon.views.broker.get_pynenc_instance", return_value=app):
+    with patch("pynmon.views.broker.get_pynenc_instance", return_value=app_broker):
         client = TestClient(pynmon_app)
         response = client.get("/broker/")
 
@@ -72,10 +72,10 @@ def test_broker_overview_shows_broker_info(app: "Pynenc") -> None:
         content = response.text
         assert "test-broker-app" in content
         assert "BaseBroker" not in content
-        assert app.broker.__class__.__name__ in content
+        assert app_broker.broker.__class__.__name__ in content
 
 
-def test_broker_queue_shows_pending_invocations(app: "Pynenc") -> None:
+def test_broker_queue_shows_pending_invocations(app_broker: "Pynenc") -> None:
     """Test that broker queue displays pending invocations."""
     # Manually create and route invocations to ensure they stay in the queue
     from pynenc.arguments import Arguments
@@ -83,7 +83,7 @@ def test_broker_queue_shows_pending_invocations(app: "Pynenc") -> None:
     from pynenc.invocation import DistributedInvocation
 
     # Debug: Check initial state
-    print(f"Initial queue count: {app.broker.count_invocations()}")
+    print(f"Initial queue count: {app_broker.broker.count_invocations()}")
 
     # Create calls for our tasks
     call1: Call = Call(task_one, Arguments({"x": 1}))
@@ -98,24 +98,24 @@ def test_broker_queue_shows_pending_invocations(app: "Pynenc") -> None:
     )
 
     # Manually route them to the broker to ensure they are queued
-    app.broker.route_invocation(invocation1)
-    app.broker.route_invocation(invocation2)
+    app_broker.broker.route_invocation(invocation1)
+    app_broker.broker.route_invocation(invocation2)
 
-    print(f"Queue count after routing: {app.broker.count_invocations()}")
+    print(f"Queue count after routing: {app_broker.broker.count_invocations()}")
 
     # Test retrieve directly
-    retrieved = app.broker.retrieve_invocation()
+    retrieved = app_broker.broker.retrieve_invocation()
     print(f"Retrieved: {retrieved.invocation_id[:8] if retrieved else None}")
 
     # Re-route for the actual test
     if retrieved:
-        app.broker.route_invocation(retrieved)
+        app_broker.broker.route_invocation(retrieved)
 
     # Setup routes before creating test client
     setup_routes()
 
     # Patch pynmon to use our test app
-    with patch("pynmon.views.broker.get_pynenc_instance", return_value=app):
+    with patch("pynmon.views.broker.get_pynenc_instance", return_value=app_broker):
         client = TestClient(pynmon_app)
         response = client.get("/broker/queue")
 
@@ -131,7 +131,7 @@ def test_broker_queue_shows_pending_invocations(app: "Pynenc") -> None:
         assert "task_two" in content
 
 
-def test_broker_purge_clears_queue(app: "Pynenc") -> None:
+def test_broker_purge_clears_queue(app_broker: "Pynenc") -> None:
     """Test that purging broker clears the queue."""
     # Create some invocations first
     task_one(10)
@@ -141,7 +141,7 @@ def test_broker_purge_clears_queue(app: "Pynenc") -> None:
     setup_routes()
 
     # Patch pynmon to use our test app
-    with patch("pynmon.views.broker.get_pynenc_instance", return_value=app):
+    with patch("pynmon.views.broker.get_pynenc_instance", return_value=app_broker):
         client = TestClient(pynmon_app)
 
         # Verify queue has items
@@ -156,4 +156,4 @@ def test_broker_purge_clears_queue(app: "Pynenc") -> None:
         # Verify queue is now empty
         response = client.get("/broker/queue")
         # After purge, should have no pending invocations
-        assert app.broker.count_invocations() == 0
+        assert app_broker.broker.count_invocations() == 0

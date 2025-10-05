@@ -27,9 +27,11 @@ class BaseBroker(ABC):
 
     ```{note}
     Available broker implementations depend on installed plugins:
-    - **MemBroker**: Built-in memory-based broker for development and testing
+    - **MemBroker**: Built-in memory-based broker for development and testing (single-host only, not suitable for distributed systems; only compatible with ThreadRunner for memory save)
+    - **SQLiteBroker**: Built-in SQLite-based broker for testing on a single host (not suitable for distributed systems; compatible with any runner that shares the same database file)
     - **RedisBroker**: Available with `pynenc-redis` plugin for production Redis deployments
     - **MongoBroker**: Available with `pynenc-mongodb` plugin for MongoDB-based systems
+    - **RabbitMQBroker**: Available with `pynenc-rabbitmq` plugin for message queue-based distributed systems
     ```
 
     ```{attention}

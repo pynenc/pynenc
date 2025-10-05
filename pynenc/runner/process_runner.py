@@ -182,9 +182,11 @@ class ProcessRunner(BaseRunner):
             if waiting_invocation_ids := self.wait_invocation.get(invocation_id, set()):
                 to_resume_invocation_ids.update(waiting_invocation_ids)
                 self.wait_invocation[invocation_id] = set()
-                self.logger.info(f"{invocation_id=} finalized, resuming waiting ones")
+                self.logger.info(
+                    f"{invocation_id=} finalized, resuming waiting ones: {waiting_invocation_ids}"
+                )
         # Resume the processes waiting for finalized invocations
-        # and set their status to RUNNING
+        # and set their status to RESUMED
         if to_resume_invocation_ids:
             for waiting_invocation_id in to_resume_invocation_ids:
                 # Find the process for this waiting invocation ID
@@ -194,11 +196,13 @@ class ProcessRunner(BaseRunner):
                     if waiting_process.pid:
                         os.kill(waiting_process.pid, signal.SIGCONT)
                         self.logger.info(
-                            f"{waiting_invocation_id=} resuming process {waiting_process.pid}"
+                            f"resuming process {waiting_process.pid} of {waiting_invocation_id=} "
                         )
-            self.app.orchestrator.set_invocations_status(
-                list(to_resume_invocation_ids), InvocationStatus.RUNNING
-            )
+                        self.app.orchestrator.set_invocation_status(
+                            waiting_invocation_id,
+                            InvocationStatus.RESUMED,
+                            ignore_final_status_error=True,
+                        )
 
     def runner_loop_iteration(self) -> None:
         """

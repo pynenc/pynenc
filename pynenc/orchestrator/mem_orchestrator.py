@@ -5,7 +5,11 @@ from collections.abc import Iterator
 from time import time
 from typing import TYPE_CHECKING, Any, Optional
 
-from pynenc.exceptions import CycleDetectedError, PendingInvocationLockError
+from pynenc.exceptions import (
+    CycleDetectedError,
+    InvocationOnFinalStatusError,
+    PendingInvocationLockError,
+)
 from pynenc.invocation.status import InvocationStatus
 from pynenc.orchestrator.base_orchestrator import (
     BaseBlockingControl,
@@ -400,16 +404,7 @@ class MemOrchestrator(BaseOrchestrator):
 
     def get_invocation_call_id(self, invocation_id: str) -> str:
         """Retrieves the call ID associated with a specific invocation ID."""
-        try:
-            return self.inv_id_to_call_id[invocation_id]
-        except Exception:
-            # TODO remove this
-            self.app.logger.error(
-                f"Error get_invocation_call_id for invocation ID {invocation_id}"
-            )
-            for inv_id, call_id in self.inv_id_to_call_id.items():
-                self.app.logger.error(f"inv_id: {inv_id} --> call_id: {call_id}")
-            raise
+        return self.inv_id_to_call_id[invocation_id]
 
     def any_non_final_invocations(self, call_id: str) -> bool:
         """Checks if there are any non-final invocations for a specific call ID."""
@@ -476,6 +471,14 @@ class MemOrchestrator(BaseOrchestrator):
         self, invocation_id: str, status: InvocationStatus
     ) -> None:
         """Sets the status of a specific invocation."""
+        if prev_status := self.invocation_status.get(invocation_id):
+            if prev_status == status:
+                self.app.logger.debug(
+                    f"Invocation {invocation_id} already in status {status}, no change"
+                )
+                return
+            if prev_status.is_final():
+                raise InvocationOnFinalStatusError(invocation_id, prev_status, status)
         if status != InvocationStatus.PENDING:
             self.clean_pending_status(invocation_id)
         if invocation_id in self.invocation_status:
@@ -485,12 +488,6 @@ class MemOrchestrator(BaseOrchestrator):
             )
         self.status_index[status].add(invocation_id)
         self.invocation_status[invocation_id] = status
-
-    def _set_invocations_status(
-        self, invocation_ids: list[str], status: InvocationStatus
-    ) -> None:
-        for invocation_id in invocation_ids:
-            self._internal_set_invocation_status(invocation_id, status)
 
     def _set_invocation_pending_status(self, invocation_id: str) -> None:
         """

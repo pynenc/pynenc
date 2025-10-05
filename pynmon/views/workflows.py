@@ -43,7 +43,7 @@ async def workflows_list(request: Request) -> HTMLResponse:
 
     try:
         # Get all workflow types (convert iterator to list)
-        workflow_types = list(app.state_backend.get_all_workflows())
+        workflow_types = list(app.state_backend.get_all_workflow_types())
         logger.info(f"Found {len(workflow_types)} workflow types")
 
         # Get workflow runs for each type
@@ -84,7 +84,7 @@ async def refresh_workflows_list(request: Request) -> HTMLResponse:
 
     try:
         # Get all workflow types (convert iterator to list)
-        workflow_types = list(app.state_backend.get_all_workflows())
+        workflow_types = list(app.state_backend.get_all_workflow_types())
         logger.info(f"Found {len(workflow_types)} workflow types")
 
         # Get workflow runs for each type
@@ -122,7 +122,7 @@ async def workflow_runs_list(request: Request) -> HTMLResponse:
 
     try:
         # Get all workflow runs (convert iterator to list)
-        all_runs = list(app.state_backend.get_all_workflows_runs())
+        all_runs = list(app.state_backend.get_all_workflow_runs())
         logger.info(f"Found {len(all_runs)} workflow runs")
 
         # Sort by creation time if available (newest first)
@@ -153,7 +153,7 @@ async def refresh_workflow_runs_list(request: Request) -> HTMLResponse:
 
     try:
         # Get all workflow runs (convert iterator to list)
-        all_runs = list(app.state_backend.get_all_workflows_runs())
+        all_runs = list(app.state_backend.get_all_workflow_runs())
         logger.info(f"Found {len(all_runs)} workflow runs")
 
         # Sort by creation time if available (newest first)
@@ -277,7 +277,7 @@ async def debug_info(request: Request) -> HTMLResponse:
 
         # Try to get workflow runs count
         try:
-            all_workflow_runs = list(app.state_backend.get_all_workflows_runs())
+            all_workflow_runs = list(app.state_backend.get_all_workflow_runs())
             info["total_workflow_runs"] = len(all_workflow_runs)
         except Exception as e:
             info["workflow_runs_error"] = str(e)

@@ -388,7 +388,7 @@ class BaseStateBackend(ABC, Generic[Params, Result]):
         """
 
     @abstractmethod
-    def get_all_workflows(self) -> Iterator[str]:
+    def get_all_workflow_types(self) -> Iterator[str]:
         """
         Retrieve all workflow types (workflow_task_ids) stored in this state backend.
 
@@ -396,7 +396,7 @@ class BaseStateBackend(ABC, Generic[Params, Result]):
         """
 
     @abstractmethod
-    def get_all_workflows_runs(self) -> Iterator["WorkflowIdentity"]:
+    def get_all_workflow_runs(self) -> Iterator["WorkflowIdentity"]:
         """
         Retrieve workflow run identities from this state backend.
 

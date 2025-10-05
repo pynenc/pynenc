@@ -6,12 +6,12 @@ true cross-process coordination for testing process runners. Unlike shared memor
 SQLite provides ACID transactions and handles concurrent access automatically.
 """
 
-import sqlite3
 from functools import cached_property
 from time import time
 from typing import TYPE_CHECKING, Callable, Iterator, Optional
 
 from pynenc.conf.config_orchestrator import ConfigOrchestratorSQLite
+from pynenc.exceptions import InvocationOnFinalStatusError, PendingInvocationLockError
 from pynenc.invocation.status import InvocationStatus
 from pynenc.orchestrator.base_orchestrator import (
     BaseBlockingControl,
@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from pynenc.invocation.dist_invocation import DistributedInvocation
     from pynenc.task import Task
     from pynenc.types import Params, Result
+    from pynenc.util.sqlite_utils import SQLiteConnection
 
 
 class Tables:
@@ -159,7 +160,7 @@ class SQLiteCycleControl(BaseCycleControl):
                 yield row[0]
 
     def _find_cycle_with_new_edge(
-        self, conn: sqlite3.Connection, caller_id: str, callee_id: str
+        self, conn: "SQLiteConnection", caller_id: str, callee_id: str
     ) -> list[str] | None:
         """
         Find cycle that would be caused by adding a new edge from caller to callee.
@@ -307,7 +308,7 @@ class SQLiteBlockingControl(BaseBlockingControl):
         """
         params = [*available_statuses, max_num_invocations]
         with sqlite_conn(self.sqlite_db_path) as conn:
-            cursor = conn.execute(query, params)
+            cursor = conn.execute(query, tuple(params))
             cursor_rows = cursor.fetchall()
             cursor.close()
             for (waited_id,) in cursor_rows:
@@ -460,7 +461,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
         if wheres:
             sql += " WHERE " + " AND ".join(wheres)
         with sqlite_conn(self.sqlite_db_path) as conn:
-            cursor = conn.execute(sql, params)
+            cursor = conn.execute(sql, tuple(params))
             cursor_rows = cursor.fetchall()
             cursor.close()
             for (invocation_id,) in cursor_rows:
@@ -519,23 +520,33 @@ class SQLiteOrchestrator(BaseOrchestrator):
         status: InvocationStatus,
     ) -> None:
         """Set the status of an invocation by ID."""
-        self._set_invocations_status([invocation_id], status)
-
-    def _set_invocations_status(
-        self, invocation_ids: list[str], status: InvocationStatus
-    ) -> None:
-        """Set the status of multiple invocations at once by ID."""
-        now = time() if status == InvocationStatus.PENDING else None
-        # pre_pending = status.value if status == InvocationStatus.PENDING else None
         with sqlite_conn(self.sqlite_db_path) as conn:
-            placeholders = ",".join(["?" for _ in invocation_ids])
-            sql = f"""UPDATE {Tables.INVOCATIONS}
+            cursor = conn.execute(
+                f"SELECT status FROM {Tables.INVOCATIONS} WHERE invocation_id = ?",
+                (invocation_id,),
+            )
+            row = cursor.fetchone()
+            if not row:
+                raise KeyError(f"Invocation ID {invocation_id} not found")
+            prev_status = InvocationStatus(row[0])
+            if prev_status == status:
+                if prev_status == InvocationStatus.PENDING:
+                    raise PendingInvocationLockError(invocation_id)
+                self.app.logger.debug(
+                    f"Invocation {invocation_id} already in status {status}, no change"
+                )
+                return
+            if prev_status.is_final():
+                raise InvocationOnFinalStatusError(invocation_id, prev_status, status)
+            now = time() if status == InvocationStatus.PENDING else None
+            conn.execute(
+                f"""UPDATE {Tables.INVOCATIONS}
                         SET status = ?,
                             pre_pending_status = CASE WHEN ? = '{InvocationStatus.PENDING.value}' THEN status ELSE NULL END,
                             pending_start_time = ?
-                        WHERE invocation_id IN ({placeholders})"""
-            params = [status.value, status.value, now] + invocation_ids
-            conn.execute(sql, params)
+                        WHERE invocation_id = ?""",
+                (status.value, status.value, now, invocation_id),
+            )
             conn.commit()
 
     def _set_invocation_pending_status(self, invocation_id: str) -> None:
@@ -686,7 +697,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
                 WHERE invocation_id IN ({placeholders}) AND status IN ({status_placeholders})
             """
             params = invocation_ids + [s.value for s in status_filter]
-            cursor = conn.execute(sql, params)
+            cursor = conn.execute(sql, tuple(params))
             invocation_ids = [row[0] for row in cursor.fetchall()]
             cursor.close()
             return invocation_ids

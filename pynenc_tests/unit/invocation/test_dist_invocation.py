@@ -27,15 +27,15 @@ def test_distributed_invocation_instantiation() -> None:
 
 
 def test_distributed_invocation_to_and_fromjson() -> None:
+    # Patch orchestrator to return a real value for get_call_invocation_ids
+    app.orchestrator.get_call_invocation_ids.return_value = []
     invocation = add(1, 2)
     assert invocation == DistributedInvocation.from_json(app, invocation.to_json())
 
 
 def test_get_final_result_exception_not_final() -> None:
     invocation: DistributedInvocation = add(1, 2)  # type: ignore
-    app.orchestrator._get_invocation_status_mock.return_value = (
-        InvocationStatus.REGISTERED
-    )
+    app.orchestrator.get_invocation_status.return_value = InvocationStatus.REGISTERED
     # Test that it will raise an exception if the invocation is not finished
     with pytest.raises(InvocationError):
         invocation.get_final_result()
@@ -47,12 +47,13 @@ def retry() -> int:
 
 
 def test_max_retries() -> None:
-    app.orchestrator._get_invocation_retries_mock.return_value = 1
+    app.orchestrator.get_invocation_retries.return_value = 1
     invocation: DistributedInvocation = retry()  # type: ignore
+    app.orchestrator.get_invocation_status.return_value = InvocationStatus.RUNNING
 
     with capture_logs(app.logger) as log_buffer:
         with pytest.raises(RetryError):
-            invocation.run(RunnerContext.from_runner(app.runner))
+            invocation.run(RunnerContext.from_runner(app.runner))  # type: ignore
         assert "Invocation MAX-RETRY" in log_buffer.getvalue()
 
 
@@ -68,7 +69,7 @@ def test_reroute_on_running_control() -> None:
         app.orchestrator, "reroute_invocations"
     ) as mock_reroute_invocations:
         invocation: DistributedInvocation = add(1, 2)  # type: ignore
-        invocation.run(RunnerContext.from_runner(app.runner))
+        invocation.run(RunnerContext.from_runner(app.runner))  # type: ignore
         mock_is_authorized.assert_called_once()
         mock_reroute_invocations.assert_called_once_with({invocation})
 
@@ -95,7 +96,7 @@ async def test_distributed_async_result_wait_loop(
     def status_side_effect(inv: Any) -> InvocationStatus:
         return statuses.pop(0) if statuses else InvocationStatus.SUCCESS
 
-    mock_base_app.orchestrator._get_invocation_status_mock.side_effect = (  # type: ignore
+    mock_base_app.orchestrator.get_invocation_status.side_effect = (  # type: ignore
         status_side_effect
     )
 

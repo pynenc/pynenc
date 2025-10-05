@@ -5,15 +5,19 @@ from typing import TYPE_CHECKING, NamedTuple
 import pytest
 
 from pynenc.conf.config_task import ConcurrencyControlType
+from pynenc.invocation import InvocationStatus
 from pynenc.runner import ThreadRunner
 from pynenc_tests.conftest import MockPynenc
+from pynenc_tests.util import create_test_logger
 
 if TYPE_CHECKING:
     from _pytest.fixtures import FixtureRequest
 
     from pynenc import Pynenc
+    from pynenc.invocation import DistributedInvocation
 
 mock_app = MockPynenc()
+logger = create_test_logger(__name__)
 
 
 class SleepResult(NamedTuple):
@@ -40,9 +44,7 @@ def any_run_in_parallel(results: list[SleepResult]) -> bool:
     sorted_results = sorted(results, key=lambda x: x.start)
     for i in range(1, len(sorted_results)):
         if sorted_results[i].start < sorted_results[i - 1].end:
-            mock_app.logger.warning(
-                f"Overlap: {sorted_results[i - 1]} and {sorted_results[i]}"
-            )
+            logger.warning(f"Overlap: {sorted_results[i - 1]} and {sorted_results[i]}")
             return True  # Found an overlap, tasks ran in parallel
     return False  # No overlap found, tasks did not run in parallel
 
@@ -79,7 +81,7 @@ def test_running_concurrency(app: "Pynenc") -> None:
     # if not any_run_in_parallel(no_control_results):
     #     raise AssertionError(f"Expected parallel execution, got {no_control_results}")
 
-    app.logger.info("check that with control does not run in parallel")
+    logger.info("check that with control does not run in parallel")
     controlled_invocations = [sleep_with_running_concurrency(0.1) for _ in range(10)]
     controlled_results = [i.result for i in controlled_invocations]
     if any_run_in_parallel(controlled_results):
@@ -88,3 +90,16 @@ def test_running_concurrency(app: "Pynenc") -> None:
     # stop the runner
     app.runner.stop_runner_loop()
     thread.join()
+
+
+def test_basic_running_concurrency_check(app: "Pynenc") -> None:
+    """Basic concurency control check"""
+    invocation1 = sleep_with_running_concurrency(0.5)
+    app.orchestrator._set_invocation_status(
+        invocation1.invocation_id, InvocationStatus.RUNNING
+    )
+    invocation2: "DistributedInvocation" = sleep_with_running_concurrency(0.1)  # type: ignore
+    assert (
+        app.orchestrator.is_authorize_to_run_by_concurrency_control(invocation2)
+        is False
+    )
