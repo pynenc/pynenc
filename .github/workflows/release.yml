@@ -20,21 +20,19 @@ jobs:
         with:
           python-version: "3.11.7"
 
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
         with:
-          version: 1.7.0
-          virtualenvs-create: true
-          virtualenvs-in-project: true
+          version: "latest"
 
-      - name: Cache Poetry dependencies
+      - name: Cache uv
         uses: actions/cache@v4
         with:
-          path: .venv
-          key: pydeps-${{ hashFiles('**/poetry.lock') }}
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-${{ hashFiles('pyproject.toml') }}
 
       - name: Install dependencies
-        run: poetry install --no-interaction
+        run: uv sync --all-extras
 
       - name: Check if there is a parent commit
         id: check-parent-commit
@@ -47,18 +45,18 @@ jobs:
         uses: salsify/action-detect-and-tag-new-version@v2.0.1
         with:
           version-command: |
-            bash -o pipefail -c "poetry version | awk '{ print \$2 }'"
+            bash -o pipefail -c "uv version | awk '{ print \$2 }'"
 
       - name: Bump version for developmental release
         if: ${{ ! steps.check-version.outputs.tag }}
         run: |
-          poetry version patch &&
-          version=$(poetry version | awk '{ print $2 }') &&
-          poetry version $version.dev.$(date +%s)
+          # Bump patch version and add dev timestamp
+          uv version --bump patch
+          uv version --bump dev
+          echo "VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")" >> $GITHUB_ENV
 
       - name: Build package
-        run: |
-          poetry build --ansi
+        run: uv build
 
       - name: Publish package on PyPI
         if: steps.check-version.outputs.tag

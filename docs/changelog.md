@@ -59,6 +59,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
   - Implemented retry logic in SQLite connection handling to improve reliability and handle transient connection issues.
 
+- **Migration from Poetry to UV**:
+
+  - **BREAKING CHANGE**: The project has migrated from Poetry to [UV](https://github.com/astral-sh/uv) for dependency management, versioning, and builds.
+  - All workflows, Makefile targets, and development instructions now use UV.
+  - The `pyproject.toml` format is now PEP 621-compliant and compatible with UV.
+  - See updated documentation for new development and release commands.
+
 ### Changed
 
 - **Redis Extraction to Plugin**:
@@ -116,6 +123,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **MemBroker FIFO Fix**:
 
   - Fixed MemBroker to use FIFO (First In, First Out) ordering instead of FILO (First In, Last Out), ensuring correct task processing order.
+
+- **ProcessRunner Retry Status Error Handling**:
+
+  - Fixed a bug in `ProcessRunner._on_stop` where attempting to set an invocation to `RETRY` would raise an error if the invocation was already in a final status.
+  - Now safely ignores errors when killing processes and updating invocation status, ensuring clean shutdown and preventing unnecessary exceptions.
 
 ### Migration Guide
 

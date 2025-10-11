@@ -7,7 +7,7 @@ def get_project_version() -> str:
     pyproject_path = Path(__file__).resolve().parents[3] / "pyproject.toml"
     with pyproject_path.open("rb") as f:
         pyproject_data = tomllib.load(f)
-    return pyproject_data["tool"]["poetry"]["version"]
+    return pyproject_data["project"]["version"]
 
 
 def test_release_changelog() -> None:

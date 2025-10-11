@@ -1,13 +1,11 @@
-[tool.poetry]
+[project]
 name = "pynenc"
 version = "0.1.0"
 description = "A task management system for complex distributed orchestration"
-authors = ["Jose Diaz"]
-license = "MIT License"
+authors = [{ name = "Jose Diaz" }]
+license = { text = "MIT License" }
 readme = "README.md"
-homepage = "https://pynenc.org"
-documentation = "https://docs.pynenc.org"
-repository = "https://github.com/pynenc/pynenc"
+requires-python = ">=3.11.6,<4.0"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -16,89 +14,68 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: System :: Distributed Computing",
 ]
-packages = [
-    { include = "pynenc" },
-    { include = "pynmon" },
-    { include = "pynenc_tests" }
+
+dependencies = [
+    "pyyaml>=6.0.1",
+    "typing-extensions>=4.9.0",
+    "cistell==0.0.7",
+    "croniter>=6.0.0",
+    "jsonpickle>=4.1.0",
 ]
 
+[project.optional-dependencies]
+monitor = [
+    "fastapi>=0.115.0",
+    "jinja2>=3.1.0",
+    "python-multipart>=0.0.6",
+    "uvicorn>=0.34.0",
+]
+tests = [
+    "pytest>=8.2.0",
+    "pytest-asyncio>=0.25.0",
+    "pytest-timeout>=2.2.0",
+    "coverage[toml]>=7.2.6",
+    "mypy>=1.7.0",
+    "types-PyYAML>=6.0.0",
+    "pre-commit>=3.5.0",
+    "types-requests>=2.32.0",
+    "httpx>=0.27.0",
+    "requests>=2.32.0",
+    "psutil>=7.0.0",
+]
 
-[tool.poetry.scripts]
-pynenc = 'pynenc.__main__:main'
+[project.urls]
+Homepage = "https://pynenc.org"
+Documentation = "https://docs.pynenc.org"
+Repository = "https://github.com/pynenc/pynenc"
 
-# Plugin entry points for extending PynencBuilder
-# External plugins register their builder methods here:
-# Example: redis = "pynenc_redis.builder:RedisBuilderPlugin"
-[tool.poetry.plugins."pynenc.plugins"]
+[project.scripts]
+pynenc = "pynenc.__main__:main"
+
+[project.entry-points."pynenc.plugins"]
 # Core pynenc doesn't register any plugins
 # This section serves as documentation for plugin developers
 
-
-[tool.poetry.dependencies]
-python = ">=3.11.6"
-pyyaml = ">=6.0.1"
-typing-extensions = "^4.9.0"
-cistell = "0.0.7"
-croniter = "^6.0.0"
-# Optional dependencies for monitor
-fastapi = { version = "^0.115.11", optional = true }
-jinja2 = { version = ">=3.1.4,<4.0.0", optional = true }
-python-multipart = { version = ">=0.0.6,<0.1.0", optional = true }
-uvicorn = { version = "^0.34.0", optional = true }
-jsonpickle = "^4.1.1"
-# Optional dependencies for tests
-pytest = { version = ">=8.2.0", optional = true }
-pytest-asyncio = { version = "^0.25.3", optional = true }
-pytest-timeout = { version = "^2.2.0", optional = true }
-coverage = { version = ">=7.2.6,<8.0", optional = true, extras = ["toml"] }
-mypy = { version = "1.7.0", optional = true }
-types-PyYAML = { version = "6.0.12.12", optional = true }
-pre-commit = { version = "^3.5.0", optional = true }
-types-requests = { version = "^2.32.0.20250602", optional = true }
-httpx = { version = "^0.27.0", optional = true }
-requests = { version = "^2.32.0", optional = true }
-psutil = { version = "^7.1.0", optional = true }
-
-
-[tool.poetry.extras]
-monitor = ["fastapi", "jinja2", "python-multipart", "uvicorn"]
-tests = [
-    "pytest",
-    "pytest-asyncio",
-    "pytest-timeout",
-    "coverage",
-    "mypy",
-    "types-PyYAML",
-    "pre-commit",
-    "types-requests",
-    "httpx",
-    "requests",
-    "psutil"
+[dependency-groups]
+dev = [
+    "black==23.11.0",
+]
+docs = [
+    "sphinx>=7.0",
+    "myst-parser>=2",
+    "furo>=2023",
+    "sphinx-copybutton>=0.5.2",
+    "sphinx-design>=0.5.0",
+    "sphinx-inline-tabs>=2023.4.21",
+    "sphinx-autodoc2>=0.5.0",
 ]
 
-
-[tool.poetry.group.dev.dependencies]
-black = "23.11.0"
-
-
-[tool.poetry.group.docs]
-optional = true
-
-
-[tool.poetry.group.docs.dependencies]
-sphinx = "^7.0"
-myst-parser = "^2"
-furo = "^2023"
-sphinx-copybutton = "^0.5.2"
-sphinx-design = "^0.5.0"
-sphinx-inline-tabs = "^2023.4.21"
-sphinx-autodoc2 = "^0.5.0"
-
-
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
+[tool.hatch.build.targets.wheel]
+packages = ["pynenc", "pynmon", "pynenc_tests"]
 
 [tool.isort]
 profile = "black"
@@ -114,15 +91,6 @@ exclude = '''
     | \.venv
 )/
 '''
-
-
-# [tool.flake8]
-# max-line-length = 88
-# exclude = [".venv", ".env", ".eggs"]
-# ignore = [
-#     "E203",  # Whitespace before ':' (conflicts with black)
-#     "W503",  # Line break before binary operator (conflicts with black)
-# ]
 
 [tool.ruff]
 select = [
