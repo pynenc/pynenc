@@ -40,13 +40,10 @@ jobs:
       - name: Build package
         run: uv build
 
-      - name: Publish to TestPyPI
-        uses: pypa/gh-action-pypi-publish@v1.8.6
-        with:
-          user: __token__
-          password: ${{ secrets.TEST_PYPI_TOKEN }}
-          repository-url: https://test.pypi.org/legacy/
-          skip-existing: true
+      - name: Publish package
+        run: uv publish --index testpypi
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.TEST_PYPI_TOKEN }}
 
       - name: Comment PR
         uses: actions/github-script@v6

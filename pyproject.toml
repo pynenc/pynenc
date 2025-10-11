@@ -2,10 +2,11 @@
 name = "pynenc"
 version = "0.1.0"
 description = "A task management system for complex distributed orchestration"
-authors = [{ name = "Jose Diaz" }]
+authors = [{ name = "Luis Diaz", email = "code.luis.diaz@proton.me" }]
 license = { text = "MIT License" }
 readme = "README.md"
 requires-python = ">=3.11.6,<4.0"
+keywords = ["task", "orchestration", "workflow", "distributed", "python", "events"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
