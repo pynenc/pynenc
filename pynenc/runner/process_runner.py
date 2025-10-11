@@ -3,7 +3,7 @@ import signal
 from multiprocessing import Manager, Process, cpu_count
 from typing import TYPE_CHECKING, Any, NamedTuple, Optional
 
-from pynenc.exceptions import RunnerError
+from pynenc.exceptions import InvocationOnFinalStatusError, RunnerError
 from pynenc.invocation import InvocationStatus
 from pynenc.runner.base_runner import BaseRunner
 from pynenc.runner.runner_context import RunnerContext
@@ -111,8 +111,9 @@ class ProcessRunner(BaseRunner):
         self.logger.info("Stopping ProcessRunner")
         for invocation_id, process in self.inv_id_to_processes.items():
             process.kill()
+            # Use ignore_final_status_error for RETRY since we're killing the runner anyway
             self.app.orchestrator.set_invocation_status(
-                invocation_id, InvocationStatus.RETRY
+                invocation_id, InvocationStatus.RETRY, ignore_final_status_error=True
             )
             self.logger.info(f"Killing invocation {invocation_id}")
         self.manager.shutdown()  # type: ignore
@@ -233,8 +234,10 @@ class ProcessRunner(BaseRunner):
             if process.pid:
                 self.inv_id_to_processes[invocation.invocation_id] = process
             else:
-                # Optionally, raise an exception or log error if process.pid is not available.
-                raise RunnerError("Failed to start process: PID not available")
+                self.logger.error(
+                    f"Failed to start process for invocation {invocation.invocation_id}, rerouting it"
+                )
+                self.app.orchestrator.reroute_invocations({invocation})
         self.handle_waiting_invocations()
 
     def _waiting_for_results(
@@ -246,22 +249,37 @@ class ProcessRunner(BaseRunner):
         """
         Handles invocations that are waiting for results from other invocations.
         Pauses the running process and registers it to wait for the results of specified invocations.
-        :param running_invocation_id: The ID of the invocation that is waiting for results.
-        :param result_invocation_ids: A list of IDs of invocations whose results are being awaited.
-        :param runner_args: Additional arguments required for the ProcessRunner.
+
+        :param str running_invocation_id: The ID of the invocation that is waiting for results.
+        :param list[str] result_invocation_ids: A list of IDs of invocations whose results are being awaited.
+        :param Optional[dict[str, Any]] runner_args: Additional arguments required for the ProcessRunner.
         """
-        self.app.orchestrator.set_invocation_status(
-            running_invocation_id, InvocationStatus.PAUSED
-        )
         if not result_invocation_ids:
             return
         if not runner_args:
             raise RunnerError("runner_args should be defined for ProcessRunner")
-        self.parse_args(runner_args)
-        for result_inv_id in result_invocation_ids:
-            current_waiters = set(self.wait_invocation.get(result_inv_id, set()))
-            current_waiters.add(running_invocation_id)
-            self.wait_invocation[result_inv_id] = current_waiters
-            self.logger.debug(
-                f"Invocation {running_invocation_id} is waiting for invocation {result_inv_id} to finish"
+        try:
+            self.parse_args(runner_args)
+            self.app.orchestrator.set_invocation_status(
+                running_invocation_id,
+                InvocationStatus.PAUSED,
+                ignore_final_status_error=True,
             )
+            for result_inv_id in result_invocation_ids:
+                current_waiters = set(self.wait_invocation.get(result_inv_id, set()))
+                current_waiters.add(running_invocation_id)
+                self.wait_invocation[result_inv_id] = current_waiters
+                self.logger.debug(
+                    f"Invocation {running_invocation_id} is waiting for invocation {result_inv_id} to finish"
+                )
+        except InvocationOnFinalStatusError:
+            self.logger.warning(
+                f"Invocation {running_invocation_id} is already on a final status, not pausing or waiting"
+            )
+            # remove from any wait_invocation set
+            for result_inv_id in result_invocation_ids:
+                if running_invocation_id in self.wait_invocation.get(
+                    result_inv_id, set()
+                ):
+                    self.wait_invocation[result_inv_id].remove(running_invocation_id)
+            return

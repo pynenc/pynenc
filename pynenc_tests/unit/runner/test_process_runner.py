@@ -125,7 +125,9 @@ def test_waiting_for_results(
         )
         # check that the invocation status is set to PAUSED
         mock_set_invocation_status.assert_called_once_with(
-            running_invocation.invocation_id, InvocationStatus.PAUSED
+            running_invocation.invocation_id,
+            InvocationStatus.PAUSED,
+            ignore_final_status_error=True,
         )
         # check that the waiting invocation is stored in the wait_invocation dict
         assert result_invocation.invocation_id in runner.wait_invocation
@@ -152,10 +154,8 @@ def test_waiting_for_results_returns_without_waiting_invocation(
             [],
             {"wait_invocation": runner.wait_invocation},
         )
-        # check that the invocation status is set to PAUSED
-        mock_set_invocation_status.assert_called_once_with(
-            running_invocation.invocation_id, InvocationStatus.PAUSED
-        )
+        # check that it was not called since there was no invocation to wait
+        mock_set_invocation_status.assert_not_called()
         # there was no invocation to wait, the wait_invocation dict should be empty
         assert len(runner.wait_invocation) == 0
 
@@ -177,10 +177,7 @@ def test_waiting_for_results_no_args_error(
             runner.waiting_for_results(
                 running_invocation.invocation_id, [result_invocation.invocation_id]
             )
-        # check that the invocation status is set to PAUSED
-        mock_set_invocation_status.assert_called_once_with(
-            running_invocation.invocation_id, InvocationStatus.PAUSED
-        )
+        mock_set_invocation_status.assert_not_called()
         # there was no invocation to wait, the wait_invocation dict should be empty
         assert len(runner.wait_invocation) == 0
 
