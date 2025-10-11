@@ -6,7 +6,8 @@ Each test module defines its own app and tasks. The fixtures here start
 runners and set up pynmon clients that use the app from the test module.
 """
 
-# Skip all pynmon integration tests if monitor dependencies are not available
+import socket
+
 import pytest
 
 pytest.importorskip("fastapi", reason="pynmon tests require monitor dependencies")
@@ -71,6 +72,13 @@ def pynmon_client(pynmon_server: str) -> "Generator[PynmonClient, None, None]":
     yield client
 
 
+def get_free_port() -> int:
+    """Find a free port on localhost."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("", 0))
+        return s.getsockname()[1]
+
+
 @pytest.fixture
 def pynmon_server(request: "FixtureRequest") -> "Generator[str, None, None]":
     """
@@ -102,15 +110,7 @@ def pynmon_server(request: "FixtureRequest") -> "Generator[str, None, None]":
     # Ensure routes are set up
     pynmon.app.setup_routes()
 
-    # Find an available port starting from 8081
-    import socket
-
-    port = 8081
-    while port < 8090:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            if s.connect_ex(("localhost", port)) != 0:
-                break
-        port += 1
+    port = get_free_port()
 
     # Configure uvicorn server
     config = uvicorn.Config(
