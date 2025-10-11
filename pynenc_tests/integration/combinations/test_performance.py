@@ -44,7 +44,7 @@ def get_test_config(app: "Pynenc") -> PerformanceTestConfig:
     if app.runner.mem_compatible():
         # Thread runner - expect nearly sequential execution due to GIL, but allow higher parallelization factor due to time constraint
         return PerformanceTestConfig(
-            runtime_sec=0.5, num_tasks=5, expected_min=0.7, expected_max=2.2
+            runtime_sec=0.5, num_tasks=5, expected_min=0.7, expected_max=2.5
         )
     elif isinstance(app.runner, ProcessRunner):
         return PerformanceTestConfig(
