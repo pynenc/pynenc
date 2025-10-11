@@ -6,7 +6,7 @@ allowing tasks to be triggered when other tasks reach specific states.
 """
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, ClassVar, Optional
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from pynenc.arguments import Arguments
 from pynenc.invocation.status import InvocationStatus
@@ -42,7 +42,7 @@ class StatusContext(ConditionContext):
     def from_invocation(
         cls,
         invocation: "DistributedInvocation",
-        status: Optional[InvocationStatus] = None,
+        status: InvocationStatus | None = None,
     ) -> "StatusContext":
         """
         Create a StatusContext from a DistInvocation.

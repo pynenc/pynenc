@@ -1,5 +1,5 @@
 import threading
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -53,8 +53,8 @@ def test_task_runner_logs(app: "Pynenc") -> None:
 
         # Get all log lines
         log_lines = log_buffer.getvalue().splitlines()
-        in_task_log: Optional[str] = None
-        runner_log: Optional[str] = None
+        in_task_log: str | None = None
+        runner_log: str | None = None
 
         for line in log_lines:
             if "(in task log)" in line:

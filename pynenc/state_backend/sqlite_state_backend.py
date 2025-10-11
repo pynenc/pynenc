@@ -6,8 +6,9 @@ true cross-process coordination for testing process runners. Unlike shared memor
 SQLite provides ACID transactions and handles concurrent access automatically.
 """
 
+from collections.abc import Iterator
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Iterator, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from pynenc.app_info import AppInfo
 from pynenc.conf.config_state_backend import ConfigStateBackendSQLite

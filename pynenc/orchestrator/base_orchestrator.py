@@ -134,14 +134,14 @@ class BaseOrchestrator(ABC):
     def get_existing_invocations(
         self,
         task: "Task[Params, Result]",
-        key_serialized_arguments: Optional[dict[str, str]] = None,
-        statuses: Optional[list["InvocationStatus"]] = None,
+        key_serialized_arguments: dict[str, str] | None = None,
+        statuses: "list[InvocationStatus] | None" = None,
     ) -> Iterator[str]:
         """
         Retrieves existing invocation IDs based on task, arguments, and status.
 
         :param Task[Params, Result] task: The task for which to retrieve invocations.
-        :param Optional[dict[str, str]] key_serialized_arguments: Serialized arguments to filter invocations.
+        :param dict[str, str] | None key_serialized_arguments: Serialized arguments to filter invocations.
         :param Optional[list[InvocationStatus]] statuses: The statuses to filter invocations.
         :return: An iterator over the matching invocation IDs.
         :rtype: Iterator[str]
@@ -223,13 +223,13 @@ class BaseOrchestrator(ABC):
         )
 
     @abstractmethod
-    def get_invocation_pending_timer(self, invocation_id: str) -> Optional[float]:
+    def get_invocation_pending_timer(self, invocation_id: str) -> float | None:
         """
         Retrieves the pending timer for a specific invocation.
 
         :param str invocation_id: The ID of the invocation to look up.
         :return: The pending timer value, or None if not set.
-        :rtype: Optional[float]
+        :rtype: float | None
         """
 
     @abstractmethod
@@ -395,12 +395,12 @@ class BaseOrchestrator(ABC):
             self.blocking_control.release_waiters(waited_id)
 
     def waiting_for_results(
-        self, caller_invocation_id: Optional[str], result_invocation_ids: list[str]
+        self, caller_invocation_id: str | None, result_invocation_ids: list[str]
     ) -> None:
         """
         Notifies the system that an invocation is waiting on the results of other invocations.
 
-        :param Optional[str] caller_invocation_id: The ID of the waiting invocation.
+        :param str | None caller_invocation_id: The ID of the waiting invocation.
         :param list[str] result_invocation_ids: The IDs of the invocations being waited on.
         """
         if not result_invocation_ids:

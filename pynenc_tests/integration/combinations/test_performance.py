@@ -195,6 +195,7 @@ def test_parallel_performance(task_cpu_intensive_no_conc: Task) -> None:
         zip(
             performance_data["individual_task_times"],
             performance_data["individual_task_iters"],
+            strict=True,
         )
     ):
         logger.info(f"  Task {idx}: time={t}, iterations={iters}")

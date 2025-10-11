@@ -4,7 +4,7 @@ import signal
 import time
 from functools import cached_property
 from multiprocessing import Manager, Process
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 # Use 'spawn' method on macOS to avoid connection issues
 if (
@@ -214,7 +214,7 @@ class PersistentProcessRunner(BaseRunner):
         self,
         running_invocation_id: str,
         result_invocation_ids: list[str],
-        runner_args: Optional[dict[str, Any]] = None,
+        runner_args: dict[str, Any] | None = None,
     ) -> None:
         """
         In this simplified version, we don't pause/resume processes.

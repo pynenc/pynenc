@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -85,7 +85,7 @@ async def refresh_broker(request: Request) -> HTMLResponse:
 
 
 @router.post("/purge", response_class=JSONResponse)
-async def purge_broker(request: Request) -> Dict[str, Any]:
+async def purge_broker(request: Request) -> dict[str, Any]:
     """Purge all pending invocations from the broker."""
     app = get_pynenc_instance()
 

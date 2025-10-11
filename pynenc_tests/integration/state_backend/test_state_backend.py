@@ -1,5 +1,5 @@
 import inspect
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from time import sleep
 from typing import TYPE_CHECKING
 
@@ -52,8 +52,8 @@ def test_store_history_status(
         app.state_backend.wait_for_invocation_async_operations(invocation_id)
         history = app.state_backend.get_history(invocation.invocation_id)
         assert len(history) == len(expected_statuses)
-        prev_datetime = datetime.min.replace(tzinfo=timezone.utc)
-        for expected_status, inv_hist in zip(expected_statuses, history):
+        prev_datetime = datetime.min.replace(tzinfo=UTC)
+        for expected_status, inv_hist in zip(expected_statuses, history, strict=True):
             assert inv_hist.timestamp > prev_datetime
             assert inv_hist.status == expected_status
             prev_datetime = inv_hist.timestamp

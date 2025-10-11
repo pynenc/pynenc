@@ -1,6 +1,6 @@
 import signal
+from collections.abc import Generator
 from multiprocessing.managers import DictProxy, SyncManager
-from typing import Generator
 from unittest.mock import ANY, Mock, patch
 
 import pytest

@@ -3,7 +3,7 @@ import threading
 from collections import OrderedDict, defaultdict, deque
 from collections.abc import Iterator
 from time import time
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from pynenc.exceptions import (
     CycleDetectedError,
@@ -362,7 +362,7 @@ class MemOrchestrator(BaseOrchestrator):
         self,
         task: "Task[Params, Result]",
         key_serialized_arguments: dict[str, str] | None = None,
-        statuses: Optional[list["InvocationStatus"]] = None,
+        statuses: "list[InvocationStatus] | None" = None,
     ) -> Iterator[str]:
         """
         Retrieves invocation ids based on provided key arguments and/or status.
@@ -527,7 +527,7 @@ class MemOrchestrator(BaseOrchestrator):
         self.pending_timer.pop(invocation_id, None)
         self.pre_pending_status.pop(invocation_id, None)
 
-    def get_invocation_pending_timer(self, invocation_id: str) -> Optional[float]:
+    def get_invocation_pending_timer(self, invocation_id: str) -> float | None:
         """Retrieves the pending timer for a specific invocation."""
         return self.pending_timer.get(invocation_id)
 

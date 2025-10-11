@@ -2,10 +2,11 @@ import json
 import threading
 from abc import ABC, abstractmethod
 from collections import defaultdict
+from collections.abc import Iterator
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Generic, Iterator, Optional
+from typing import TYPE_CHECKING, Any, Generic, Optional
 
 from pynenc.conf.config_state_backend import ConfigStateBackend
 from pynenc.exceptions import InvocationNotFoundError, PynencError
@@ -32,11 +33,9 @@ class InvocationHistory:
     :ivar execution_context: Context of the execution, reserved for future use.
     """
 
-    _timestamp: datetime = field(
-        init=False, default_factory=lambda: datetime.now(timezone.utc)
-    )
+    _timestamp: datetime = field(init=False, default_factory=lambda: datetime.now(UTC))
     status: InvocationStatus
-    runner_context: Optional[RunnerContext] = None
+    runner_context: RunnerContext | None = None
 
     @property
     def timestamp(self) -> datetime:
@@ -72,7 +71,7 @@ class InvocationHistory:
 
         timestamp = datetime.fromisoformat(hist_dict["_timestamp"])
         if timestamp.tzinfo is None:
-            timestamp = timestamp.replace(tzinfo=timezone.utc)
+            timestamp = timestamp.replace(tzinfo=UTC)
         history._timestamp = timestamp
 
         if runner_ctx_json := hist_dict.get("runner_context"):
@@ -266,7 +265,7 @@ class BaseStateBackend(ABC, Generic[Params, Result]):
         Adds a history record for an invocation.
 
         :param str invocation_id: The invocation Id to add history for.
-        :param Optional[InvocationStatus] status: The status of the invocation.
+        :param InvocationStatus | None status: The status of the invocation.
         :param Optional[Any] execution_context: The execution context of the invocation.
         """
         invocation_history = InvocationHistory(status, runner_context)

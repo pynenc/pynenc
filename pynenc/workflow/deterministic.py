@@ -11,7 +11,8 @@ import datetime
 import hashlib
 import random
 import uuid
-from typing import TYPE_CHECKING, Any, Callable, TypeVar
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from pynenc.arguments import Arguments
 from pynenc.call import Call
@@ -120,7 +121,7 @@ class DeterministicExecutor:
 
         if stored_base_time is None:
             # Create new base time and store as ISO format string
-            base_time = datetime.datetime.now(datetime.timezone.utc)
+            base_time = datetime.datetime.now(datetime.UTC)
             self.app.state_backend.set_workflow_data(
                 self.workflow_identity, base_time_key, base_time.isoformat()
             )

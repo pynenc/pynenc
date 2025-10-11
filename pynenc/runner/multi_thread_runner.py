@@ -2,7 +2,7 @@ import time
 from enum import Enum
 from functools import cached_property
 from multiprocessing import Manager, Process, cpu_count
-from typing import TYPE_CHECKING, Any, NamedTuple, Optional
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from pynenc import context
 from pynenc.conf.config_runner import ConfigMultiThreadRunner
@@ -257,7 +257,7 @@ class MultiThreadRunner(BaseRunner):
         self,
         running_invocation_id: str,
         result_invocation_ids: list[str],
-        runner_args: Optional[dict[str, Any]] = None,
+        runner_args: dict[str, Any] | None = None,
     ) -> None:
         """
         Handle waiting for results when called outside a process context.

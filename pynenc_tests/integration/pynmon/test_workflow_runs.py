@@ -138,7 +138,7 @@ def analyze_data_batch(batch_data: list[dict[str, Any]]) -> dict[str, Any]:
     processed_items = 0
 
     for item in batch_data:
-        if "value" in item and isinstance(item["value"], (int, float)):
+        if "value" in item and isinstance(item["value"], int | float):
             processed_items += 1
         time.sleep(0.02)  # Small delay per item
 

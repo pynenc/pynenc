@@ -9,16 +9,8 @@ mapping from trigger contexts to task arguments.
 import json
 import logging
 from abc import ABC, abstractmethod
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    ClassVar,
-    Generic,
-    Protocol,
-    TypeVar,
-    cast,
-)
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, Protocol, TypeVar, cast
 
 from pynenc.arguments import Arguments
 from pynenc.trigger.arguments.arguments_common import SerializableCallable
@@ -54,7 +46,7 @@ class ArgumentProviderError(Exception):
         """
         Initialize with details about the provider failure.
 
-        :param Optional[str] message: Explanation of the error
+        :param str | None message: Explanation of the error
         :param ArgumentProvider provider: Argument provider that failed
         :param Optional[Exception] cause: Original exception that caused this error, if any
         """

@@ -1,7 +1,7 @@
 import json
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable, Union
+from typing import TYPE_CHECKING, Any, Union
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
@@ -9,9 +9,9 @@ if TYPE_CHECKING:
     from pynenc.types import Args, Result
 
     # Type for the parallel function that generates arguments for parallel processing
-    ParallelFuncReturn = Union[
+    ParallelFuncReturn = Union[  # noqa: UP007 # Use `X | Y` for type annotations
         # Option 1: Just return an iterable of arguments (any format)
-        Iterable[Union[tuple, dict, Arguments]],
+        Iterable[tuple | dict | Arguments],
         # Option 2: Return a tuple of (common_args, param_iter) for optimized processing of large shared data
         # This approach pre-serializes common_args once, reducing overhead for large arguments
         # tuple.0 Common arguments shared by all tasks

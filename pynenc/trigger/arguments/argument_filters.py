@@ -8,8 +8,9 @@ against filter criteria.
 
 import json
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Callable, ClassVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from pynenc.arguments import Arguments
 from pynenc.trigger.arguments.arguments_common import SerializableCallable

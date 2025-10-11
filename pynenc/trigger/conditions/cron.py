@@ -5,7 +5,7 @@ This module provides time-based trigger conditions, including cron schedule trig
 that allow tasks to be executed at specific times or intervals.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from croniter import croniter  # type: ignore[import]
@@ -46,7 +46,7 @@ class CronContext(ConditionContext):
         """
         super().__init__()
         self.last_execution = last_execution
-        self.timestamp = timestamp if timestamp else datetime.now(timezone.utc)
+        self.timestamp = timestamp if timestamp else datetime.now(UTC)
 
     @property
     def context_id(self) -> str:

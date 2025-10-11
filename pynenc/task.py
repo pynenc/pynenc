@@ -3,9 +3,9 @@ from __future__ import annotations
 import importlib
 import json
 import time
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Callable, Generic, overload
+from typing import TYPE_CHECKING, Any, Generic, overload
 
 from pynenc import context
 from pynenc.arguments import Arguments

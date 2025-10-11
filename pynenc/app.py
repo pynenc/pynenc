@@ -1,8 +1,8 @@
 import asyncio
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from functools import cached_property, wraps
 from logging import Logger
-from typing import TYPE_CHECKING, Any, Callable, Optional, Union, overload
+from typing import TYPE_CHECKING, Any, Optional, Union, overload
 
 from pynenc import context
 from pynenc.app_info import AppInfo
@@ -27,9 +27,9 @@ if TYPE_CHECKING:
     from pynenc.types import Args, Func, Params, Result
 
     # Type for the parallel function that generates arguments for parallel processing
-    ParallelFuncReturn = Union[
+    ParallelFuncReturn = Union[  # noqa: UP007 # Use `X | Y` for type annotations
         # Option 1: Just return an iterable of arguments (any format)
-        Iterable[Union[tuple, dict, Arguments]],
+        Iterable[tuple | dict | Arguments],
         # Option 2: Return a tuple of (common_args, param_iter) for optimized processing of large shared data
         # This approach pre-serializes common_args once, reducing overhead for large arguments
         # tuple.0 Common arguments shared by all tasks
@@ -46,11 +46,11 @@ class Pynenc:
     """
     The main class of the Pynenc library that creates an application object.
 
-    :param Optional[str] app_id:
+    :param str | None app_id:
         The id of the application.
-    :param Optional[dict[str, Any]] config_values:
+    :param dict[str, Any] | None config_values:
         A dictionary of configuration values.
-    :param Optional[str] config_filepath:
+    :param str | None config_filepath:
         A path to a configuration file.
 
     ```{note}
@@ -64,14 +64,14 @@ class Pynenc:
     def __init__(
         self,
         app_id: str | None = None,
-        config_values: Optional[dict[str, Any]] = None,
-        config_filepath: Optional[str] = None,
+        config_values: dict[str, Any] | None = None,
+        config_filepath: str | None = None,
     ) -> None:
         self._app_id = app_id
         self.config_values = config_values
         self.config_filepath = config_filepath
         self.reporting = None
-        self._runner_instance: Optional[BaseRunner] = None
+        self._runner_instance: BaseRunner | None = None
         self._tasks: dict[str, Task] = {}
         self.logger.info(f"Initialized Pynenc app with id {self.app_id}")
         load_all_plugins()
@@ -219,17 +219,17 @@ class Pynenc:
         self,
         func: "Func",
         *,
-        parallel_batch_size: Optional[int] = None,
-        retry_for: Optional[tuple[type[Exception], ...]] = None,
-        max_retries: Optional[int] = None,
-        running_concurrency: Optional[ConcurrencyControlType] = None,
-        registration_concurrency: Optional[ConcurrencyControlType] = None,
-        key_arguments: Optional[tuple[str, ...]] = None,
-        on_diff_non_key_args_raise: Optional[bool] = None,
-        call_result_cache: Optional[bool] = None,
-        disable_cache_args: Optional[tuple[str, ...]] = None,
+        parallel_batch_size: int | None = None,
+        retry_for: tuple[type[Exception], ...] | None = None,
+        max_retries: int | None = None,
+        running_concurrency: ConcurrencyControlType | None = None,
+        registration_concurrency: ConcurrencyControlType | None = None,
+        key_arguments: tuple[str, ...] | None = None,
+        on_diff_non_key_args_raise: bool | None = None,
+        call_result_cache: bool | None = None,
+        disable_cache_args: tuple[str, ...] | None = None,
         triggers: Union["TriggerBuilder", list["TriggerBuilder"]] | None = None,
-        force_new_workflow: Optional[bool] = None,
+        force_new_workflow: bool | None = None,
     ) -> "Task":
         ...
 
@@ -238,17 +238,17 @@ class Pynenc:
         self,
         func: None = None,
         *,
-        parallel_batch_size: Optional[int] = None,
-        retry_for: Optional[tuple[type[Exception], ...]] = None,
-        max_retries: Optional[int] = None,
-        running_concurrency: Optional[ConcurrencyControlType] = None,
-        registration_concurrency: Optional[ConcurrencyControlType] = None,
-        key_arguments: Optional[tuple[str, ...]] = None,
-        on_diff_non_key_args_raise: Optional[bool] = None,
-        call_result_cache: Optional[bool] = None,
-        disable_cache_args: Optional[tuple[str, ...]] = None,
+        parallel_batch_size: int | None = None,
+        retry_for: tuple[type[Exception], ...] | None = None,
+        max_retries: int | None = None,
+        running_concurrency: ConcurrencyControlType | None = None,
+        registration_concurrency: ConcurrencyControlType | None = None,
+        key_arguments: tuple[str, ...] | None = None,
+        on_diff_non_key_args_raise: bool | None = None,
+        call_result_cache: bool | None = None,
+        disable_cache_args: tuple[str, ...] | None = None,
         triggers: Union["TriggerBuilder", list["TriggerBuilder"]] | None = None,
-        force_new_workflow: Optional[bool] = None,
+        force_new_workflow: bool | None = None,
     ) -> Callable[["Func"], "Task"]:
         ...
 
@@ -256,49 +256,49 @@ class Pynenc:
         self,
         func: Optional["Func"] = None,
         *,
-        parallel_batch_size: Optional[int] = None,
-        retry_for: Optional[tuple[type[Exception], ...]] = None,
-        max_retries: Optional[int] = None,
-        running_concurrency: Optional[ConcurrencyControlType] = None,
-        registration_concurrency: Optional[ConcurrencyControlType] = None,
-        key_arguments: Optional[tuple[str, ...]] = None,
-        on_diff_non_key_args_raise: Optional[bool] = None,
-        call_result_cache: Optional[bool] = None,
-        disable_cache_args: Optional[tuple[str, ...]] = None,
+        parallel_batch_size: int | None = None,
+        retry_for: tuple[type[Exception], ...] | None = None,
+        max_retries: int | None = None,
+        running_concurrency: ConcurrencyControlType | None = None,
+        registration_concurrency: ConcurrencyControlType | None = None,
+        key_arguments: tuple[str, ...] | None = None,
+        on_diff_non_key_args_raise: bool | None = None,
+        call_result_cache: bool | None = None,
+        disable_cache_args: tuple[str, ...] | None = None,
         triggers: Union["TriggerBuilder", list["TriggerBuilder"]] | None = None,
-        force_new_workflow: Optional[bool] = None,
-    ) -> "Task" | Callable[["Func"], "Task"]:
+        force_new_workflow: bool | None = None,
+    ) -> "Task | Callable[[Func], Task]":
         """
         The task decorator converts the function into an instance of a BaseTask. It accepts any kind of options,
         however these options will be validated with the options class assigned to the class.
 
         :param Optional[Callable] func:
             The function to be converted into a Task instance.
-        :param Optional[int] parallel_batch_size:
+        :param int | None parallel_batch_size:
             If set to 0, auto parallelization is disabled. If greater than 0, tasks with iterable
             arguments are automatically split into chunks.
         :param Optional[Tuple[Exception, ...]] retry_for:
             Exceptions for which the task should be retried.
-        :param Optional[int] max_retries:
+        :param int | None max_retries:
             The maximum number of retries for a task.
-        :param Optional[ConcurrencyControlType] running_concurrency:
+        :param ConcurrencyControlType | None running_concurrency:
             Controls the concurrency behavior of the task.
-        :param Optional[ConcurrencyControlType] registration_concurrency:
+        :param ConcurrencyControlType | None registration_concurrency:
             Manages task registration concurrency.
         :param Optional[Tuple[str, ...]] key_arguments:
             Key arguments for concurrency control.
-        :param Optional[bool] on_diff_non_key_args_raise:
+        :param bool | None on_diff_non_key_args_raise:
             If True, raises an exception for task invocations with matching key arguments but
             different non-key arguments.
-        :param Optional[bool] call_result_cache:
+        :param bool | None call_result_cache:
             If True, it will return the latest result of a Task with the same arguments if availble,
             otherwise it will trigger a new invocation as expected.
-        :param Optional[tuple[str, ...]] disable_cache_args:
+        :param tuple[str, ...] | None disable_cache_args:
             Arguments to exclude from caching, it will accept "*" to disable caching for all arguments.
         :param Union[TriggerBuilder, list[TriggerBuilder]] | None triggers:
             Trigger definitions that determine when this task should execute automatically.
             Can be a single TriggerBuilder or a list of builders for multiple trigger conditions.
-        :param Optional[bool] force_new_workflow:
+        :param bool | None force_new_workflow:
             If True, this task will always create a new workflow when invoked.
             Even when called from within another workflow, it creates a subworkflow
             that maintains a reference to its parent workflow.
@@ -382,18 +382,18 @@ class Pynenc:
         self,
         func: "Func",
         *,
-        parallel_func: Optional["ParallelFunc"] = None,
-        aggregate_func: Optional["AggregateFunc"] = None,
-        parallel_batch_size: Optional[int] = None,
-        retry_for: Optional[tuple[type[Exception], ...]] = None,
-        max_retries: Optional[int] = None,
-        running_concurrency: Optional[ConcurrencyControlType] = None,
-        registration_concurrency: Optional[ConcurrencyControlType] = None,
-        key_arguments: Optional[tuple[str, ...]] = None,
-        on_diff_non_key_args_raise: Optional[bool] = None,
-        call_result_cache: Optional[bool] = None,
-        disable_cache_args: Optional[tuple[str, ...]] = None,
-        force_new_workflow: Optional[bool] = None,
+        parallel_func: "ParallelFunc | None" = None,
+        aggregate_func: "AggregateFunc | None" = None,
+        parallel_batch_size: int | None = None,
+        retry_for: tuple[type[Exception], ...] | None = None,
+        max_retries: int | None = None,
+        running_concurrency: ConcurrencyControlType | None = None,
+        registration_concurrency: ConcurrencyControlType | None = None,
+        key_arguments: tuple[str, ...] | None = None,
+        on_diff_non_key_args_raise: bool | None = None,
+        call_result_cache: bool | None = None,
+        disable_cache_args: tuple[str, ...] | None = None,
+        force_new_workflow: bool | None = None,
     ) -> "Func":
         ...
 
@@ -402,18 +402,18 @@ class Pynenc:
         self,
         func: "Func[Params, Result]",
         *,
-        parallel_func: Optional["ParallelFunc"] = None,
-        aggregate_func: Optional["AggregateFunc"] = None,
-        parallel_batch_size: Optional[int] = None,
-        retry_for: Optional[tuple[type[Exception], ...]] = None,
-        max_retries: Optional[int] = None,
-        running_concurrency: Optional[ConcurrencyControlType] = None,
-        registration_concurrency: Optional[ConcurrencyControlType] = None,
-        key_arguments: Optional[tuple[str, ...]] = None,
-        on_diff_non_key_args_raise: Optional[bool] = None,
-        call_result_cache: Optional[bool] = None,
-        disable_cache_args: Optional[tuple[str, ...]] = None,
-        force_new_workflow: Optional[bool] = None,
+        parallel_func: "ParallelFunc | None" = None,
+        aggregate_func: "AggregateFunc | None" = None,
+        parallel_batch_size: int | None = None,
+        retry_for: tuple[type[Exception], ...] | None = None,
+        max_retries: int | None = None,
+        running_concurrency: ConcurrencyControlType | None = None,
+        registration_concurrency: ConcurrencyControlType | None = None,
+        key_arguments: tuple[str, ...] | None = None,
+        on_diff_non_key_args_raise: bool | None = None,
+        call_result_cache: bool | None = None,
+        disable_cache_args: tuple[str, ...] | None = None,
+        force_new_workflow: bool | None = None,
     ) -> "Func":
         ...
 
@@ -422,18 +422,18 @@ class Pynenc:
         self,
         func: None = None,
         *,
-        parallel_func: Optional["ParallelFunc"] = None,
-        aggregate_func: Optional["AggregateFunc"] = None,
-        parallel_batch_size: Optional[int] = None,
-        retry_for: Optional[tuple[type[Exception], ...]] = None,
-        max_retries: Optional[int] = None,
-        running_concurrency: Optional[ConcurrencyControlType] = None,
-        registration_concurrency: Optional[ConcurrencyControlType] = None,
-        key_arguments: Optional[tuple[str, ...]] = None,
-        on_diff_non_key_args_raise: Optional[bool] = None,
-        call_result_cache: Optional[bool] = None,
-        disable_cache_args: Optional[tuple[str, ...]] = None,
-        force_new_workflow: Optional[bool] = None,
+        parallel_func: "ParallelFunc | None" = None,
+        aggregate_func: "AggregateFunc | None" = None,
+        parallel_batch_size: int | None = None,
+        retry_for: tuple[type[Exception], ...] | None = None,
+        max_retries: int | None = None,
+        running_concurrency: ConcurrencyControlType | None = None,
+        registration_concurrency: ConcurrencyControlType | None = None,
+        key_arguments: tuple[str, ...] | None = None,
+        on_diff_non_key_args_raise: bool | None = None,
+        call_result_cache: bool | None = None,
+        disable_cache_args: tuple[str, ...] | None = None,
+        force_new_workflow: bool | None = None,
     ) -> Callable[["Func[Params, Result]"], "Func[Params, Result]"]:
         ...
 
@@ -441,21 +441,20 @@ class Pynenc:
         self,
         func: Optional["Func[Params, Result]"] = None,
         *,
-        parallel_func: Optional["ParallelFunc"] = None,
-        aggregate_func: Optional["AggregateFunc"] = None,
-        parallel_batch_size: Optional[int] = None,
-        retry_for: Optional[tuple[type[Exception], ...]] = None,
-        max_retries: Optional[int] = None,
-        running_concurrency: Optional[ConcurrencyControlType] = None,
-        registration_concurrency: Optional[ConcurrencyControlType] = None,
-        key_arguments: Optional[tuple[str, ...]] = None,
-        on_diff_non_key_args_raise: Optional[bool] = None,
-        call_result_cache: Optional[bool] = None,
-        disable_cache_args: Optional[tuple[str, ...]] = None,
-        force_new_workflow: Optional[bool] = None,
+        parallel_func: "ParallelFunc | None" = None,
+        aggregate_func: "AggregateFunc | None" = None,
+        parallel_batch_size: int | None = None,
+        retry_for: tuple[type[Exception], ...] | None = None,
+        max_retries: int | None = None,
+        running_concurrency: ConcurrencyControlType | None = None,
+        registration_concurrency: ConcurrencyControlType | None = None,
+        key_arguments: tuple[str, ...] | None = None,
+        on_diff_non_key_args_raise: bool | None = None,
+        call_result_cache: bool | None = None,
+        disable_cache_args: tuple[str, ...] | None = None,
+        force_new_workflow: bool | None = None,
     ) -> (
-        "Func[Params, Result]"
-        | Callable[["Func[Params, Result]"], "Func[Params, Result]"]
+        "Func[Params, Result] | Callable[[Func[Params, Result]], Func[Params, Result]]"
     ):
         """
         Create a task that directly returns its result rather than returning an invocation.
@@ -495,28 +494,28 @@ class Pynenc:
                arguments (20MB+) as they're serialized only once instead of for each parallel task.
         :param Optional[AggregateFunc] aggregate_func:
             Function that takes a list of results and aggregates them into a single result.
-        :param Optional[int] parallel_batch_size:
+        :param int | None parallel_batch_size:
             If set to 0, auto parallelization is disabled. If greater than 0, tasks with iterable
             arguments are automatically split into chunks.
         :param Optional[Tuple[Exception, ...]] retry_for:
             Exceptions for which the task should be retried.
-        :param Optional[int] max_retries:
+        :param int | None max_retries:
             The maximum number of retries for a task.
-        :param Optional[ConcurrencyControlType] running_concurrency:
+        :param ConcurrencyControlType | None running_concurrency:
             Controls the concurrency behavior of the task.
-        :param Optional[ConcurrencyControlType] registration_concurrency:
+        :param ConcurrencyControlType | None registration_concurrency:
             Manages task registration concurrency.
         :param Optional[Tuple[str, ...]] key_arguments:
             Key arguments for concurrency control.
-        :param Optional[bool] on_diff_non_key_args_raise:
+        :param bool | None on_diff_non_key_args_raise:
             If True, raises an exception for task invocations with matching key arguments but
             different non-key arguments.
-        :param Optional[bool] call_result_cache:
+        :param bool | None call_result_cache:
             If True, it will return the latest result of a Task with the same arguments if available,
             otherwise it will trigger a new invocation as expected.
-        :param Optional[tuple[str, ...]] disable_cache_args:
+        :param tuple[str, ...] | None disable_cache_args:
             Arguments to exclude from caching, it will accept "*" to disable caching for all arguments.
-        :param Optional[bool] force_new_workflow:
+        :param bool | None force_new_workflow:
             If True, this task will always create a new workflow when invoked.
             Even when called from within another workflow, it creates a subworkflow
             that maintains a reference to its parent workflow.

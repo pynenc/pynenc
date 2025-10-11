@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 
@@ -39,4 +39,4 @@ class EventInstance:
         self.event_id = event_id or str(uuid.uuid4())
         self.event_code = event_code
         self.payload = payload
-        self.timestamp = timestamp or datetime.now(timezone.utc)
+        self.timestamp = timestamp or datetime.now(UTC)

@@ -1,7 +1,6 @@
 import logging
 import traceback
 from pathlib import Path
-from typing import Optional
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
@@ -28,7 +27,7 @@ templates = Jinja2Templates(directory=str(templates_dir))
 
 # Global reference to the monitored Pynenc app instance
 all_pynenc_instances: dict[str, Pynenc] = {}
-pynenc_instance: Optional[Pynenc] = None
+pynenc_instance: Pynenc | None = None
 
 
 # Global exception handler to catch and log all unhandled exceptions
@@ -199,7 +198,7 @@ def get_pynenc_instance() -> Pynenc:
 
 
 def hydrate_app_instances(
-    apps_info: dict[str, AppInfo], selected_app: Optional[Pynenc] = None
+    apps_info: dict[str, AppInfo], selected_app: Pynenc | None = None
 ) -> dict[str, Pynenc]:
     """
     Hydrate Pynenc app instances from AppInfo objects.

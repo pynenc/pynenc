@@ -10,9 +10,9 @@ Key components:
 """
 
 import logging
+from collections.abc import Generator
 from contextlib import contextmanager
 from io import StringIO
-from typing import Generator
 
 
 class _Ansi:

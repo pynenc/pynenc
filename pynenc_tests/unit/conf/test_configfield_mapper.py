@@ -1,4 +1,4 @@
-from typing import Any, Type
+from typing import Any
 
 import pytest
 from cistell.field import ConfigField, default_config_field_mapper
@@ -42,7 +42,7 @@ def test_default_mapper_type_error() -> None:
 
 
 def test_other_mapper() -> None:
-    def other_mapper(value: Any, expected_type: Type) -> Any:
+    def other_mapper(value: Any, expected_type: type) -> Any:
         """mapper that parse tuples to int, otherwise default"""
         if isinstance(value, tuple):
             return -13

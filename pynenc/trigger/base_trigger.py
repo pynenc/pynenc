@@ -14,7 +14,7 @@ Key components:
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Iterable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -549,7 +549,7 @@ class BaseTrigger(ABC):
         :param current_time: Current time to check against, defaults to now
         """
         # Create time context
-        now = current_time or datetime.now(timezone.utc)
+        now = current_time or datetime.now(UTC)
         context = CronContext(timestamp=now)
 
         time_conditions = [

@@ -1,6 +1,7 @@
 import importlib
 import json
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from pynenc.util.import_tools import is_module_level_function
 

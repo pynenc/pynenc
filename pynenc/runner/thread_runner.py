@@ -2,7 +2,7 @@ import multiprocessing
 import threading
 import time
 from functools import cached_property
-from typing import Any, NamedTuple, Optional
+from typing import Any, NamedTuple
 
 from pynenc.conf.config_runner import ConfigThreadRunner
 from pynenc.invocation.dist_invocation import DistributedInvocation, InvocationStatus
@@ -153,7 +153,7 @@ class ThreadRunner(BaseRunner):
         self,
         running_invocation_id: str,
         result_invocation_ids: list[str],
-        runner_args: Optional[dict[str, Any]] = None,
+        runner_args: dict[str, Any] | None = None,
     ) -> None:
         """
         Handles invocations waiting for results by polling a local final cache instead of pausing threads.

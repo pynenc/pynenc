@@ -2,7 +2,7 @@
 Global Pynenc exception and warning classes.
 """
 import json
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from .util.subclasses import get_all_subclasses
 
@@ -54,7 +54,7 @@ class PendingInvocationLockError(PynencError):
 class TaskError(PynencError):
     """Base class for all Task related errors."""
 
-    def __init__(self, task_id: str, message: Optional[str] = None) -> None:
+    def __init__(self, task_id: str, message: str | None = None) -> None:
         self.task_id = task_id
         self.message = message
 
@@ -98,7 +98,7 @@ class InvocationConcurrencyWithDifferentArgumentsError(TaskRoutingError):
         existing_invocation_id: str,
         new_call_id: str,
         diff: str,
-        message: Optional[str] = None,
+        message: str | None = None,
     ) -> None:
         self.existing_invocation_id = existing_invocation_id
         self.new_call_id = new_call_id
@@ -110,7 +110,7 @@ class InvocationConcurrencyWithDifferentArgumentsError(TaskRoutingError):
         cls,
         existing_invocation: "BaseInvocation",
         new_call: "Call",
-        message: Optional[str] = None,
+        message: str | None = None,
     ) -> "InvocationConcurrencyWithDifferentArgumentsError":
         return cls(
             existing_invocation.task.task_id,
@@ -183,7 +183,7 @@ class InvocationConcurrencyWithDifferentArgumentsError(TaskRoutingError):
 class InvocationError(PynencError):
     """Base class for all Task related errors."""
 
-    def __init__(self, invocation_id: str, message: Optional[str] = None) -> None:
+    def __init__(self, invocation_id: str, message: str | None = None) -> None:
         self.invocation_id = invocation_id
         self.message = message
 
@@ -208,7 +208,7 @@ class StateBackendError(PynencError):
 class InvocationNotFoundError(StateBackendError):
     """Error raised when the invocation is not present in the State Backend."""
 
-    def __init__(self, invocation_id: str, message: Optional[str] = None) -> None:
+    def __init__(self, invocation_id: str, message: str | None = None) -> None:
         self.invocation_id = invocation_id
         self.message = message
 

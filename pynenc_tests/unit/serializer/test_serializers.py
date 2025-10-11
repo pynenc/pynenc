@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Type
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -18,36 +18,36 @@ def pytest_generate_tests(metafunc: "Metafunc") -> None:
 
 
 @pytest.fixture
-def serializer_class(request: "FixtureRequest") -> Type[BaseSerializer]:
+def serializer_class(request: "FixtureRequest") -> type[BaseSerializer]:
     return request.param
 
 
-def test_serialize_deserialize_integers(serializer_class: Type[BaseSerializer]) -> None:
+def test_serialize_deserialize_integers(serializer_class: type[BaseSerializer]) -> None:
     obj = 42
     serialized = serializer_class.serialize(obj)
     assert serializer_class.deserialize(serialized) == obj
 
 
-def test_serialize_deserialize_strings(serializer_class: Type[BaseSerializer]) -> None:
+def test_serialize_deserialize_strings(serializer_class: type[BaseSerializer]) -> None:
     obj = "hello"
     serialized = serializer_class.serialize(obj)
     assert serializer_class.deserialize(serialized) == obj
 
 
-def test_serialize_deserialize_lists(serializer_class: Type[BaseSerializer]) -> None:
+def test_serialize_deserialize_lists(serializer_class: type[BaseSerializer]) -> None:
     obj = [1, 2, 3]
     serialized = serializer_class.serialize(obj)
     assert serializer_class.deserialize(serialized) == obj
 
 
-def test_serialize_deserialize_dicts(serializer_class: Type[BaseSerializer]) -> None:
+def test_serialize_deserialize_dicts(serializer_class: type[BaseSerializer]) -> None:
     obj = {"key": "value"}
     serialized = serializer_class.serialize(obj)
     assert serializer_class.deserialize(serialized) == obj
 
 
 def test_serialize_deserialize_exceptions(
-    serializer_class: Type[BaseSerializer],
+    serializer_class: type[BaseSerializer],
 ) -> None:
     obj = ValueError("An exception")
     serialized = serializer_class.serialize(obj)

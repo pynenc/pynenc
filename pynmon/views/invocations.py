@@ -2,8 +2,8 @@ import json
 import logging
 import time
 import traceback
-from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Optional
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -24,8 +24,8 @@ logger = logging.getLogger("pynmon.views.invocations")
 @router.get("/", response_class=HTMLResponse)
 async def invocations_list(
     request: Request,
-    status: Optional[str] = None,
-    task_id: Optional[str] = None,
+    status: str | None = None,
+    task_id: str | None = None,
     limit: int = 50,
 ) -> HTMLResponse:
     """Display invocations with optional filtering."""
@@ -103,10 +103,10 @@ async def invocations_list(
 
 
 def _parse_timeline_date_range(
-    time_range: str, start_date: Optional[str], end_date: Optional[str]
+    time_range: str, start_date: str | None, end_date: str | None
 ) -> tuple[datetime, datetime]:
     """Parse the time range parameters into start and end datetime objects."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     end_datetime = now
 
     if time_range == "custom" and start_date and end_date:
@@ -114,11 +114,11 @@ def _parse_timeline_date_range(
             # Parse custom dates and convert to UTC if they don't have timezone info
             start_datetime = datetime.fromisoformat(start_date)
             if start_datetime.tzinfo is None:
-                start_datetime = start_datetime.replace(tzinfo=timezone.utc)
+                start_datetime = start_datetime.replace(tzinfo=UTC)
 
             end_datetime = datetime.fromisoformat(end_date)
             if end_datetime.tzinfo is None:
-                end_datetime = end_datetime.replace(tzinfo=timezone.utc)
+                end_datetime = end_datetime.replace(tzinfo=UTC)
         except ValueError:
             logger.warning(f"Invalid date format: {start_date} - {end_date}")
             # Fall back to last hour
@@ -146,7 +146,7 @@ def _parse_timeline_date_range(
     return start_datetime, end_datetime
 
 
-def _get_tasks_to_check(app: "Pynenc", task_id: Optional[str]) -> list:
+def _get_tasks_to_check(app: "Pynenc", task_id: str | None) -> list:
     """Get the list of tasks to check based on task_id filter.
 
     :param app: The Pynenc application instance
@@ -273,9 +273,9 @@ def _filter_invocations_by_time(
 async def invocations_timeline(
     request: Request,
     time_range: str = "1h",
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    task_id: Optional[str] = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    task_id: str | None = None,
     show_relationships: bool = False,
     limit: int = 100,
 ) -> HTMLResponse:
@@ -400,7 +400,7 @@ def _get_invocation_result_and_exception(
             logger.info(f"Retrieving result for invocation {invocation_id}")
             result = app.state_backend.get_result(invocation.invocation_id)
             # Format the result for display
-            if isinstance(result, (dict, list)):
+            if isinstance(result, dict | list):
                 formatted_result = json.dumps(result, indent=2)
             else:
                 formatted_result = str(result)
@@ -638,7 +638,7 @@ async def invocation_history(request: Request, invocation_id: str) -> JSONRespon
             # Make sure timestamp is timezone-aware for comparison
             timestamp = entry.timestamp
             if timestamp.tzinfo is None:
-                timestamp = timestamp.replace(tzinfo=timezone.utc)
+                timestamp = timestamp.replace(tzinfo=UTC)
 
             runner_context_summary = "N/A"
             if entry.runner_context:
@@ -701,8 +701,8 @@ async def invocation_api(request: Request, invocation_id: str) -> JSONResponse:
 @router.get("/table", response_class=HTMLResponse)
 async def invocations_table(
     request: Request,
-    status: Optional[str] = None,
-    task_id: Optional[str] = None,
+    status: str | None = None,
+    task_id: str | None = None,
     limit: int = 50,
 ) -> HTMLResponse:
     """Return just the invocations table for HTMX refresh."""

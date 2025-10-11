@@ -8,7 +8,7 @@ Each trigger definition links a task to one or more conditions that determine wh
 import hashlib
 import json
 import logging
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from pynenc.trigger.arguments.argument_providers import ArgumentProvider
 from pynenc.trigger.conditions import CompositeLogic
@@ -33,7 +33,7 @@ class TriggerDefinition:
         task_id: str,
         condition_ids: list[str],
         logic: CompositeLogic = CompositeLogic.AND,
-        argument_provider: Optional[ArgumentProvider] = None,
+        argument_provider: ArgumentProvider | None = None,
     ):
         """
         Create a new trigger definition.

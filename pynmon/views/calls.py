@@ -2,7 +2,7 @@ import json
 import logging
 import time
 import traceback
-from typing import TYPE_CHECKING, Any, Optional, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
@@ -42,7 +42,7 @@ def _check_timeout_for_call_search(
 
 def _search_invocations_in_task(
     app: "Pynenc", task: "Task", call_id: str, task_timeout: float
-) -> tuple[list["DistributedInvocation"], Optional[Any], bool]:
+) -> tuple[list["DistributedInvocation"], Any, bool]:
     """
     Search for invocations matching call_id in a specific task.
 
@@ -92,7 +92,7 @@ def _search_invocations_in_task(
 
 def find_call_and_invocations(
     app: "Pynenc", call_id: str, timeout: int = 10
-) -> tuple[Optional[Any], Optional["Task"], list["DistributedInvocation"]]:
+) -> tuple["Call | None", "Task | None", list["DistributedInvocation"]]:
     """
     Find a call by its ID along with related invocations and task.
 
@@ -154,7 +154,7 @@ def find_call_and_invocations(
     return target_call, target_task, all_invocations
 
 
-def format_call_arguments(call: "Call") -> tuple[dict[str, str], Optional[dict]]:
+def format_call_arguments(call: "Call") -> tuple[dict[str, str], dict | None]:
     """
     Format the arguments of a call for display.
 
@@ -177,7 +177,7 @@ def format_call_arguments(call: "Call") -> tuple[dict[str, str], Optional[dict]]
 
         # Format each argument for better display
         for key, value in raw_args.items():
-            if isinstance(value, (dict, list)):
+            if isinstance(value, dict | list):
                 formatted_args[key] = json.dumps(value, indent=2)
             else:
                 formatted_args[key] = str(value)

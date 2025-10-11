@@ -67,7 +67,7 @@ def deterministic_time_workflow() -> dict[str, Any]:
         "first_timestamp": timestamps[0].isoformat(),
         "timestamps_count": len(timestamps),
         "timestamps_ascending": timestamps == sorted(timestamps),
-        "all_utc": all(ts.tzinfo == datetime.timezone.utc for ts in timestamps),
+        "all_utc": all(ts.tzinfo == datetime.UTC for ts in timestamps),
     }
 
 

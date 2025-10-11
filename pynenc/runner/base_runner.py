@@ -7,7 +7,7 @@ import time
 import warnings
 from abc import ABC, abstractmethod
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from pynenc.conf.config_runner import ConfigRunner
 from pynenc.exceptions import RunnerNotExecutableError
@@ -45,8 +45,8 @@ class BaseRunner(ABC):
     def __init__(
         self,
         app: "Pynenc",
-        runner_cache: Optional[dict] = None,
-        extra_id: Optional[str] = None,
+        runner_cache: dict | None = None,
+        extra_id: str | None = None,
     ) -> None:
         self.app = app
         self.app.runner = self
@@ -150,7 +150,7 @@ class BaseRunner(ABC):
         """This method is called after the runner loop signal is received"""
 
     def stop_runner_loop(
-        self, signum: Optional[int] = None, frame: Optional["FrameType"] = None
+        self, signum: int | None = None, frame: "FrameType | None" = None
     ) -> None:
         """
         Stops the runner loop, typically in response to a signal.
@@ -168,7 +168,7 @@ class BaseRunner(ABC):
         self,
         running_invocation_id: str,
         result_invocation_ids: list[str],
-        runner_args: Optional[dict[str, Any]] = None,
+        runner_args: dict[str, Any] | None = None,
     ) -> None:
         """
         Method called when an invocation is waiting for results from other invocations.
@@ -194,9 +194,9 @@ class BaseRunner(ABC):
 
     def waiting_for_results(
         self,
-        running_invocation_id: Optional[str],
+        running_invocation_id: str | None,
         result_invocation_ids: list[str],
-        runner_args: Optional[dict[str, Any]] = None,
+        runner_args: dict[str, Any] | None = None,
     ) -> None:
         """
         Handles invocations that are waiting for results from other invocations.
@@ -219,9 +219,9 @@ class BaseRunner(ABC):
 
     async def async_waiting_for_results(
         self,
-        running_invocation_id: Optional[str],
+        running_invocation_id: str | None,
         result_invocation_ids: list[str],
-        runner_args: Optional[dict[str, Any]] = None,
+        runner_args: dict[str, Any] | None = None,
     ) -> None:
         if not running_invocation_id:
             # running from outside this runner (user instantiate an app with this runner class,
@@ -303,7 +303,7 @@ class DummyRunner(BaseRunner):
         self,
         running_invocation_id: str,
         result_invocation_ids: list[str],
-        runner_args: Optional[dict[str, Any]] = None,
+        runner_args: dict[str, Any] | None = None,
     ) -> None:
         # Parameters are ids (string) to conform with BaseRunner interface.
         del running_invocation_id, result_invocation_ids, runner_args

@@ -1,6 +1,6 @@
 import importlib
 import os
-from typing import Any, Type, TypeVar
+from typing import Any, TypeVar
 
 import pytest
 
@@ -14,8 +14,8 @@ from pynenc.util.subclasses import get_all_subclasses
 T = TypeVar("T")
 
 
-def get_module_subclasses(module_base_path: str, base_class: Type[T]) -> set[Type[T]]:
-    subclasses: set[Type[T]] = set()
+def get_module_subclasses(module_base_path: str, base_class: type[T]) -> set[type[T]]:
+    subclasses: set[type[T]] = set()
     module_dir_path = os.path.join(os.getcwd(), module_base_path.replace("/", os.sep))
 
     for file in os.listdir(module_dir_path):
@@ -35,7 +35,7 @@ def get_module_subclasses(module_base_path: str, base_class: Type[T]) -> set[Typ
     return subclasses
 
 
-def filter_test_subclasses(subclasses: set[Type]) -> set[Type]:
+def filter_test_subclasses(subclasses: set[type]) -> set[type]:
     return {subclass for subclass in subclasses if "tests" not in subclass.__module__}
 
 
@@ -49,7 +49,7 @@ def filter_test_subclasses(subclasses: set[Type]) -> set[Type]:
         ("pynenc/serializer", BaseSerializer),
     ],
 )
-def test_get_all_subclasses(module_base_path: str, base_class: Type[Any]) -> None:
+def test_get_all_subclasses(module_base_path: str, base_class: type[Any]) -> None:
     """Test that all the relevant subclasses are discovered by get_all_subclasses."""
     # To ensure that the __init__.py of the module need to import all the subclasses.
     # This test will check for any subclass in submodules manually

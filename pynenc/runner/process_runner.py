@@ -1,7 +1,7 @@
 import os
 import signal
 from multiprocessing import Manager, Process, cpu_count
-from typing import TYPE_CHECKING, Any, NamedTuple, Optional
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from pynenc.exceptions import InvocationOnFinalStatusError, RunnerError
 from pynenc.invocation import InvocationStatus
@@ -244,7 +244,7 @@ class ProcessRunner(BaseRunner):
         self,
         running_invocation_id: str,
         result_invocation_ids: list[str],
-        runner_args: Optional[dict[str, Any]] = None,
+        runner_args: dict[str, Any] | None = None,
     ) -> None:
         """
         Handles invocations that are waiting for results from other invocations.
@@ -252,7 +252,7 @@ class ProcessRunner(BaseRunner):
 
         :param str running_invocation_id: The ID of the invocation that is waiting for results.
         :param list[str] result_invocation_ids: A list of IDs of invocations whose results are being awaited.
-        :param Optional[dict[str, Any]] runner_args: Additional arguments required for the ProcessRunner.
+        :param dict[str, Any] | None runner_args: Additional arguments required for the ProcessRunner.
         """
         if not result_invocation_ids:
             return

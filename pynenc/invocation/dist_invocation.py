@@ -40,7 +40,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
     :param DistributedInvocation | None parent_invocation:
         A reference to a parent invocation, if this invocation is part of a nested call structure.
         This attribute is used to maintain the invocation hierarchy in complex task workflows.
-    :param Optional[str] _invocation_id:
+    :param str | None _invocation_id:
         A unique identifier for the invocation. This ID is crucial for tracking and orchestrating the invocation
         across the distributed system. It's assigned internally and used by the orchestration mechanism.
     :param bool _disable_upsert:

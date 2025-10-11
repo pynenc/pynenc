@@ -8,7 +8,7 @@ all its state in memory. It's suitable for development and testing purposes.
 import threading
 from collections import defaultdict
 from collections.abc import Iterable
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Optional
 
 from pynenc.trigger.base_trigger import BaseTrigger
@@ -65,7 +65,7 @@ class MemTrigger(BaseTrigger):
         condition_id = condition.condition_id
         self._conditions[condition_id] = condition
 
-    def get_condition(self, condition_id: str) -> Optional[TriggerCondition]:
+    def get_condition(self, condition_id: str) -> TriggerCondition | None:
         """
         Get a condition by its ID from the in-memory store.
 
@@ -243,7 +243,7 @@ class MemTrigger(BaseTrigger):
         :return: True if the claim was successful, False if another worker has claimed it
         """
         claim_key = f"{trigger_id}:{valid_condition_id}"
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         expiration = now + timedelta(seconds=expiration_seconds)
 
         with self._claim_lock:
@@ -270,7 +270,7 @@ class MemTrigger(BaseTrigger):
         :param expiration_seconds: Number of seconds after which the claim expires
         :return: True if the claim was successful, False if another worker has claimed it
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         expiration = now + timedelta(seconds=expiration_seconds)
 
         with self._trigger_run_lock:

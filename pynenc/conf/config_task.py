@@ -2,7 +2,7 @@ import importlib
 import json
 import os
 from enum import StrEnum, auto
-from typing import Any, Optional, TypeVar
+from typing import Any, TypeVar
 
 from cistell import ConfigField
 
@@ -202,9 +202,9 @@ class ConfigTask(ConfigPynencBase):
     def __init__(
         self,
         task_id: str,
-        config_values: Optional[dict[str, Any]] = None,
-        config_filepath: Optional[str] = None,
-        task_options: Optional[dict[str, Any]] = None,
+        config_values: dict[str, Any] | None = None,
+        config_filepath: str | None = None,
+        task_options: dict[str, Any] | None = None,
     ) -> None:
         self.task_id = task_id
         config_values = dict(config_values or {})

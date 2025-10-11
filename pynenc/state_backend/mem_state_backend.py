@@ -1,6 +1,7 @@
 import itertools
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any, Iterator, Optional
+from collections.abc import Iterator
+from typing import TYPE_CHECKING, Any, Optional
 
 from pynenc.state_backend.base_state_backend import BaseStateBackend
 from pynenc.types import Params, Result

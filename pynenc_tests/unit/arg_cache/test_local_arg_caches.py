@@ -1,5 +1,3 @@
-from typing import Optional
-
 import pytest
 
 from pynenc.arg_cache.base_arg_cache import BaseArgCache
@@ -26,7 +24,7 @@ class TestObject:
 class LocalArgCache(BaseArgCache):
     """Minimal test implementation of BaseArgCache."""
 
-    def __init__(self, app: "MockPynenc", *, serialized_value: Optional[str] = None):
+    def __init__(self, app: "MockPynenc", *, serialized_value: str | None = None):
         super().__init__(app)
         self._stored_values: dict[str, str] = {}
         self._next_serialized = serialized_value

@@ -14,7 +14,7 @@ Key components:
 
 import warnings
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any
 
 from pynenc.arg_cache.mem_arg_cache import MemArgCache
 from pynenc.conf.config_pynenc import ArgumentPrintMode
@@ -254,7 +254,7 @@ class PynencBuilder:
         self._plugin_components.clear()  # Clear any plugin components
         return self
 
-    def sqlite(self, sqlite_db_path: Optional[str] = None) -> "PynencBuilder":
+    def sqlite(self, sqlite_db_path: str | None = None) -> "PynencBuilder":
         """
         Configure SQLite components for the Pynenc application.
 
@@ -264,7 +264,7 @@ class PynencBuilder:
 
         Note: SQLite will not work in distributed environments with independent DB files.
 
-        :param Optional[str] sqlite_db_path: Path to the SQLite database file. If None, uses the default location.
+        :param str | None sqlite_db_path: Path to the SQLite database file. If None, uses the default location.
         :return: The builder instance for method chaining
         """
         self._config.update(
@@ -549,8 +549,8 @@ class PynencBuilder:
 
     def concurrency_control(
         self,
-        running_concurrency: Optional[Union[str, ConcurrencyControlType]] = None,
-        registration_concurrency: Optional[Union[str, ConcurrencyControlType]] = None,
+        running_concurrency: str | ConcurrencyControlType | None = None,
+        registration_concurrency: str | ConcurrencyControlType | None = None,
     ) -> "PynencBuilder":
         """
         Configure concurrency control default behaviors for all tasks.
@@ -588,7 +588,7 @@ class PynencBuilder:
         return self
 
     def argument_print_mode(
-        self, mode: Union[str, ArgumentPrintMode], truncate_length: int = 32
+        self, mode: str | ArgumentPrintMode, truncate_length: int = 32
     ) -> "PynencBuilder":
         """
         Configure how task arguments are printed in logs.

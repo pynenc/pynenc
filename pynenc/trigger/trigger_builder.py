@@ -5,7 +5,8 @@ This module provides a fluent interface for building trigger definitions,
 making it easier to define complex triggering conditions for tasks.
 """
 
-from typing import TYPE_CHECKING, Any, Callable, TypeVar, cast
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from pynenc.invocation.status import InvocationStatus
 from pynenc.trigger.arguments.argument_filters import create_argument_filter

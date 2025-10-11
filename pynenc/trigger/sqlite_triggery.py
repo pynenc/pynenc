@@ -5,9 +5,10 @@ This module provides a trigger system implementation that stores
 all its state in a SQLite database. Suitable for cross-process coordination and testing.
 """
 
-from datetime import datetime, timedelta, timezone
+from collections.abc import Iterable
+from datetime import UTC, datetime, timedelta
 from functools import cached_property
-from typing import TYPE_CHECKING, Iterable, Optional
+from typing import TYPE_CHECKING, Optional
 
 from pynenc.conf.config_trigger import ConfigTriggerSQLite
 from pynenc.trigger.base_trigger import BaseTrigger
@@ -121,7 +122,7 @@ class SQLiteTrigger(BaseTrigger):
             )
             conn.commit()
 
-    def get_condition(self, condition_id: str) -> Optional[TriggerCondition]:
+    def get_condition(self, condition_id: str) -> TriggerCondition | None:
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
                 f"SELECT condition_json FROM {Tables.CONDITIONS} WHERE condition_id = ?",
@@ -293,7 +294,7 @@ class SQLiteTrigger(BaseTrigger):
         self, trigger_id: str, valid_condition_id: str, expiration_seconds: int = 60
     ) -> bool:
         claim_key = f"{trigger_id}:{valid_condition_id}"
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         expiration = now + timedelta(seconds=expiration_seconds)
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
@@ -316,7 +317,7 @@ class SQLiteTrigger(BaseTrigger):
     def claim_trigger_run(
         self, trigger_run_id: str, expiration_seconds: int = 60
     ) -> bool:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         expiration = now + timedelta(seconds=expiration_seconds)
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(

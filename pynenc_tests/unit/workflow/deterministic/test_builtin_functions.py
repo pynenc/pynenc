@@ -14,7 +14,7 @@ def test_base_time_establishment(deterministic_executor: DeterministicExecutor) 
     # First call establishes base time
     base_time1 = deterministic_executor.get_base_time()
     assert isinstance(base_time1, datetime.datetime)
-    assert base_time1.tzinfo == datetime.timezone.utc
+    assert base_time1.tzinfo == datetime.UTC
 
     # Second call should return the same base time
     base_time2 = deterministic_executor.get_base_time()
@@ -51,7 +51,7 @@ def test_deterministic_time_progression(
     times = [deterministic_executor.utc_now() for _ in range(3)]
 
     # All should be UTC
-    assert all(t.tzinfo == datetime.timezone.utc for t in times)
+    assert all(t.tzinfo == datetime.UTC for t in times)
 
     # Should be in ascending order (each call advances time)
     assert times == sorted(times)

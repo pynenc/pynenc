@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from functools import cached_property
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from pynenc import context
 from pynenc.call import Call
@@ -94,7 +94,7 @@ class BaseBroker(ABC):
         """
 
     @abstractmethod
-    def retrieve_invocation(self) -> Optional[DistributedInvocation]:
+    def retrieve_invocation(self) -> DistributedInvocation | None:
         """
         Method to retrieve a distributed invocation.
 

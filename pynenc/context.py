@@ -49,7 +49,7 @@ def swap_dist_invocation_context(
 
 
 # Runner arguments passed from the runner to a distributed invocation.
-runner_args: Optional[dict[str, Any]] = None
+runner_args: dict[str, Any] | None = None
 
 
 def get_current_runner(app_id: str) -> Optional["BaseRunner"]:

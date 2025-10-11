@@ -6,7 +6,7 @@ the in-memory implementation.
 """
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 from unittest.mock import Mock, patch
 
 import pytest
@@ -317,7 +317,7 @@ def test_optimistic_locking_for_cron_execution(trigger: "BaseTrigger") -> None:
     def modified_store(
         condition_id: str,
         execution_time: datetime,
-        expected_last_execution: Optional[datetime] = None,
+        expected_last_execution: datetime | None = None,
     ) -> bool:
         current = trigger.get_last_cron_execution(condition_id)
         if expected_last_execution is not None and current != expected_last_execution:

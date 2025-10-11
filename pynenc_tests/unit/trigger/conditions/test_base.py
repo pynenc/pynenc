@@ -4,7 +4,7 @@ Unit tests for base trigger conditions.
 Tests the base classes and context objects used by all condition implementations.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import Mock
 
 from pynenc.arguments import Arguments
@@ -23,7 +23,7 @@ def test_time_context_default() -> None:
     assert hasattr(context, "timestamp")
     assert isinstance(context.timestamp, datetime)
     # Should be close to current time
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if context.timestamp.tzinfo is None:
         # If timestamp is naive, make now naive too
         now = now.replace(tzinfo=None)
@@ -33,7 +33,7 @@ def test_time_context_default() -> None:
 
 def test_time_context_custom() -> None:
     """Test CronContext with custom timestamp."""
-    timestamp = datetime(2023, 1, 1, tzinfo=timezone.utc)
+    timestamp = datetime(2023, 1, 1, tzinfo=UTC)
     context = CronContext()
     context.timestamp = timestamp
     assert context.timestamp == timestamp

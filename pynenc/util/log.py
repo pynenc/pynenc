@@ -1,6 +1,6 @@
 import logging
 from collections.abc import MutableMapping
-from typing import TYPE_CHECKING, Any, Literal, Optional
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from logging import LogRecord
@@ -144,17 +144,17 @@ class TaskLoggerAdapter(logging.LoggerAdapter):
     """
 
     def __init__(
-        self, logger: logging.Logger, task_id: str, invocation_id: Optional[str] = None
+        self, logger: logging.Logger, task_id: str, invocation_id: str | None = None
     ):
         super().__init__(logger, {})
         self.set_context(task_id, invocation_id)
 
-    def set_context(self, task_id: str, invocation_id: Optional[str]) -> None:
+    def set_context(self, task_id: str, invocation_id: str | None) -> None:
         """
         Sets the context for logging.
 
         :param str task_id: The ID of the task.
-        :param Optional[str] invocation_id: The ID of the invocation.
+        :param str | None invocation_id: The ID of the invocation.
         """
         self.task_id = task_id
         self.invocation_id = invocation_id

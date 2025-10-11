@@ -48,8 +48,9 @@ import importlib.util
 import inspect
 import os
 import sys
-from functools import lru_cache
-from typing import Callable, NamedTuple
+from collections.abc import Callable
+from functools import cache
+from typing import NamedTuple
 
 
 def get_object_filepath(obj: object) -> str | None:
@@ -136,7 +137,7 @@ class TaskModules(NamedTuple):
     task_module: str
 
 
-@lru_cache(maxsize=None)
+@cache
 def get_task_modules(app_filepath: str, task_filepath: str) -> TaskModules:
     """
     Determine the module names for the application and task based on their file paths.

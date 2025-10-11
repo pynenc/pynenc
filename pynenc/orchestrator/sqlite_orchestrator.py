@@ -6,9 +6,10 @@ true cross-process coordination for testing process runners. Unlike shared memor
 SQLite provides ACID transactions and handles concurrent access automatically.
 """
 
+from collections.abc import Callable, Iterator
 from functools import cached_property
 from time import time
-from typing import TYPE_CHECKING, Callable, Iterator, Optional
+from typing import TYPE_CHECKING
 
 from pynenc.conf.config_orchestrator import ConfigOrchestratorSQLite
 from pynenc.exceptions import InvocationOnFinalStatusError, PendingInvocationLockError
@@ -570,7 +571,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
                 )
             conn.commit()
 
-    def get_invocation_pending_timer(self, invocation_id: str) -> Optional[float]:
+    def get_invocation_pending_timer(self, invocation_id: str) -> float | None:
         """Retrieves the pending timer for a specific invocation."""
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(

@@ -6,8 +6,9 @@ argument filtering infrastructure. These filters determine if task results
 match certain criteria by adapting them to the argument filter format.
 """
 
+from collections.abc import Callable
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Callable, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from pynenc.trigger.arguments.argument_filters import (
     ArgumentFilter,
