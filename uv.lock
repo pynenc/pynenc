@@ -866,7 +866,7 @@ requires-dist = [
     { name = "cistell", specifier = "==0.0.7" },
     { name = "coverage", extras = ["toml"], marker = "extra == 'tests'", specifier = ">=7.2.6" },
     { name = "croniter", specifier = ">=6.0.0" },
-    { name = "fastapi", marker = "extra == 'monitor'", specifier = ">=0.115.0" },
+    { name = "fastapi", marker = "extra == 'monitor'", specifier = ">=0.115.8" },
     { name = "httpx", marker = "extra == 'tests'", specifier = ">=0.27.0" },
     { name = "jinja2", marker = "extra == 'monitor'", specifier = ">=3.1.0" },
     { name = "jsonpickle", specifier = ">=4.1.0" },
