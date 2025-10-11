@@ -29,7 +29,7 @@ jobs:
       - name: Install dependencies (minimum)
         if: matrix.deps-version == 'minimum'
         run: |
-          uv pip install --resolution=lowest-direct -e ".[tests]"
+          uv sync --resolution=lowest-direct --all-extras
 
       - name: Install dependencies (latest)
         if: matrix.deps-version == 'latest'
