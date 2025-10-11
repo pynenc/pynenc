@@ -34,7 +34,7 @@ jobs:
       - name: Install dependencies (latest)
         if: matrix.deps-version == 'latest'
         run: |
-          uv pip install -e ".[tests]"
+          uv sync --all-extras
 
       - name: Run tests
         run: |
