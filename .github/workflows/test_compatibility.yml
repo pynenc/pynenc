@@ -11,7 +11,6 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.11", "3.12", "3.13", "3.14"]
-        # Test with minimum and latest versions
         deps-version: ["minimum", "latest"]
     steps:
       - uses: actions/checkout@v4
@@ -27,25 +26,20 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies (minimum, core + tests only)
-        if: matrix.deps-version == 'minimum' && matrix.python-version == '3.13'
+        if: matrix.deps-version == 'minimum' && matrix.python-version >= '3.13'
         run: uv sync --resolution=lowest-direct --extra tests
 
       - name: Install dependencies (latest, core + tests only)
-        if: matrix.deps-version == 'latest' && matrix.python-version == '3.13'
+        if: matrix.deps-version == 'latest' && matrix.python-version >= '3.13'
         run: uv sync --extra tests
 
       - name: Install dependencies (minimum, all extras)
-        if: matrix.deps-version == 'minimum' && matrix.python-version != '3.13'
+        if: matrix.deps-version == 'minimum' && matrix.python-version < '3.13'
         run: uv sync --resolution=lowest-direct --all-extras
 
       - name: Install dependencies (latest, all extras)
-        if: matrix.deps-version == 'latest' && matrix.python-version != '3.13'
+        if: matrix.deps-version == 'latest' && matrix.python-version < '3.13'
         run: uv sync --all-extras
 
-      - name: Run core tests only (Python 3.13+)
-        if: matrix.python-version == '3.13'
-        run: uv run pytest pynenc_tests/unit pynenc_tests/integration --ignore=pynenc_tests/integration/pynmon
-
-      - name: Run all tests (Python <3.13)
-        if: matrix.python-version != '3.13'
+      - name: Run all tests
         run: uv run pytest pynenc_tests/
