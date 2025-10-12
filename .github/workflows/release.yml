@@ -31,9 +31,6 @@ jobs:
           path: ~/.cache/uv
           key: ${{ runner.os }}-uv-${{ hashFiles('pyproject.toml') }}
 
-      - name: Install dependencies
-        run: uv sync --all-extras
-
       - name: Check if there is a parent commit
         id: check-parent-commit
         run: |
@@ -45,22 +42,26 @@ jobs:
         uses: salsify/action-detect-and-tag-new-version@v2.0.1
         with:
           version-command: |
-            bash -o pipefail -c "uv version | awk '{ print \$2 }'"
+            uv version --short
 
       - name: Bump version for developmental release
         if: ${{ ! steps.check-version.outputs.tag }}
         run: |
-          # Bump patch version and add dev timestamp
           uv version --bump patch
-          uv version --bump dev
-          echo "VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")" >> $GITHUB_ENV
+          current_version=$(uv version --short)
+          dev_version="${current_version}.dev$(date +%s)"
+          uv version $dev_version
+          echo "VERSION=$dev_version" >> $GITHUB_ENV
+
+      - name: Install dependencies
+        run: uv sync
 
       - name: Build package
         run: uv build
 
       - name: Publish package on PyPI
         if: steps.check-version.outputs.tag
-        run: uv publish --index testpypi
+        run: uv publish
         env:
           UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
 
@@ -69,6 +70,29 @@ jobs:
         run: uv publish --index testpypi
         env:
           UV_PUBLISH_TOKEN: ${{ secrets.TEST_PYPI_TOKEN }}
+
+      - name: Add package link to job summary (PyPI)
+        if: steps.check-version.outputs.tag
+        run: |
+          echo "### 📦 Package Published to PyPI" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Version: \`${{ steps.check-version.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🔗 [View on PyPI](https://pypi.org/project/pynenc/${{ steps.check-version.outputs.tag }}/)" >> $GITHUB_STEP_SUMMARY
+
+      - name: Add package link to job summary (TestPyPI)
+        if: ${{! steps.check-version.outputs.tag }}
+        run: |
+          echo "### 📦 Package Published to TestPyPI" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Version: \`${{ env.VERSION }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🔗 [View on TestPyPI](https://test.pypi.org/project/pynenc/${{ env.VERSION }}/)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Install command:**" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "pip install --index-url https://test.pypi.org/simple/ pynenc==${{ env.VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
 
       - name: Publish the release notes
         uses: release-drafter/release-drafter@v5.23.0
