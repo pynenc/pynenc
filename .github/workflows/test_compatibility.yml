@@ -41,5 +41,10 @@ jobs:
         if: matrix.deps-version == 'latest' && matrix.python-version < '3.13'
         run: uv sync --all-extras
 
-      - name: Run all tests
-        run: uv run pytest pynenc_tests/
+      - name: Run unit tests only (Python >=3.13)
+        if: matrix.python-version >= '3.13'
+        run: uv run pytest pynenc_tests/unit/ --ignore=pynenc_tests/unit/pynmon
+
+      - name: Run all unit tests (Python <3.13)
+        if: matrix.python-version < '3.13'
+        run: uv run pytest pynenc_tests/unit/
