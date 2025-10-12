@@ -27,6 +27,14 @@ def add_monitor_subparser(subparsers: argparse._SubParsersAction) -> None:
 
 def start_monitor_command(args: PynencCLINamespace) -> None:
     """Execute the monitor command, starting the web interface."""
+    # Check Python version compatibility
+    if sys.version_info >= (3, 13):
+        print("Error: Pynmon monitoring UI requires Python <3.13")
+        print("Reason: FastAPI/Pydantic v2 dependencies do not support Python 3.13+")
+        print("Note: Core pynenc functionality supports Python 3.13+")
+        print("Solution: Use Python 3.11 or 3.12 for monitoring features")
+        sys.exit(1)
+
     # Check if the monitor dependencies are installed
     if not _check_monitor_dependencies():
         print(

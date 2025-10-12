@@ -1,3 +1,17 @@
+"""
+Pynmon monitoring application and server startup.
+
+Note: Pynmon requires Python <3.13 due to FastAPI/Pydantic v2 dependency limitations.
+Core pynenc functionality supports Python 3.11+.
+"""
+import sys
+
+if sys.version_info >= (3, 13):
+    raise RuntimeError(
+        "The pynmon monitoring UI requires Python <3.13 due to FastAPI/Pydantic limitations. "
+        "Core pynenc functionality supports Python 3.13+."
+    )
+
 import logging
 import traceback
 from pathlib import Path

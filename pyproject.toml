@@ -5,7 +5,7 @@ description = "A task management system for complex distributed orchestration"
 authors = [{ name = "Luis Diaz", email = "code.luis.diaz@proton.me" }]
 license = { text = "MIT License" }
 readme = "README.md"
-requires-python = ">=3.11.6,<4.0"
+requires-python = ">=3.11.6"
 keywords = ["task", "orchestration", "workflow", "distributed", "python", "events"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -26,14 +26,14 @@ dependencies = [
 
 [project.optional-dependencies]
 monitor = [
-    "fastapi>=0.115.8",
+    "fastapi>=0.115.0",
     "jinja2>=3.1.0",
     "python-multipart>=0.0.6",
     "uvicorn>=0.34.0",
 ]
 tests = [
-    "pytest>=8.2.0",
-    "pytest-asyncio>=0.25.0",
+    "pytest>=7.4.4",
+    "pytest-asyncio>=0.18.3",
     "pytest-timeout>=2.2.0",
     "coverage[toml]>=7.2.6",
     "mypy>=1.7.0",
@@ -41,7 +41,7 @@ tests = [
     "pre-commit>=3.5.0",
     "types-requests>=2.32.0",
     "httpx>=0.27.0",
-    "requests>=2.32.0",
+    "requests>=2.31.0",
     "psutil>=7.0.0",
 ]
 

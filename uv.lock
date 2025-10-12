@@ -1,6 +1,6 @@
 version = 1
 revision = 3
-requires-python = ">=3.11.6, <4.0"
+requires-python = ">=3.11.6"
 
 [[package]]
 name = "accessible-pygments"
@@ -866,19 +866,19 @@ requires-dist = [
     { name = "cistell", specifier = "==0.0.7" },
     { name = "coverage", extras = ["toml"], marker = "extra == 'tests'", specifier = ">=7.2.6" },
     { name = "croniter", specifier = ">=6.0.0" },
-    { name = "fastapi", marker = "extra == 'monitor'", specifier = ">=0.115.8" },
+    { name = "fastapi", marker = "extra == 'monitor'", specifier = ">=0.115.0" },
     { name = "httpx", marker = "extra == 'tests'", specifier = ">=0.27.0" },
     { name = "jinja2", marker = "extra == 'monitor'", specifier = ">=3.1.0" },
     { name = "jsonpickle", specifier = ">=4.1.0" },
     { name = "mypy", marker = "extra == 'tests'", specifier = ">=1.7.0" },
     { name = "pre-commit", marker = "extra == 'tests'", specifier = ">=3.5.0" },
     { name = "psutil", marker = "extra == 'tests'", specifier = ">=7.0.0" },
-    { name = "pytest", marker = "extra == 'tests'", specifier = ">=8.2.0" },
-    { name = "pytest-asyncio", marker = "extra == 'tests'", specifier = ">=0.25.0" },
+    { name = "pytest", marker = "extra == 'tests'", specifier = ">=7.4.4" },
+    { name = "pytest-asyncio", marker = "extra == 'tests'", specifier = ">=0.18.3" },
     { name = "pytest-timeout", marker = "extra == 'tests'", specifier = ">=2.2.0" },
     { name = "python-multipart", marker = "extra == 'monitor'", specifier = ">=0.0.6" },
     { name = "pyyaml", specifier = ">=6.0.1" },
-    { name = "requests", marker = "extra == 'tests'", specifier = ">=2.32.0" },
+    { name = "requests", marker = "extra == 'tests'", specifier = ">=2.31.0" },
     { name = "types-pyyaml", marker = "extra == 'tests'", specifier = ">=6.0.0" },
     { name = "types-requests", marker = "extra == 'tests'", specifier = ">=2.32.0" },
     { name = "typing-extensions", specifier = ">=4.9.0" },

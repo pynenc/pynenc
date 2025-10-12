@@ -98,7 +98,7 @@ Pynenc addresses the complex challenges of task management in distributed enviro
 
 Installing Pynenc is a simple process. The core package provides the framework, and you'll need to install backend plugins separately:
 
-### Core Package
+### Core (supports Python 3.11+)
 
 ```bash
 pip install pynenc
