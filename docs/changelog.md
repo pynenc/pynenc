@@ -118,6 +118,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
   - Streamlined `MockPynenc` by removing manual definitions and automatically mocking only the abstract methods of Pynenc base classes, improving test maintainability and reducing boilerplate.
 
+- **Add Pr validation, fix release drafter, improve release workflow**
+
+  - PR validation workflow to ensure PR descriptions meet quality standards for automated release notes
+  - Validates conventional commit format with minimum description length
+  - Warns about missing labels for better release notes categorization
+  - Commit message validation via pre-commit hooks to enforce conventional commit format
+  - Release Drafter integration for automated release note generation from merged PRs
+
 ### Fixed
 
 - **MemBroker FIFO Fix**:
