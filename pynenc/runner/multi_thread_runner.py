@@ -8,6 +8,9 @@ from pynenc import context
 from pynenc.conf.config_runner import ConfigMultiThreadRunner
 from pynenc.runner.base_runner import BaseRunner
 from pynenc.runner.thread_runner import ThreadRunner
+from pynenc.util.multiprocessing_utils import configure_multiprocessing
+
+configure_multiprocessing()
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc

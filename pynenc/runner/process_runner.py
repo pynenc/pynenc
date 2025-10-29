@@ -7,6 +7,9 @@ from pynenc.exceptions import InvocationOnFinalStatusError, RunnerError
 from pynenc.invocation import InvocationStatus
 from pynenc.runner.base_runner import BaseRunner
 from pynenc.runner.runner_context import RunnerContext
+from pynenc.util.multiprocessing_utils import configure_multiprocessing
+
+configure_multiprocessing()
 
 if TYPE_CHECKING:
     pass

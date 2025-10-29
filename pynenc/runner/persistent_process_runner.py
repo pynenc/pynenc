@@ -21,10 +21,12 @@ from pynenc import context
 from pynenc.conf.config_runner import ConfigPersistentProcessRunner
 from pynenc.runner.base_runner import BaseRunner
 from pynenc.runner.runner_context import RunnerContext
+from pynenc.util.multiprocessing_utils import configure_multiprocessing
+
+configure_multiprocessing()
 
 if TYPE_CHECKING:
     from multiprocessing.synchronize import Event
-
     from pynenc.app import Pynenc
 
 
