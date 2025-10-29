@@ -12,6 +12,10 @@ from typing import TYPE_CHECKING, Any
 from pynenc.conf.config_runner import ConfigRunner
 from pynenc.exceptions import RunnerNotExecutableError
 from pynenc.util.log import RunnerLogAdapter
+from pynenc.util.multiprocessing_utils import configure_multiprocessing
+
+# Ensure spawn method is configured as early as possible
+configure_multiprocessing()
 
 if TYPE_CHECKING:
     from types import FrameType

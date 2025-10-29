@@ -21,8 +21,12 @@ from pynenc import context
 from pynenc.conf.config_runner import ConfigPersistentProcessRunner
 from pynenc.runner.base_runner import BaseRunner
 from pynenc.runner.runner_context import RunnerContext
-from pynenc.util.multiprocessing_utils import configure_multiprocessing
+from pynenc.util.multiprocessing_utils import (
+    configure_multiprocessing,
+    ensure_safe_multiprocessing,
+)
 
+# Ensure spawn method is configured
 configure_multiprocessing()
 
 if TYPE_CHECKING:
@@ -115,6 +119,10 @@ class PersistentProcessRunner(BaseRunner):
         self.logger.info(
             f"Starting PersistentProcessRunner with {self.num_processes} processes"
         )
+
+        # Validate safe multiprocessing usage before spawning processes
+        ensure_safe_multiprocessing()
+
         self.processes = {}
         self._process_id_counter: int = 0
         self.manager = Manager()

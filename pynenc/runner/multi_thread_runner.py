@@ -8,8 +8,12 @@ from pynenc import context
 from pynenc.conf.config_runner import ConfigMultiThreadRunner
 from pynenc.runner.base_runner import BaseRunner
 from pynenc.runner.thread_runner import ThreadRunner
-from pynenc.util.multiprocessing_utils import configure_multiprocessing
+from pynenc.util.multiprocessing_utils import (
+    configure_multiprocessing,
+    ensure_safe_multiprocessing,
+)
 
+# Ensure spawn method is configured
 configure_multiprocessing()
 
 if TYPE_CHECKING:
@@ -89,7 +93,6 @@ class MultiThreadRunner(BaseRunner):
 
     processes: dict[str, Process]
     manager: Manager  # type: ignore
-    # shared_status: Maps process key to ProcessStatus
     shared_status: dict[str, ProcessStatus]
     max_processes: int
     runner_cache: dict
@@ -110,7 +113,8 @@ class MultiThreadRunner(BaseRunner):
     def mem_compatible() -> bool:
         """
         Indicates if the runner is compatible with in-memory components.
-        :return: False, as each Thread runs in a separate process with independent memory.
+
+        :return: False, as each thread runs in a separate process with independent memory
         """
         return False
 
@@ -118,12 +122,23 @@ class MultiThreadRunner(BaseRunner):
     def max_parallel_slots(self) -> int:
         """
         The maximum number of parallel tasks that the runner can handle.
-        :return: An integer representing the maximum number of parallel tasks, based on config or CPU count.
+
+        :return: int representing the maximum number of parallel tasks
         """
         return max(self.conf.min_processes, self.max_processes)
 
     def _on_start(self) -> None:
+        """
+        Initialize multiprocessing infrastructure for spawning worker processes.
+
+        Validates that multiprocessing is being used safely before creating
+        the Manager and spawning initial processes.
+        """
         self.logger.info("Starting MultiThreadRunner")
+
+        # Validate safe multiprocessing usage before spawning processes
+        ensure_safe_multiprocessing()
+
         self.manager = Manager()
         self.shared_status = self.manager.dict()  # type: ignore
         self.runner_cache = self._runner_cache or self.manager.dict()  # type: ignore
@@ -133,6 +148,7 @@ class MultiThreadRunner(BaseRunner):
             self._spawn_thread_runner_process()
 
     def _spawn_thread_runner_process(self) -> None:
+        """Spawn a new ThreadRunner worker process."""
         process_key = f"trp-{time.time()}-{len(self.processes)}"
         args = {
             "app": self.app,
@@ -150,6 +166,7 @@ class MultiThreadRunner(BaseRunner):
         self.logger.info(f"Spawned ThreadRunner process {process_key} with pid {p.pid}")
 
     def _on_stop(self) -> None:
+        """Stop all worker processes and shutdown the manager."""
         self.logger.info("Stopping MultiThreadRunner")
         for key, proc in self.processes.items():
             if proc.is_alive():
@@ -171,11 +188,8 @@ class MultiThreadRunner(BaseRunner):
             self.logger.debug(f"Manager already stopped while removing state for {key}")
 
     def _on_stop_runner_loop(self) -> None:
-        """
-        Internal method called after receiving a signal to stop the runner loop.
-        """
+        """Internal method called after receiving a signal to stop the runner loop."""
         self.logger.info("Stopping MultiThreadRunner loop")
-        # Terminate all processes immediately
         if hasattr(self, "processes") and self.processes is not None:
             for key, proc in list(self.processes.items()):
                 try:
@@ -186,14 +200,13 @@ class MultiThreadRunner(BaseRunner):
                         self._safe_remove_shared_state(key)
                         self.logger.info(f"Terminated process {key} during loop stop")
                 except AssertionError:
-                    # We're trying to check a non-child process (likely ourselves)
                     self.logger.info(
                         f"Skipping process {key} termination - not a child process"
                     )
         self.logger.info("MultiThreadRunner loop stopped")
 
     def _cleanup_dead_processes(self) -> None:
-        """Remove processes that are no longer alive from our tracking dictionaries."""
+        """Remove processes that are no longer alive from tracking dictionaries."""
         dead_keys = [key for key, proc in self.processes.items() if not proc.is_alive()]
         if dead_keys:
             self.logger.warning(f"Found {len(dead_keys)} dead processes to clean up")
@@ -203,10 +216,9 @@ class MultiThreadRunner(BaseRunner):
                 self.logger.info(f"Cleaned up dead process {key}")
 
     def _scale_up_processes(self) -> None:
-        """Spawns new processes based on enforce_max_processes setting and pending tasks."""
+        """Spawn new processes based on enforce_max_processes setting and pending tasks."""
         current_processes = len(self.processes)
         if self.conf.enforce_max_processes:
-            # Always maintain exactly max_processes processes.
             while current_processes < self.max_processes:
                 self._spawn_thread_runner_process()
                 current_processes = len(self.processes)
@@ -224,13 +236,7 @@ class MultiThreadRunner(BaseRunner):
                     self._spawn_thread_runner_process()
 
     def _terminate_idle_processes(self) -> None:
-        """
-        Terminates processes that are idle longer than the configured timeout.
-        A process is considered idle if its shared status indicates IDLE and
-        the time since its last update exceeds idle_timeout_process_sec.
-        Respects enforce_max_processes if enabled.
-        """
-        # Skip termination if enforce_max_processes is enabled and we're at max
+        """Terminate processes that are idle longer than the configured timeout."""
         if self.conf.enforce_max_processes and len(self.processes) > self.max_processes:
             return
         now = time.time()
@@ -251,9 +257,8 @@ class MultiThreadRunner(BaseRunner):
             self._safe_remove_shared_state(key)
 
     def runner_loop_iteration(self) -> None:
-        # self._cleanup_dead_processes()
+        """Execute one iteration of the runner loop."""
         self._scale_up_processes()
-        # self._terminate_idle_processes()
         time.sleep(self.conf.runner_loop_sleep_time_sec)
 
     def _waiting_for_results(
@@ -266,8 +271,11 @@ class MultiThreadRunner(BaseRunner):
         Handle waiting for results when called outside a process context.
 
         This method warns if called directly on MultiThreadRunner, as result waiting
-        should occur within a ThreadRunner process, which uses the context-set runner.
-        The global context ensures each process handles its own results correctly.
+        should occur within a ThreadRunner process using the context-set runner.
+
+        :param str running_invocation_id: ID of the invocation waiting for results
+        :param list[str] result_invocation_ids: IDs of invocations being awaited
+        :param dict[str, Any] | None runner_args: Additional runner-specific arguments
         """
         del running_invocation_id, result_invocation_ids, runner_args
         self.logger.warning(self.WAITING_FOR_RESULTS_WARNING)
