@@ -8,13 +8,8 @@ from pynenc import context
 from pynenc.conf.config_runner import ConfigMultiThreadRunner
 from pynenc.runner.base_runner import BaseRunner
 from pynenc.runner.thread_runner import ThreadRunner
-from pynenc.util.multiprocessing_utils import (
-    configure_multiprocessing,
-    ensure_safe_multiprocessing,
-)
+from pynenc.util.multiprocessing_utils import warn_missing_main_guard
 
-# Ensure spawn method is configured
-configure_multiprocessing()
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
@@ -135,10 +130,7 @@ class MultiThreadRunner(BaseRunner):
         the Manager and spawning initial processes.
         """
         self.logger.info("Starting MultiThreadRunner")
-
-        # Validate safe multiprocessing usage before spawning processes
-        ensure_safe_multiprocessing()
-
+        warn_missing_main_guard()
         self.manager = Manager()
         self.shared_status = self.manager.dict()  # type: ignore
         self.runner_cache = self._runner_cache or self.manager.dict()  # type: ignore

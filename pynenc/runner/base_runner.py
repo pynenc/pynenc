@@ -12,10 +12,7 @@ from typing import TYPE_CHECKING, Any
 from pynenc.conf.config_runner import ConfigRunner
 from pynenc.exceptions import RunnerNotExecutableError
 from pynenc.util.log import RunnerLogAdapter
-from pynenc.util.multiprocessing_utils import configure_multiprocessing
 
-# Ensure spawn method is configured as early as possible
-configure_multiprocessing()
 
 if TYPE_CHECKING:
     from types import FrameType
@@ -73,7 +70,8 @@ class BaseRunner(ABC):
     def runner_id(self) -> str:
         """
         Unique identifier for the runner instance.
-        :return: A string representing the unique identifier of the runner.
+
+        :return: A string representing the unique identifier of the runner
         """
         return self._runner_id
 
@@ -89,7 +87,8 @@ class BaseRunner(ABC):
     def cache(self) -> dict:
         """
         Returns the runner cache.
-        :return: A dictionary representing the runner cache.
+
+        :return: A dictionary representing the runner cache
         """
 
     @staticmethod
@@ -97,10 +96,12 @@ class BaseRunner(ABC):
     def mem_compatible() -> bool:
         """
         Indicates if the runner is compatible with in-memory components.
+
         ```{important}
             In memory components can only be used for testing purposes in shared memory space.
         ```
-        :return: True if compatible, False otherwise.
+
+        :return: True if compatible, False otherwise
         """
         ...
 
@@ -109,7 +110,8 @@ class BaseRunner(ABC):
     def max_parallel_slots(self) -> int:
         """
         The maximum number of parallel tasks that the runner can handle.
-        :return: An integer representing the maximum number of parallel tasks.
+
+        :return: An integer representing the maximum number of parallel tasks
         """
 
     @abstractmethod
@@ -158,8 +160,9 @@ class BaseRunner(ABC):
     ) -> None:
         """
         Stops the runner loop, typically in response to a signal.
-        :param signum: Signal number.
-        :param frame: Frame object at the time the signal was received.
+
+        :param int | None signum: Signal number
+        :param FrameType | None frame: Frame object at the time the signal was received
         """
         self.app.logger.info(
             f"Received signal {signum=} {frame=} Stopping runner loop..."
@@ -191,9 +194,9 @@ class BaseRunner(ABC):
 
         Subclasses can define the waiting behavior of the running invocation in this method.
 
-        :param running_invocation_id: The ID of the invocation that is waiting for results.
-        :param result_invocation_ids: A list of IDs of the invocations whose results are being awaited.
-        :param runner_args: Additional arguments passed to the runner, specific to the runner's implementation.
+        :param str running_invocation_id: The ID of the invocation that is waiting for results
+        :param list[str] result_invocation_ids: A list of IDs of the invocations whose results are being awaited
+        :param dict[str, Any] | None runner_args: Additional arguments passed to the runner, specific to the runner's implementation
         """
 
     def waiting_for_results(
@@ -205,9 +208,10 @@ class BaseRunner(ABC):
         """
         Handles invocations that are waiting for results from other invocations.
         Pauses the current thread and registers it to wait for the results of specified invocations.
-        :param running_invocation_id: The ID of the invocation that is waiting for results.
-        :param result_invocation_ids: A list of IDs of the invocations whose results are being awaited.
-        :param runner_args: Additional arguments required for the ThreadRunner.
+
+        :param str | None running_invocation_id: The ID of the invocation that is waiting for results
+        :param list[str] result_invocation_ids: A list of IDs of the invocations whose results are being awaited
+        :param dict[str, Any] | None runner_args: Additional arguments required for the ThreadRunner
         """
         if not running_invocation_id:
             # running from outside this runner (user instantiate an app with this runner class,

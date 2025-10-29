@@ -7,13 +7,8 @@ from pynenc.exceptions import InvocationOnFinalStatusError, RunnerError
 from pynenc.invocation import InvocationStatus
 from pynenc.runner.base_runner import BaseRunner
 from pynenc.runner.runner_context import RunnerContext
-from pynenc.util.multiprocessing_utils import (
-    configure_multiprocessing,
-    ensure_safe_multiprocessing,
-)
+from pynenc.util.multiprocessing_utils import warn_missing_main_guard
 
-# Ensure spawn method is configured
-configure_multiprocessing()
 
 if TYPE_CHECKING:
     pass
@@ -104,10 +99,7 @@ class ProcessRunner(BaseRunner):
         Initializes the process manager and the data structures for managing invocations.
         """
         self.logger.info("Starting ProcessRunner")
-
-        # Validate safe multiprocessing usage before spawning processes
-        ensure_safe_multiprocessing()
-
+        warn_missing_main_guard()
         self.manager = Manager()
         self.wait_invocation = self.manager.dict()  # type: ignore
         self.runner_cache = self._runner_cache or self.manager.dict()  # type: ignore

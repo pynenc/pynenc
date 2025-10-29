@@ -1,60 +1,49 @@
 """
-Multiprocessing utilities and configuration for Pynenc runners.
+Multiprocessing utilities for Pynenc runners.
 
-This module ensures consistent multiprocessing behavior across platforms,
-particularly for macOS which requires the 'spawn' start method to avoid
-fork-related issues with certain libraries and debuggers.
+Provides validation and helpful error messages for multiprocessing usage,
+particularly for detecting missing if __name__ == '__main__' guards.
 
 Key components:
-- configure_multiprocessing: Sets up spawn method for cross-platform compatibility
-- ensure_safe_multiprocessing: Validates that multiprocessing can be safely used
+- warn_missing_main_guard: Detects and warns about unsafe multiprocessing usage
 """
 
-import multiprocessing
-import threading
+import sys
 import warnings
 
 
-def configure_multiprocessing() -> None:
+def warn_missing_main_guard() -> None:
     """
-    Configure multiprocessing to use spawn method on all platforms.
+    Detect and warn about missing if __name__ == '__main__' guard.
 
-    This prevents issues with:
-    - macOS fork safety problems
-    - VSCode debugger compatibility
-    - Manager() connection issues
+    Checks if the main module appears to be running without proper protection
+    for multiprocessing spawning. This is required on macOS and Windows when
+    using runners that spawn worker processes (like MultiThreadRunner).
 
-    Should be called once at module import, idempotent if called multiple times.
-    Designed to work even if client code doesn't use `if __name__ == '__main__':` guard.
+    The warning is only shown if running from a file (not interactive shell).
     """
-    if multiprocessing.get_start_method(allow_none=True) != "spawn":
-        try:
-            multiprocessing.set_start_method("spawn", force=True)
-        except RuntimeError:
-            # Already set in a parent process, which is fine
-            pass
+    main_module = sys.modules.get("__main__")
+    if main_module is None or not hasattr(main_module, "__file__"):
+        # Not main module or running from interactive shell - safe to skip
+        return
 
-
-def ensure_safe_multiprocessing() -> None:
-    """
-    Validate that multiprocessing can be safely used in the current environment.
-
-    Warns if code is running in a non-main thread, which could indicate
-    improper usage of multiprocessing (e.g., missing `if __name__ == '__main__':` guard).
-
-    This should be called from runner initialization to detect unsafe multiprocessing
-    conditions early, before Manager() or Process spawning occurs.
-    """
-    if threading.current_thread() is not threading.main_thread():
-        warnings.warn(
-            "Multiprocessing runner initialized in a non-main thread. "
-            "This may indicate missing `if __name__ == '__main__':` guard in your main module. "
-            "Consider wrapping your application startup code in a main guard to avoid "
-            "recursive spawning and connection issues.",
-            RuntimeWarning,
-            stacklevel=3,
-        )
-
-
-# Configure at module import
-configure_multiprocessing()
+    warnings.warn(
+        "\n"
+        "┌─────────────────────────────────────────────────────────────────────┐\n"
+        "│ MultiThreadRunner requires if __name__ == '__main__': guard        │\n"
+        "├─────────────────────────────────────────────────────────────────────┤\n"
+        "│                                                                     │\n"
+        "│ On macOS and Windows, wrap your application startup code:          │\n"
+        "│                                                                     │\n"
+        "│     if __name__ == '__main__':                                      │\n"
+        "│         from multiprocessing import freeze_support                  │\n"
+        "│         freeze_support()                                            │\n"
+        "│         app.runner.run()                                            │\n"
+        "│                                                                     │\n"
+        "│ This prevents recursive spawning when creating worker processes.   │\n"
+        "│                                                                     │\n"
+        "│ See: https://docs.python.org/3/library/multiprocessing.html        │\n"
+        "└─────────────────────────────────────────────────────────────────────┘\n",
+        RuntimeWarning,
+        stacklevel=4,
+    )
