@@ -244,3 +244,23 @@ def test_avoid_direct_self_cycles(task_direct_cycle: Task) -> None:
     assert str(exc_info.value) == expected_error
     app.runner.stop_runner_loop()
     thread.join()
+
+
+def test_single_run(task_sum: Task) -> None:
+    """Test the task only run once"""
+    app = task_sum.app
+    # app.app_id = app.app_id + "-test_parallel_execution"ase
+
+    def run_in_thread() -> None:
+        app.runner.run()
+
+    thread = threading.Thread(target=run_in_thread, daemon=True)
+    thread.start()
+    invocation = task_sum(1, 1)
+    assert 2 == invocation.result
+    history = app.state_backend.get_history(invocation.invocation_id)
+    assert 1 == sum(1 for h in history if h.status == InvocationStatus.RUNNING), (
+        f"Invocation ran more than once: {history}"
+    )
+    app.runner.stop_runner_loop()
+    thread.join()

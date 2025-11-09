@@ -257,34 +257,6 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         """
         # runner_args are passed from/to the runner (e.g. used to sync subprocesses)
         context.runner_args = runner_args
-
-        # TODO remove this, just for debugging
-        # if 'mem' in self.app.orchestrator.__class__.__name__.lower():
-        #     raise RuntimeError(
-        #         "NEW INVOCATION!!! "
-        #         f"Current invocation has the wrong orchestrator"
-        #         f"Orchestrator: {self.app.orchestrator.__class__.__name__}, "
-        #         f"App ID: {self.app.app_id}, "
-        #     )
-        # if 'wait_invocation' in runner_args:
-        #     for running, waiters in runner_args['wait_invocation'].items():
-        #         if 'mem' in running.__class__.__name__.lower():
-        #             raise RuntimeError(
-        #                 "RECEIVING ARGS!!! "
-        #                 f"Stored runner in wait_invocation has the wrong orchestrator"
-        #                 f"Runner orchestrator: {running.app.orchestrator.__class__.__name__}, "
-        #                 f"Runner app ID: {self.app.app_id}, "
-        #             )
-        #         for waiter in waiters:
-        #             if 'mem' in waiter.__class__.__name__.lower():
-        #                 raise RuntimeError(
-        #                     "RECEIVING ARGS!!! "
-        #                     f"Stored waiter in wait_invocation has the wrong orchestrator"
-        #                     f"Waiter orchestrator: {waiter.app.orchestrator.__class__.__name__}, "
-        #                     f"Waiter app ID: {waiter.app.app_id}, "
-        #                     f"Waiter invocation type: {waiter.__class__.__name__}"
-        #                 )
-
         try:
             self.task.logger.info("Invocation STARTED")
             previous_invocation_context = self.swap_context()
