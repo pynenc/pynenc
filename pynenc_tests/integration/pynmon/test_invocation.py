@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from pynenc_tests.integration.pynmon.conftest import PynmonClient
 
 # Debug configuration - Set to 1 to keep server alive for browser debugging
-KEEP_ALIVE = 0
+KEEP_ALIVE = 1
 
 # Configure app for testing (following pattern from test_home_integration.py)
 app = (
@@ -60,7 +60,7 @@ def test_invocation_history(pynmon_client: "PynmonClient") -> None:
 
         assert "Status timeline".upper() in content.upper()
         for history_item in history:
-            assert history_item.status.value.upper() in content.upper()
+            assert history_item.status_record.status.value.upper() in content.upper()
             assert history_item.timestamp.isoformat() in content
             if history_item.runner_context:
                 assert history_item.runner_context.runner_id in content

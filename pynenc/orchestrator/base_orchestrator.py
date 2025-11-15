@@ -1,19 +1,21 @@
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
+from datetime import datetime
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Optional
+from time import time
+from typing import TYPE_CHECKING, Any, NamedTuple, Optional
 
 from pynenc import context
 from pynenc.conf.config_orchestrator import ConfigOrchestrator
 from pynenc.conf.config_task import ConcurrencyControlType
 from pynenc.exceptions import (
     InvocationConcurrencyWithDifferentArgumentsError,
-    InvocationOnFinalStatusError,
-    PendingInvocationLockError,
+    InvocationNotFoundError,
     TaskParallelProcessingError,
+    InvocationStatusError,
 )
 from pynenc.invocation.dist_invocation import DistributedInvocation, ReusedInvocation
-from pynenc.invocation.status import InvocationStatus
+from pynenc.invocation.status import InvocationStatus, InvocationStatusRecord
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
@@ -21,6 +23,20 @@ if TYPE_CHECKING:
     from pynenc.runner import RunnerContext
     from pynenc.task import Task
     from pynenc.types import Params, Result
+
+
+class ActiveRunnerInfo(NamedTuple):
+    """
+    Information about an active runner including heartbeat tracking.
+
+    :param RunnerContext runner_ctx: The runner context with execution details.
+    :param datetime creation_time: When the runner was first registered.
+    :param datetime last_heartbeat: When the last heartbeat was received.
+    """
+
+    runner_ctx: "RunnerContext"
+    creation_time: datetime
+    last_heartbeat: datetime
 
 
 class BaseCycleControl(ABC):
@@ -122,12 +138,16 @@ class BaseOrchestrator(ABC):
 
     @abstractmethod
     def _register_new_invocations(
-        self, invocations: list["DistributedInvocation[Params, Result]"]
-    ) -> None:
+        self,
+        invocations: list["DistributedInvocation[Params, Result]"],
+        owner_id: str | None = None,
+    ) -> InvocationStatusRecord:
         """
         Register new invocations with status Register if they don't exist yet.
 
         :param list[DistributedInvocation[Params, Result]] invocations: The invocations to be registered.
+        :param str | None owner_id: The owner ID for ownership validation
+        :return: The status record of the registered invocation.
         """
 
     @abstractmethod
@@ -184,53 +204,57 @@ class BaseOrchestrator(ABC):
         """
 
     @abstractmethod
-    def _set_invocation_status(
-        self,
-        invocation_id: str,
-        status: "InvocationStatus",
-    ) -> None:
+    def _atomic_status_transition(
+        self, invocation_id: str, status: InvocationStatus, owner_id: str | None = None
+    ) -> InvocationStatusRecord:
         """
-        Sets the status of a specific invocation.
+        Atomically validates and transitions invocation status.
 
-        :param str invocation_id: The ID of the invocation to update.
-        :param InvocationStatus status: The new status to set for the invocation.
-        """
+        Backend implementations must:
+        1. Read current status record
+        2. Validate transition using status_record_transition()
+        3. Atomically update only if validation passes
+        4. Return the new status record
 
-    @abstractmethod
-    def _set_invocation_pending_status(self, invocation_id: str) -> None:
-        """
-        Sets the status of an invocation to pending.
-        ```{note}
-            Pending can only be set by the orchestrator
-        ```
-        :param str invocation_id: The ID of the invocation to update.
-        :raises InvocationOnFinalStatusError: If the invocation is already in a final status.
-        """
+        All validation and state changes happen within a single atomic operation.
 
-    def set_invocation_pending_status(self, invocation_id: str) -> None:
+        :param str invocation_id: The ID of the invocation to update
+        :param InvocationStatus status: The target status
+        :param str | None owner_id: The owner ID for ownership validation
+        :return: The new status record after successful transition
+        :rtype: InvocationStatusRecord
+        :raises InvocationStatusTransitionError: If transition is not allowed
+        :raises InvocationStatusOwnershipError: If ownership rules are violated
+        :raises KeyError: If invocation does not exist
         """
-        Marks an invocation as pending and updates its history in the state backend.
-        ```{note}
-            Pending can only be set by the orchestrator
-        ```
-        :param str invocation_id: The ID of the invocation to mark as pending.
-        :raises InvocationOnFinalStatusError: If the invocation is already in a final status.
-        :raises PendingInvocationLockError: If the invocation is already pending.
-        """
-        self._set_invocation_pending_status(invocation_id)
-        self.app.state_backend.add_histories(
-            [invocation_id], status=InvocationStatus.PENDING
-        )
-
-    @abstractmethod
-    def get_invocation_pending_timer(self, invocation_id: str) -> float | None:
-        """
-        Retrieves the pending timer for a specific invocation.
-
-        :param str invocation_id: The ID of the invocation to look up.
-        :return: The pending timer value, or None if not set.
-        :rtype: float | None
-        """
+        # Example implementation pattern (varies by backend):
+        #
+        # def _atomic_status_transition(self, invocation_id, status, owner_id):
+        #     # PostgreSQL with transaction:
+        #     with transaction:
+        #         current = get_invocation_status_record(invocation_id)
+        #         new_record = status_record_transition(current, status, owner_id)
+        #         UPDATE ... WHERE invocation_id = ? AND status = current.status
+        #         if not updated: raise race condition
+        #         return new_record
+        #
+        #     # Redis with Lua script:
+        #     lua_script = """
+        #         local current = get_status(invocation_id)
+        #         -- validate in Lua or return data for Python validation
+        #         if valid then set_status(new_status) end
+        #     """
+        #     return execute_lua(lua_script)
+        #
+        #     # MongoDB findAndModify:
+        #     current = find_one(invocation_id)
+        #     new_record = status_record_transition(current, status, owner_id)
+        #     result = find_and_modify(
+        #         query={id: invocation_id, status: current.status},
+        #         update={status: new_record}
+        #     )
+        #     if not result: raise race condition
+        #     return new_record
 
     @abstractmethod
     def index_arguments_for_concurrency_control(
@@ -263,7 +287,6 @@ class BaseOrchestrator(ABC):
         ```
         """
 
-    @abstractmethod
     def get_invocation_status(self, invocation_id: str) -> "InvocationStatus":
         """
         Retrieves the status of a specific invocation id.
@@ -275,6 +298,21 @@ class BaseOrchestrator(ABC):
         :param str invocation_id: The id of the invocation whose status is to be retrieved.
         :return: The current status of the invocation.
         :rtype: InvocationStatus
+        :raises KeyError: If the invocation ID does not exist.
+        """
+        status_record = self.get_invocation_status_record(invocation_id)
+        return status_record.status
+
+    @abstractmethod
+    def get_invocation_status_record(
+        self, invocation_id: str
+    ) -> "InvocationStatusRecord":
+        """
+        Retrieves the status record of a specific invocation id.
+
+        :param str invocation_id: The id of the invocation whose status is to be retrieved.
+        :return: The current status record of the invocation.
+        :rtype: InvocationStatusRecord
         :raises KeyError: If the invocation ID does not exist.
         """
 
@@ -298,7 +336,7 @@ class BaseOrchestrator(ABC):
 
     @abstractmethod
     def filter_by_status(
-        self, invocation_ids: list[str], status_filter: set["InvocationStatus"]
+        self, invocation_ids: list[str], status_filter: frozenset["InvocationStatus"]
     ) -> list[str]:
         """
         Filters a list of invocation ids by their status in an optimized way.
@@ -398,7 +436,7 @@ class BaseOrchestrator(ABC):
         self, caller_invocation_id: str | None, result_invocation_ids: list[str]
     ) -> None:
         """
-        Notifies the system that an invocation is waiting on the results of other invocations.
+        Notifies the system that an invocation is waiting for the results of other invocations.
 
         :param str | None caller_invocation_id: The ID of the waiting invocation.
         :param list[str] result_invocation_ids: The IDs of the invocations being waited on.
@@ -415,7 +453,7 @@ class BaseOrchestrator(ABC):
 
     def get_blocking_invocations(self, max_num_invocation_ids: int) -> Iterator[str]:
         """
-        Retrieves invocation IDs that are blocking others but not blocked themselves.
+        Retrieves invocation IDs that are blocking others but are not blocked themselves.
 
         :param int max_num_invocation_ids: The maximum number of blocking invocation IDs to retrieve.
         :return: An iterator over unblocked, blocking invocation IDs.
@@ -437,41 +475,28 @@ class BaseOrchestrator(ABC):
         invocation_id: str,
         status: "InvocationStatus",
         runner_ctx: Optional["RunnerContext"] = None,
-        ignore_final_status_error: bool = False,
     ) -> None:
         """
         Sets the status of a specific invocation.
 
         :param DistributedInvocation[Params, Result] invocation: The invocation to update.
         :param InvocationStatus status: The new status to set for the invocation.
+
+        :raises InvocationStatusTransitionError: If transition is not allowed
+        :raises InvocationStatusOwnershipError: If ownership rules are violated
+        :raises InvocationStatusRaceConditionError: If a race condition is detected during status update
         """
-        if previous_status := self.get_invocation_status(invocation_id):
-            if previous_status == status:
-                self.app.logger.debug(
-                    f"Invocation {invocation_id} is already in status {status}, no change needed."
-                )
-                return
-            if previous_status.is_final() and not ignore_final_status_error:
-                raise InvocationOnFinalStatusError(
-                    invocation_id, previous_status, status
-                )
-        try:
-            if status == InvocationStatus.PENDING:
-                self._set_invocation_pending_status(invocation_id)
-            else:
-                if status.is_final():
-                    self.release_waiters(invocation_id)
-                    self.clean_up_invocation_cycles(invocation_id)
-                    self.set_up_invocation_auto_purge(invocation_id)
-                # TODO! on previous fail, this should still change status to running
-                self._set_invocation_status(invocation_id, status)
-        except InvocationOnFinalStatusError:
-            if not ignore_final_status_error:
-                raise
-            self.app.logger.warning(
-                f"Invocation {invocation_id} is already in a final status, cannot change to {status}"
-            )
-        self.app.state_backend.add_histories([invocation_id], status, runner_ctx)
+        owner_id = runner_ctx.runner_id if runner_ctx else None
+        new_status_record = self._atomic_status_transition(
+            invocation_id, status, owner_id
+        )
+        if status.is_final():
+            self.release_waiters(invocation_id)
+            self.clean_up_invocation_cycles(invocation_id)
+            self.set_up_invocation_auto_purge(invocation_id)
+        self.app.state_backend.add_histories(
+            [invocation_id], new_status_record, runner_ctx
+        )
         self.app.trigger.report_tasks_status([invocation_id], status)
 
     def set_invocation_run(
@@ -488,14 +513,16 @@ class BaseOrchestrator(ABC):
         """
         if caller:
             self.add_call_and_check_cycles(caller, callee)
-        # TODO! on previous fail, this should still change status
         self.set_invocation_status(
             callee.invocation_id, InvocationStatus.RUNNING, runner_ctx
         )
         callee.wf.register_task_run(caller)
 
     def set_invocation_result(
-        self, invocation: "DistributedInvocation", result: Any
+        self,
+        invocation: "DistributedInvocation",
+        result: Any,
+        runner_ctx: "RunnerContext",
     ) -> None:
         """
         Sets the result for a completed invocation.
@@ -505,12 +532,15 @@ class BaseOrchestrator(ABC):
         """
         self.app.state_backend.set_result(invocation.invocation_id, result)
         self.app.orchestrator.set_invocation_status(
-            invocation.invocation_id, InvocationStatus.SUCCESS
+            invocation.invocation_id, InvocationStatus.SUCCESS, runner_ctx
         )
         self.app.trigger.report_invocation_result(invocation, result)
 
     def set_invocation_exception(
-        self, invocation: "DistributedInvocation", exception: Exception
+        self,
+        invocation: "DistributedInvocation",
+        exception: Exception,
+        runner_ctx: "RunnerContext",
     ) -> None:
         """
         Sets an exception for an invocation that finished with an error.
@@ -523,12 +553,15 @@ class BaseOrchestrator(ABC):
         # eg. on case of interruption from a kubernetes pod (SIGTERM, SIGKILL)
         #     it should try to finish all the calls in this function
         self.app.orchestrator.set_invocation_status(
-            invocation.invocation_id, InvocationStatus.FAILED
+            invocation.invocation_id, InvocationStatus.FAILED, runner_ctx
         )
         self.app.trigger.report_invocation_failure(invocation, exception)
 
     def set_invocation_retry(
-        self, invocation: "DistributedInvocation", exception: Exception
+        self,
+        invocation: "DistributedInvocation",
+        exception: Exception,
+        runner_ctx: "RunnerContext",
     ) -> None:
         """
         Sets an invocation for retry in case of a retriable exception.
@@ -540,7 +573,7 @@ class BaseOrchestrator(ABC):
         # eg. on case of interruption from a kubernetes pod (SIGTERM, SIGKILL)
         #     it should try to finish all the calls in this function
         self.app.orchestrator.set_invocation_status(
-            invocation.invocation_id, InvocationStatus.RETRY
+            invocation.invocation_id, InvocationStatus.RETRY, runner_ctx
         )
         self.app.orchestrator.increment_invocation_retries(invocation.invocation_id)
         self.app.broker.route_invocation(invocation)
@@ -619,7 +652,10 @@ class BaseOrchestrator(ABC):
         return False
 
     def get_blocking_invocations_to_run(
-        self, max_num_invocations: int, blocking_invocation_ids: set[str]
+        self,
+        max_num_invocations: int,
+        blocking_invocation_ids: set[str],
+        runner_ctx: "RunnerContext",
     ) -> Iterator[str]:
         """
         Retrieves invocation IDs that are blocking others but are not themselves blocked, up to a maximum number.
@@ -639,9 +675,14 @@ class BaseOrchestrator(ABC):
                 continue
             blocking_invocation_ids.add(blocking_invocation_id)
             try:
-                self.set_invocation_pending_status(blocking_invocation_id)
+                self.set_invocation_status(
+                    blocking_invocation_id, InvocationStatus.PENDING, runner_ctx
+                )
                 yield blocking_invocation_id
-            except PendingInvocationLockError:
+            except InvocationStatusError as ex:
+                self.app.logger.warning(
+                    f"Could not set blocking invocation {blocking_invocation_id} to PENDING: {ex}"
+                )
                 continue
 
     def get_additional_invocations_to_run(
@@ -649,6 +690,7 @@ class BaseOrchestrator(ABC):
         missing_invocations: int,
         blocking_invocation_ids: set[str],
         invocations_to_reroute: set["DistributedInvocation"],
+        runner_ctx: "RunnerContext",
     ) -> Iterator["DistributedInvocation"]:
         """
         Retrieves additional invocations to run, considering those not blocked or already identified as blocking.
@@ -669,20 +711,33 @@ class BaseOrchestrator(ABC):
                         if not self.is_candidate_to_run_by_concurrency_control(
                             invocation
                         ):
+                            self.set_invocation_status(
+                                invocation.invocation_id,
+                                InvocationStatus.CONCURRENCY_CONTROLLED,
+                                runner_ctx,
+                            )
                             invocations_to_reroute.add(invocation)
                             continue
                         try:
-                            self.set_invocation_pending_status(invocation.invocation_id)
+                            self.set_invocation_status(
+                                invocation.invocation_id,
+                                InvocationStatus.PENDING,
+                                runner_ctx,
+                            )
                             missing_invocations -= 1
                             yield invocation
-                        except PendingInvocationLockError:
-                            # invocations_to_reroute.add(invocation)
+                        except InvocationStatusError as ex:
+                            self.app.logger.warning(
+                                f"Could not set invocation {invocation.invocation_id} to PENDING: {ex}"
+                            )
                             continue
             else:
                 break
 
     def reroute_invocations(
-        self, invocations_to_reroute: set["DistributedInvocation"]
+        self,
+        invocations_to_reroute: set["DistributedInvocation"],
+        runner_ctx: "RunnerContext",
     ) -> None:
         """
         Reroutes the specified invocations, typically when they are not authorized to run.
@@ -694,12 +749,12 @@ class BaseOrchestrator(ABC):
                 f"Rerouting invocation {invocation.invocation_id} because it was not authorized to run"
             )
             self.set_invocation_status(
-                invocation.invocation_id, InvocationStatus.REROUTED
+                invocation.invocation_id, InvocationStatus.REROUTED, runner_ctx
             )
             self.app.broker.route_invocation(invocation)
 
     def get_invocations_to_run(
-        self, max_num_invocations: int
+        self, max_num_invocations: int, runner_ctx: "RunnerContext"
     ) -> Iterator["DistributedInvocation"]:
         """
         Retrieves a set of invocations to run, considering blocking and concurrency control.
@@ -711,7 +766,7 @@ class BaseOrchestrator(ABC):
         blocking_invocation_ids: set[str] = set()
         # Get blocking invocations as IDs but still need to yield actual invocations
         for blocking_invocation_id in self.get_blocking_invocations_to_run(
-            max_num_invocations, blocking_invocation_ids
+            max_num_invocations, blocking_invocation_ids, runner_ctx
         ):
             if invocation := self.app.state_backend.get_invocation(
                 blocking_invocation_id
@@ -721,9 +776,12 @@ class BaseOrchestrator(ABC):
         invocations_to_reroute: set[DistributedInvocation] = set()
         missing_invocations = max_num_invocations - len(blocking_invocation_ids)
         yield from self.get_additional_invocations_to_run(
-            missing_invocations, blocking_invocation_ids, invocations_to_reroute
+            missing_invocations,
+            blocking_invocation_ids,
+            invocations_to_reroute,
+            runner_ctx,
         )
-        self.reroute_invocations(invocations_to_reroute)
+        self.reroute_invocations(invocations_to_reroute, runner_ctx)
 
     def register_new_invocations(
         self, invocations: list["DistributedInvocation[Params, Result]"]
@@ -732,17 +790,20 @@ class BaseOrchestrator(ABC):
         Registers a new invocation in the state backend and the orchestrator.
 
         :param DistributedInvocation[Params, Result] invocation: The invocation to register.
+        :param str | None owner_id: The owner ID for ownership validation
         """
+        runner_ctx = context.get_current_runner_context(self.app.app_id)
+        owner_id = runner_ctx.runner_id if runner_ctx else None
         self.app.state_backend.upsert_invocations(invocations)
         # This should add the status registered to the backend
-        self._register_new_invocations(invocations)
+        status_record = self._register_new_invocations(invocations, owner_id)
         inv_ids = [invocation.invocation_id for invocation in invocations]
-        self.app.state_backend.add_histories(inv_ids, InvocationStatus.REGISTERED)
-        self.app.trigger.report_tasks_status(inv_ids, InvocationStatus.REGISTERED)
+        self.app.state_backend.add_histories(inv_ids, status_record, runner_ctx)
+        self.app.trigger.report_tasks_status(inv_ids, status_record.status)
         self.app.broker.route_invocations(invocations)
 
     def _route_new_call_invocation(
-        self, call: "Call[Params, Result]"
+        self, call: "Call[Params, Result]", owner_id: str | None = None
     ) -> "DistributedInvocation[Params, Result]":
         """
         Routes a new call invocation within the distributed task system.
@@ -871,3 +932,126 @@ class BaseOrchestrator(ABC):
         ]
         self.register_new_invocations(invocations)
         return invocations
+
+    @abstractmethod
+    def register_runner_heartbeat(self, runner_ctx: "RunnerContext") -> None:
+        """
+        Register or update a runner's heartbeat timestamp.
+
+        :param RunnerContext runner_ctx: The runner context to register.
+        """
+
+    @abstractmethod
+    def get_active_runners(self) -> list[ActiveRunnerInfo]:
+        """
+        Retrieve all active runners with heartbeat information.
+
+        Only returns runners that have sent a heartbeat within the configured timeout period.
+        Results are ordered by creation time (oldest first).
+
+        :return: List of active runner information ordered by creation time (oldest first).
+        :rtype: list[ActiveRunnerInfo]
+        """
+
+    @abstractmethod
+    def cleanup_inactive_runners(self) -> None:
+        """
+        Remove runners that haven't sent a heartbeat within the timeout period.
+        """
+
+    @abstractmethod
+    def get_pending_invocations_for_recovery(self) -> Iterator[str]:
+        """
+        Retrieve invocation IDs stuck in PENDING status beyond the allowed time.
+
+        :return: Iterator of invocation IDs that need recovery.
+        :rtype: Iterator[str]
+        """
+
+    def should_run_recovery_service(self, runner_ctx: "RunnerContext") -> bool:
+        """
+        Determine if the current runner should execute the recovery service.
+
+        Uses runner count and timing to distribute recovery checks across runners,
+        preventing simultaneous execution and race conditions.
+
+        :param RunnerContext runner_ctx: The context of the current runner.
+        :return: True if this runner should execute recovery now.
+        :rtype: bool
+        """
+        self.cleanup_inactive_runners()
+        active_runners = self.get_active_runners()
+
+        if not active_runners:
+            return False
+
+        # Find position of current runner in ordered list
+        try:
+            runner_position = next(
+                i
+                for i, r in enumerate(active_runners)
+                if r.runner_ctx.runner_id == runner_ctx.runner_id
+            )
+        except StopIteration:
+            self.app.logger.warning(
+                f"Runner {runner_ctx.runner_id} not found in active runners for recovery service"
+            )
+            return False
+
+        total_runners = len(active_runners)
+
+        # Single runner always runs recovery
+        if total_runners == 1:
+            return True
+
+        recovery_interval = self.conf.run_invocation_recovery_service_every_minutes * 60
+        spread_margin = self.conf.recovery_service_spread_margin_minutes * 60
+
+        # Calculate time window for this runner
+        # Each runner gets a window within the recovery interval
+        time_slot_size = recovery_interval / total_runners
+        runner_start_time = runner_position * time_slot_size
+        runner_end_time = runner_start_time + time_slot_size - spread_margin
+
+        # Ensure end time doesn't go negative
+        if runner_end_time <= runner_start_time:
+            runner_end_time = runner_start_time + (time_slot_size / 2)
+
+        # Current position within the recovery cycle
+        current_time = time()
+        time_in_cycle = current_time % recovery_interval
+
+        return runner_start_time <= time_in_cycle < runner_end_time
+
+    def invocation_recovery_service(self, runner_ctx: "RunnerContext") -> None:
+        """
+        Service to recover invocations stuck in PENDING status beyond the allowed time.
+
+        This method checks for invocations that have been in PENDING status longer than
+        the configured max_pending_seconds and reverts them to their previous status.
+
+        :param RunnerContext runner_ctx: The context of the runner executing this service.
+        """
+        self.register_runner_heartbeat(runner_ctx)
+
+        if not self.should_run_recovery_service(runner_ctx):
+            return
+
+        self.app.logger.info(
+            f"Runner {runner_ctx.runner_id} executing invocation recovery service"
+        )
+
+        pending_invocations = set()
+        for invocation_id in self.get_pending_invocations_for_recovery():
+            try:
+                pending_invocations.add(
+                    self.app.state_backend.get_invocation(invocation_id)
+                )
+                self.app.logger.info(
+                    f"Invocation {invocation_id} added to recovery service"
+                )
+            except InvocationNotFoundError:
+                self.app.logger.warning(
+                    f"Invocation {invocation_id} not found during recovery service"
+                )
+        self.reroute_invocations(pending_invocations, runner_ctx)

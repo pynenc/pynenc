@@ -5,6 +5,7 @@ This module verifies that workflow data is properly persisted across task
 executions and that different workflow instances have isolated data across
 different state backend implementations.
 """
+
 import threading
 from typing import TYPE_CHECKING
 
@@ -33,16 +34,16 @@ def test_workflow_data_basic(workflow_data_test_runner: "Task") -> None:
     # Verify all tests passed
     assert results["basic_set_get"], "Basic set/get operations should work"
     assert results["basic_update"], "Data updates should persist"
-    assert results[
-        "default_value"
-    ], "Default values should be returned for missing keys"
+    assert results["default_value"], (
+        "Default values should be returned for missing keys"
+    )
     assert results["none_value"], "None should be returned when no default is provided"
-    assert results[
-        "counter_persistence"
-    ], "Counter should persist across operations within workflow"
-    assert results[
-        "different_types"
-    ], "Different data types should be stored and retrieved correctly"
+    assert results["counter_persistence"], (
+        "Counter should persist across operations within workflow"
+    )
+    assert results["different_types"], (
+        "Different data types should be stored and retrieved correctly"
+    )
 
     app.runner.stop_runner_loop()
     thread.join()
@@ -100,32 +101,32 @@ def test_workflow_data_isolation(isolated_workflow_test: "Task") -> None:
     third_result = third_invocation.result
 
     # Each workflow should have different identities
-    assert (
-        first_result["workflow_id"] != second_result["workflow_id"]
-    ), "Workflow IDs should be different"
-    assert (
-        first_result["workflow_id"] != third_result["workflow_id"]
-    ), "Workflow IDs should be different"
-    assert (
-        second_result["workflow_id"] != third_result["workflow_id"]
-    ), "Workflow IDs should be different"
+    assert first_result["workflow_id"] != second_result["workflow_id"], (
+        "Workflow IDs should be different"
+    )
+    assert first_result["workflow_id"] != third_result["workflow_id"], (
+        "Workflow IDs should be different"
+    )
+    assert second_result["workflow_id"] != third_result["workflow_id"], (
+        "Workflow IDs should be different"
+    )
 
     # Each workflow should have different invocation IDs
-    assert (
-        first_result["invocation_id"] != second_result["invocation_id"]
-    ), "Invocation IDs should be different"
-    assert (
-        first_result["invocation_id"] != third_result["invocation_id"]
-    ), "Invocation IDs should be different"
-    assert (
-        second_result["invocation_id"] != third_result["invocation_id"]
-    ), "Invocation IDs should be different"
+    assert first_result["invocation_id"] != second_result["invocation_id"], (
+        "Invocation IDs should be different"
+    )
+    assert first_result["invocation_id"] != third_result["invocation_id"], (
+        "Invocation IDs should be different"
+    )
+    assert second_result["invocation_id"] != third_result["invocation_id"], (
+        "Invocation IDs should be different"
+    )
 
     # Each workflow should have its own isolated data
     assert first_result["stored_value"] == 100, "First workflow should store its value"
-    assert (
-        second_result["stored_value"] == 200
-    ), "Second workflow should store its value"
+    assert second_result["stored_value"] == 200, (
+        "Second workflow should store its value"
+    )
     assert third_result["stored_value"] == 300, "Third workflow should store its value"
 
     # Each workflow should have its own counter starting at 1

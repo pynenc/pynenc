@@ -4,6 +4,7 @@ import signal
 import socket
 import threading
 import time
+import uuid
 import warnings
 from abc import ABC, abstractmethod
 from functools import cached_property
@@ -12,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 from pynenc.conf.config_runner import ConfigRunner
 from pynenc.exceptions import RunnerNotExecutableError
 from pynenc.util.log import RunnerLogAdapter
+from pynenc.runner.runner_context import RunnerContext
 
 
 if TYPE_CHECKING:
@@ -47,24 +49,26 @@ class BaseRunner(ABC):
         self,
         app: "Pynenc",
         runner_cache: dict | None = None,
-        extra_id: str | None = None,
     ) -> None:
         self.app = app
         self.app.runner = self
         self.running = False
         self._runner_cache = runner_cache
-        self._extra_id = extra_id
-        self._host_proc_id = (
-            f"{self.__class__.__name__}({socket.gethostname()}-{os.getpid()})"
-        )
-        self._runner_id = self._host_proc_id
-        if extra_id:
-            self._runner_id = self._host_proc_id + f"[{extra_id}]"
-        self.logger = RunnerLogAdapter(self.app.logger, self._runner_id)
+        self._extra_id: str | None = None
+        self._uuid = uuid.uuid4().hex
+        self._hostname = socket.gethostname()
+        self._pid = os.getpid()
+        self.logger = RunnerLogAdapter(self.app.logger, self.runner_id)
+        self._last_recovery_check_time = 0.0
+
+    @cached_property
+    def _base_runner_id(self) -> str:
+        """Base ID without extra_id."""
+        return f"{self.__class__.__name__}@{self._hostname}-{self._pid}"
 
     def set_extra_id(self, extra_id: str) -> None:
-        self._runner_id = self._host_proc_id + f"[{extra_id}]"
-        self.logger = RunnerLogAdapter(self.app.logger, self._runner_id)
+        self._extra_id = extra_id
+        self.logger = RunnerLogAdapter(self.app.logger, self.runner_id)
 
     @property
     def runner_id(self) -> str:
@@ -73,7 +77,11 @@ class BaseRunner(ABC):
 
         :return: A string representing the unique identifier of the runner
         """
-        return self._runner_id
+        return (
+            f"{self._base_runner_id}[{self._extra_id}]"
+            if self._extra_id
+            else self._base_runner_id
+        )
 
     @cached_property
     def conf(self) -> ConfigRunner:
@@ -243,6 +251,21 @@ class BaseRunner(ABC):
             running_invocation_id, result_invocation_ids, runner_args
         )
 
+    def _check_recovery_service(self) -> None:
+        """
+        Check and run recovery service if enough time has passed.
+
+        Uses recovery_service_check_interval_minutes to throttle checks
+        and avoid putting pressure on the orchestrator every loop iteration.
+        """
+        current_time = time.time()
+        check_interval_seconds = self.conf.recovery_service_check_interval_minutes * 60
+
+        if current_time - self._last_recovery_check_time >= check_interval_seconds:
+            self._last_recovery_check_time = current_time
+            runner_ctx = RunnerContext.from_runner(self)
+            self.app.orchestrator.invocation_recovery_service(runner_ctx)
+
     def run(self) -> None:
         """Starts the runner, initiating its main loop."""
         self.on_start()
@@ -250,6 +273,7 @@ class BaseRunner(ABC):
             while self.running:
                 self.app.trigger.trigger_loop_iteration()
                 self.runner_loop_iteration()
+                self._check_recovery_service()
                 time.sleep(self.conf.runner_loop_sleep_time_sec)
         except KeyboardInterrupt:
             self.logger.warning("KeyboardInterrupt received. Stopping runner...")

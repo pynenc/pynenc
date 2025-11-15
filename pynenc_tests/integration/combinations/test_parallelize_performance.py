@@ -53,26 +53,14 @@ def calculate_distributed_metrics(
     individual_times = [v[2] for v in results.invocation_times.values()]
     num_tasks = len(individual_times)
     if num_tasks == 0:
-        avg_sub_task_time = (
-            min_sub_task_time
-        ) = (
-            max_sub_task_time
-        ) = (
-            total_cpu_time
-        ) = (
+        avg_sub_task_time = min_sub_task_time = max_sub_task_time = total_cpu_time = (
             sequential_time
         ) = parallelization_factor = efficiency_per_cpu = avg_iters = 0.0
-        avg_sub_task_time_str = (
-            min_sub_task_time_str
-        ) = (
-            max_sub_task_time_str
-        ) = (
+        avg_sub_task_time_str = min_sub_task_time_str = max_sub_task_time_str = (
             total_cpu_time_str
-        ) = (
-            sequential_time_str
-        ) = (
-            wall_clock_time_str
-        ) = parallelization_factor_str = efficiency_per_cpu_str = "N/A"
+        ) = sequential_time_str = wall_clock_time_str = parallelization_factor_str = (
+            efficiency_per_cpu_str
+        ) = "N/A"
         individual_sub_task_times = []
         individual_sub_task_iters = []
     else:
@@ -248,8 +236,8 @@ def test_distributed_cpu_work_performance(task_distribute_cpu_work: Task) -> Non
         assert expected_min_time <= total_time <= expected_max_time, (
             f"Wall-clock time {total_time:.3f}s outside expected range "
             f"[{expected_min_time:.3f}s, {expected_max_time:.3f}s] "
-            f"({MIN_TIME_FACTOR}x min={MIN_TIME_FACTOR*min_sub_task_time:.3f}s, "
-            f"{MAX_TIME_FACTOR}x max={MAX_TIME_FACTOR*max_sub_task_time:.3f}s)\n"
+            f"({MIN_TIME_FACTOR}x min={MIN_TIME_FACTOR * min_sub_task_time:.3f}s, "
+            f"{MAX_TIME_FACTOR}x max={MAX_TIME_FACTOR * max_sub_task_time:.3f}s)\n"
             f"Performance data: {performance_data}"
         )
 

@@ -5,6 +5,7 @@ This module provides fixtures for testing workflow data persistence and
 deterministic operations across different state backend implementations,
 following the same pattern as app combinations integration tests.
 """
+
 from typing import TYPE_CHECKING
 
 import pytest

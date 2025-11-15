@@ -1,4 +1,26 @@
+"""
+Invocation status management.
+
+This module defines the status lifecycle of task invocations, including state transitions,
+ownership rules, and the state machine that enforces them.
+
+Key components:
+- InvocationStatus: Enum of all possible invocation states
+- InvocationStatusRecord: Immutable record combining status with ownership
+- StatusDefinition: Declarative rules for status behavior
+- State machine functions: Validation and transition logic
+"""
+
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from enum import StrEnum, auto
+from functools import cached_property
+from typing import Final
+
+from pynenc.exceptions import (
+    InvocationStatusTransitionError,
+    InvocationStatusOwnershipError,
+)
 
 
 class InvocationStatus(StrEnum):
@@ -9,90 +31,358 @@ class InvocationStatus(StrEnum):
     :attr:`~pynenc.conf.config_pynenc.ConfigPynenc.max_pending_seconds`.
 
     ```{note}
-    FAILED, RETRY, and SUCCESS are the same category and can be considered as subtypes of a hypothetical TERMINATED status.
+    FAILED, RETRY, and SUCCESS are final statuses that terminate the invocation lifecycle.
     ```
 
-    :cvar REGISTERED:
-        The task call has been routed and is registered.
-
-    :cvar REROUTED:
-        The task call has been re-routed and is registered.
-        This status is used when a registered task cannot be set to pending and then run
-        in case of running concurrency checks (e.g., only one instance of the task can run at the same time).
-
-    :cvar PENDING:
-        The task call was picked by a runner but is not yet executed.
-        The status pending will expire after Config.max_pending_seconds.
-
-    :cvar RUNNING:
-        The task call is currently running.
-
-    :cvar PAUSED:
-        The task call execution is paused.
-
-    :cvar RESUMED:
-        The task call execution has been resumed.
-
-    :cvar SUCCESS:
-        The task call finished without errors.
-
-    :cvar SCHEDULED:
-        A task has been registered to run at a specific time. This is a subtype of REGISTERED.
-
-    :cvar FAILED:
-        The task call finished with exceptions.
-
-    :cvar RETRY:
-        The task call finished with a retriable exception.
+    :cvar REGISTERED: The task call has been routed and is registered
+    :cvar CONCURRENCY_CONTROLLED: The task call is not allowed to run due to concurrency control
+    :cvar REROUTED: The task call has been re-routed and is registered
+    :cvar PENDING: The task call was picked by a runner but is not yet executed
+    :cvar RUNNING: The task call is currently running
+    :cvar PAUSED: The task call execution is paused
+    :cvar RESUMED: The task call execution has been resumed
+    :cvar KILLED: The task call execution has been killed
+    :cvar SUCCESS: The task call finished without errors
+    :cvar FAILED: The task call finished with exceptions
+    :cvar RETRY: The task call finished with a retriable exception
     """
 
     REGISTERED = auto()
+    CONCURRENCY_CONTROLLED = auto()
     REROUTED = auto()
     PENDING = auto()
     RUNNING = auto()
     PAUSED = auto()
     RESUMED = auto()
+    KILLED = auto()
     SUCCESS = auto()
-    SCHEDULED = auto()
     FAILED = auto()
     RETRY = auto()
 
-    def is_available_for_run(self) -> bool:
-        """
-        Check if the task is in a state where it is available to be picked up and run by any broker.
-        This means the task is not currently being executed, paused, or about to be executed by any other broker.
-
-        :return:
-            True if the status is runnable by any broker, False otherwise.
-        """
-        return self in InvocationStatus.get_available_for_run_statuses()
-
     def is_final(self) -> bool:
-        """
-        Checks if the status is a final status.
+        """Check if the status terminates the invocation lifecycle."""
+        return self in _CONFIG.final_statuses
 
-        :return: True if the status is final, False otherwise.
-        """
-        return self in InvocationStatus.get_final_statuses()
-
-    @classmethod
-    def get_final_statuses(cls) -> set["InvocationStatus"]:
-        """
-        Returns the set of statuses that are considered final.
-
-        :return: A set containing all final statuses
-        """
-        return {cls.SUCCESS, cls.FAILED}
+    def is_available_for_run(self) -> bool:
+        """Check if the task can be picked up and run by any broker."""
+        return self in _CONFIG.available_for_run_statuses
 
     @classmethod
-    def get_available_for_run_statuses(cls) -> set["InvocationStatus"]:
-        """
-        Returns the set of statuses that are considered available for run.
+    def get_final_statuses(cls) -> frozenset["InvocationStatus"]:
+        """Return all statuses that terminate the invocation lifecycle."""
+        return _CONFIG.final_statuses
 
-        :return: A set containing all statuses available for run
-        """
+    @classmethod
+    def get_available_for_run_statuses(cls) -> frozenset["InvocationStatus"]:
+        """Return all statuses where invocations can be picked up by runners."""
+        return _CONFIG.available_for_run_statuses
+
+
+@dataclass(frozen=True)
+class InvocationStatusRecord:
+    """
+    Immutable record combining status with ownership information.
+
+    :ivar InvocationStatus status: The current invocation status
+    :ivar str | None owner_id: Runner ID that owns this invocation (None if no owner)
+    :ivar datetime timestamp: When this status was set
+    """
+
+    status: InvocationStatus
+    owner_id: str | None = None
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
+
+    def to_json(self) -> dict:
+        """Serialize the status record to a JSON-compatible dictionary."""
         return {
-            cls.REGISTERED,
-            cls.REROUTED,
-            cls.RETRY,
+            "status": self.status.value,
+            "owner_id": self.owner_id,
+            "timestamp": self.timestamp.isoformat(),
         }
+
+    @classmethod
+    def from_json(cls, json_dict: dict) -> "InvocationStatusRecord":
+        """Deserialize a JSON-compatible dictionary into a status record."""
+        timestamp = datetime.fromisoformat(json_dict["timestamp"])
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=UTC)
+        return cls(
+            status=InvocationStatus(json_dict["status"]),
+            owner_id=json_dict.get("owner_id"),
+            timestamp=timestamp,
+        )
+
+
+@dataclass(frozen=True)
+class StatusDefinition:
+    """
+    Declarative definition of status behavior and ownership rules.
+
+    :ivar frozenset[InvocationStatus] allowed_transitions: Valid next statuses
+    :ivar bool is_final: Terminates invocation lifecycle
+    :ivar bool available_for_run: Can be picked up by runners
+    :ivar bool requires_ownership: Only owner can modify
+    :ivar bool acquires_ownership: Claims ownership on entry
+    :ivar bool releases_ownership: Releases ownership on entry
+    """
+
+    allowed_transitions: frozenset[InvocationStatus] = field(default_factory=frozenset)
+    is_final: bool = False
+    available_for_run: bool = False
+    requires_ownership: bool = False
+    acquires_ownership: bool = False
+    releases_ownership: bool = False
+
+    def __post_init__(self) -> None:
+        if self.acquires_ownership and self.releases_ownership:
+            raise ValueError("Status cannot both acquire and release ownership")
+        if self.is_final and self.allowed_transitions:
+            raise ValueError("Final statuses cannot have allowed transitions")
+
+
+@dataclass(frozen=True)
+class StatusConfiguration:
+    """
+    Complete configuration for invocation status behavior.
+
+    :ivar dict[InvocationStatus | None, StatusDefinition] definitions: Behavior rules per status
+    """
+
+    definitions: dict[InvocationStatus | None, StatusDefinition]
+
+    def __post_init__(self) -> None:
+        defined = {k for k in self.definitions if k is not None}
+        if missing := set(InvocationStatus) - defined:
+            raise ValueError(f"Missing definitions for: {missing}")
+
+        for status, definition in self.definitions.items():
+            for target in definition.allowed_transitions:
+                if target not in InvocationStatus:
+                    raise ValueError(
+                        f"{status} references undefined transition: {target}"
+                    )
+
+    @cached_property
+    def final_statuses(self) -> frozenset[InvocationStatus]:
+        return frozenset(s for s, d in self.definitions.items() if s and d.is_final)
+
+    @cached_property
+    def available_for_run_statuses(self) -> frozenset[InvocationStatus]:
+        return frozenset(
+            s for s, d in self.definitions.items() if s and d.available_for_run
+        )
+
+    @cached_property
+    def ownership_required_statuses(self) -> frozenset[InvocationStatus]:
+        return frozenset(
+            s for s, d in self.definitions.items() if s and d.requires_ownership
+        )
+
+    @cached_property
+    def ownership_acquire_statuses(self) -> frozenset[InvocationStatus]:
+        return frozenset(
+            s for s, d in self.definitions.items() if s and d.acquires_ownership
+        )
+
+    @cached_property
+    def ownership_release_statuses(self) -> frozenset[InvocationStatus]:
+        return frozenset(
+            s for s, d in self.definitions.items() if s and d.releases_ownership
+        )
+
+    def get_definition(self, status: InvocationStatus | None) -> StatusDefinition:
+        return self.definitions[status]
+
+
+# ============================================================================
+# Status Configuration
+# ============================================================================
+
+_CONFIG: Final[StatusConfiguration] = StatusConfiguration(
+    definitions={
+        None: StatusDefinition(
+            allowed_transitions=frozenset({InvocationStatus.REGISTERED}),
+        ),
+        InvocationStatus.REGISTERED: StatusDefinition(
+            allowed_transitions=frozenset(
+                {InvocationStatus.PENDING, InvocationStatus.CONCURRENCY_CONTROLLED}
+            ),
+            available_for_run=True,
+            releases_ownership=True,
+        ),
+        # The invocation is not allowed to run due to concurrency control
+        InvocationStatus.CONCURRENCY_CONTROLLED: StatusDefinition(
+            allowed_transitions=frozenset({InvocationStatus.REROUTED}),
+            available_for_run=False,
+            releases_ownership=True,
+        ),
+        InvocationStatus.REROUTED: StatusDefinition(
+            allowed_transitions=frozenset(
+                {InvocationStatus.PENDING, InvocationStatus.CONCURRENCY_CONTROLLED}
+            ),
+            available_for_run=True,
+            releases_ownership=True,
+        ),
+        InvocationStatus.PENDING: StatusDefinition(
+            # An invocation can FAILED without running by the CYCLE-CONTROL mechanism
+            # to avoid deadlocks.
+            allowed_transitions=frozenset(
+                {
+                    InvocationStatus.RUNNING,
+                    InvocationStatus.KILLED,
+                    InvocationStatus.REROUTED,
+                    InvocationStatus.FAILED,
+                }
+            ),
+            requires_ownership=True,
+            acquires_ownership=True,
+        ),
+        InvocationStatus.RUNNING: StatusDefinition(
+            allowed_transitions=frozenset(
+                {
+                    InvocationStatus.PAUSED,
+                    InvocationStatus.KILLED,
+                    InvocationStatus.RETRY,
+                    InvocationStatus.SUCCESS,
+                    InvocationStatus.FAILED,
+                }
+            ),
+            requires_ownership=True,
+        ),
+        InvocationStatus.PAUSED: StatusDefinition(
+            allowed_transitions=frozenset(
+                {InvocationStatus.RESUMED, InvocationStatus.KILLED}
+            ),
+            requires_ownership=True,
+        ),
+        InvocationStatus.RESUMED: StatusDefinition(
+            allowed_transitions=frozenset(
+                {
+                    InvocationStatus.PAUSED,
+                    InvocationStatus.KILLED,
+                    InvocationStatus.RETRY,
+                    InvocationStatus.SUCCESS,
+                    InvocationStatus.FAILED,
+                }
+            ),
+            requires_ownership=True,
+        ),
+        InvocationStatus.KILLED: StatusDefinition(
+            allowed_transitions=frozenset({InvocationStatus.REROUTED}),
+            releases_ownership=True,
+        ),
+        InvocationStatus.RETRY: StatusDefinition(
+            allowed_transitions=frozenset({InvocationStatus.PENDING}),
+            available_for_run=True,
+            releases_ownership=True,
+        ),
+        InvocationStatus.SUCCESS: StatusDefinition(
+            is_final=True,
+            releases_ownership=True,
+        ),
+        InvocationStatus.FAILED: StatusDefinition(
+            is_final=True,
+            releases_ownership=True,
+        ),
+    }
+)
+
+
+# ============================================================================
+# State Machine Functions
+# ============================================================================
+
+
+def validate_transition(
+    from_status: InvocationStatus | None,
+    to_status: InvocationStatus,
+) -> None:
+    """
+    Validate state transition or raise exception.
+
+    :param InvocationStatus | None from_status: Current status (None for new invocations)
+    :param InvocationStatus to_status: Target status
+    :raises InvocationStatusTransitionError: If transition is invalid
+    """
+    definition = _CONFIG.get_definition(from_status)
+    if to_status not in definition.allowed_transitions:
+        raise InvocationStatusTransitionError(
+            from_status=from_status,
+            to_status=to_status,
+            allowed_statuses=definition.allowed_transitions,
+        )
+
+
+def validate_ownership(
+    current_record: InvocationStatusRecord | None,
+    new_status: InvocationStatus,
+    runner_id: str | None,
+) -> None:
+    """
+    Validate ownership requirements for a transition.
+
+    :param InvocationStatusRecord | None current_record: Current status record
+    :param InvocationStatus new_status: Target status
+    :param str | None runner_id: Runner attempting the transition
+    :raises InvocationStatusOwnershipError: If ownership rules are violated
+    """
+    if not current_record:
+        return
+
+    current_def = _CONFIG.get_definition(current_record.status)
+    new_def = _CONFIG.get_definition(new_status)
+
+    msg: str | None = None
+    attempted_owner: str | None = runner_id
+
+    if current_def.requires_ownership and runner_id != current_record.owner_id:
+        msg = f"Status requires ownership by '{current_record.owner_id}'"
+    elif new_def.acquires_ownership and not runner_id:
+        msg = f"Status {new_status} requires a runner_id to acquire ownership"
+        attempted_owner = None
+
+    if msg:
+        raise InvocationStatusOwnershipError(
+            from_status=current_record.status,
+            to_status=new_status,
+            current_owner=current_record.owner_id,
+            attempted_owner=attempted_owner,
+            reason=msg,
+        )
+
+
+def compute_new_owner(
+    current_record: InvocationStatusRecord | None,
+    new_status: InvocationStatus,
+    runner_id: str | None,
+) -> str | None:
+    """Compute new owner based on status transition."""
+    new_def = _CONFIG.get_definition(new_status)
+    if new_def.releases_ownership:
+        return None
+    if new_def.acquires_ownership:
+        return runner_id
+    return current_record.owner_id if current_record else None
+
+
+def status_record_transition(
+    current_record: InvocationStatusRecord | None,
+    new_status: InvocationStatus,
+    runner_id: str | None,
+) -> InvocationStatusRecord:
+    """
+    Execute a status change with safety checks.
+
+    :param InvocationStatusRecord | None current_record: Current state (None for new invocations)
+    :param InvocationStatus new_status: Desired new status
+    :param str | None runner_id: ID of runner making the change
+    :return: New validated status record
+    :raises InvocationStatusTransitionError: If transition is not allowed
+    :raises InvocationStatusOwnershipError: If ownership rules are violated
+    """
+    from_status = current_record.status if current_record else None
+    validate_transition(from_status, new_status)
+    validate_ownership(current_record, new_status, runner_id)
+    new_owner = compute_new_owner(current_record, new_status, runner_id)
+
+    return InvocationStatusRecord(status=new_status, owner_id=new_owner)

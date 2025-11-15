@@ -238,7 +238,10 @@ def _filter_invocations_by_time(
 
         # Get end time (last entry if in final state)
         invocation_end_time = None
-        if sorted_history[-1].status and sorted_history[-1].status.is_final():
+        if (
+            sorted_history[-1].status_record.status
+            and sorted_history[-1].status_record.status.is_final()
+        ):
             invocation_end_time = sorted_history[-1].timestamp
 
         # Find parent invocation if it exists
@@ -448,7 +451,8 @@ def _get_formatted_invocation_history(
             formatted_history.append(
                 {
                     "timestamp": entry.timestamp.isoformat(),
-                    "status": entry.status.name if entry.status else "UNKNOWN",
+                    "status": entry.status_record.status.name,
+                    "status_owner_id": entry.status_record.owner_id,
                     "running_context": entry.runner_context,
                     "runner_context_summary": runner_context_summary,
                 }
@@ -473,7 +477,7 @@ def _get_formatted_invocation_history(
 
 
 def _get_invocation_timestamps_and_duration(
-    formatted_history: list[dict[str, str | None]]
+    formatted_history: list[dict[str, str | None]],
 ) -> tuple[str | None, str | None, float | None]:
     """Extract timestamps and calculate duration from formatted history."""
     created_at: str | None = "Unknown"
@@ -647,7 +651,8 @@ async def invocation_history(request: Request, invocation_id: str) -> JSONRespon
             formatted_history.append(
                 {
                     "timestamp": timestamp.isoformat(),
-                    "status": entry.status.value,
+                    "status": entry.status_record.status.value,
+                    "status_owner_id": entry.status_record.owner_id,
                     "runner_context_summary": runner_context_summary,
                 }
             )

@@ -4,6 +4,7 @@ Tests for operation sequence tracking and counter management.
 This module tests the core sequence tracking logic that ensures deterministic
 operation ordering and proper counter persistence across executor instances.
 """
+
 from pynenc.workflow.deterministic import DeterministicExecutor
 
 

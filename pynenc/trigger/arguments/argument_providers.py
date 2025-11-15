@@ -220,8 +220,7 @@ class StaticArgumentProvider(ArgumentProvider):
 class ContextCallable(Protocol[C_contra]):
     """Protocol for callables that process a specific context type."""
 
-    def __call__(self, context: C_contra) -> dict[str, Any]:
-        ...
+    def __call__(self, context: C_contra) -> dict[str, Any]: ...
 
 
 class ContextTypeArgumentProvider(ArgumentProvider, Generic[C]):

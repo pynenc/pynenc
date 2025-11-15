@@ -1,0 +1,103 @@
+{% extends "base.html" %} {% block content %}
+<div class="container-fluid">
+  <!-- Page Header -->
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="h4 mb-0 text-primary">Active Runners</h2>
+    <button
+      class="btn btn-sm btn-outline-primary"
+      hx-get="/runners/refresh"
+      hx-target="#runners-table"
+      hx-swap="innerHTML"
+    >
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="16"
+        height="16"
+        fill="currentColor"
+        class="bi bi-arrow-clockwise"
+        viewBox="0 0 16 16"
+      >
+        <path
+          fill-rule="evenodd"
+          d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"
+        />
+        <path
+          d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"
+        />
+      </svg>
+      Refresh
+    </button>
+  </div>
+
+  <!-- Stats Overview -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <div class="metric-card">
+        <h6 class="section-title">Total Runners</h6>
+        <p class="h3 mb-0 text-primary">{{ total_runners }}</p>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="metric-card">
+        <h6 class="section-title">Runner Classes</h6>
+        <p class="h3 mb-0 text-info">{{ runner_classes|length }}</p>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="metric-card">
+        <h6 class="section-title">Unique Hosts</h6>
+        <p class="h3 mb-0 text-success">{{ hostnames|length }}</p>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="metric-card">
+        <h6 class="section-title">Heartbeat Timeout</h6>
+        <p class="h3 mb-0 text-secondary">{{ heartbeat_timeout_minutes }}m</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Configuration Info -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="info-card">
+        <h6 class="section-title">Recovery Service Configuration</h6>
+        <div class="row">
+          <div class="col-md-6">
+            <div class="metric-item">
+              <span class="metric-label">Check Interval</span>
+              <span class="badge bg-info"
+                >{{ recovery_interval_minutes }} minutes</span
+              >
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="metric-item">
+              <span class="metric-label">Heartbeat Timeout</span>
+              <span class="badge bg-warning"
+                >{{ heartbeat_timeout_minutes }} minutes</span
+              >
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Active Runners Table -->
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <h6 class="mb-0">Active Runners</h6>
+        </div>
+        <div class="card-body p-0">
+          <div id="runners-table">
+            {% include "runners/partials/runners_table.html" %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

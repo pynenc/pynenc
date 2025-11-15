@@ -28,9 +28,9 @@ def test_route_and_retrieve_invocation(task: "Task") -> None:
     """Test that invocations can be routed and retrieved in FIFO order."""
     broker = task.app.broker
 
-    inv_1: "DistributedInvocation" = task()  # type: ignore
+    inv_1: DistributedInvocation = task()  # type: ignore
     assert broker.retrieve_invocation() == inv_1
-    inv_2: "DistributedInvocation" = task()  # type: ignore
+    inv_2: DistributedInvocation = task()  # type: ignore
     assert broker.retrieve_invocation() == inv_2
 
     broker.route_invocation(inv_1)
@@ -51,8 +51,8 @@ def test_route_and_retrieve_multiple_invocations(task: "Task") -> None:
     assert broker.retrieve_invocation() is None
 
     # It will route automatically when calling the task
-    inv_1: "DistributedInvocation" = task()  # type: ignore
-    inv_2: "DistributedInvocation" = task()  # type: ignore
+    inv_1: DistributedInvocation = task()  # type: ignore
+    inv_2: DistributedInvocation = task()  # type: ignore
 
     assert broker.retrieve_invocation() == inv_1
     assert broker.retrieve_invocation() == inv_2
@@ -72,8 +72,8 @@ def test_count_invocations(task: "Task") -> None:
 
     assert broker.count_invocations() == 0
 
-    inv_1: "DistributedInvocation" = task()  # type: ignore
-    inv_2: "DistributedInvocation" = task()  # type: ignore
+    inv_1: DistributedInvocation = task()  # type: ignore
+    inv_2: DistributedInvocation = task()  # type: ignore
 
     assert broker.count_invocations() == 2
     assert broker.retrieve_invocation() == inv_1

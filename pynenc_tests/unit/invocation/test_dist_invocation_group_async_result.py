@@ -9,6 +9,7 @@ from pynenc.invocation import (
     DistributedInvocation,
     DistributedInvocationGroup,
     InvocationStatus,
+    InvocationStatusRecord,
 )
 from pynenc_tests.conftest import MockPynenc
 
@@ -63,7 +64,9 @@ async def test_async_pending_results(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     # Force pending status for both
     app.orchestrator.filter_by_status.return_value = []
-    app.orchestrator.get_invocation_status.return_value = InvocationStatus.PENDING
+    app.orchestrator.get_invocation_status_record.return_value = InvocationStatusRecord(
+        status=InvocationStatus.PENDING
+    )
 
     # Set runner.async_waiting_for_results to an AsyncMock that raises an exception
     async def dummy_wait(

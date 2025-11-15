@@ -8,7 +8,7 @@ runners and set up pynmon clients that use the app from the test module.
 Note: Pynmon requires Python <3.13 due to FastAPI/Pydantic v2 dependencies.
 """
 
-import logging
+from logging import Logger
 import os
 import socket
 import sys
@@ -17,6 +17,8 @@ import time
 from typing import TYPE_CHECKING
 
 import pytest
+
+from pynenc_tests.util.log import create_test_logger
 
 # Skip all pynmon tests on Python 3.13+
 if sys.version_info >= (3, 13):
@@ -46,7 +48,7 @@ from pynmon.app import all_pynenc_instances
 from pynmon.app import app as pynmon_app
 from pynmon.app import pynenc_instance
 
-logger = logging.getLogger(__name__)
+logger: Logger = create_test_logger("conftest")
 
 
 class PynmonClient:
@@ -122,7 +124,7 @@ def pynmon_server(request: "FixtureRequest") -> "Generator[str, None, None]":
     :return: The server URL
     """
     # Get the app from the test module
-    test_app: "Pynenc" = request.module.app
+    test_app: Pynenc = request.module.app
 
     # Store original global state
     original_all_instances = all_pynenc_instances.copy()
@@ -141,7 +143,7 @@ def pynmon_server(request: "FixtureRequest") -> "Generator[str, None, None]":
     pynmon.app.setup_routes()
 
     port = get_free_port()
-    logger.info(f"Starting pynmon server on port {port}")
+    logger.warning(f"Starting pynmon server on port {port}")
 
     # Configure uvicorn server
     config = uvicorn.Config(
@@ -200,7 +202,7 @@ def pynmon_server(request: "FixtureRequest") -> "Generator[str, None, None]":
                 logger.info(f"Server started successfully on port {port}")
                 break
         except requests.exceptions.RequestException as e:
-            logger.debug(f"Attempt {i+1}/{max_retries}: Server not ready - {e}")
+            logger.debug(f"Attempt {i + 1}/{max_retries}: Server not ready - {e}")
             if i == max_retries - 1:
                 error_msg = f"Server failed to start on port {port} after {max_retries} attempts"
                 if server_error:

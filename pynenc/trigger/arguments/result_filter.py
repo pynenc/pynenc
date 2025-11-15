@@ -154,7 +154,7 @@ class CallableResultFilter(CallableArgumentFilter):
 
 
 def create_result_filter(
-    filter_spec: Any | Callable[[Any], bool]
+    filter_spec: Any | Callable[[Any], bool],
 ) -> ResultFilterProtocol:
     """
     Factory function to create the appropriate result filter based on the input type.

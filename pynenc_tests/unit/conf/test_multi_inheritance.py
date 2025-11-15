@@ -27,8 +27,7 @@ class ConfigChildOk(ConfigParent0, ConfigParent2):
     unique_child = ConfigField("child-ok")
 
 
-class ConfigChildMulti(ConfigChildOk, ConfigParent1):
-    ...
+class ConfigChildMulti(ConfigChildOk, ConfigParent1): ...
 
 
 def test_avoid_parent_same_config() -> None:

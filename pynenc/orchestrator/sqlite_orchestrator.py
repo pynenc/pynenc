@@ -7,14 +7,19 @@ SQLite provides ACID transactions and handles concurrent access automatically.
 """
 
 from collections.abc import Callable, Iterator
+from datetime import UTC, datetime
 from functools import cached_property
 from time import time
 from typing import TYPE_CHECKING
 
 from pynenc.conf.config_orchestrator import ConfigOrchestratorSQLite
-from pynenc.exceptions import InvocationOnFinalStatusError, PendingInvocationLockError
-from pynenc.invocation.status import InvocationStatus
+from pynenc.invocation.status import (
+    InvocationStatus,
+    InvocationStatusRecord,
+    status_record_transition,
+)
 from pynenc.orchestrator.base_orchestrator import (
+    ActiveRunnerInfo,
     BaseBlockingControl,
     BaseCycleControl,
     BaseOrchestrator,
@@ -28,6 +33,7 @@ from pynenc.util.sqlite_utils import (
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
     from pynenc.invocation.dist_invocation import DistributedInvocation
+    from pynenc.runner.runner_context import RunnerContext
     from pynenc.task import Task
     from pynenc.types import Params, Result
     from pynenc.util.sqlite_utils import SQLiteConnection
@@ -39,6 +45,7 @@ class Tables:
     CYCLE_CALLS = "orchestrator_cycle_calls"
     CYCLE_EDGES = "orchestrator_cycle_edges"
     BLOCKING_EDGES = "orchestrator_blocking_edges"
+    RUNNER_HEARTBEATS = "orchestrator_runner_heartbeats"
 
 
 class SQLiteCycleControl(BaseCycleControl):
@@ -353,9 +360,9 @@ class SQLiteOrchestrator(BaseOrchestrator):
                     task_id TEXT NOT NULL,
                     call_id TEXT NOT NULL,
                     status TEXT NOT NULL,
+                    status_owner_id TEXT,
+                    status_timestamp REAL NOT NULL,
                     retry_count INTEGER NOT NULL DEFAULT 0,
-                    pending_start_time REAL,
-                    pre_pending_status TEXT,
                     auto_purge_timestamp REAL
                 )
             """
@@ -385,6 +392,24 @@ class SQLiteOrchestrator(BaseOrchestrator):
                 CREATE INDEX IF NOT EXISTS idx_orchestrator_args_key_value ON {Tables.INVOCATION_ARGS}(arg_key, arg_value)
             """
             )
+
+            conn.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS {Tables.RUNNER_HEARTBEATS} (
+                    runner_id TEXT PRIMARY KEY,
+                    runner_context_json TEXT NOT NULL,
+                    creation_timestamp REAL NOT NULL,
+                    last_heartbeat REAL NOT NULL
+                )
+            """
+            )
+            conn.execute(
+                f"CREATE INDEX IF NOT EXISTS idx_runner_heartbeat ON {Tables.RUNNER_HEARTBEATS}(last_heartbeat)"
+            )
+            conn.execute(
+                f"CREATE INDEX IF NOT EXISTS idx_runner_creation ON {Tables.RUNNER_HEARTBEATS}(creation_timestamp)"
+            )
+
             conn.commit()
 
     @cached_property
@@ -405,27 +430,33 @@ class SQLiteOrchestrator(BaseOrchestrator):
         return self._blocking_control
 
     def _register_new_invocations(
-        self, invocations: list["DistributedInvocation[Params, Result]"]
-    ) -> None:
+        self,
+        invocations: list["DistributedInvocation[Params, Result]"],
+        owner_id: str | None = None,
+    ) -> InvocationStatusRecord:
         """Register new invocations with status Register if they don't exist yet."""
         # TRY TO INSERT, IF CONFLICT, DO NOTHING
+        status_record = InvocationStatusRecord(InvocationStatus.REGISTERED, owner_id)
         with sqlite_conn(self.sqlite_db_path) as conn:
             for invocation in invocations:
                 conn.execute(
                     f"""
                     INSERT INTO {Tables.INVOCATIONS} (
-                    invocation_id, task_id, call_id, status
-                ) VALUES (?, ?, ?, ?)
+                    invocation_id, task_id, call_id, status, status_owner_id, status_timestamp
+                ) VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT(invocation_id) DO NOTHING
                 """,
                     (
                         invocation.invocation_id,
                         invocation.task.task_id,
                         invocation.call_id,
-                        InvocationStatus.REGISTERED.value,
+                        status_record.status.value,
+                        status_record.owner_id,
+                        status_record.timestamp.timestamp(),
                     ),
                 )
             conn.commit()
+        return status_record
 
     def get_existing_invocations(
         self,
@@ -508,56 +539,45 @@ class SQLiteOrchestrator(BaseOrchestrator):
             cursor = conn.execute(
                 f"""
                 SELECT 1 FROM {Tables.INVOCATIONS}
-                WHERE call_id = ? AND status NOT IN ({','.join(['?' for _ in final_status])})
+                WHERE call_id = ? AND status NOT IN ({",".join(["?" for _ in final_status])})
                 LIMIT 1
                 """,
                 (call_id, *final_status),
             )
             return cursor.fetchone() is not None
 
-    def _set_invocation_status(
-        self,
-        invocation_id: str,
-        status: InvocationStatus,
-    ) -> None:
+    def _atomic_status_transition(
+        self, invocation_id: str, status: InvocationStatus, owner_id: str | None = None
+    ) -> InvocationStatusRecord:
         """Set the status of an invocation by ID."""
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
-                f"SELECT status FROM {Tables.INVOCATIONS} WHERE invocation_id = ?",
+                f"SELECT status, status_owner_id, status_timestamp FROM {Tables.INVOCATIONS} WHERE invocation_id = ?",
                 (invocation_id,),
             )
             row = cursor.fetchone()
             if not row:
                 raise KeyError(f"Invocation ID {invocation_id} not found")
-            prev_status = InvocationStatus(row[0])
-            if prev_status == status:
-                if prev_status == InvocationStatus.PENDING:
-                    raise PendingInvocationLockError(invocation_id)
-                self.app.logger.debug(
-                    f"Invocation {invocation_id} already in status {status}, no change"
-                )
-                return
-            if prev_status.is_final():
-                raise InvocationOnFinalStatusError(invocation_id, prev_status, status)
-            now = time() if status == InvocationStatus.PENDING else None
+            prev_status_record = InvocationStatusRecord(
+                InvocationStatus(row[0]), row[1], row[2]
+            )
+            new_record = status_record_transition(prev_status_record, status, owner_id)
+
             conn.execute(
                 f"""UPDATE {Tables.INVOCATIONS}
                         SET status = ?,
-                            pre_pending_status = CASE WHEN ? = '{InvocationStatus.PENDING.value}' THEN status ELSE NULL END,
-                            pending_start_time = ?
+                            status_owner_id = ?,
+                            status_timestamp = ?
                         WHERE invocation_id = ?""",
-                (status.value, status.value, now, invocation_id),
+                (
+                    new_record.status.value,
+                    new_record.owner_id,
+                    new_record.timestamp.timestamp(),
+                    invocation_id,
+                ),
             )
             conn.commit()
-
-    def _set_invocation_pending_status(self, invocation_id: str) -> None:
-        """
-        Set an invocation to pending status with locking by ID.
-
-        :param str invocation_id: The invocation ID
-        :raises PendingInvocationLockError: If already pending
-        """
-        self._set_invocation_status(invocation_id, InvocationStatus.PENDING)
+        return new_record
 
     def index_arguments_for_concurrency_control(
         self,
@@ -570,16 +590,6 @@ class SQLiteOrchestrator(BaseOrchestrator):
                     (invocation.invocation_id, key, value),
                 )
             conn.commit()
-
-    def get_invocation_pending_timer(self, invocation_id: str) -> float | None:
-        """Retrieves the pending timer for a specific invocation."""
-        with sqlite_conn(self.sqlite_db_path) as conn:
-            cursor = conn.execute(
-                f"SELECT pending_start_time FROM {Tables.INVOCATIONS} WHERE invocation_id = ?",
-                (invocation_id,),
-            )
-            row = cursor.fetchone()
-            return row[0] if row else None
 
     def set_up_invocation_auto_purge(self, invocation_id: str) -> None:
         """
@@ -617,7 +627,9 @@ class SQLiteOrchestrator(BaseOrchestrator):
                 )
             conn.commit()
 
-    def get_invocation_status(self, invocation_id: str) -> InvocationStatus:
+    def get_invocation_status_record(
+        self, invocation_id: str
+    ) -> InvocationStatusRecord:
         """
         Get the current status of an invocation by ID, handling pending timeouts.
 
@@ -626,7 +638,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
         """
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
-                f"""SELECT status, pending_start_time, pre_pending_status
+                f"""SELECT status, status_timestamp, status_owner_id
                     FROM {Tables.INVOCATIONS}
                     WHERE invocation_id = ?""",
                 (invocation_id,),
@@ -635,19 +647,10 @@ class SQLiteOrchestrator(BaseOrchestrator):
             cursor.close()
             if not row:
                 raise KeyError(f"Invocation ID {invocation_id} not found")
-            status, pending_start_time, pre_pending_status = row
-            status_enum = InvocationStatus(status)
-            if status_enum == InvocationStatus.PENDING:
-                elapsed = time() - pending_start_time
-                if elapsed > self.app.conf.max_pending_seconds and pre_pending_status:
-                    # Fallback to pre-pending status and update in DB
-                    conn.execute(
-                        f"UPDATE {Tables.INVOCATIONS} SET status = ? WHERE invocation_id = ?",
-                        (pre_pending_status, invocation_id),
-                    )
-                    conn.commit()
-                    return InvocationStatus(pre_pending_status)
-            return status_enum
+            status_str, status_timestamp, status_owner_id = row
+            status = InvocationStatus(status_str)
+            timestamp = datetime.fromtimestamp(status_timestamp, tz=UTC)
+            return InvocationStatusRecord(status, status_owner_id, timestamp)
 
     def increment_invocation_retries(self, invocation_id: str) -> None:
         """
@@ -679,7 +682,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
             return row[0] if row else 0
 
     def filter_by_status(
-        self, invocation_ids: list[str], status_filter: set["InvocationStatus"]
+        self, invocation_ids: list[str], status_filter: frozenset["InvocationStatus"]
     ) -> list[str]:
         """
         Filter invocations by status by ID.
@@ -702,6 +705,97 @@ class SQLiteOrchestrator(BaseOrchestrator):
             invocation_ids = [row[0] for row in cursor.fetchall()]
             cursor.close()
             return invocation_ids
+
+    def register_runner_heartbeat(self, runner_ctx: "RunnerContext") -> None:
+        """Register or update a runner's heartbeat timestamp."""
+        current_time = time()
+        runner_id = runner_ctx.runner_id
+        runner_json = runner_ctx.to_json()
+
+        with sqlite_conn(self.sqlite_db_path) as conn:
+            conn.execute(
+                f"""
+                INSERT INTO {Tables.RUNNER_HEARTBEATS} (
+                    runner_id, runner_context_json, creation_timestamp, last_heartbeat
+                ) VALUES (?, ?, ?, ?)
+                ON CONFLICT(runner_id) DO UPDATE SET
+                    last_heartbeat = excluded.last_heartbeat
+                """,
+                (runner_id, runner_json, current_time, current_time),
+            )
+            conn.commit()
+
+    def get_active_runners(self) -> list[ActiveRunnerInfo]:
+        """Retrieve all active runners with heartbeat information."""
+        from pynenc.runner.runner_context import RunnerContext
+
+        timeout_seconds = self.conf.runner_heartbeat_timeout_minutes * 60
+        current_time = time()
+        cutoff_time = current_time - timeout_seconds
+
+        with sqlite_conn(self.sqlite_db_path) as conn:
+            cursor = conn.execute(
+                f"""
+                SELECT runner_context_json, creation_timestamp, last_heartbeat
+                FROM {Tables.RUNNER_HEARTBEATS}
+                WHERE last_heartbeat >= ?
+                ORDER BY creation_timestamp ASC
+                """,
+                (cutoff_time,),
+            )
+            cursor_rows = cursor.fetchall()
+            cursor.close()
+
+            active_runners = []
+            for runner_json, creation_ts, last_hb in cursor_rows:
+                try:
+                    runner_ctx = RunnerContext.from_json(runner_json)
+                    active_runners.append(
+                        ActiveRunnerInfo(
+                            runner_ctx=runner_ctx,
+                            creation_time=datetime.fromtimestamp(creation_ts, tz=UTC),
+                            last_heartbeat=datetime.fromtimestamp(last_hb, tz=UTC),
+                        )
+                    )
+                except ValueError:
+                    # Skip invalid runner contexts
+                    continue
+
+            return active_runners
+
+    def cleanup_inactive_runners(self) -> None:
+        """Remove runners that haven't sent a heartbeat within the timeout period."""
+        timeout_seconds = self.conf.runner_heartbeat_timeout_minutes * 60
+        current_time = time()
+        cutoff_time = current_time - timeout_seconds
+
+        with sqlite_conn(self.sqlite_db_path) as conn:
+            conn.execute(
+                f"DELETE FROM {Tables.RUNNER_HEARTBEATS} WHERE last_heartbeat < ?",
+                (cutoff_time,),
+            )
+            conn.commit()
+
+    def get_pending_invocations_for_recovery(self) -> Iterator[str]:
+        """Retrieve invocation IDs stuck in PENDING status beyond the allowed time."""
+        max_pending_seconds = self.app.conf.max_pending_seconds
+        current_time = time()
+        cutoff_time = current_time - max_pending_seconds
+
+        with sqlite_conn(self.sqlite_db_path) as conn:
+            cursor = conn.execute(
+                f"""
+                SELECT invocation_id
+                FROM {Tables.INVOCATIONS}
+                WHERE status = ? AND status_timestamp <= ?
+                """,
+                (InvocationStatus.PENDING.value, cutoff_time),
+            )
+            cursor_rows = cursor.fetchall()
+            cursor.close()
+
+            for (invocation_id,) in cursor_rows:
+                yield invocation_id
 
     def purge(self) -> None:
         """

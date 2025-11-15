@@ -54,15 +54,15 @@ def test_waiting_for_results(test_vars_bc: Vars) -> None:
     # Since we can't directly inspect the backend (or other impls), we'll verify indirectly
     # by checking that inv2 and inv3 are considered blocking when inv1 is waiting
     blocking_ids = list(app.orchestrator.get_blocking_invocations(3))
-    assert (
-        inv2.invocation_id in blocking_ids
-    ), "inv2 should be blocking due to inv1 waiting"
-    assert (
-        inv3.invocation_id in blocking_ids
-    ), "inv3 should be blocking due to inv1 waiting"
-    assert (
-        inv1.invocation_id not in blocking_ids
-    ), "inv1 should not be blocking (it's waiting)"
+    assert inv2.invocation_id in blocking_ids, (
+        "inv2 should be blocking due to inv1 waiting"
+    )
+    assert inv3.invocation_id in blocking_ids, (
+        "inv3 should be blocking due to inv1 waiting"
+    )
+    assert inv1.invocation_id not in blocking_ids, (
+        "inv1 should not be blocking (it's waiting)"
+    )
 
 
 def test_get_blocking_invocations_max_limit(test_vars_bc: Vars) -> None:
@@ -73,9 +73,9 @@ def test_get_blocking_invocations_max_limit(test_vars_bc: Vars) -> None:
     # No dependencies initially, all should be "not waiting"
     blocking_ids = set(app.orchestrator.get_blocking_invocations(2))
     assert len(blocking_ids) <= 2, f"Expected at most 2, got {len(blocking_ids)}"
-    assert blocking_ids.issubset(
-        test_vars_bc.expected_ids
-    ), "Blocking IDs should match test vars"
+    assert blocking_ids.issubset(test_vars_bc.expected_ids), (
+        "Blocking IDs should match test vars"
+    )
 
     # Make inv1 wait on inv2 and inv3
     app.orchestrator.waiting_for_results(

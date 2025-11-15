@@ -5,6 +5,7 @@ This module verifies that deterministic operations behave consistently
 across workflow executions and replays on different state backend implementations.
 These tests focus on high-level functionality rather than detailed unit behavior.
 """
+
 import threading
 from typing import TYPE_CHECKING
 
@@ -119,23 +120,23 @@ def test_mixed_deterministic_operations(deterministic_mixed_workflow: "Task") ->
     thread.join()
 
     # Verify mixed operations work correctly
-    assert (
-        "random1" in results and "random2" in results
-    ), "Should have multiple random values"
+    assert "random1" in results and "random2" in results, (
+        "Should have multiple random values"
+    )
     assert "time1" in results and "time2" in results, "Should have multiple timestamps"
     assert "uuid1" in results and "uuid2" in results, "Should have multiple UUIDs"
     assert "base_time" in results, "Should have base time"
 
     # Verify values are different within execution
-    assert (
-        results["random1"] != results["random2"]
-    ), "Random values should differ within execution"
-    assert (
-        results["time1"] != results["time2"]
-    ), "Timestamps should advance within execution"
-    assert (
-        results["uuid1"] != results["uuid2"]
-    ), "UUIDs should be unique within execution"
+    assert results["random1"] != results["random2"], (
+        "Random values should differ within execution"
+    )
+    assert results["time1"] != results["time2"], (
+        "Timestamps should advance within execution"
+    )
+    assert results["uuid1"] != results["uuid2"], (
+        "UUIDs should be unique within execution"
+    )
 
 
 def test_workflow_isolation_across_backends(
@@ -165,20 +166,20 @@ def test_workflow_isolation_across_backends(
     thread.join()
 
     # Different workflows should produce different sequences regardless of backend
-    assert (
-        results1["random_values"] != results2["random_values"]
-    ), "Different workflows should have different random sequences"
+    assert results1["random_values"] != results2["random_values"], (
+        "Different workflows should have different random sequences"
+    )
 
     # But both should have consistent internal properties
-    assert (
-        results1["values_count"] == results2["values_count"] == 5
-    ), "Both should generate 5 values"
-    assert (
-        results1["all_different"] and results2["all_different"]
-    ), "Values within each workflow should be different"
-    assert (
-        results1["all_in_range"] and results2["all_in_range"]
-    ), "All values should be in valid range"
+    assert results1["values_count"] == results2["values_count"] == 5, (
+        "Both should generate 5 values"
+    )
+    assert results1["all_different"] and results2["all_different"], (
+        "Values within each workflow should be different"
+    )
+    assert results1["all_in_range"] and results2["all_in_range"], (
+        "All values should be in valid range"
+    )
 
 
 def test_state_backend_value_storage(deterministic_mixed_workflow: "Task") -> None:
@@ -229,9 +230,9 @@ def test_state_backend_value_storage(deterministic_mixed_workflow: "Task") -> No
             workflow_identity, test_key
         )
 
-        assert (
-            retrieved_value == test_value
-        ), "State backend should store and retrieve values correctly"
+        assert retrieved_value == test_value, (
+            "State backend should store and retrieve values correctly"
+        )
 
         # If the task fixture doesn't use workflow context deterministic methods,
         # skip the specific value checks but verify the storage mechanism works
@@ -273,9 +274,9 @@ def test_cross_backend_storage_compatibility(
     app.state_backend.set_workflow_data(workflow_identity, test_key, test_value)
     retrieved_value = app.state_backend.get_workflow_data(workflow_identity, test_key)
 
-    assert (
-        retrieved_value == test_value
-    ), "Custom value should be stored and retrieved correctly"
+    assert retrieved_value == test_value, (
+        "Custom value should be stored and retrieved correctly"
+    )
 
     # Test retrieving non-existent value
     non_existent = app.state_backend.get_workflow_data(
@@ -290,6 +291,6 @@ def test_cross_backend_storage_compatibility(
     workflow_data = app.state_backend.get_workflow_data(
         workflow_identity, "workflow_test_key"
     )
-    assert (
-        workflow_data == "workflow_test_value"
-    ), "Workflow data should be stored and retrieved correctly"
+    assert workflow_data == "workflow_test_value", (
+        "Workflow data should be stored and retrieved correctly"
+    )

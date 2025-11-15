@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 
 from pynenc.conf import config_task
 from pynenc.invocation import DistributedInvocation, InvocationStatus
+from pynenc.runner.runner_context import RunnerContext
 from pynenc_tests.util import create_test_logger
 
 if TYPE_CHECKING:
@@ -26,16 +27,18 @@ def test_no_concurrency_default(task_sum_io: "Task") -> None:
     assert isinstance(trying_to_run_invocation, DistributedInvocation)
 
     app.orchestrator.register_new_invocations([fake_running_invocation])
+    runner_ctx = RunnerContext.from_runner(app.runner)
     app.orchestrator.set_invocation_status(
-        fake_running_invocation.invocation_id, status=InvocationStatus.RUNNING
+        fake_running_invocation.invocation_id, InvocationStatus.PENDING, runner_ctx
+    )
+    app.orchestrator.set_invocation_status(
+        fake_running_invocation.invocation_id, InvocationStatus.RUNNING, runner_ctx
     )
     app.broker.route_invocations([trying_to_run_invocation])
     trying_to_run_invocation.task.conf.running_concurrency = (
         config_task.ConcurrencyControlType.DISABLED
     )
-    invocations_to_run = list(
-        app.orchestrator.get_invocations_to_run(max_num_invocations=1)
-    )
+    invocations_to_run = list(app.orchestrator.get_invocations_to_run(1, runner_ctx))
     assert invocations_to_run == [trying_to_run_invocation]
 
 
@@ -44,7 +47,7 @@ def test_running_concurrency_type_task(task_sum_io: "Task") -> None:
     it will not return an invocation of the same task to run while there is another running
     """
     app = task_sum_io.app
-
+    runner_ctx = RunnerContext.from_runner(app.runner)
     # We cannot directly change the config of the task to set running_concurrency to TASK
     # And that is because on serialization, we only store the options that are passed by parameter to the task
     # that means, the options that are not default
@@ -69,14 +72,15 @@ def test_running_concurrency_type_task(task_sum_io: "Task") -> None:
         [fake_running_invocation, trying_to_run_invocation]
     )
     app.orchestrator.set_invocation_status(
-        fake_running_invocation.invocation_id, status=InvocationStatus.RUNNING
+        fake_running_invocation.invocation_id, InvocationStatus.PENDING, runner_ctx
+    )
+    app.orchestrator.set_invocation_status(
+        fake_running_invocation.invocation_id, InvocationStatus.RUNNING, runner_ctx
     )
 
     # First it will return the invocation tryin to run
     logger.info(f"Routing invocation {trying_to_run_invocation.invocation_id=}")
     # With concurrency control the task should not return
     app.broker.route_invocations([trying_to_run_invocation])
-    invocations_to_run = list(
-        app.orchestrator.get_invocations_to_run(max_num_invocations=10)
-    )
+    invocations_to_run = list(app.orchestrator.get_invocations_to_run(10, runner_ctx))
     assert invocations_to_run == []

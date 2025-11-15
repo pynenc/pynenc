@@ -240,7 +240,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
                     (
                         invocation_id,
                         invocation_history._timestamp,
-                        invocation_history.status,
+                        invocation_history.status_record.status,
                         invocation_history.to_json(),
                     ),
                 )

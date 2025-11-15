@@ -4,6 +4,7 @@ Shared fixtures for deterministic workflow tests.
 Provides common test setup including app configuration, workflow identity,
 and deterministic executor instances used across all deterministic test modules.
 """
+
 from typing import TYPE_CHECKING
 
 import pytest

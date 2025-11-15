@@ -7,8 +7,13 @@ import pytest
 
 from pynenc import Task
 from pynenc.exceptions import RunnerError
-from pynenc.invocation import DistributedInvocation, InvocationStatus
+from pynenc.invocation import (
+    DistributedInvocation,
+    InvocationStatus,
+    InvocationStatusRecord,
+)
 from pynenc.runner.process_runner import ProcessRunner
+from pynenc.runner.runner_context import RunnerContext
 from pynenc_tests.conftest import MockPynenc
 
 
@@ -58,8 +63,8 @@ def test_on_stop(mock_process: Mock, runner: ProcessRunner) -> None:
     runner.inv_id_to_processes[mock_invocation.invocation_id] = mock_process
 
     # Ensure the mock orchestrator returns a non-final status
-    runner.app.orchestrator.get_invocation_status.return_value = (  # type: ignore
-        InvocationStatus.RUNNING
+    runner.app.orchestrator.get_invocation_status_record.return_value = (  # type: ignore
+        InvocationStatusRecord(status=InvocationStatus.RUNNING)
     )
 
     runner._on_stop()
@@ -127,7 +132,7 @@ def test_waiting_for_results(
         mock_set_invocation_status.assert_called_once_with(
             running_invocation.invocation_id,
             InvocationStatus.PAUSED,
-            ignore_final_status_error=True,
+            runner_ctx=RunnerContext.from_runner(runner),
         )
         # check that the waiting invocation is stored in the wait_invocation dict
         assert result_invocation.invocation_id in runner.wait_invocation
@@ -146,8 +151,7 @@ def test_waiting_for_results_returns_without_waiting_invocation(
     running_invocation: DistributedInvocation = add_task(1, 2)  # type: ignore
 
     with patch(
-        "pynenc.orchestrator.base_orchestrator.BaseOrchestrator.set_invocation_status",
-        return_value=[add_task(1, 2)],
+        "pynenc.orchestrator.base_orchestrator.BaseOrchestrator.set_invocation_status"
     ) as mock_set_invocation_status:
         runner.waiting_for_results(
             running_invocation.invocation_id,
@@ -170,8 +174,7 @@ def test_waiting_for_results_no_args_error(
     result_invocation: DistributedInvocation = add_task(3, 4)  # type: ignore
 
     with patch(
-        "pynenc.orchestrator.base_orchestrator.BaseOrchestrator.set_invocation_status",
-        return_value=[add(1, 2)],
+        "pynenc.orchestrator.base_orchestrator.BaseOrchestrator.set_invocation_status"
     ) as mock_set_invocation_status:
         with pytest.raises(RunnerError):
             runner.waiting_for_results(

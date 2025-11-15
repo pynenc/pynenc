@@ -3,7 +3,7 @@ import signal
 from multiprocessing import Manager, Process, cpu_count
 from typing import TYPE_CHECKING, Any, NamedTuple
 
-from pynenc.exceptions import InvocationOnFinalStatusError, RunnerError
+from pynenc.exceptions import InvocationStatusError, RunnerError
 from pynenc.invocation import InvocationStatus
 from pynenc.runner.base_runner import BaseRunner
 from pynenc.runner.runner_context import RunnerContext
@@ -114,10 +114,14 @@ class ProcessRunner(BaseRunner):
         self.logger.info("Stopping ProcessRunner")
         for invocation_id, process in self.inv_id_to_processes.items():
             process.kill()
-            # Use ignore_final_status_error for RETRY since we're killing the runner anyway
-            self.app.orchestrator.set_invocation_status(
-                invocation_id, InvocationStatus.RETRY, ignore_final_status_error=True
-            )
+            try:
+                self.app.orchestrator.set_invocation_status(
+                    invocation_id, InvocationStatus.RETRY
+                )
+            except InvocationStatusError:
+                self.logger.warning(
+                    f"Could not set invocation {invocation_id} to RETRY status"
+                )
             self.logger.info(f"Killing invocation {invocation_id}")
         self.manager.shutdown()  # type: ignore
         self.logger.info("ProcessRunner stopped")
@@ -202,11 +206,14 @@ class ProcessRunner(BaseRunner):
                         self.logger.info(
                             f"resuming process {waiting_process.pid} of {waiting_invocation_id=} "
                         )
-                        self.app.orchestrator.set_invocation_status(
-                            waiting_invocation_id,
-                            InvocationStatus.RESUMED,
-                            ignore_final_status_error=True,
-                        )
+                        try:
+                            self.app.orchestrator.set_invocation_status(
+                                waiting_invocation_id, InvocationStatus.RESUMED
+                            )
+                        except InvocationStatusError as ex:
+                            self.logger.warning(
+                                f"Could not set invocation {waiting_invocation_id} to RESUMED status: {ex}"
+                            )
 
     def runner_loop_iteration(self) -> None:
         """
@@ -215,15 +222,16 @@ class ProcessRunner(BaseRunner):
         """
         # called from parent process memory space
         self.logger.debug(f"starting runner loop iteration {self.available_processes=}")
+        runner_ctx = RunnerContext.from_runner(self)
         for invocation in self.app.orchestrator.get_invocations_to_run(
-            max_num_invocations=self.available_processes
+            max_num_invocations=self.available_processes, runner_ctx=runner_ctx
         ):
             invocation.app.runner = self
             process = Process(
                 target=invocation.run,
                 kwargs={
                     "runner_args": self.runner_args,
-                    "runner_ctx": RunnerContext.from_runner(self),
+                    "runner_ctx": runner_ctx,
                 },
                 daemon=True,
             )
@@ -240,7 +248,7 @@ class ProcessRunner(BaseRunner):
                 self.logger.error(
                     f"Failed to start process for invocation {invocation.invocation_id}, rerouting it"
                 )
-                self.app.orchestrator.reroute_invocations({invocation})
+                self.app.orchestrator.reroute_invocations({invocation}, runner_ctx)
         self.handle_waiting_invocations()
 
     def _waiting_for_results(
@@ -266,7 +274,7 @@ class ProcessRunner(BaseRunner):
             self.app.orchestrator.set_invocation_status(
                 running_invocation_id,
                 InvocationStatus.PAUSED,
-                ignore_final_status_error=True,
+                runner_ctx=RunnerContext.from_runner(self),
             )
             for result_inv_id in result_invocation_ids:
                 current_waiters = set(self.wait_invocation.get(result_inv_id, set()))
@@ -275,9 +283,9 @@ class ProcessRunner(BaseRunner):
                 self.logger.debug(
                     f"Invocation {running_invocation_id} is waiting for invocation {result_inv_id} to finish"
                 )
-        except InvocationOnFinalStatusError:
+        except InvocationStatusError as ex:
             self.logger.warning(
-                f"Invocation {running_invocation_id} is already on a final status, not pausing or waiting"
+                f"Not possible to change {running_invocation_id} status: {ex}"
             )
             # remove from any wait_invocation set
             for result_inv_id in result_invocation_ids:

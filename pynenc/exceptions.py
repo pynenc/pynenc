@@ -1,6 +1,7 @@
 """
 Global Pynenc exception and warning classes.
 """
+
 import json
 from typing import TYPE_CHECKING, Any
 
@@ -8,7 +9,7 @@ from .util.subclasses import get_all_subclasses
 
 if TYPE_CHECKING:
     from .call import Call
-    from .invocation import BaseInvocation, InvocationStatus
+    from .invocation import BaseInvocation, InvocationStatus, InvocationStatusRecord
 
 
 class PynencError(Exception):
@@ -42,13 +43,6 @@ class RetryError(PynencError):
 
 class ConcurrencyRetryError(RetryError):
     """Error raised when a task should be retried due to concurrency control."""
-
-
-class PendingInvocationLockError(PynencError):
-    """Error raised when two processes try to set the same invocation as pending concurrently"""
-
-    def __init__(self, invocation_id: str) -> None:
-        self.invocation_id = invocation_id
 
 
 class TaskError(PynencError):
@@ -278,37 +272,212 @@ class AlreadyInitializedError(PynencError):
     """Error raised when trying to change the class of a component after it was initialized"""
 
 
-class InvocationOnFinalStatusError(PynencError):
-    """Error raised when trying to change the status of an invocation that is already in a final status"""
+class InvocationStatusError(PynencError):
+    """
+    Base class for all invocation status related errors.
+
+    Use this to catch any error related to status transitions, ownership, or final status modifications.
+    """
+
+
+class InvocationStatusRaceConditionError(InvocationStatusError):
+    """
+    Raised when a race condition is detected in non-atomic status updates.
+
+    This error occurs in non-atomic orchestrators when the actual status differs
+    from the expected status after a write operation, indicating concurrent modification.
+    """
 
     def __init__(
         self,
         invocation_id: str,
-        final_status: "InvocationStatus",
-        new_status: "InvocationStatus",
+        previous_status_record: "InvocationStatusRecord",
+        expected_status_record: "InvocationStatusRecord",
+        actual_status_record: "InvocationStatusRecord",
     ) -> None:
+        """
+        Create a race condition error.
+
+        :param str invocation_id: The invocation that experienced the race condition
+        :param InvocationStatusRecord previous_status_record: Status before the attempted change
+        :param InvocationStatusRecord expected_status_record: Status that was intended
+        :param InvocationStatusRecord actual_status_record: Status that was actually set
+        """
         self.invocation_id = invocation_id
-        self.final_status = final_status
-        self.new_status = new_status
-        message = f"Cannot change {invocation_id=} {final_status=} to {new_status=}"
-        super().__init__(message)
+        self.previous_status_record = previous_status_record
+        self.expected_status_record = expected_status_record
+        self.actual_status_record = actual_status_record
+
+        super().__init__(
+            f"Race condition detected for invocation {invocation_id}: "
+            f"expected {expected_status_record.status} (owner: {expected_status_record.owner_id}), "
+            f"but found {actual_status_record.status} (owner: {actual_status_record.owner_id})"
+        )
 
     def __str__(self) -> str:
-        return f"InvocationError({self.invocation_id})"
+        return (
+            f"InvocationStatusRaceConditionError("
+            f"invocation_id={self.invocation_id}, "
+            f"previous={self.previous_status_record.status}, "
+            f"expected={self.expected_status_record.status}, "
+            f"actual={self.actual_status_record.status})"
+        )
 
     def _to_json_dict(self) -> dict[str, Any]:
         return {
             "invocation_id": self.invocation_id,
-            "final_status": self.final_status,
-            "new_status": self.new_status,
+            "previous_status_record": self.previous_status_record.to_json(),
+            "expected_status_record": self.expected_status_record.to_json(),
+            "actual_status_record": self.actual_status_record.to_json(),
         }
 
     @classmethod
     def _from_json_dict(
         cls, json_dict: dict[str, Any]
-    ) -> "InvocationOnFinalStatusError":
+    ) -> "InvocationStatusRaceConditionError":
+        from pynenc.invocation.status import InvocationStatusRecord
+
         return cls(
-            json_dict["invocation_id"],
-            json_dict["final_status"],
-            json_dict["new_status"],
+            invocation_id=json_dict["invocation_id"],
+            previous_status_record=InvocationStatusRecord.from_json(
+                json_dict["previous_status_record"]
+            ),
+            expected_status_record=InvocationStatusRecord.from_json(
+                json_dict["expected_status_record"]
+            ),
+            actual_status_record=InvocationStatusRecord.from_json(
+                json_dict["actual_status_record"]
+            ),
+        )
+
+
+class InvocationStatusTransitionError(InvocationStatusError):
+    """
+    Raised when attempting an invalid invocation status transition.
+
+    This error occurs when trying to change an invocation's status
+    to a state that is not allowed by the state machine rules.
+    """
+
+    def __init__(
+        self,
+        from_status: "InvocationStatus | None",
+        to_status: "InvocationStatus",
+        allowed_statuses: frozenset["InvocationStatus"],
+    ) -> None:
+        """
+        Create an invalid state transition error.
+
+        :param InvocationStatus | None from_status: Current status
+        :param InvocationStatus to_status: Attempted target status
+        :param frozenset[InvocationStatus] allowed_statuses: Statuses that are allowed from current state
+        """
+        self.from_status = from_status
+        self.to_status = to_status
+        self.allowed_statuses = allowed_statuses
+
+        allowed_str = (
+            ", ".join(str(s) for s in sorted(allowed_statuses))
+            if allowed_statuses
+            else "none"
+        )
+        from_str = str(from_status) if from_status else "new invocation"
+
+        super().__init__(
+            f"Cannot transition from {from_str} to {to_status}. "
+            f"Allowed transitions: {allowed_str}"
+        )
+
+    def __str__(self) -> str:
+        return (
+            f"InvocationStatusTransitionError("
+            f"from_status={self.from_status}, "
+            f"to_status={self.to_status}, "
+            f"allowed_statuses={list(self.allowed_statuses)})"
+        )
+
+    def _to_json_dict(self) -> dict[str, Any]:
+        return {
+            "from_status": self.from_status,
+            "to_status": self.to_status,
+            "allowed_statuses": list(self.allowed_statuses),
+        }
+
+    @classmethod
+    def _from_json_dict(
+        cls, json_dict: dict[str, Any]
+    ) -> "InvocationStatusTransitionError":
+        return cls(
+            json_dict["from_status"],
+            json_dict["to_status"],
+            frozenset(json_dict["allowed_statuses"]),
+        )
+
+
+class InvocationStatusOwnershipError(InvocationStatusError):
+    """
+    Raised when attempting to modify an invocation without proper ownership.
+
+    This error occurs when:
+    - A non-owner tries to modify an owned invocation
+    - Attempting to acquire ownership without providing a runner ID
+    - A status requiring ownership has no owner set (invalid state)
+    """
+
+    def __init__(
+        self,
+        from_status: "InvocationStatus | None",
+        to_status: "InvocationStatus",
+        current_owner: str | None,
+        attempted_owner: str | None,
+        reason: str,
+    ) -> None:
+        """
+        Create an invocation ownership error.
+
+        :param InvocationStatus | None from_status: Current status
+        :param InvocationStatus to_status: Attempted target status
+        :param str | None current_owner: Current owner ID
+        :param str | None attempted_owner: ID of runner attempting the change
+        :param str reason: Explanation of why ownership was violated
+        """
+        self.from_status = from_status
+        self.to_status = to_status
+        self.current_owner = current_owner
+        self.attempted_owner = attempted_owner
+        self.reason = reason
+
+        super().__init__(
+            f"Ownership violation transitioning from {from_status} to {to_status}: {reason}"
+        )
+
+    def __str__(self) -> str:
+        return (
+            f"InvocationStatusOwnershipError("
+            f"from_status={self.from_status}, "
+            f"to_status={self.to_status}, "
+            f"current_owner={self.current_owner}, "
+            f"attempted_owner={self.attempted_owner}, "
+            f"reason={self.reason})"
+        )
+
+    def _to_json_dict(self) -> dict[str, Any]:
+        return {
+            "from_status": self.from_status,
+            "to_status": self.to_status,
+            "current_owner": self.current_owner,
+            "attempted_owner": self.attempted_owner,
+            "reason": self.reason,
+        }
+
+    @classmethod
+    def _from_json_dict(
+        cls, json_dict: dict[str, Any]
+    ) -> "InvocationStatusOwnershipError":
+        return cls(
+            json_dict["from_status"],
+            json_dict["to_status"],
+            json_dict["current_owner"],
+            json_dict["attempted_owner"],
+            json_dict["reason"],
         )

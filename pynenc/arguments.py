@@ -25,7 +25,7 @@ class Arguments:
     def __init__(
         self, kwargs: Optional["Args"] = None, *, app: Optional["Pynenc"] = None
     ) -> None:
-        self.kwargs: "Args" = kwargs or {}
+        self.kwargs: Args = kwargs or {}
         self._app = app
 
     @classmethod
@@ -101,7 +101,7 @@ class Arguments:
             return str_value
         if len(str_value) <= conf.truncate_arguments_length:
             return str_value
-        return f"{str_value[:conf.truncate_arguments_length]}..."
+        return f"{str_value[: conf.truncate_arguments_length]}..."
 
     def __str__(self) -> str:
         if not self.kwargs:

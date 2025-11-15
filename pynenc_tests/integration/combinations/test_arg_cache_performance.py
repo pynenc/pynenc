@@ -65,9 +65,9 @@ def test_batch_parallelization_overhead(task_process_large_shared_arg: Task) -> 
         logger.info(f"With cache, batch task {i}: elapsed={e:.3f} seconds")
 
     # Assert at least one cached batch task is faster than the fastest no-cache batch task
-    assert min(batch_elapsed_cache) < min(
-        batch_elapsed_no_cache
-    ), "No cached batch task started faster than no-cache batch task"
+    assert min(batch_elapsed_cache) < min(batch_elapsed_no_cache), (
+        "No cached batch task started faster than no-cache batch task"
+    )
 
 
 def test_arg_cache_effect_on_task_start(task_process_large_shared_arg: Task) -> None:

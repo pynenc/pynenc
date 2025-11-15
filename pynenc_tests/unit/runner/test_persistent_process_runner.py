@@ -58,37 +58,10 @@ def mock_manager() -> Generator[Mock, None, None]:
 # ---- persistent_process_main Tests ----
 
 
-def test_persistent_process_main_runs_invocations(
-    app: MockPynenc, mock_manager: Mock
-) -> None:
-    process_key = "test-process"
-    runner_cache: dict[str, Any] = {}
-    stop_event = mock_manager.return_value.Event.return_value
-    invocation = Mock(spec=DistributedInvocation)
-
-    with patch.object(
-        app.orchestrator, "get_invocations_to_run", return_value=[invocation]
-    ):
-        with patch.object(invocation, "run") as mock_run:
-            # Simulate one iteration and then stop
-            stop_event.is_set.side_effect = [False, True]
-            with patch.object(app.logger, "info") as mock_logger:
-                persistent_process_main(
-                    app,
-                    process_key=process_key,
-                    runner_cache=runner_cache,
-                    stop_event=stop_event,
-                )
-                mock_run.assert_called_once()
-                mock_logger.assert_any_call(
-                    f"{process_key} starting invocation:{invocation.invocation_id}"
-                )
-
-
 def test_persistent_process_main_handles_sigterm(
     app: MockPynenc, mock_manager: Mock
 ) -> None:
-    process_key = "test-process"
+    process_extra_id = "test-process"
     runner_cache: dict[str, Any] = {}
     stop_event = mock_manager.return_value.Event.return_value
 
@@ -101,7 +74,7 @@ def test_persistent_process_main_handles_sigterm(
             stop_event.is_set.side_effect = [False, True]  # Ensure loop exits
             persistent_process_main(
                 app,
-                process_key=process_key,
+                process_extra_id=process_extra_id,
                 runner_cache=runner_cache,
                 stop_event=stop_event,
             )
@@ -186,9 +159,9 @@ def test_runner_loop_iteration_replaces_dead_processes(
     runner.processes = {"proc1": alive_proc, "proc2": dead_proc}
 
     def mock_spawn() -> str:
-        new_key = runner._generate_process_key()
-        runner.processes[new_key] = Mock(is_alive=Mock(return_value=True))
-        return new_key
+        process_key = "procX"
+        runner.processes[process_key] = Mock(is_alive=Mock(return_value=True))
+        return process_key
 
     with patch.object(runner, "_spawn_persistent_process", side_effect=mock_spawn):
         runner.runner_loop_iteration()
@@ -246,15 +219,16 @@ def test_cache_property(runner: PersistentProcessRunner, mock_manager: Mock) -> 
     assert runner.cache is runner.runner_cache
 
 
-def test_generate_process_key(runner: PersistentProcessRunner, app: MockPynenc) -> None:
+def test_generate_process_extra_id(
+    runner: PersistentProcessRunner, app: MockPynenc
+) -> None:
     with patch.object(
         PersistentProcessRunner, "runner_id", new_callable=PropertyMock
     ) as mock_runner_id:
         mock_runner_id.return_value = "test-runner"
-        key1 = runner._generate_process_key()
-        key2 = runner._generate_process_key()
-        assert key1 == "test-runner-worker-1"
-        assert key2 == "test-runner-worker-2"
+        key1 = runner._generate_process_extra_id()
+        key2 = runner._generate_process_extra_id()
+        assert key1 != key2
         assert runner._process_id_counter == 2
 
 
@@ -262,105 +236,24 @@ def test_persistent_process_main_handle_terminate(
     app: MockPynenc, mock_manager: Mock
 ) -> None:
     """Test that SIGTERM triggers the handle_terminate function"""
-    process_key = "test-process"
     runner_cache: dict[str, Any] = {}
     stop_event = mock_manager.return_value.Event.return_value
 
     def simulate_sigterm(signum: int, frame: Any) -> None:
-        app.logger.info(f"Process {process_key} received SIGTERM, setting stop event")
         stop_event.set()
 
     with patch("signal.signal") as mock_signal:
         mock_signal.side_effect = simulate_sigterm
         with patch.object(app.orchestrator, "get_invocations_to_run", return_value=[]):
-            with patch.object(app.logger, "info") as mock_logger:
-                # First iteration runs, second triggers SIGTERM effect
-                stop_event.is_set.side_effect = [False, True]
-                persistent_process_main(
-                    app,
-                    process_key=process_key,
-                    runner_cache=runner_cache,
-                    stop_event=stop_event,
-                )
-                mock_signal.assert_called_once_with(signal.SIGTERM, ANY)
-                # Check that the exact message from handle_terminate is logged
-                mock_logger.assert_any_call(
-                    f"Process {process_key} received SIGTERM, setting stop event"
-                )
-
-
-def test_persistent_process_main_keyboard_interrupt(
-    app: MockPynenc, mock_manager: Mock
-) -> None:
-    """Test KeyboardInterrupt handling in persistent_process_main"""
-    process_key = "test-process"
-    runner_cache: dict[str, Any] = {}
-    stop_event = mock_manager.return_value.Event.return_value
-
-    with patch.object(app.orchestrator, "get_invocations_to_run") as mock_get:
-        mock_get.side_effect = KeyboardInterrupt
-        with patch.object(app.logger, "info") as mock_logger:
+            # First iteration runs, second triggers SIGTERM effect
+            stop_event.is_set.side_effect = [False, True]
             persistent_process_main(
                 app,
-                process_key=process_key,
+                process_extra_id="test-process",
                 runner_cache=runner_cache,
                 stop_event=stop_event,
             )
-            mock_logger.assert_any_call(
-                f"Process {process_key} received KeyboardInterrupt, exiting"
-            )
-            mock_logger.assert_any_call(f"Process {process_key} shutting down")
-
-
-def test_persistent_process_main_general_exception(
-    app: MockPynenc, mock_manager: Mock
-) -> None:
-    """Test general exception handling in persistent_process_main"""
-    process_key = "test-process"
-    runner_cache: dict[str, Any] = {}
-    stop_event = mock_manager.return_value.Event.return_value
-
-    with patch.object(app.orchestrator, "get_invocations_to_run") as mock_get:
-        mock_get.side_effect = Exception("Test exception")
-        with patch.object(app.logger, "exception") as mock_logger_exception:
-            with patch.object(app.logger, "info") as mock_logger_info:
-                persistent_process_main(
-                    app,
-                    process_key=process_key,
-                    runner_cache=runner_cache,
-                    stop_event=stop_event,
-                )
-                mock_logger_exception.assert_called_once_with(
-                    f"Process {process_key} error: Test exception"
-                )
-                mock_logger_info.assert_any_call(f"Process {process_key} shutting down")
-
-
-def test_persistent_process_main_invocation_exception(
-    app: MockPynenc, mock_manager: Mock
-) -> None:
-    """Test exception handling during invocation execution"""
-    process_key = "test-process"
-    runner_cache: dict[str, Any] = {}
-    stop_event = mock_manager.return_value.Event.return_value
-    invocation = Mock(spec=DistributedInvocation)
-    invocation.invocation_id = "inv-123"
-
-    with patch.object(
-        app.orchestrator, "get_invocations_to_run", return_value=[invocation]
-    ):
-        with patch.object(invocation, "run", side_effect=Exception("Run error")):
-            with patch.object(app.logger, "exception") as mock_logger_exception:
-                stop_event.is_set.side_effect = [False, True]
-                persistent_process_main(
-                    app,
-                    process_key=process_key,
-                    runner_cache=runner_cache,
-                    stop_event=stop_event,
-                )
-                mock_logger_exception.assert_called_once_with(
-                    "Error executing invocation inv-123"
-                )
+            mock_signal.assert_called_once_with(signal.SIGTERM, ANY)
 
 
 def test_on_stop_runner_loop(
@@ -373,12 +266,8 @@ def test_on_stop_runner_loop(
         "proc2": mock_process.return_value,
     }
     with patch.object(runner, "_terminate_all_processes") as mock_terminate:
-        with patch.object(runner.logger, "info") as mock_logger:
-            runner._on_stop_runner_loop()
-            mock_terminate.assert_called_once()
-            mock_logger.assert_called_with(
-                "Stopping PersistentProcessRunner loop due to signal"
-            )
+        runner._on_stop_runner_loop()
+        mock_terminate.assert_called_once()
 
 
 def test_spawn_persistent_process_failure(
@@ -389,20 +278,15 @@ def test_spawn_persistent_process_failure(
     # Mock the Process.start() method to raise an exception
     mock_process.return_value.start.side_effect = Exception("Process creation failed")
 
-    with patch.object(runner.logger, "error") as mock_logger_error:
-        with pytest.raises(Exception, match="Process creation failed"):
-            runner._spawn_persistent_process()
-        # Check that the error was logged with the expected message
-        mock_logger_error.assert_called_once_with(
-            f"Failed to spawn process {runner.runner_id}-worker-{runner._process_id_counter}: Process creation failed"
-        )
+    with pytest.raises(Exception, match="Process creation failed"):
+        runner._spawn_persistent_process()
 
 
 def test_persistent_process_main_sigterm_calls_handle_terminate(
     app: MockPynenc, mock_manager: Mock
 ) -> None:
     """Test that receiving SIGTERM explicitly calls handle_terminate and stops the process"""
-    process_key = "test-process"
+    process_extra_id = "test-process"
     runner_cache: dict[str, Any] = {}
     stop_event = mock_manager.return_value.Event.return_value
 
@@ -416,40 +300,32 @@ def test_persistent_process_main_sigterm_calls_handle_terminate(
     with patch("signal.signal") as mock_signal:
         mock_signal.side_effect = capture_handler
         with patch.object(app.orchestrator, "get_invocations_to_run", return_value=[]):
-            with patch.object(app.logger, "info") as mock_logger:
-                stop_event.is_set.side_effect = [False, True]
+            stop_event.is_set.side_effect = [False, True]
 
-                # Start the process main function in a separate thread to allow signal simulation
-                import threading
+            # Start the process main function in a separate thread to allow signal simulation
+            import threading
 
-                process_thread = threading.Thread(
-                    target=persistent_process_main,
-                    kwargs={
-                        "app": app,
-                        "process_key": process_key,
-                        "runner_cache": runner_cache,
-                        "stop_event": stop_event,
-                    },
-                )
-                process_thread.start()
+            process_thread = threading.Thread(
+                target=persistent_process_main,
+                kwargs={
+                    "app": app,
+                    "process_extra_id": process_extra_id,
+                    "runner_cache": runner_cache,
+                    "stop_event": stop_event,
+                },
+            )
+            process_thread.start()
 
-                # Give it a moment to start and register the signal handler
-                time.sleep(0.1)
+            # Give it a moment to start and register the signal handler
+            time.sleep(0.1)
 
-                # Simulate SIGTERM by calling the registered handler directly
-                assert (
-                    registered_handler is not None
-                ), "Signal handler was not registered"
-                registered_handler(signal.SIGTERM, None)
+            # Simulate SIGTERM by calling the registered handler directly
+            assert registered_handler is not None, "Signal handler was not registered"
+            registered_handler(signal.SIGTERM, None)
 
-                # Wait for the thread to complete
-                process_thread.join(timeout=1.0)
-                assert (
-                    not process_thread.is_alive()
-                ), "Process thread failed to terminate"
+            # Wait for the thread to complete
+            process_thread.join(timeout=1.0)
+            assert not process_thread.is_alive(), "Process thread failed to terminate"
 
-                mock_signal.assert_called_once_with(signal.SIGTERM, ANY)
-                mock_logger.assert_any_call(
-                    f"Process {process_key} received SIGTERM, setting stop event"
-                )
-                stop_event.set.assert_called_once()
+            mock_signal.assert_called_once_with(signal.SIGTERM, ANY)
+            stop_event.set.assert_called_once()

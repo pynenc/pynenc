@@ -4,6 +4,7 @@ Unit tests for deterministic task execution.
 This module tests the execute_task method of the DeterministicExecutor,
 verifying that it returns the same DistributedInvocation for identical calls.
 """
+
 from typing import TYPE_CHECKING
 
 from pynenc.workflow.deterministic import DeterministicExecutor
@@ -89,7 +90,7 @@ def test_execute_task_stores_invocation_id_only(
 
     # Create expected storage key
     arguments = Arguments.from_call(app_with_task.func, 42, 58)
-    call: "Call" = Call(task=app_with_task, _arguments=arguments)
+    call: Call = Call(task=app_with_task, _arguments=arguments)
     expected_key = f"task_invocation:{call.call_id}"
 
     # Verify only the invocation_id is stored

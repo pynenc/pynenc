@@ -9,6 +9,7 @@ from pynenc.invocation import (
     DistributedInvocation,
     DistributedInvocationGroup,
     InvocationStatus,
+    InvocationStatusRecord,
 )
 from pynenc_tests.conftest import MockPynenc
 
@@ -42,7 +43,9 @@ async def test_async_results_final() -> None:
         task=add, invocations=[invocation0, invocation1]
     )
     # Force both invocations to be final.
-    app.orchestrator.get_invocation_status.return_value = InvocationStatus.SUCCESS
+    app.orchestrator.get_invocation_status_record.return_value = InvocationStatusRecord(
+        status=InvocationStatus.SUCCESS
+    )
     # ! Patch filter_by_status as it is used for performance instead of individual status checks.
     app.orchestrator.filter_by_status.return_value = [
         invocation0.invocation_id,
@@ -68,7 +71,9 @@ async def test_async_results_pending_exception(monkeypatch: pytest.MonkeyPatch) 
     )
     # Force pending status for both invocations.
     app.orchestrator.filter_by_status.return_value = []
-    app.orchestrator.get_invocation_status.return_value = InvocationStatus.PENDING
+    app.orchestrator.get_invocation_status_record.return_value = InvocationStatusRecord(
+        status=InvocationStatus.PENDING
+    )
 
     async def dummy_wait(parent: Any, invs: Any, runner_args: Any = None) -> None:
         raise Exception("Abort waiting loop")

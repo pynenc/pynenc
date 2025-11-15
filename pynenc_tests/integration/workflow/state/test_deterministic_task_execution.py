@@ -4,6 +4,7 @@ Integration tests for deterministic task execution.
 This module tests that the execute_task method returns the same DistributedInvocation
 when called with identical arguments, using the workflow context.
 """
+
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:

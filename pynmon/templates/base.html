@@ -778,6 +778,15 @@
             </li>
             <li class="nav-item">
               <a
+                class="nav-link {{ 'active' if '/runners' in request.url.path }}"
+                href="/runners"
+              >
+                <span class="material-icons">devices</span>
+                Runners
+              </a>
+            </li>
+            <li class="nav-item">
+              <a
                 class="nav-link {{ 'active' if '/state-backend' in request.url.path }}"
                 href="/state-backend"
               >

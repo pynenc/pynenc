@@ -4,6 +4,7 @@ Integration tests for pynmon calls view.
 Tests the complete calls functionality with real backend
 and real Pynenc app integration.
 """
+
 import threading
 import time
 from typing import TYPE_CHECKING

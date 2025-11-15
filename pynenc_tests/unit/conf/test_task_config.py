@@ -163,6 +163,6 @@ def test_all_task_options_in_task_decorator() -> None:
     }
 
     missing_in_decorator = config_task_fields - task_decorator_params
-    assert (
-        len(missing_in_decorator) == 0
-    ), f"Missing task options in decorator: {missing_in_decorator}"
+    assert len(missing_in_decorator) == 0, (
+        f"Missing task options in decorator: {missing_in_decorator}"
+    )

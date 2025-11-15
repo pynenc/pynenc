@@ -30,42 +30,44 @@ if TYPE_CHECKING:
 
 
 def persistent_process_main(
-    app: "Pynenc", *, process_key: str, runner_cache: dict, stop_event: "Event"
+    app: "Pynenc", *, process_extra_id: str, runner_cache: dict, stop_event: "Event"
 ) -> None:
     """Main function for persistent process that executes invocations sequentially."""
-    app.logger.info(f"Persistent process {process_key} started with PID {os.getpid()}")
+    app.logger.info(
+        f"Persistent process {process_extra_id} started with PID {os.getpid()}"
+    )
     app.runner._runner_cache = runner_cache
-    app.runner.set_extra_id(process_key)
+    app.runner.set_extra_id(process_extra_id)
     context.set_current_runner(app.app_id, app.runner)
+    runner_ctx = RunnerContext.from_runner(app.runner)
+    runner_id = app.runner.runner_id
 
     def handle_terminate(signum: int, frame: Any) -> None:
-        app.logger.info(f"Process {process_key} received SIGTERM, setting stop event")
+        app.logger.info(f"Process {runner_id} received SIGTERM, setting stop event")
         stop_event.set()
 
     signal.signal(signal.SIGTERM, handle_terminate)  # Handle SIGTERM gracefully
     try:
         while not stop_event.is_set():
-            invocations = list(
-                app.orchestrator.get_invocations_to_run(max_num_invocations=1)
-            )
+            invocations = list(app.orchestrator.get_invocations_to_run(1, runner_ctx))
             if not invocations:
                 continue
             invocation = invocations[0]
             invocation_id = invocation.invocation_id
             app.logger.info(
-                f"{process_key} starting invocation:{invocation.invocation_id}"
+                f"{runner_id} starting invocation:{invocation.invocation_id}"
             )
 
             try:
-                invocation.run(RunnerContext.from_runner(app.runner))
+                invocation.run(runner_ctx)
             except Exception:
                 app.logger.exception(f"Error executing invocation {invocation_id}")
     except KeyboardInterrupt:
-        app.logger.info(f"Process {process_key} received KeyboardInterrupt, exiting")
+        app.logger.info(f"Process {runner_id} received KeyboardInterrupt, exiting")
     except Exception as e:
-        app.logger.exception(f"Process {process_key} error: {e}")
+        app.logger.exception(f"Process {runner_id} error: {e}")
     finally:
-        app.logger.info(f"Process {process_key} shutting down")
+        app.logger.info(f"Process {runner_id} shutting down")
 
 
 class PersistentProcessRunner(BaseRunner):
@@ -101,10 +103,10 @@ class PersistentProcessRunner(BaseRunner):
         """Returns the maximum number of concurrent processes."""
         return self.num_processes
 
-    def _generate_process_key(self) -> str:
-        """Generates a unique process key using runner_id and an incrementing counter."""
+    def _generate_process_extra_id(self) -> str:
+        """Generates an extra id for the new process."""
         self._process_id_counter += 1
-        return f"{self.runner_id}-worker-{self._process_id_counter}"
+        return f"PerWorker:{self._process_id_counter:05d}"
 
     def _on_start(self) -> None:
         """Initializes the runner and spawns initial processes."""
@@ -127,10 +129,11 @@ class PersistentProcessRunner(BaseRunner):
         """Spawns a new persistent process and returns its key."""
         if not hasattr(self, "running") or not self.running:
             raise RuntimeError("Trying to spawn new process after stopping loop")
-        process_key = self._generate_process_key()
+        process_extra_id = self._generate_process_extra_id()
+        process_key = f"{self.runner_id}[{process_extra_id}]"
         args = {
             "app": self.app,
-            "process_key": process_key,
+            "process_extra_id": process_extra_id,
             "runner_cache": self.runner_cache,
             "stop_event": self.stop_event,
         }

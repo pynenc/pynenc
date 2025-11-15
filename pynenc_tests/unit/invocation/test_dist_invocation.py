@@ -6,7 +6,11 @@ import pytest
 
 from pynenc.call import Call
 from pynenc.exceptions import InvocationError, RetryError
-from pynenc.invocation import DistributedInvocation, InvocationStatus
+from pynenc.invocation import (
+    DistributedInvocation,
+    InvocationStatus,
+    InvocationStatusRecord,
+)
 from pynenc.runner import RunnerContext
 from pynenc_tests.conftest import MockPynenc
 from pynenc_tests.util import capture_logs
@@ -35,7 +39,9 @@ def test_distributed_invocation_to_and_fromjson() -> None:
 
 def test_get_final_result_exception_not_final() -> None:
     invocation: DistributedInvocation = add(1, 2)  # type: ignore
-    app.orchestrator.get_invocation_status.return_value = InvocationStatus.REGISTERED
+    app.orchestrator.get_invocation_status_record.return_value = InvocationStatusRecord(
+        status=InvocationStatus.REGISTERED
+    )
     # Test that it will raise an exception if the invocation is not finished
     with pytest.raises(InvocationError):
         invocation.get_final_result()
@@ -49,7 +55,9 @@ def retry() -> int:
 def test_max_retries() -> None:
     app.orchestrator.get_invocation_retries.return_value = 1
     invocation: DistributedInvocation = retry()  # type: ignore
-    app.orchestrator.get_invocation_status.return_value = InvocationStatus.RUNNING
+    app.orchestrator.get_invocation_status_record.return_value = InvocationStatusRecord(
+        status=InvocationStatus.RUNNING
+    )
 
     with capture_logs(app.logger) as log_buffer:
         with pytest.raises(RetryError):
@@ -61,17 +69,21 @@ def test_reroute_on_running_control() -> None:
     """
     Tests that invocations are rerouted when not authorized to run by concurrency control.
     """
-    with patch.object(
-        app.orchestrator,
-        "is_authorize_to_run_by_concurrency_control",
-        return_value=False,
-    ) as mock_is_authorized, patch.object(
-        app.orchestrator, "reroute_invocations"
-    ) as mock_reroute_invocations:
+    with (
+        patch.object(
+            app.orchestrator,
+            "is_authorize_to_run_by_concurrency_control",
+            return_value=False,
+        ) as mock_is_authorized,
+        patch.object(
+            app.orchestrator, "reroute_invocations"
+        ) as mock_reroute_invocations,
+    ):
         invocation: DistributedInvocation = add(1, 2)  # type: ignore
-        invocation.run(RunnerContext.from_runner(app.runner))  # type: ignore
+        runner_ctx = RunnerContext.from_runner(app.runner)  # type: ignore
+        invocation.run(runner_ctx)  # type: ignore
         mock_is_authorized.assert_called_once()
-        mock_reroute_invocations.assert_called_once_with({invocation})
+        mock_reroute_invocations.assert_called_once_with({invocation}, runner_ctx)
 
 
 app2 = MockPynenc()
@@ -93,10 +105,11 @@ async def test_distributed_async_result_wait_loop(
     # Simulate status changes: first RUNNING then SUCCESS.
     statuses = [InvocationStatus.RUNNING, InvocationStatus.SUCCESS]
 
-    def status_side_effect(inv: Any) -> InvocationStatus:
-        return statuses.pop(0) if statuses else InvocationStatus.SUCCESS
+    def status_side_effect(inv: Any) -> InvocationStatusRecord:
+        status = statuses.pop(0) if statuses else InvocationStatus.SUCCESS
+        return InvocationStatusRecord(status=status)
 
-    mock_base_app.orchestrator.get_invocation_status.side_effect = (  # type: ignore
+    mock_base_app.orchestrator.get_invocation_status_record.side_effect = (  # type: ignore
         status_side_effect
     )
 

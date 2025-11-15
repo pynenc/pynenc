@@ -43,9 +43,9 @@ def test_file_path_invalid_spec() -> None:
         with pytest.raises(ValueError) as exc_info:
             find_app_instance(SOME_APP_PATH)
         expected_message = f"Could not create module spec for {SOME_APP_PATH}"
-        assert expected_message in str(
-            exc_info.value
-        ), f"Expected '{expected_message}', got '{str(exc_info.value)}'"
+        assert expected_message in str(exc_info.value), (
+            f"Expected '{expected_message}', got '{str(exc_info.value)}'"
+        )
 
 
 def test_file_path_no_pynenc_instance() -> None:
@@ -95,9 +95,9 @@ def test_file_path_module_spec_loader_none() -> None:
         with pytest.raises(ValueError) as exc_info:
             find_app_instance(SOME_APP_PATH)
         expected_message = f"Could not create module spec for {SOME_APP_PATH}"
-        assert expected_message in str(
-            exc_info.value
-        ), f"Expected '{expected_message}', got '{str(exc_info.value)}'"
+        assert expected_message in str(exc_info.value), (
+            f"Expected '{expected_message}', got '{str(exc_info.value)}'"
+        )
 
 
 def test_file_path_execution_fails() -> None:
@@ -122,6 +122,6 @@ def test_file_path_execution_fails() -> None:
         ):
             with pytest.raises(Exception) as exc_info:
                 find_app_instance(SOME_APP_PATH)
-            assert "Exec failed" in str(
-                exc_info.value
-            ), f"Expected 'Exec failed', got '{str(exc_info.value)}'"
+            assert "Exec failed" in str(exc_info.value), (
+                f"Expected 'Exec failed', got '{str(exc_info.value)}'"
+            )

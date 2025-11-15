@@ -3,8 +3,13 @@ from unittest.mock import ANY, Mock, patch
 import pytest
 
 from pynenc.conf.config_task import ConcurrencyControlType
-from pynenc.exceptions import PendingInvocationLockError
-from pynenc.invocation import DistributedInvocation, InvocationStatus
+from pynenc.exceptions import InvocationStatusError
+from pynenc.invocation import (
+    DistributedInvocation,
+    InvocationStatus,
+    InvocationStatusRecord,
+)
+from pynenc.runner.runner_context import RunnerContext
 from pynenc_tests.conftest import MockPynenc
 
 mock_base_app = MockPynenc(app_id="tests/unit/orchestrator/test_base_orchestrator.py")
@@ -23,6 +28,9 @@ def test_route_default(mock_trigger_report_task_status: Mock) -> None:
      - The orchestrator will forward the task to the broker
      - The broker should return a new Invocation and report the change of status to the orchestrator
     """
+    mock_base_app.orchestrator._register_new_invocations.return_value = (
+        InvocationStatusRecord(status=InvocationStatus.REGISTERED)
+    )
     invocation = add(1, 3)
     assert isinstance(invocation, DistributedInvocation)
     # test that app.broker.route_invocation (MockBroker.route_invocation) has been called
@@ -30,8 +38,9 @@ def test_route_default(mock_trigger_report_task_status: Mock) -> None:
     # test that app.orchestrator.set_invocation_status (MockBaseOrchestrator.set_invocation_status)
     # has been called with (result, InvocationStatus.REGISTERED)
     mock_base_app.orchestrator._register_new_invocations.assert_called_once_with(
-        [invocation]
+        [invocation], None
     )
+
     # This method do change the status internally, so it should also propagate it to the backend
     mock_base_app.state_backend._add_histories.assert_called_once_with(
         [invocation.invocation_id], ANY
@@ -149,11 +158,9 @@ def test_running_concurrency_task_control() -> None:
 @patch(
     "pynenc.orchestrator.base_orchestrator.BaseOrchestrator.is_candidate_to_run_by_concurrency_control"
 )
-@patch(
-    "pynenc.orchestrator.base_orchestrator.BaseOrchestrator.set_invocation_pending_status"
-)
+@patch("pynenc.orchestrator.base_orchestrator.BaseOrchestrator.set_invocation_status")
 def test_get_blocking_invocations_to_run(
-    mock_set_pending: Mock, mock_authorize_run: Mock
+    mock_set_status: Mock, mock_authorize_run: Mock
 ) -> None:
     """Test that get_blocking_invocations_to_run retrieves and processes invocations correctly."""
     mock_invocation_1 = dummy_run_task_concurrency()
@@ -168,8 +175,9 @@ def test_get_blocking_invocations_to_run(
     mock_authorize_run.return_value = True
 
     # Call the method under test
+    runner_ctx = RunnerContext.from_runner(mock_base_app.runner)  # type: ignore
     blocking_invocations = list(
-        mock_base_app.orchestrator.get_blocking_invocations_to_run(3, set())
+        mock_base_app.orchestrator.get_blocking_invocations_to_run(3, set(), runner_ctx)
     )
 
     # Assert that the method returns the expected invocations
@@ -181,17 +189,17 @@ def test_get_blocking_invocations_to_run(
 
     # Assert that _set_pending was called for each invocation
     for invocation in [mock_invocation_1, mock_invocation_2, mock_invocation_3]:
-        mock_set_pending.assert_any_call(invocation)
+        mock_set_status.assert_any_call(
+            invocation, InvocationStatus.PENDING, runner_ctx
+        )
 
 
 @patch(
     "pynenc.orchestrator.base_orchestrator.BaseOrchestrator.is_candidate_to_run_by_concurrency_control"
 )
-@patch(
-    "pynenc.orchestrator.base_orchestrator.BaseOrchestrator.set_invocation_pending_status"
-)
+@patch("pynenc.orchestrator.base_orchestrator.BaseOrchestrator.set_invocation_status")
 def test_get_blocking_invocations_to_run_disabled(
-    mock_set_pending: Mock, mock_authorize_run: Mock
+    mock_set_status: Mock, mock_authorize_run: Mock
 ) -> None:
     """Test that get_blocking_invocations_to_run retrieves and processes invocations correctly."""
     mock_invocation_1 = dummy_run_task_concurrency()
@@ -204,21 +212,20 @@ def test_get_blocking_invocations_to_run_disabled(
     mock_authorize_run.return_value = False
 
     # Call the method under test
+    runner_ctx = RunnerContext.from_runner(mock_base_app.runner)  # type: ignore
     blocking_invocations = list(
-        mock_base_app.orchestrator.get_blocking_invocations_to_run(3, set())
+        mock_base_app.orchestrator.get_blocking_invocations_to_run(3, set(), runner_ctx)
     )
     assert blocking_invocations == []
-    mock_set_pending.assert_not_called()
+    mock_set_status.assert_not_called()
 
 
 @patch(
     "pynenc.orchestrator.base_orchestrator.BaseOrchestrator.is_candidate_to_run_by_concurrency_control"
 )
-@patch(
-    "pynenc.orchestrator.base_orchestrator.BaseOrchestrator.set_invocation_pending_status"
-)
+@patch("pynenc.orchestrator.base_orchestrator.BaseOrchestrator.set_invocation_status")
 def test_get_blocking_invocations_to_run_handles_lock(
-    mock_set_pending: Mock, mock_authorize_run: Mock
+    mock_set_status: Mock, mock_authorize_run: Mock
 ) -> None:
     """Test that get_blocking_invocations_to_run retrieves and processes invocations correctly."""
     mock_invocation_1 = dummy_run_task_concurrency()
@@ -229,16 +236,19 @@ def test_get_blocking_invocations_to_run_handles_lock(
     )
 
     # mock_set_pending raises exception PendingInvocationLockError
-    mock_set_pending.side_effect = PendingInvocationLockError("test")
+    mock_set_status.side_effect = InvocationStatusError("test")
 
     mock_authorize_run.return_value = True
 
     # Call the method under test
+    runner_ctx = RunnerContext.from_runner(mock_base_app.runner)  # type: ignore
     blocking_invocations = list(
-        mock_base_app.orchestrator.get_blocking_invocations_to_run(3, set())
+        mock_base_app.orchestrator.get_blocking_invocations_to_run(3, set(), runner_ctx)
     )
     assert blocking_invocations == []
-    mock_set_pending.assert_called_once_with(mock_invocation_1)
+    mock_set_status.assert_called_once_with(
+        mock_invocation_1, InvocationStatus.PENDING, runner_ctx
+    )
 
 
 def test_waiting_for_results_empty_invocations() -> None:

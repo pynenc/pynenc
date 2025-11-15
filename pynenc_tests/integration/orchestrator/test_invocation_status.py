@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from pynenc.invocation import InvocationStatus
+from pynenc.runner.runner_context import RunnerContext
 
 if TYPE_CHECKING:
     from pynenc import Pynenc
@@ -16,9 +17,9 @@ def check_status_and_get_elapsed_time(
 ) -> float:
     start_time = time.time()
     current_status = app.orchestrator.get_invocation_status(invocation_id)
-    assert (
-        current_status == expected_status
-    ), f"Expected status {expected_status}, but got {current_status}"
+    assert current_status == expected_status, (
+        f"Expected status {expected_status}, but got {current_status}"
+    )
     elapsed_time = time.time() - start_time
     return elapsed_time
 
@@ -34,8 +35,9 @@ def test_get_status_performance(task_dummy_io: "Task") -> None:
 
     app.orchestrator._register_new_invocations([inv])
     inv_id = inv.invocation_id
-
-    app.orchestrator.set_invocation_status(inv_id, InvocationStatus.RUNNING)
+    runner_ctx = RunnerContext.from_runner(app.runner)
+    app.orchestrator.set_invocation_status(inv_id, InvocationStatus.PENDING, runner_ctx)
+    app.orchestrator.set_invocation_status(inv_id, InvocationStatus.RUNNING, runner_ctx)
     elapsed_times = []
     for i in range(10):
         elapsed_time = check_status_and_get_elapsed_time(

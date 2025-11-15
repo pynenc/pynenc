@@ -36,7 +36,7 @@ class MemStateBackend(BaseStateBackend[Params, Result]):
         self._exceptions: dict[str, Exception] = {}
         self._workflow_data: dict[str, dict[str, Any]] = defaultdict(dict)
         self._workflow_types: set[str] = set()  # Stores workflow_task_ids
-        self._workflow_runs: dict[str, set["WorkflowIdentity"]] = defaultdict(
+        self._workflow_runs: dict[str, set[WorkflowIdentity]] = defaultdict(
             set
         )  # workflow_task_id -> runs
         self._workflow_sub_invocations: dict[str, set[str]] = defaultdict(

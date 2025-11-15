@@ -1,0 +1,76 @@
+{% if active_runners %}
+<div class="table-responsive">
+  <table class="table table-sm table-hover mb-0">
+    <thead>
+      <tr>
+        <th>Runner ID</th>
+        <th>Class</th>
+        <th>Host</th>
+        <th>PID</th>
+        <th>Created</th>
+        <th>Last Heartbeat</th>
+        <th>Age</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for runner_info in active_runners %}
+      <tr>
+        <td>
+          <code class="small">{{ runner_info.runner_ctx.runner_id }}</code>
+        </td>
+        <td>
+          <span class="badge bg-secondary"
+            >{{ runner_info.runner_ctx.runner_cls }}</span
+          >
+        </td>
+        <td>{{ runner_info.runner_ctx.hostname }}</td>
+        <td>{{ runner_info.runner_ctx.pid }}</td>
+        <td>
+          <small class="text-muted"
+            >{{ runner_info.creation_time.strftime('%Y-%m-%d %H:%M:%S')
+            }}</small
+          >
+        </td>
+        <td>
+          <small class="text-muted"
+            >{{ runner_info.last_heartbeat.strftime('%Y-%m-%d %H:%M:%S')
+            }}</small
+          >
+        </td>
+        <td>
+          {% set age_seconds = (runner_info.last_heartbeat -
+          runner_info.creation_time).total_seconds() %} {% if age_seconds < 60
+          %}
+          <span class="badge bg-success">{{ age_seconds|int }}s</span>
+          {% elif age_seconds < 3600 %}
+          <span class="badge bg-info"
+            >{{ (age_seconds / 60)|int }}m {{ (age_seconds % 60)|int }}s</span
+          >
+          {% else %}
+          <span class="badge bg-warning"
+            >{{ (age_seconds / 3600)|int }}h {{ ((age_seconds % 3600) / 60)|int
+            }}m</span
+          >
+          {% endif %}
+        </td>
+      </tr>
+      {% if runner_info.runner_ctx.extra_data %}
+      <tr class="table-light">
+        <td colspan="7">
+          <details class="ms-3">
+            <summary class="small text-muted">Extra Data</summary>
+            <pre class="small mb-0 mt-2">
+{{ runner_info.runner_ctx.extra_data|tojson(indent=2) }}</pre
+            >
+          </details>
+        </td>
+      </tr>
+      {% endif %} {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="text-center py-4">
+  <p class="text-muted mb-0">No active runners</p>
+</div>
+{% endif %}

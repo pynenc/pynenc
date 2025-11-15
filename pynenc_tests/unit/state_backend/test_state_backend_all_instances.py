@@ -6,7 +6,11 @@ import pytest
 
 from pynenc.app import AppInfo
 from pynenc.exceptions import InvocationNotFoundError
-from pynenc.state_backend.base_state_backend import InvocationHistory, InvocationStatus
+from pynenc.invocation.status import InvocationStatus
+from pynenc.state_backend.base_state_backend import (
+    InvocationHistory,
+    InvocationStatusRecord,
+)
 from pynenc.workflow import WorkflowIdentity
 from pynenc_tests.conftest import MockPynenc
 
@@ -26,7 +30,7 @@ def dummy_task() -> None:
 def invocation(app_instance: "Pynenc") -> "DistributedInvocation":
     """Helper to create a dummy invocation."""
     dummy_task.app = app_instance
-    invocation: "DistributedInvocation" = dummy_task()  # type: ignore
+    invocation: DistributedInvocation = dummy_task()  # type: ignore
     return invocation
 
 
@@ -39,13 +43,15 @@ def test_history_records_are_stored_and_ordered(app_instance: "Pynenc") -> None:
 
     # Use the actual InvocationHistory class and set timestamps explicitly
     # This keeps the test simple and ensures type compatibility.
-    hist1 = InvocationHistory(InvocationStatus.REGISTERED)
+    hist1 = InvocationHistory(
+        InvocationStatusRecord(status=InvocationStatus.REGISTERED)
+    )
     hist1._timestamp = datetime.fromtimestamp(1.0)
 
-    hist2 = InvocationHistory(InvocationStatus.RUNNING)
+    hist2 = InvocationHistory(InvocationStatusRecord(status=InvocationStatus.RUNNING))
     hist2._timestamp = datetime.fromtimestamp(2.0)
 
-    hist3 = InvocationHistory(InvocationStatus.FAILED)
+    hist3 = InvocationHistory(InvocationStatusRecord(status=InvocationStatus.FAILED))
     hist3._timestamp = datetime.fromtimestamp(3.0)
 
     backend._add_histories(["inv-1"], hist2)
@@ -53,10 +59,10 @@ def test_history_records_are_stored_and_ordered(app_instance: "Pynenc") -> None:
     backend._add_histories(["inv-1"], hist3)
 
     histories = backend.get_history("inv-1")
-    assert [hist.status for hist in histories] == [
-        hist1.status,
-        hist2.status,
-        hist3.status,
+    assert [hist.status_record.status for hist in histories] == [
+        hist1.status_record.status,
+        hist2.status_record.status,
+        hist3.status_record.status,
     ]
 
 
@@ -95,11 +101,13 @@ def test_add_and_get_ordered_histories(app_instance: "Pynenc") -> None:
     backend = app_instance.state_backend
     invocation_id = "inv-xyz"
 
-    hist1 = InvocationHistory(InvocationStatus.REGISTERED)
+    hist1 = InvocationHistory(
+        InvocationStatusRecord(status=InvocationStatus.REGISTERED)
+    )
     sleep(0.01)
-    hist2 = InvocationHistory(InvocationStatus.RUNNING)
+    hist2 = InvocationHistory(InvocationStatusRecord(status=InvocationStatus.RUNNING))
     sleep(0.01)
-    hist3 = InvocationHistory(InvocationStatus.FAILED)
+    hist3 = InvocationHistory(InvocationStatusRecord(status=InvocationStatus.FAILED))
 
     backend._add_histories([invocation_id], hist1)
     backend._add_histories([invocation_id], hist3)
@@ -110,10 +118,10 @@ def test_add_and_get_ordered_histories(app_instance: "Pynenc") -> None:
         sleep(0.1)  # add history run async in a thread
         histories = backend.get_history(invocation_id)
         assert len(histories) == 3
-    assert [hist.status for hist in histories] == [
-        hist1.status,
-        hist2.status,
-        hist3.status,
+    assert [hist.status_record for hist in histories] == [
+        hist1.status_record,
+        hist2.status_record,
+        hist3.status_record,
     ]
 
 

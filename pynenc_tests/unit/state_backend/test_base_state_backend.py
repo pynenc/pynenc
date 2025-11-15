@@ -8,7 +8,11 @@ import pytest
 from pynenc.call import Call
 from pynenc.conf.config_state_backend import ConfigStateBackend
 from pynenc.exceptions import InvocationNotFoundError
-from pynenc.invocation import DistributedInvocation, InvocationStatus
+from pynenc.invocation import (
+    DistributedInvocation,
+    InvocationStatus,
+    InvocationStatusRecord,
+)
 from pynenc_tests.conftest import MockPynenc
 
 if TYPE_CHECKING:
@@ -19,8 +23,7 @@ if TYPE_CHECKING:
 mock_base_app = MockPynenc(app_id="pynenc_tests/unit/runner/test_base_runner.py")
 
 
-def dummy() -> None:
-    ...
+def dummy() -> None: ...
 
 
 @pytest.fixture
@@ -43,7 +46,8 @@ def test_add_history_non_blocking(
 
     start_time = time.time()
     mock_base_app.state_backend.add_histories(
-        [dummy_invocation.invocation_id], status=InvocationStatus.REGISTERED
+        [dummy_invocation.invocation_id],
+        status_record=InvocationStatusRecord(status=InvocationStatus.REGISTERED),
     )
     end_time = time.time()
 

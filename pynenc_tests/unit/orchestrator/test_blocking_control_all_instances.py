@@ -1,19 +1,21 @@
 from pynenc import Pynenc
 from pynenc.call import Call
-from pynenc.invocation import DistributedInvocation, InvocationStatus
+from pynenc.invocation import (
+    DistributedInvocation,
+    InvocationStatus,
+    InvocationStatusRecord,
+)
 from pynenc_tests.conftest import MockPynenc
 
 _mock_base_app = MockPynenc()
 
 
 @_mock_base_app.task
-def task0() -> None:
-    ...
+def task0() -> None: ...
 
 
 @_mock_base_app.task
-def task1() -> None:
-    ...
+def task1() -> None: ...
 
 
 def test_get_blocking_invocations(app_instance: "Pynenc") -> None:
@@ -29,8 +31,8 @@ def test_get_blocking_invocations(app_instance: "Pynenc") -> None:
     # graph.add_invocation_call(invocation1, invocation2)
     graph.waiting_for_results(invocation0.invocation_id, [invocation1.invocation_id])
 
-    invocation0.app.orchestrator.get_invocation_status.return_value = (  # type: ignore
-        InvocationStatus.REGISTERED
+    invocation0.app.orchestrator.get_invocation_status_record.return_value = (  # type: ignore
+        InvocationStatusRecord(status=InvocationStatus.REGISTERED)
     )
 
     blocking: list[str] = list(graph.get_blocking_invocations(2))

@@ -22,11 +22,17 @@ class ConfigRunner(ConfigPynencBase):
         Minimum number of parallel execution slots for tasks. This setting determines the minimum number of tasks
         that can run in parallel, regardless of the implementation (threads or processes). For instance, on a
         single-core machine, setting this to 2 would allow at least two tasks to run concurrently.
+
+    :cvar ConfigField[float] recovery_service_check_interval_minutes:
+        Time in minutes between recovery service checks. This prevents the runner from checking for stuck
+        invocations on every loop iteration, reducing pressure on the orchestrator. The actual recovery
+        execution is further controlled by the orchestrator's recovery service scheduling logic.
     """
 
     invocation_wait_results_sleep_time_sec = ConfigField(0.1)
     runner_loop_sleep_time_sec = ConfigField(0.1)
     min_parallel_slots = ConfigField(1)
+    recovery_service_check_interval_minutes = ConfigField(2.0)
 
 
 class ConfigThreadRunner(ConfigRunner):

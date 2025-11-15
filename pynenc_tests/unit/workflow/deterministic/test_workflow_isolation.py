@@ -4,6 +4,7 @@ Tests for workflow isolation and state backend integration.
 This module tests that different workflows maintain isolated deterministic
 sequences and that state backend persistence works correctly.
 """
+
 from pynenc import Pynenc
 from pynenc.workflow.deterministic import DeterministicExecutor
 from pynenc.workflow.identity import WorkflowIdentity

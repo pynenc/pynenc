@@ -4,6 +4,7 @@ Task definitions for workflow data integration tests.
 This module defines tasks used for testing workflow data persistence
 and management across different state backend implementations.
 """
+
 from typing import Any
 
 from pynenc import Pynenc

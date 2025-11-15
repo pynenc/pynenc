@@ -8,6 +8,7 @@ from pynenc.invocation import (
     DistributedInvocation,
     DistributedInvocationGroup,
     InvocationStatus,
+    InvocationStatusRecord,
 )
 from pynenc_tests.conftest import MockPynenc
 
@@ -52,7 +53,9 @@ def test_get_pending_results() -> None:
     )
     # Force pending status for both invocations.
     app.orchestrator.filter_by_status.return_value = []
-    app.orchestrator.get_invocation_status.return_value = InvocationStatus.PENDING
+    app.orchestrator.get_invocation_status_record.return_value = InvocationStatusRecord(
+        status=InvocationStatus.PENDING
+    )
     # Patch waiting methods: orchestrator.waiting_for_results and runner.waiting_for_results.
     app.orchestrator.waiting_for_results = MagicMock()  # type: ignore
     app.runner.waiting_for_results = MagicMock(  # type: ignore

@@ -8,7 +8,7 @@ from pynenc.invocation.dist_invocation import (
     DistributedInvocationGroup,
     ReusedInvocation,
 )
-from pynenc.invocation.status import InvocationStatus
+from pynenc.invocation.status import InvocationStatus, InvocationStatusRecord
 
 __all__ = [
     "BaseInvocation",
@@ -19,4 +19,5 @@ __all__ = [
     "ReusedInvocation",
     "DistributedInvocationGroup",
     "InvocationStatus",
+    "InvocationStatusRecord",
 ]

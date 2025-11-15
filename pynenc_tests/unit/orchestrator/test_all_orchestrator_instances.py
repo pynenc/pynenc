@@ -2,7 +2,10 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from pynenc.exceptions import InvocationOnFinalStatusError, PendingInvocationLockError
+from pynenc.exceptions import (
+    InvocationStatusTransitionError,
+    InvocationStatusOwnershipError,
+)
 from pynenc.invocation import InvocationStatus
 from pynenc_tests.conftest import MockPynenc
 
@@ -21,7 +24,7 @@ def dummy_task() -> None:
 def test_retry_count(app_instance: "Pynenc") -> None:
     """Test that the retry count functionality works for both orchestrators."""
     app = app_instance
-    inv: "DistributedInvocation" = dummy_task()  # type: ignore
+    inv: DistributedInvocation = dummy_task()  # type: ignore
     app.orchestrator._register_new_invocations([inv])
     assert app.orchestrator.get_invocation_retries(inv.invocation_id) == 0
     app.orchestrator.increment_invocation_retries(inv.invocation_id)
@@ -30,46 +33,8 @@ def test_retry_count(app_instance: "Pynenc") -> None:
     assert app.orchestrator.get_invocation_retries(inv.invocation_id) == 0
 
 
-def test_set_pending_status(app_instance: "Pynenc") -> None:
-    # Setup
-    inv: "DistributedInvocation" = dummy_task()  # type: ignore
-    app_instance.orchestrator._register_new_invocations([inv])
-    invocation_id = inv.invocation_id
-    # Set pending status can only be called on an invocation with some other status
-    app_instance.orchestrator._set_invocation_status(
-        invocation_id, InvocationStatus.RUNNING
-    )
-
-    # Test
-    app_instance.orchestrator._set_invocation_pending_status(invocation_id)
-
-    # Assertions
-    assert (
-        app_instance.orchestrator.get_invocation_status(invocation_id)
-        == InvocationStatus.PENDING
-    )
-    assert (
-        app_instance.orchestrator.get_invocation_pending_timer(invocation_id)
-        is not None
-    )
-
-
-def test_set_pending_only_once(app_instance: "Pynenc") -> None:
-    """Test that trying to set pending twice would raise PendingInvocationLockError."""
-    # Setup
-    inv: "DistributedInvocation" = dummy_task()  # type: ignore
-    app_instance.orchestrator._register_new_invocations([inv])
-    invocation_id = inv.invocation_id
-
-    app_instance.orchestrator._set_invocation_pending_status(invocation_id)
-    # Test / Assertions
-    with pytest.raises(PendingInvocationLockError) as exc_info:
-        app_instance.orchestrator._set_invocation_pending_status(invocation_id)
-        assert exc_info.value.invocation_id == invocation_id
-
-
 def test_registering_an_invocation_set_register_status(app_instance: "Pynenc") -> None:
-    inv: "DistributedInvocation" = dummy_task()  # type: ignore
+    inv: DistributedInvocation = dummy_task()  # type: ignore
     app_instance.orchestrator._register_new_invocations([inv])
     assert (
         app_instance.orchestrator.get_invocation_status(inv.invocation_id)
@@ -79,43 +44,38 @@ def test_registering_an_invocation_set_register_status(app_instance: "Pynenc") -
 
 def test_cannot_change_final_status(app_instance: "Pynenc") -> None:
     """Check that any attempt to change status from a final state raises InvocationOnFinalStatusError."""
-    inv: "DistributedInvocation" = dummy_task()  # type: ignore
+    inv: DistributedInvocation = dummy_task()  # type: ignore
     app_instance.orchestrator._register_new_invocations([inv])
     invocation_id = inv.invocation_id
-    app_instance.orchestrator._set_invocation_status(
-        invocation_id, InvocationStatus.SUCCESS
+    owner_id = "some_unique_owner_id"
+
+    # We should follow a valid status transition path to reach a final status
+    app_instance.orchestrator._atomic_status_transition(
+        invocation_id, InvocationStatus.PENDING, owner_id
     )
-    with pytest.raises(InvocationOnFinalStatusError) as exc_info:
-        app_instance.orchestrator._set_invocation_status(
-            invocation_id, InvocationStatus.PAUSED
+    app_instance.orchestrator._atomic_status_transition(
+        invocation_id, InvocationStatus.RUNNING, owner_id
+    )
+
+    # Attempting to change ownership by another owner should raise InvocationStatusOwnershipError
+    with pytest.raises(InvocationStatusOwnershipError) as exc_info:
+        app_instance.orchestrator._atomic_status_transition(
+            invocation_id, InvocationStatus.SUCCESS, "some_other_owner_id"
         )
-        assert exc_info.value.invocation_id == invocation_id
-        assert exc_info.value.final_status == InvocationStatus.SUCCESS
-        assert exc_info.value.new_status == InvocationStatus.PAUSED
+        assert exc_info.value.from_status == InvocationStatus.RUNNING
+        assert exc_info.value.to_status == InvocationStatus.SUCCESS
+        assert exc_info.value.current_owner == owner_id
+        assert exc_info.value.attempted_owner == "some_other_owner_id"
 
-    with pytest.raises(InvocationOnFinalStatusError) as exc_info:
-        app_instance.orchestrator.set_invocation_status(
-            invocation_id, InvocationStatus.FAILED
-        )
-        assert exc_info.value.invocation_id == invocation_id
-        assert exc_info.value.final_status == InvocationStatus.SUCCESS
-        assert exc_info.value.new_status == InvocationStatus.FAILED
-
-    app_instance.orchestrator.set_invocation_status(
-        invocation_id, InvocationStatus.SUCCESS
+    app_instance.orchestrator._atomic_status_transition(
+        invocation_id, InvocationStatus.SUCCESS, owner_id
     )
 
-
-def test_set_pending_cannot_change_final_status(app_instance: "Pynenc") -> None:
-    """Check that any attempt to change status to pending from a final state raises InvocationOnFinalStatusError."""
-    inv: "DistributedInvocation" = dummy_task()  # type: ignore
-    app_instance.orchestrator._register_new_invocations([inv])
-    invocation_id = inv.invocation_id
-    app_instance.orchestrator._set_invocation_status(
-        invocation_id, InvocationStatus.SUCCESS
-    )
-    with pytest.raises(InvocationOnFinalStatusError) as exc_info:
-        app_instance.orchestrator._set_invocation_pending_status(invocation_id)
-        assert exc_info.value.invocation_id == invocation_id
-        assert exc_info.value.final_status == InvocationStatus.SUCCESS
-        assert exc_info.value.new_status == InvocationStatus.PENDING
+    # It's not possible to transition from a final status to any other status
+    for status in InvocationStatus:
+        with pytest.raises(InvocationStatusTransitionError) as exc_info:
+            app_instance.orchestrator._atomic_status_transition(
+                invocation_id, status, owner_id
+            )
+            assert exc_info.value.from_status == InvocationStatus.SUCCESS
+            assert exc_info.value.to_status == status

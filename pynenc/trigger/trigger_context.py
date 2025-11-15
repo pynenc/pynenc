@@ -41,7 +41,7 @@ class TriggerContext:
 
     @staticmethod
     def build_conditions_dict(
-        valid_conditions: dict[str, "ValidCondition"]
+        valid_conditions: dict[str, "ValidCondition"],
     ) -> dict[str, "TriggerCondition"]:
         """
         Build a mapping from condition IDs to condition objects.
@@ -61,9 +61,9 @@ class TriggerContext:
         :param valid_condition: The valid condition to add
         """
         self.valid_conditions[valid_condition.valid_condition_id] = valid_condition
-        self.conditions[
-            valid_condition.condition.condition_id
-        ] = valid_condition.condition
+        self.conditions[valid_condition.condition.condition_id] = (
+            valid_condition.condition
+        )
 
     def has_condition(self, condition_id: str) -> bool:
         """

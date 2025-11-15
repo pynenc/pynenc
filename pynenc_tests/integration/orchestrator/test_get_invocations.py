@@ -1,14 +1,16 @@
 import concurrent.futures
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 import pytest
 
 from pynenc.arguments import Arguments
 from pynenc.call import Call
-from pynenc.exceptions import PendingInvocationLockError
+from pynenc.exceptions import InvocationStatusError
 from pynenc.invocation import DistributedInvocation, InvocationStatus
 from pynenc.orchestrator import MemOrchestrator
+from pynenc.runner.runner_context import RunnerContext
 
 if TYPE_CHECKING:
     from pynenc import Pynenc
@@ -89,11 +91,27 @@ def test_get_by_status(test_vars_gi: Vars) -> None:
         )
     )
     assert len(invocations_ids) == 3
+
+    runner_context = RunnerContext.from_runner(app.runner)
+    # The status is validatid, task must be set to PENDING before they can run
     app.orchestrator.set_invocation_status(
-        test_vars_gi.inv2.invocation_id, status=InvocationStatus.SUCCESS
+        test_vars_gi.inv2.invocation_id, InvocationStatus.PENDING, runner_context
     )
     app.orchestrator.set_invocation_status(
-        test_vars_gi.inv3.invocation_id, status=InvocationStatus.SUCCESS
+        test_vars_gi.inv2.invocation_id, InvocationStatus.RUNNING, runner_context
+    )
+    app.orchestrator.set_invocation_status(
+        test_vars_gi.inv3.invocation_id, InvocationStatus.PENDING, runner_context
+    )
+    app.orchestrator.set_invocation_status(
+        test_vars_gi.inv3.invocation_id, InvocationStatus.RUNNING, runner_context
+    )
+
+    app.orchestrator.set_invocation_status(
+        test_vars_gi.inv2.invocation_id, InvocationStatus.SUCCESS, runner_context
+    )
+    app.orchestrator.set_invocation_status(
+        test_vars_gi.inv3.invocation_id, InvocationStatus.SUCCESS, runner_context
     )
     invocation_ids = set(
         app.orchestrator.get_existing_invocations(
@@ -135,9 +153,14 @@ def test_set_invocation_pending_status(test_vars_gi: Vars) -> None:
     if not isinstance(app.orchestrator, MemOrchestrator):
         pytest.skip("Only for MemOrchestrator")
     app.conf.max_pending_seconds = 10
-    app.orchestrator._set_invocation_pending_status(test_vars_gi.inv1.invocation_id)
-    with pytest.raises(PendingInvocationLockError):
-        app.orchestrator._set_invocation_pending_status(test_vars_gi.inv1.invocation_id)
+    owner_id = "test_owner"
+    app.orchestrator._atomic_status_transition(
+        test_vars_gi.inv1.invocation_id, InvocationStatus.PENDING, owner_id
+    )
+    with pytest.raises(InvocationStatusError):
+        app.orchestrator._atomic_status_transition(
+            test_vars_gi.inv1.invocation_id, InvocationStatus.PENDING, owner_id
+        )
 
 
 def test_set_invocation_pending_status_atomicity(test_vars_gi: Vars) -> None:
@@ -151,13 +174,16 @@ def test_set_invocation_pending_status_atomicity(test_vars_gi: Vars) -> None:
 
     # Define a function to run in a separate thread
     def run_set_invocation_pending_status(app: "Pynenc") -> None:
-        app.orchestrator._set_invocation_pending_status(test_vars_gi.inv1.invocation_id)
+        owner_id = uuid4().hex
+        app.orchestrator._atomic_status_transition(
+            test_vars_gi.inv1.invocation_id, InvocationStatus.PENDING, owner_id
+        )
 
     # Run set_invocation_pending_status concurrently in two threads
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
         future1 = executor.submit(run_set_invocation_pending_status, app)
         future2 = executor.submit(run_set_invocation_pending_status, app)
-        with pytest.raises(PendingInvocationLockError):
+        with pytest.raises(InvocationStatusError):
             future1.result()
             future2.result()
 
@@ -169,7 +195,8 @@ def test_get_invocations_to_run_atomicity(task_concat_io: "Task") -> None:
 
     # Define a function to run in a separate thread
     def run_get_invocations_to_run(_app: "Pynenc") -> list[DistributedInvocation]:
-        return list(_app.orchestrator.get_invocations_to_run(1))
+        runner_ctx = RunnerContext.from_runner(_app.runner)
+        return list(_app.orchestrator.get_invocations_to_run(1, runner_ctx))
 
     app = task_concat_io.app
     # max pending seconds to a value that will not affect the tests
@@ -211,7 +238,8 @@ def test_get_invocations_to_run_max_limit(test_vars_gi: Vars) -> None:
     )
 
     # Get one invocation to run
-    invocations = list(app.orchestrator.get_invocations_to_run(1))
+    runner_context = RunnerContext.from_runner(app.runner)
+    invocations = list(app.orchestrator.get_invocations_to_run(1, runner_context))
 
     # Check only 1 invocation retrieved
     assert len(invocations) == 1, f"Expected 1 invocation, got {len(invocations)}"

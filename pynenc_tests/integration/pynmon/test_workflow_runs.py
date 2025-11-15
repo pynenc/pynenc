@@ -6,6 +6,7 @@ sub-tasks with various execution patterns. These tests validate both the
 workflow execution and the pynmon monitoring views that display workflow
 hierarchies and execution histories.
 """
+
 import threading
 import time
 from typing import TYPE_CHECKING, Any

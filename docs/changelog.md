@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.0] - 2025-09-07
+## [0.1.0] - 2025-11-15
 
 ### Added
 
@@ -23,6 +23,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Implemented dynamic method resolution for plugin-provided builder methods
   - Enhanced error handling with helpful messages for missing plugin methods
   - Added comprehensive test coverage for plugin system functionality
+
+- **Invocation Status System Refactor**:
+
+  - Refactored invocation status management into a declarative, type-safe state machine.
+  - Added `InvocationStatusRecord` dataclass to encapsulate status, ownership, and timestamp.
+  - Created `StatusDefinition` for declarative status rules (final, available_for_run, ownership, transitions).
+  - Added `StatusConfiguration` for centralized status and transition configuration.
+  - Implemented state machine functions: `validate_transition`, `validate_ownership`, `compute_new_owner`, and `transition`.
+
+- **Runner Heartbeat Tracking and Recovery Service**:
+
+  - Implemented runner heartbeat tracking system in orchestrators
+  - Implemented invocation recovery service to detect and reroute stuck PENDING invocations
+  - Added distributed recovery scheduling across multiple runners using time-slot allocation to prevent race conditions
+  - Only one runner executes recovery at any given time based on runner position and time cycles
+
+- **Pynmon Runner Monitoring Interface**:
+
+  - Added dedicated /runners page in pynmon for monitoring active runners
+  - Displays runner details: ID, class, hostname, PID, creation time, last heartbeat, and age
+  - Integrated runner statistics into orchestrator overview page
 
 - **Builder System Improvements**:
 

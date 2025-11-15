@@ -82,6 +82,19 @@ def test_causes_cycles(test_vars_cc: Vars, mock_register_task_run: MagicMock) ->
     test_vars_cc.app.orchestrator.register_new_invocations(
         [test_vars_cc.inv1, test_vars_cc.inv2, test_vars_cc.inv3]
     )
+
+    runner_context = RunnerContext.from_runner(DummyRunner(test_vars_cc.app))
+    # The status is validatid, task must be set to PENDING before they can run
+    test_vars_cc.app.orchestrator.set_invocation_status(
+        test_vars_cc.inv1.invocation_id, InvocationStatus.PENDING, runner_context
+    )
+    test_vars_cc.app.orchestrator.set_invocation_status(
+        test_vars_cc.inv2.invocation_id, InvocationStatus.PENDING, runner_context
+    )
+    test_vars_cc.app.orchestrator.set_invocation_status(
+        test_vars_cc.inv3.invocation_id, InvocationStatus.PENDING, runner_context
+    )
+
     runner_context = RunnerContext.from_runner(DummyRunner(test_vars_cc.app))
     test_vars_cc.app.orchestrator.set_invocation_run(
         test_vars_cc.inv1, test_vars_cc.inv2, runner_context
@@ -110,7 +123,20 @@ def test_clean_up_cycles(test_vars_cc: Vars, mock_register_task_run: MagicMock) 
     test_vars_cc.app.orchestrator.register_new_invocations(
         [test_vars_cc.inv1, test_vars_cc.inv2, test_vars_cc.inv3]
     )
+
     runner_context = RunnerContext.from_runner(DummyRunner(test_vars_cc.app))
+    # The status is validatid, task must be set to PENDING before they can run
+    test_vars_cc.app.orchestrator.set_invocation_status(
+        test_vars_cc.inv1.invocation_id, InvocationStatus.PENDING, runner_context
+    )
+    test_vars_cc.app.orchestrator.set_invocation_status(
+        test_vars_cc.inv2.invocation_id, InvocationStatus.PENDING, runner_context
+    )
+    test_vars_cc.app.orchestrator.set_invocation_status(
+        test_vars_cc.inv3.invocation_id, InvocationStatus.PENDING, runner_context
+    )
+
+    # Set the invocation for run
     test_vars_cc.app.orchestrator.set_invocation_run(
         test_vars_cc.inv1, test_vars_cc.inv2, runner_context
     )
@@ -124,7 +150,7 @@ def test_clean_up_cycles(test_vars_cc: Vars, mock_register_task_run: MagicMock) 
         )
     # if inv2 finished, and gets cleaned up
     test_vars_cc.app.orchestrator.set_invocation_status(
-        test_vars_cc.inv2.invocation_id, InvocationStatus.SUCCESS
+        test_vars_cc.inv2.invocation_id, InvocationStatus.SUCCESS, runner_context
     )
     test_vars_cc.app.orchestrator.clean_up_invocation_cycles(
         test_vars_cc.inv2.invocation_id
@@ -174,7 +200,10 @@ def test_avoid_getting_always_same_invocations(test_vars_cc: Vars) -> None:
     blocking_inv = list(test_vars_cc.app.orchestrator.get_blocking_invocations(1))
     # when we instead call get_invocation_to_run it will get inv3 as its blocking inv3
     # but this call will change the status of inv3 to pending
-    inv_to_run = list(test_vars_cc.app.orchestrator.get_invocations_to_run(1))
+    runner_context = RunnerContext.from_runner(DummyRunner(test_vars_cc.app))
+    inv_to_run = list(
+        test_vars_cc.app.orchestrator.get_invocations_to_run(1, runner_context)
+    )
     inv_to_run_ids = [inv.invocation_id for inv in inv_to_run]
     sleep(0.1)  # sleep as the pending status is async
     assert blocking_inv == inv_to_run_ids == [test_vars_cc.inv3.invocation_id]
@@ -244,6 +273,18 @@ def test_config_cycle_control(
         [test_vars_cc.inv1, test_vars_cc.inv2, test_vars_cc.inv3]
     )
     runner_context = RunnerContext.from_runner(DummyRunner(test_vars_cc.app))
+    # The status is validatid, task must be set to PENDING before they can run
+    test_vars_cc.app.orchestrator.set_invocation_status(
+        test_vars_cc.inv1.invocation_id, InvocationStatus.PENDING, runner_context
+    )
+    test_vars_cc.app.orchestrator.set_invocation_status(
+        test_vars_cc.inv2.invocation_id, InvocationStatus.PENDING, runner_context
+    )
+    test_vars_cc.app.orchestrator.set_invocation_status(
+        test_vars_cc.inv3.invocation_id, InvocationStatus.PENDING, runner_context
+    )
+
+    # Set the invocation for run
     test_vars_cc.app.orchestrator.set_invocation_run(
         test_vars_cc.inv1, test_vars_cc.inv2, runner_context
     )

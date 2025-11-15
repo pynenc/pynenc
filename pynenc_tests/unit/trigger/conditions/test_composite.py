@@ -15,9 +15,9 @@ from pynenc.trigger.conditions.cron import CronContext
 
 
 @pytest.fixture
-def composite_conditions_setup() -> (
-    tuple[TriggerCondition, TriggerCondition, CronContext]
-):
+def composite_conditions_setup() -> tuple[
+    TriggerCondition, TriggerCondition, CronContext
+]:
     """Set up test fixtures for composite conditions."""
     # Create mock conditions
     condition1 = Mock(spec=TriggerCondition)
@@ -42,7 +42,7 @@ def test_init_requires_conditions() -> None:
 
 
 def test_condition_id_is_deterministic(
-    composite_conditions_setup: tuple[Mock, Mock, CronContext]
+    composite_conditions_setup: tuple[Mock, Mock, CronContext],
 ) -> None:
     """Test that condition_id is deterministic and based on child conditions."""
     condition1, condition2, _ = composite_conditions_setup
@@ -103,7 +103,7 @@ def test_or_logic(composite_conditions_setup: tuple[Mock, Mock, CronContext]) ->
 
 
 def test_get_condition_data(
-    composite_conditions_setup: tuple[Mock, Mock, CronContext]
+    composite_conditions_setup: tuple[Mock, Mock, CronContext],
 ) -> None:
     """Test getting condition data."""
     condition1, condition2, _ = composite_conditions_setup
@@ -118,7 +118,7 @@ def test_get_condition_data(
 
 
 def test_affects_task(
-    composite_conditions_setup: tuple[Mock, Mock, CronContext]
+    composite_conditions_setup: tuple[Mock, Mock, CronContext],
 ) -> None:
     """Test affects_task method checks all child conditions."""
     condition1, condition2, _ = composite_conditions_setup

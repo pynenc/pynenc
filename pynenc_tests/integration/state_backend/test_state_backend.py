@@ -7,7 +7,11 @@ import pytest
 
 from pynenc.call import Call
 from pynenc.exceptions import PynencError
-from pynenc.invocation import DistributedInvocation, InvocationStatus
+from pynenc.invocation import (
+    DistributedInvocation,
+    InvocationStatus,
+    InvocationStatusRecord,
+)
 from pynenc.util.subclasses import get_all_subclasses
 from pynenc_tests.conftest import MockPynenc
 
@@ -20,8 +24,7 @@ mock_app = MockPynenc()
 
 
 @mock_app.task
-def dummy() -> None:
-    ...
+def dummy() -> None: ...
 
 
 @pytest.fixture
@@ -55,16 +58,18 @@ def test_store_history_status(
         prev_datetime = datetime.min.replace(tzinfo=UTC)
         for expected_status, inv_hist in zip(expected_statuses, history, strict=True):
             assert inv_hist.timestamp > prev_datetime
-            assert inv_hist.status == expected_status
+            assert inv_hist.status_record.status == expected_status
             prev_datetime = inv_hist.timestamp
 
     assert [] == app.state_backend.get_history(invocation.invocation_id)
     app.state_backend.add_histories(
-        [invocation.invocation_id], status=InvocationStatus.REGISTERED
+        [invocation.invocation_id],
+        status_record=InvocationStatusRecord(status=InvocationStatus.REGISTERED),
     )
     _check_history(invocation.invocation_id, [InvocationStatus.REGISTERED])
     app.state_backend.add_histories(
-        [invocation.invocation_id], status=InvocationStatus.RUNNING
+        [invocation.invocation_id],
+        status_record=InvocationStatusRecord(status=InvocationStatus.RUNNING),
     )
     _check_history(
         invocation.invocation_id,
@@ -122,6 +127,21 @@ def test_set_pynenc_exceptions(app_instance: "Pynenc") -> None:
             "call_ids": ["fake_call_id_1", "fake_call_id_2"],
             "final_status": InvocationStatus.FAILED,
             "new_status": InvocationStatus.SUCCESS,
+            "from_status": InvocationStatus.REGISTERED,
+            "to_status": InvocationStatus.RUNNING,
+            "allowed_statuses": {InvocationStatus.PENDING},
+            "previous_status_record": InvocationStatusRecord(
+                status=InvocationStatus.PENDING
+            ),
+            "expected_status_record": InvocationStatusRecord(
+                status=InvocationStatus.RUNNING
+            ),
+            "actual_status_record": InvocationStatusRecord(
+                status=InvocationStatus.FAILED
+            ),
+            "current_owner": None,
+            "attempted_owner": "fake_attempted_owner",
+            "reason": "fake_reason",
         }
         # Filter out the keys that are not in the __init__ of the exception class
         if init_params := get_init_var_names(exception_cls):

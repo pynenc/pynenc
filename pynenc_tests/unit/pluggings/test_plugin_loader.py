@@ -37,9 +37,12 @@ def test_load_all_plugins_success() -> None:
     mock_ep2 = MagicMock()
     mock_ep2.module = "test_plugin2"
 
-    with patch(
-        "importlib.metadata.entry_points", return_value=[mock_ep1, mock_ep2]
-    ) as mock_eps, patch("builtins.__import__") as mock_import:
+    with (
+        patch(
+            "importlib.metadata.entry_points", return_value=[mock_ep1, mock_ep2]
+        ) as mock_eps,
+        patch("builtins.__import__") as mock_import,
+    ):
         load_all_plugins()
 
         mock_eps.assert_called_once_with(group="pynenc.plugins")
@@ -55,8 +58,9 @@ def test_load_all_plugins_import_error(caplog: pytest.LogCaptureFixture) -> None
     mock_ep.name = "failing_plugin"
     mock_ep.module = "failing_module"
 
-    with patch("importlib.metadata.entry_points", return_value=[mock_ep]), patch(
-        "builtins.__import__", side_effect=ImportError("Test error")
+    with (
+        patch("importlib.metadata.entry_points", return_value=[mock_ep]),
+        patch("builtins.__import__", side_effect=ImportError("Test error")),
     ):
         load_all_plugins()
 

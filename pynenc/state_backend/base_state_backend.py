@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Generic, Optional
 
 from pynenc.conf.config_state_backend import ConfigStateBackend
 from pynenc.exceptions import InvocationNotFoundError, PynencError
-from pynenc.invocation.status import InvocationStatus
+from pynenc.invocation.status import InvocationStatusRecord
 from pynenc.runner import RunnerContext
 from pynenc.types import Params, Result
 
@@ -34,7 +34,7 @@ class InvocationHistory:
     """
 
     _timestamp: datetime = field(init=False, default_factory=lambda: datetime.now(UTC))
-    status: InvocationStatus
+    status_record: InvocationStatusRecord
     runner_context: RunnerContext | None = None
 
     @property
@@ -51,7 +51,7 @@ class InvocationHistory:
         return json.dumps(
             {
                 "_timestamp": self._timestamp.isoformat(),
-                "status": self.status.value,
+                "status_record": self.status_record.to_json(),
                 "runner_context": self.runner_context.to_json()
                 if self.runner_context
                 else None,
@@ -67,7 +67,7 @@ class InvocationHistory:
         :return: An instance of InvocationHistory.
         """
         hist_dict = json.loads(json_str)
-        history = cls(InvocationStatus(hist_dict["status"]))
+        history = cls(InvocationStatusRecord.from_json(hist_dict["status_record"]))
 
         timestamp = datetime.fromisoformat(hist_dict["_timestamp"])
         if timestamp.tzinfo is None:
@@ -258,17 +258,17 @@ class BaseStateBackend(ABC, Generic[Params, Result]):
     def add_histories(
         self,
         invocation_ids: list[str],
-        status: "InvocationStatus",
+        status_record: "InvocationStatusRecord",
         runner_context: Optional["RunnerContext"] = None,
     ) -> None:
         """
         Adds a history record for an invocation.
 
         :param str invocation_id: The invocation Id to add history for.
-        :param InvocationStatus | None status: The status of the invocation.
+        :param InvocationStatusRecord status_record: The status record of the invocation.
         :param Optional[Any] execution_context: The execution context of the invocation.
         """
-        invocation_history = InvocationHistory(status, runner_context)
+        invocation_history = InvocationHistory(status_record, runner_context)
         thread = threading.Thread(
             target=self._add_histories, args=(invocation_ids, invocation_history)
         )

@@ -95,10 +95,14 @@ def test_running_concurrency(app: "Pynenc") -> None:
 def test_basic_running_concurrency_check(app: "Pynenc") -> None:
     """Basic concurency control check"""
     invocation1 = sleep_with_running_concurrency(0.5)
-    app.orchestrator._set_invocation_status(
-        invocation1.invocation_id, InvocationStatus.RUNNING
+    owner_id = "test_owner"
+    app.orchestrator._atomic_status_transition(
+        invocation1.invocation_id, InvocationStatus.PENDING, owner_id
     )
-    invocation2: "DistributedInvocation" = sleep_with_running_concurrency(0.1)  # type: ignore
+    app.orchestrator._atomic_status_transition(
+        invocation1.invocation_id, InvocationStatus.RUNNING, owner_id
+    )
+    invocation2: DistributedInvocation = sleep_with_running_concurrency(0.1)  # type: ignore
     assert (
         app.orchestrator.is_authorize_to_run_by_concurrency_control(invocation2)
         is False

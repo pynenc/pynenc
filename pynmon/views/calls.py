@@ -116,7 +116,7 @@ def find_call_and_invocations(
         if _check_timeout_for_call_search(start_time, timeout, i, task_count):
             break
 
-        logger.debug(f"Searching in task [{i+1}/{task_count}]: {task.task_id}")
+        logger.debug(f"Searching in task [{i + 1}/{task_count}]: {task.task_id}")
         try:
             # Use a separate timeout for each task to prevent one slow task from consuming all the time
             elapsed = time.time() - start_time

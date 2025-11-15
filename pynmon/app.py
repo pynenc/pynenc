@@ -4,6 +4,7 @@ Pynmon monitoring application and server startup.
 Note: Pynmon requires Python <3.13 due to FastAPI/Pydantic v2 dependency limitations.
 Core pynenc functionality supports Python 3.11+.
 """
+
 import sys
 
 if sys.version_info >= (3, 13):
@@ -143,6 +144,7 @@ def setup_routes() -> None:
         calls,
         invocations,
         orchestrator,
+        runners,
         state_backend,
         tasks,
         workflows,
@@ -151,6 +153,7 @@ def setup_routes() -> None:
     # Register the routes
     app.include_router(broker.router)
     app.include_router(orchestrator.router)
+    app.include_router(runners.router)
     app.include_router(invocations.router)
     app.include_router(tasks.router)
     app.include_router(calls.router)

@@ -2,16 +2,18 @@ import pickle
 import threading
 from collections import OrderedDict, defaultdict, deque
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from time import time
 from typing import TYPE_CHECKING, Any
 
-from pynenc.exceptions import (
-    CycleDetectedError,
-    InvocationOnFinalStatusError,
-    PendingInvocationLockError,
+from pynenc.exceptions import CycleDetectedError
+from pynenc.invocation.status import (
+    InvocationStatus,
+    InvocationStatusRecord,
+    status_record_transition,
 )
-from pynenc.invocation.status import InvocationStatus
 from pynenc.orchestrator.base_orchestrator import (
+    ActiveRunnerInfo,
     BaseBlockingControl,
     BaseCycleControl,
     BaseOrchestrator,
@@ -22,6 +24,7 @@ if TYPE_CHECKING:
     from pynenc.app import Pynenc
     from pynenc.call import Call
     from pynenc.invocation.dist_invocation import DistributedInvocation
+    from pynenc.runner import RunnerContext
     from pynenc.task import Task
 
 
@@ -36,7 +39,7 @@ class MemCycleControl(BaseCycleControl):
 
     def __init__(self, app: "Pynenc") -> None:
         self.app = app
-        self.calls: dict[str, "Call"] = {}
+        self.calls: dict[str, Call] = {}
         self.edges: dict[str, set[str]] = defaultdict(set)
 
     def add_call_and_check_cycles(
@@ -273,12 +276,21 @@ class MemOrchestrator(BaseOrchestrator):
         self.invocation_args: dict[str, set[ArgPair]] = defaultdict(set)
         self.args_index: dict[ArgPair, set[str]] = defaultdict(set)
         self.status_index: dict[InvocationStatus, set[str]] = defaultdict(set)
-        self.pending_timer: dict[str, float] = {}
-        self.pre_pending_status: dict[str, InvocationStatus] = {}
-        self.invocation_status: dict[str, InvocationStatus] = {}
+        self.invocation_status_record: dict[str, InvocationStatusRecord] = {}
         self.invocation_retries: dict[str, int] = {}
         self.invocations_to_purge: deque[tuple[float, str]] = deque()
         self.locks: dict[str, threading.Lock] = {}
+
+        # Runner heartbeat tracking
+        self.runner_contexts: dict[
+            str, str
+        ] = {}  # runner_id -> serialized RunnerContext
+        self.runner_creation_time: dict[
+            str, float
+        ] = {}  # runner_id -> creation timestamp
+        self.runner_last_heartbeat: dict[
+            str, float
+        ] = {}  # runner_id -> last heartbeat timestamp
 
         self._cycle_control: MemCycleControl | None = None
         self._blocking_control: MemBlockingControl | None = None
@@ -298,21 +310,23 @@ class MemOrchestrator(BaseOrchestrator):
         return self._blocking_control
 
     def _register_new_invocations(
-        self, invocations: list["DistributedInvocation[Params, Result]"]
-    ) -> None:
+        self,
+        invocations: list["DistributedInvocation[Params, Result]"],
+        owner_id: str | None = None,
+    ) -> InvocationStatusRecord:
         """Registers new invocations and sets them to REGISTERED status."""
+        status_record = InvocationStatusRecord(InvocationStatus.REGISTERED, owner_id)
         for invocation in invocations:
-            if invocation.invocation_id in self.invocation_status:
-                continue
+            self._interanl_atomic_status_transition(
+                invocation.invocation_id, None, status_record
+            )
             self.task_id_to_inv_id[invocation.task.task_id].add(
                 invocation.invocation_id
             )
             self.call_id_to_inv_id[invocation.call_id].add(invocation.invocation_id)
             self.inv_id_to_call_id[invocation.invocation_id] = invocation.call_id
-            self._internal_set_invocation_status(
-                invocation.invocation_id, InvocationStatus.REGISTERED
-            )
             self.invocation_retries[invocation.invocation_id] = 0
+        return status_record
 
     def filter_by_key_arguments(self, key_arguments: dict[str, str]) -> set[str]:
         """
@@ -409,7 +423,7 @@ class MemOrchestrator(BaseOrchestrator):
     def any_non_final_invocations(self, call_id: str) -> bool:
         """Checks if there are any non-final invocations for a specific call ID."""
         for invocation_id in self.call_id_to_inv_id.get(call_id, set()):
-            if not self.invocation_status[invocation_id].is_final():
+            if not self.invocation_status_record[invocation_id].status.is_final():
                 return True
         return False
 
@@ -444,7 +458,9 @@ class MemOrchestrator(BaseOrchestrator):
         invocation = self.app.state_backend.get_invocation(invocation_id)
         for key, value in invocation.serialized_arguments.items():
             self.args_index[ArgPair(key, value)].discard(invocation_id)
-        self.status_index[self.invocation_status[invocation_id]].discard(invocation_id)
+        self.status_index[self.invocation_status_record[invocation_id].status].discard(
+            invocation_id
+        )
         self.task_id_to_inv_id.get(invocation.task.task_id, set()).discard(
             invocation_id
         )
@@ -453,63 +469,34 @@ class MemOrchestrator(BaseOrchestrator):
         if args := self.invocation_args.pop(invocation_id, None):
             for arg in args:
                 self.args_index[arg].discard(invocation_id)
-        self.status_index[self.invocation_status[invocation_id]].discard(invocation_id)
-        self.pending_timer.pop(invocation_id, None)
-        self.pre_pending_status.pop(invocation_id, None)
-        self.invocation_status.pop(invocation_id, None)
+        self.status_index[self.invocation_status_record[invocation_id].status].discard(
+            invocation_id
+        )
+        self.invocation_status_record.pop(invocation_id, None)
         self.invocation_retries.pop(invocation_id, None)
 
-    def _set_invocation_status(
-        self, invocation_id: str, status: InvocationStatus
-    ) -> None:
-        """Sets the status of a specific invocation."""
-        if status == InvocationStatus.PENDING:
-            raise ValueError("Cannot set multiple invocations to PENDING status")
-        self._internal_set_invocation_status(invocation_id, status)
+    def _atomic_status_transition(
+        self, invocation_id: str, status: InvocationStatus, owner_id: str | None = None
+    ) -> InvocationStatusRecord:
+        """Sets the status record of a specific invocation."""
+        prev_status_record = self.invocation_status_record.get(invocation_id)
+        new_record = status_record_transition(prev_status_record, status, owner_id)
+        return self._interanl_atomic_status_transition(
+            invocation_id, prev_status_record, new_record
+        )
 
-    def _internal_set_invocation_status(
-        self, invocation_id: str, status: InvocationStatus
-    ) -> None:
-        """Sets the status of a specific invocation."""
-        if prev_status := self.invocation_status.get(invocation_id):
-            if prev_status == status:
-                self.app.logger.debug(
-                    f"Invocation {invocation_id} already in status {status}, no change"
-                )
-                return
-            if prev_status.is_final():
-                raise InvocationOnFinalStatusError(invocation_id, prev_status, status)
-        if status != InvocationStatus.PENDING:
-            self.clean_pending_status(invocation_id)
-        if invocation_id in self.invocation_status:
-            # already exists, remove previous status
-            self.status_index[self.invocation_status[invocation_id]].discard(
-                invocation_id
-            )
-        self.status_index[status].add(invocation_id)
-        self.invocation_status[invocation_id] = status
-
-    def _set_invocation_pending_status(self, invocation_id: str) -> None:
-        """
-        Sets the status of an invocation to pending, handling any potential locking issues.
-
-        :param str invocation_id: The ID of the invocation to set to pending status.
-        :raises PendingInvocationLockError: If the invocation is already in pending status or cannot acquire a lock.
-        """
-        lock = self.locks.setdefault(invocation_id, threading.Lock())
-        if not lock.acquire(False):
-            raise PendingInvocationLockError(invocation_id)
-        try:
-            self.pending_timer[invocation_id] = time()
-            previous_status = self.invocation_status[invocation_id]
-            if previous_status == InvocationStatus.PENDING:
-                raise PendingInvocationLockError(invocation_id)
-            self.pre_pending_status[invocation_id] = previous_status
-            self._internal_set_invocation_status(
-                invocation_id, InvocationStatus.PENDING
-            )
-        finally:
-            lock.release()
+    def _interanl_atomic_status_transition(
+        self,
+        invocation_id: str,
+        prev_status_record: InvocationStatusRecord | None,
+        new_record: InvocationStatusRecord,
+    ) -> InvocationStatusRecord:
+        """Sets the status record of a specific invocation."""
+        if prev_status_record:
+            self.status_index[prev_status_record.status].discard(invocation_id)
+        self.status_index[new_record.status].add(invocation_id)
+        self.invocation_status_record[invocation_id] = new_record
+        return new_record
 
     def index_arguments_for_concurrency_control(
         self,
@@ -518,29 +505,11 @@ class MemOrchestrator(BaseOrchestrator):
         for key, value in invocation.serialized_arguments.items():
             self.args_index[ArgPair(key, value)].add(invocation.invocation_id)
 
-    def clean_pending_status(self, invocation_id: str) -> None:
-        """
-        Cleans the pending status of an invocation if it has exceeded the maximum pending time.
-
-        :param str invocation_id: The ID of the invocation whose pending status is to be cleaned.
-        """
-        self.pending_timer.pop(invocation_id, None)
-        self.pre_pending_status.pop(invocation_id, None)
-
-    def get_invocation_pending_timer(self, invocation_id: str) -> float | None:
-        """Retrieves the pending timer for a specific invocation."""
-        return self.pending_timer.get(invocation_id)
-
-    def get_invocation_status(self, invocation_id: str) -> InvocationStatus:
-        """Retrieves the current status of an invocation, accounting for pending timeout.:rtype: InvocationStatus"""
-        status = self.invocation_status[invocation_id]
-        if status == InvocationStatus.PENDING:
-            elapsed = time() - self.pending_timer[invocation_id]
-            if elapsed > self.app.conf.max_pending_seconds:
-                pre_pending_status = self.pre_pending_status[invocation_id]
-                self._internal_set_invocation_status(invocation_id, pre_pending_status)
-                return pre_pending_status
-        return status
+    def get_invocation_status_record(
+        self, invocation_id: str
+    ) -> InvocationStatusRecord:
+        """Retrieves the current status of an invocation"""
+        return self.invocation_status_record[invocation_id]
 
     def increment_invocation_retries(self, invocation_id: str) -> None:
         """
@@ -563,7 +532,7 @@ class MemOrchestrator(BaseOrchestrator):
         return self.invocation_retries.get(invocation_id, 0)
 
     def filter_by_status(
-        self, invocation_ids: list[str], status_filter: set["InvocationStatus"]
+        self, invocation_ids: list[str], status_filter: frozenset["InvocationStatus"]
     ) -> list[str]:
         if not invocation_ids or status_filter is None:
             return []
@@ -572,6 +541,74 @@ class MemOrchestrator(BaseOrchestrator):
             for inv_id in invocation_ids
             if self.get_invocation_status(inv_id) in status_filter
         ]
+
+    def register_runner_heartbeat(self, runner_ctx: "RunnerContext") -> None:
+        """Register or update a runner's heartbeat timestamp."""
+        current_time = time()
+        runner_id = runner_ctx.runner_id
+
+        if runner_id not in self.runner_contexts:
+            self.runner_contexts[runner_id] = runner_ctx.to_json()
+            self.runner_creation_time[runner_id] = current_time
+
+        self.runner_last_heartbeat[runner_id] = current_time
+
+    def get_active_runners(self) -> list[ActiveRunnerInfo]:
+        """Retrieve all active runners with heartbeat information."""
+        from pynenc.runner.runner_context import RunnerContext
+
+        timeout_seconds = self.conf.runner_heartbeat_timeout_minutes * 60
+        current_time = time()
+        cutoff_time = current_time - timeout_seconds
+
+        active_runners = []
+        for runner_id, last_heartbeat in self.runner_last_heartbeat.items():
+            if last_heartbeat >= cutoff_time:
+                ctx_json = self.runner_contexts[runner_id]
+                runner_ctx = RunnerContext.from_json(ctx_json)
+                creation_ts = self.runner_creation_time.get(runner_id, current_time)
+                active_runners.append(
+                    ActiveRunnerInfo(
+                        runner_ctx=runner_ctx,
+                        creation_time=datetime.fromtimestamp(creation_ts, tz=UTC),
+                        last_heartbeat=datetime.fromtimestamp(last_heartbeat, tz=UTC),
+                    )
+                )
+
+        # Sort by creation time (oldest first)
+        active_runners.sort(key=lambda info: info.creation_time)
+
+        return active_runners
+
+    def cleanup_inactive_runners(self) -> None:
+        """Remove runners that haven't sent a heartbeat within the timeout period."""
+        timeout_seconds = self.conf.runner_heartbeat_timeout_minutes * 60
+        current_time = time()
+        cutoff_time = current_time - timeout_seconds
+
+        inactive_runner_ids = [
+            runner_id
+            for runner_id, last_heartbeat in self.runner_last_heartbeat.items()
+            if last_heartbeat < cutoff_time
+        ]
+
+        for runner_id in inactive_runner_ids:
+            self.runner_contexts.pop(runner_id, None)
+            self.runner_creation_time.pop(runner_id, None)
+            self.runner_last_heartbeat.pop(runner_id, None)
+
+    def get_pending_invocations_for_recovery(self) -> Iterator[str]:
+        """Retrieve invocation IDs stuck in PENDING status beyond the allowed time."""
+        max_pending_seconds = self.app.conf.max_pending_seconds
+        current_time = time()
+        cutoff_time = current_time - max_pending_seconds
+
+        pending_invocations = self.status_index.get(InvocationStatus.PENDING, set())
+
+        for invocation_id in pending_invocations:
+            status_record = self.invocation_status_record.get(invocation_id)
+            if status_record and status_record.timestamp.timestamp() <= cutoff_time:
+                yield invocation_id
 
     def purge(self) -> None:
         self._cycle_control = None
@@ -583,9 +620,11 @@ class MemOrchestrator(BaseOrchestrator):
         self.invocation_args.clear()
         self.args_index.clear()
         self.status_index.clear()
-        self.pending_timer.clear()
-        self.pre_pending_status.clear()
-        self.invocation_status.clear()
+        self.invocation_status_record.clear()
         self.invocation_retries.clear()
         self.invocations_to_purge.clear()
         self.locks.clear()
+
+        self.runner_contexts.clear()
+        self.runner_creation_time.clear()
+        self.runner_last_heartbeat.clear()

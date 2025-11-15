@@ -41,6 +41,9 @@ async def orchestrator_view(request: Request) -> HTMLResponse:
     # Get any blocking invocations (limit to 10 for display)
     blocking_invocations = list(app.orchestrator.get_blocking_invocations(10))
 
+    # Get active runners
+    active_runners = app.orchestrator.get_active_runners()
+
     return templates.TemplateResponse(
         "orchestrator/overview.html",
         {
@@ -49,7 +52,9 @@ async def orchestrator_view(request: Request) -> HTMLResponse:
             "app_id": app.app_id,
             "orchestrator_info": orchestrator_info,
             "blocking_invocations": blocking_invocations,
-            "status_counts": status_counts,  # Add status_counts here
+            "status_counts": status_counts,
+            "active_runners": active_runners,
+            "total_runners": len(active_runners),
         },
     )
 

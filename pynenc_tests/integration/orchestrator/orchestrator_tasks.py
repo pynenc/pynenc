@@ -4,8 +4,7 @@ mock_app = MockPynenc()
 
 
 @mock_app.task
-def dummy_task() -> None:
-    ...
+def dummy_task() -> None: ...
 
 
 @mock_app.task

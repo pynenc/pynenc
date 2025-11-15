@@ -4,6 +4,7 @@ Integration tests for pynmon workflow views.
 Tests the workflow-related functionality with Memory backend,
 verifying workflow discovery and display capabilities.
 """
+
 import threading
 import time
 from typing import TYPE_CHECKING
@@ -286,9 +287,9 @@ def test_workflow_detail_view_error_reproduction(pynmon_client: "PynmonClient") 
                 print("Current workflow runs data available for debugging")
 
         # The assertion will fail if there's a 500 error, showing us the issue
-        assert (
-            response.status_code == 200
-        ), f"Workflow detail view returned {response.status_code}"
+        assert response.status_code == 200, (
+            f"Workflow detail view returned {response.status_code}"
+        )
 
     finally:
         app.runner.stop_runner_loop()

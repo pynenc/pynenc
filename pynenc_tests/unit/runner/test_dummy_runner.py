@@ -45,9 +45,9 @@ async def test_dummy_runner_async_waiting_for_results_running(
     await runner.async_waiting_for_results(
         invocation.invocation_id, [invocation.invocation_id], None
     )
-    assert (
-        called
-    ), "Expected _waiting_for_results to be called when running_invocation is provided"
+    assert called, (
+        "Expected _waiting_for_results to be called when running_invocation is provided"
+    )
 
 
 def test_dummy_runner_waiting_for_results_no_running(
@@ -71,9 +71,9 @@ def test_dummy_runner_waiting_for_results_no_running(
 
     # Call waiting_for_results with running_invocation set to None.
     runner.waiting_for_results(None, [Mock()])
-    assert (
-        sleep_called
-    ), "Expected time.sleep to be called when running_invocation is None"
+    assert sleep_called, (
+        "Expected time.sleep to be called when running_invocation is None"
+    )
 
 
 def test_dummy_runner_waiting_for_results_no_effect_with_runner_args() -> None:

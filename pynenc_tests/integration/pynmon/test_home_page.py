@@ -6,6 +6,7 @@ and real Pynenc app integration.
 
 To debug: Set KEEP_ALIVE = 1 and run any test, then open http://localhost:8081
 """
+
 from typing import TYPE_CHECKING
 
 from pynenc.builder import PynencBuilder

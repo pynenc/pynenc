@@ -3,6 +3,7 @@ Minimal tests for pynmon home view.
 
 Tests basic functionality using real in-memory Pynenc app.
 """
+
 # Skip all pynmon tests if monitor dependencies are not available
 import pytest
 

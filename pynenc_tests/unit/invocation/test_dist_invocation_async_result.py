@@ -5,7 +5,11 @@ from unittest.mock import AsyncMock
 import pytest
 
 from pynenc.exceptions import InvocationError
-from pynenc.invocation import DistributedInvocation, InvocationStatus
+from pynenc.invocation import (
+    DistributedInvocation,
+    InvocationStatus,
+    InvocationStatusRecord,
+)
 from pynenc_tests.conftest import MockPynenc
 
 app = MockPynenc()
@@ -21,7 +25,9 @@ async def test_distributed_async_result_success(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     invocation: DistributedInvocation = add(1, 2)  # type: ignore
-    app.orchestrator.get_invocation_status.return_value = InvocationStatus.SUCCESS
+    app.orchestrator.get_invocation_status_record.return_value = InvocationStatusRecord(
+        status=InvocationStatus.SUCCESS
+    )
     # Patch get_final_result directly on the invocation mock
     invocation.get_final_result = lambda self=None: 3  # type: ignore
     app.runner.async_waiting_for_results = AsyncMock(return_value=None)  # type: ignore
@@ -37,11 +43,12 @@ async def test_distributed_async_result_wait_loop(
     # Simulate a waiting loop: first status RUNNING, then SUCCESS.
     statuses = [InvocationStatus.RUNNING, InvocationStatus.SUCCESS]
 
-    def status_side_effect(inv: Any) -> InvocationStatus:
+    def status_side_effect(inv: Any) -> InvocationStatusRecord:
         del inv
-        return statuses.pop(0) if statuses else InvocationStatus.SUCCESS
+        status = statuses.pop(0) if statuses else InvocationStatus.SUCCESS
+        return InvocationStatusRecord(status=status)
 
-    app.orchestrator.get_invocation_status.side_effect = status_side_effect
+    app.orchestrator.get_invocation_status_record.side_effect = status_side_effect
     invocation.get_final_result = lambda self=None: 3  # type: ignore
     # Use an async wait that sleeps briefly.
     app.runner.async_waiting_for_results = AsyncMock(  # type: ignore
@@ -57,7 +64,9 @@ async def test_distributed_async_result_failure(
 ) -> None:
     invocation: DistributedInvocation = add(1, 2)  # type: ignore
     # Force FAILED status.
-    app.orchestrator.get_invocation_status.return_value = InvocationStatus.FAILED
+    app.orchestrator.get_invocation_status_record.return_value = InvocationStatusRecord(
+        status=InvocationStatus.FAILED
+    )
 
     def raise_error(self: Any = None) -> None:
         raise InvocationError(invocation.invocation_id, "Not final")

@@ -230,8 +230,7 @@ class Pynenc:
         disable_cache_args: tuple[str, ...] | None = None,
         triggers: Union["TriggerBuilder", list["TriggerBuilder"]] | None = None,
         force_new_workflow: bool | None = None,
-    ) -> "Task":
-        ...
+    ) -> "Task": ...
 
     @overload
     def task(
@@ -249,8 +248,7 @@ class Pynenc:
         disable_cache_args: tuple[str, ...] | None = None,
         triggers: Union["TriggerBuilder", list["TriggerBuilder"]] | None = None,
         force_new_workflow: bool | None = None,
-    ) -> Callable[["Func"], "Task"]:
-        ...
+    ) -> Callable[["Func"], "Task"]: ...
 
     def task(
         self,
@@ -394,8 +392,7 @@ class Pynenc:
         call_result_cache: bool | None = None,
         disable_cache_args: tuple[str, ...] | None = None,
         force_new_workflow: bool | None = None,
-    ) -> "Func":
-        ...
+    ) -> "Func": ...
 
     @overload
     def direct_task(
@@ -414,8 +411,7 @@ class Pynenc:
         call_result_cache: bool | None = None,
         disable_cache_args: tuple[str, ...] | None = None,
         force_new_workflow: bool | None = None,
-    ) -> "Func":
-        ...
+    ) -> "Func": ...
 
     @overload
     def direct_task(
@@ -434,8 +430,7 @@ class Pynenc:
         call_result_cache: bool | None = None,
         disable_cache_args: tuple[str, ...] | None = None,
         force_new_workflow: bool | None = None,
-    ) -> Callable[["Func[Params, Result]"], "Func[Params, Result]"]:
-        ...
+    ) -> Callable[["Func[Params, Result]"], "Func[Params, Result]"]: ...
 
     def direct_task(
         self,

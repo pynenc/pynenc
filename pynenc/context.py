@@ -4,8 +4,11 @@ This module maintains the context of invocations and runners within the Pynenc a
 It stores the current invocation context and runner arguments,
 facilitating the management and tracking of nested or sub-invocations within different execution environments.
 """
+
 import threading
 from typing import TYPE_CHECKING, Any, Optional
+
+from pynenc.runner.runner_context import RunnerContext
 
 # Create a thread-local data storage
 thread_local = threading.local()
@@ -80,3 +83,15 @@ def set_current_runner(app_id: str, runner: "BaseRunner") -> None:
     :param runner: The runner instance to set.
     """
     _current_runner[app_id] = runner
+
+
+def get_current_runner_context(app_id: str) -> RunnerContext | None:
+    """
+    Get the current runner context arguments for the given app.
+
+    :param str app_id: The app identifier.
+    :result: The current runner context arguments for the given app.
+    """
+    if runner := get_current_runner(app_id):
+        return RunnerContext.from_runner(runner)
+    return None

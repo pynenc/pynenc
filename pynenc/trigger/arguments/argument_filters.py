@@ -283,7 +283,7 @@ class CallableArgumentFilter(ArgumentFilter):
 
 
 def create_argument_filter(
-    filter_spec: None | dict[str, Any] | Callable[[dict[str, Any]], bool]
+    filter_spec: None | dict[str, Any] | Callable[[dict[str, Any]], bool],
 ) -> ArgumentFilter:
     """
     Factory function to create the appropriate argument filter based on the input type.

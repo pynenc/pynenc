@@ -179,7 +179,7 @@ def parallel_with_common_data(kwargs: dict) -> tuple[dict, list[dict]]:
 
 # Simple aggregation function
 def aggregate_results(
-    results: Iterable[tuple[str, list[int]]]
+    results: Iterable[tuple[str, list[int]]],
 ) -> tuple[str, list[int]]:
     results = list(results)
     concat_items = [item for sublist in results for item in sublist[1]]

@@ -112,12 +112,12 @@ def test_task_running_concurrency(task_sleep: Task) -> None:
     slow_history = app.state_backend.get_history(slow_invocation.invocation_id)
     fast_history = app.state_backend.get_history(fast_invocation.invocation_id)
     slow_running_history = [
-        h for h in slow_history if h.status == InvocationStatus.RUNNING
+        h for h in slow_history if h.status_record.status == InvocationStatus.RUNNING
     ]
     assert slow_running_history, "No RUNNING status found for slow_invocation"
     slow_running_timestamp = slow_running_history[0]._timestamp
     fast_running_history = [
-        h for h in fast_history if h.status == InvocationStatus.RUNNING
+        h for h in fast_history if h.status_record.status == InvocationStatus.RUNNING
     ]
     assert fast_running_history, "No RUNNING status found for fast_invocation"
     fast_running_timestamp = fast_running_history[0]._timestamp
@@ -259,8 +259,8 @@ def test_single_run(task_sum: Task) -> None:
     invocation = task_sum(1, 1)
     assert 2 == invocation.result
     history = app.state_backend.get_history(invocation.invocation_id)
-    assert 1 == sum(1 for h in history if h.status == InvocationStatus.RUNNING), (
-        f"Invocation ran more than once: {history}"
-    )
+    assert 1 == sum(
+        1 for h in history if h.status_record.status == InvocationStatus.RUNNING
+    ), f"Invocation ran more than once: {history}"
     app.runner.stop_runner_loop()
     thread.join()

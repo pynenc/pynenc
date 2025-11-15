@@ -12,8 +12,7 @@ base_app = MockPynenc()
 
 
 @base_app.task
-def dummy() -> None:
-    ...
+def dummy() -> None: ...
 
 
 def test_routing(app_instance: "Pynenc") -> None:

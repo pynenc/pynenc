@@ -280,16 +280,14 @@ class Task(Generic[Params, Result]):
         self,
         param_iter: Iterable[tuple | dict | Arguments],
         common_args: None = None,
-    ) -> BaseInvocationGroup:
-        ...
+    ) -> BaseInvocationGroup: ...
 
     @overload
     def parallelize(
         self,
         param_iter: Iterable[dict],
         common_args: dict,
-    ) -> BaseInvocationGroup:
-        ...
+    ) -> BaseInvocationGroup: ...
 
     def parallelize(
         self,
@@ -515,7 +513,7 @@ def distribute_batch_calls(
         invocations.extend(batch_invocations)
         if i + batch_size < len(other_args):
             task.logger.info(
-                f"Processed batch {i//batch_size + 1}, "
+                f"Processed batch {i // batch_size + 1}, "
                 f"{len(invocations)}/{len(other_args)} invocations"
             )
 

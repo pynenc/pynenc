@@ -4,6 +4,7 @@ Task definitions for deterministic workflow integration tests.
 This module defines tasks used for testing deterministic operations
 across different state backend implementations.
 """
+
 import datetime
 from typing import Any
 
@@ -119,20 +120,20 @@ def deterministic_mixed_workflow() -> dict[str, Any]:
     results["random3"] = deterministic_mixed_workflow.wf.random()
 
     # Base time for reference
-    results[
-        "base_time"
-    ] = deterministic_mixed_workflow.wf.deterministic.get_base_time().isoformat()
+    results["base_time"] = (
+        deterministic_mixed_workflow.wf.deterministic.get_base_time().isoformat()
+    )
 
     # Operation counts
-    results[
-        "random_count"
-    ] = deterministic_mixed_workflow.wf.deterministic.get_operation_count("random")
-    results[
-        "time_count"
-    ] = deterministic_mixed_workflow.wf.deterministic.get_operation_count("time")
-    results[
-        "uuid_count"
-    ] = deterministic_mixed_workflow.wf.deterministic.get_operation_count("uuid")
+    results["random_count"] = (
+        deterministic_mixed_workflow.wf.deterministic.get_operation_count("random")
+    )
+    results["time_count"] = (
+        deterministic_mixed_workflow.wf.deterministic.get_operation_count("time")
+    )
+    results["uuid_count"] = (
+        deterministic_mixed_workflow.wf.deterministic.get_operation_count("uuid")
+    )
 
     return results
 
@@ -158,9 +159,9 @@ def deterministic_task_execution_workflow() -> dict[str, Any]:
     )
 
     # Execute the same task with same parameters again (should be deterministic)
-    results[
-        "task_result_1_repeat"
-    ] = deterministic_task_execution_workflow.wf.execute_task(simple_add_task, 10, 20)
+    results["task_result_1_repeat"] = (
+        deterministic_task_execution_workflow.wf.execute_task(simple_add_task, 10, 20)
+    )
 
     # Mix with other deterministic operations
     results["random_between_tasks"] = deterministic_task_execution_workflow.wf.random()

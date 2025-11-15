@@ -11,7 +11,7 @@ T = TypeVar("T", bound="ConfigPynencBase")
 
 
 def config_cls_cache(
-    func: Callable[[type[T]], dict[str, str]]
+    func: Callable[[type[T]], dict[str, str]],
 ) -> Callable[[type[T]], dict[str, str]]:
     """
     Decorator for caching the output of functions that extract field descriptions.

@@ -53,8 +53,8 @@ def test_sub_invocation_tracking(runner: None) -> None:
         print(f"  - {sub_id}")
 
     # Should have 4 sub-invocations (one for each child_task call)
-    assert (
-        len(sub_invocations) == 4
-    ), f"Expected 4 sub-invocations, got {len(sub_invocations)}"
+    assert len(sub_invocations) == 4, (
+        f"Expected 4 sub-invocations, got {len(sub_invocations)}"
+    )
 
     print("✅ Sub-invocation tracking is working correctly!")

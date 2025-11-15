@@ -77,7 +77,7 @@ def split_metadata(
         new_metadata.backtest_metadata.end_date = date(2024, month, end_day)
 
         print(
-            f"Created chunk {i+1}: {new_metadata.backtest_metadata.start_date} to {new_metadata.backtest_metadata.end_date}"
+            f"Created chunk {i + 1}: {new_metadata.backtest_metadata.start_date} to {new_metadata.backtest_metadata.end_date}"
         )
         metadata_chunks.append({"metadata": new_metadata})
 

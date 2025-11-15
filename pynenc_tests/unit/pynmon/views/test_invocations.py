@@ -22,6 +22,7 @@ from pynenc.arguments import Arguments
 from pynenc.call import Call
 from pynenc.invocation import DistributedInvocation
 from pynenc.invocation.status import InvocationStatus
+from pynenc.runner.runner_context import RunnerContext
 from pynenc_tests.conftest import MockPynenc
 from pynmon.app import app as pynmon_app
 from pynmon.app import setup_routes
@@ -75,8 +76,15 @@ def test_invocations_list_shows_invocations(app: "Pynenc") -> None:
     app.orchestrator.register_new_invocations([invocation1, invocation2])
 
     # Set their status to REGISTERED
+    runner_ctx = RunnerContext.from_runner(app.runner)
     app.orchestrator.set_invocation_status(
-        invocation2.invocation_id, InvocationStatus.SUCCESS
+        invocation2.invocation_id, InvocationStatus.PENDING, runner_ctx
+    )
+    app.orchestrator.set_invocation_status(
+        invocation2.invocation_id, InvocationStatus.RUNNING, runner_ctx
+    )
+    app.orchestrator.set_invocation_status(
+        invocation2.invocation_id, InvocationStatus.SUCCESS, runner_ctx
     )
 
     # Setup routes before creating test client
@@ -115,11 +123,24 @@ def test_invocations_list_with_status_filter(app: "Pynenc") -> None:
     # register invocations in the orchestrator
     app.orchestrator.register_new_invocations([invocation1, invocation2, invocation3])
     # Set different statuses (to registered)
+    runner_ctx = RunnerContext.from_runner(app.runner)
     app.orchestrator.set_invocation_status(
-        invocation2.invocation_id, InvocationStatus.SUCCESS
+        invocation2.invocation_id, InvocationStatus.PENDING, runner_ctx
     )
     app.orchestrator.set_invocation_status(
-        invocation3.invocation_id, InvocationStatus.FAILED
+        invocation2.invocation_id, InvocationStatus.RUNNING, runner_ctx
+    )
+    app.orchestrator.set_invocation_status(
+        invocation2.invocation_id, InvocationStatus.SUCCESS, runner_ctx
+    )
+    app.orchestrator.set_invocation_status(
+        invocation3.invocation_id, InvocationStatus.PENDING, runner_ctx
+    )
+    app.orchestrator.set_invocation_status(
+        invocation3.invocation_id, InvocationStatus.RUNNING, runner_ctx
+    )
+    app.orchestrator.set_invocation_status(
+        invocation3.invocation_id, InvocationStatus.FAILED, runner_ctx
     )
 
     # Setup routes before creating test client
@@ -144,19 +165,19 @@ def test_invocations_list_with_status_filter(app: "Pynenc") -> None:
         import re
 
         success_badge_pattern = r"bg-success[^>]*>[^<]*SUCCESS[^<]*</span>"
-        assert re.search(
-            success_badge_pattern, content
-        ), "Expected SUCCESS badge not found"
+        assert re.search(success_badge_pattern, content), (
+            "Expected SUCCESS badge not found"
+        )
 
         # Should NOT contain REGISTERED or FAILED status badges
         registered_badge_pattern = r"bg-dark[^>]*>[^<]*REGISTERED[^<]*</span>"
         failed_badge_pattern = r"bg-danger[^>]*>[^<]*FAILED[^<]*</span>"
-        assert not re.search(
-            registered_badge_pattern, content
-        ), "REGISTERED badge should not be present"
-        assert not re.search(
-            failed_badge_pattern, content
-        ), "FAILED badge should not be present"
+        assert not re.search(registered_badge_pattern, content), (
+            "REGISTERED badge should not be present"
+        )
+        assert not re.search(failed_badge_pattern, content), (
+            "FAILED badge should not be present"
+        )
 
         # Also verify we have exactly one invocation by checking the invocation count
         # Count the number of invocation detail links
@@ -164,15 +185,15 @@ def test_invocations_list_with_status_filter(app: "Pynenc") -> None:
 
         detail_links = re.findall(r"/invocations/[a-f0-9-]+", content)
         # Each invocation has 2 links: one in ID column, one in Details button
-        assert (
-            len(detail_links) == 2
-        ), f"Expected 2 links (ID + Details) for 1 invocation, found {len(detail_links)}"
+        assert len(detail_links) == 2, (
+            f"Expected 2 links (ID + Details) for 1 invocation, found {len(detail_links)}"
+        )
 
         # Verify both links point to the same invocation (the SUCCESS one)
         unique_invocation_ids = {link.split("/")[-1] for link in detail_links}
-        assert (
-            len(unique_invocation_ids) == 1
-        ), f"Expected links for 1 unique invocation, found {len(unique_invocation_ids)}"
+        assert len(unique_invocation_ids) == 1, (
+            f"Expected links for 1 unique invocation, found {len(unique_invocation_ids)}"
+        )
 
 
 def test_invocations_list_with_task_filter(app: "Pynenc") -> None:
@@ -209,20 +230,20 @@ def test_invocations_list_with_task_filter(app: "Pynenc") -> None:
 
         detail_links = re.findall(r"/invocations/[a-f0-9-]+", content)
         # Each invocation has 2 links: one in ID column, one in Details button
-        assert (
-            len(detail_links) == 2
-        ), f"Expected 2 links (ID + Details) for 1 invocation for {task_id}, found {len(detail_links)}"
+        assert len(detail_links) == 2, (
+            f"Expected 2 links (ID + Details) for 1 invocation for {task_id}, found {len(detail_links)}"
+        )
 
         # Verify both links point to the same invocation (invocation1)
         unique_invocation_ids = {link.split("/")[-1] for link in detail_links}
-        assert (
-            len(unique_invocation_ids) == 1
-        ), f"Expected links for 1 unique invocation, found {len(unique_invocation_ids)}"
+        assert len(unique_invocation_ids) == 1, (
+            f"Expected links for 1 unique invocation, found {len(unique_invocation_ids)}"
+        )
 
         # Verify the task ID appears in the content (as a link to the task)
-        assert (
-            task_id in content
-        ), f"Task ID {task_id} should appear in the filtered results"
+        assert task_id in content, (
+            f"Task ID {task_id} should appear in the filtered results"
+        )
 
         # Verify the task name appears in the content
         assert task_id in content
@@ -316,11 +337,24 @@ def test_orchestrator_status_filtering_logic(app: "Pynenc") -> None:
     app.orchestrator.register_new_invocations([invocation1, invocation2, invocation3])
 
     # Set different statuses (to registered)
+    runner_ctx = RunnerContext.from_runner(app.runner)
     app.orchestrator.set_invocation_status(
-        invocation2.invocation_id, InvocationStatus.SUCCESS
+        invocation2.invocation_id, InvocationStatus.PENDING, runner_ctx
     )
     app.orchestrator.set_invocation_status(
-        invocation3.invocation_id, InvocationStatus.FAILED
+        invocation2.invocation_id, InvocationStatus.RUNNING, runner_ctx
+    )
+    app.orchestrator.set_invocation_status(
+        invocation2.invocation_id, InvocationStatus.SUCCESS, runner_ctx
+    )
+    app.orchestrator.set_invocation_status(
+        invocation3.invocation_id, InvocationStatus.PENDING, runner_ctx
+    )
+    app.orchestrator.set_invocation_status(
+        invocation3.invocation_id, InvocationStatus.RUNNING, runner_ctx
+    )
+    app.orchestrator.set_invocation_status(
+        invocation3.invocation_id, InvocationStatus.FAILED, runner_ctx
     )
 
     # Test filtering for SUCCESS status only
