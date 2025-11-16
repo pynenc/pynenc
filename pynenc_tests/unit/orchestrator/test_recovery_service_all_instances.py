@@ -125,14 +125,18 @@ def test_get_pending_invocations_for_recovery(app_instance: "Pynenc") -> None:
 
         app_instance.orchestrator._register_new_invocations([inv1, inv2])
 
+        # Transition inv1 to PENDING
         app_instance.orchestrator._atomic_status_transition(
             inv1.invocation_id, InvocationStatus.PENDING, "owner-1"
         )
-        sleep(0.1)
+
+        # Wait longer than max_pending_seconds to ensure inv1 is stuck
+        sleep(0.3)
+
+        # Transition inv2 to PENDING (should not be stuck yet)
         app_instance.orchestrator._atomic_status_transition(
             inv2.invocation_id, InvocationStatus.PENDING, "owner-2"
         )
-
         stuck_invocations = list(
             app_instance.orchestrator.get_pending_invocations_for_recovery()
         )
@@ -268,6 +272,9 @@ def test_recovery_service_skips_when_not_scheduled(app_instance: "Pynenc") -> No
             assert status == InvocationStatus.PENDING, (
                 "Invocation should remain PENDING when runner2 is not scheduled"
             )
+
+            # Sleep enough time to give enough time to slow backends
+            sleep(0.3)
 
             # Runner 1 is scheduled to run recovery at this time
             app_instance.orchestrator.invocation_recovery_service(runner1)
