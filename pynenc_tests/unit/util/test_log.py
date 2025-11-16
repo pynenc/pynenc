@@ -7,9 +7,11 @@ import pytest
 from pynenc.util.log import (
     ColoredFormatter,
     Colors,
-    RunnerLogAdapter,
-    TaskLoggerAdapter,
+    PynencContextFilter,
     create_logger,
+    set_logging_context,
+    clear_logging_context,
+    get_logging_context,
 )
 
 if TYPE_CHECKING:
@@ -34,46 +36,55 @@ def test_create_logger_invalid_level() -> None:
     assert "Invalid log level: INVALID_LEVEL" in str(exc_info.value)
 
 
-def test_task_logger_adapter(caplog: "LogCaptureFixture") -> None:
-    caplog.set_level(logging.DEBUG)
-    base_logger = logging.getLogger("test")
-    task_logger = TaskLoggerAdapter(base_logger, "task_id", "invocation_id")
+def test_set_logging_context() -> None:
+    """Test that logging context can be set and retrieved."""
+    set_logging_context(
+        task_id="test_task", invocation_id="test_inv", runner_id="test_runner"
+    )
 
-    test_message = "Test message"
-    expected_log_message = f"[task_id: invocation_id] {test_message}"
+    context = get_logging_context()
+    assert context["task_id"] == "test_task"
+    assert context["invocation_id"] == "test_inv"
+    assert context["runner_id"] == "test_runner"
 
-    task_logger.info(test_message)
-
-    # Check if the expected log message is in the caplog record
-    assert any(expected_log_message in record.message for record in caplog.records)
-
-
-def test_task_logger_adapter_without_invocation_id(caplog: "LogCaptureFixture") -> None:
-    caplog.set_level(logging.DEBUG)
-    base_logger = logging.getLogger("test")
-    task_logger = TaskLoggerAdapter(base_logger, "task_id")
-
-    test_message = "Test message"
-    expected_log_message = f"[task_id] {test_message}"
-
-    task_logger.info(test_message)
-
-    # Check if the expected log message is in the caplog record
-    assert any(expected_log_message in record.message for record in caplog.records)
+    clear_logging_context()
 
 
-def test_runner_log_adapter(caplog: "LogCaptureFixture") -> None:
-    caplog.set_level(logging.DEBUG)
-    base_logger = logging.getLogger("test")
-    runner_logger = RunnerLogAdapter(base_logger, "runner_id")
+def test_clear_logging_context() -> None:
+    """Test that logging context can be cleared."""
+    set_logging_context(task_id="test_task", runner_id="test_runner")
+    clear_logging_context()
 
-    test_message = "Runner message"
-    expected_log_message = f"[runner: runner_id] {test_message}"
+    context = get_logging_context()
+    assert context["task_id"] is None
+    assert context["invocation_id"] is None
+    assert context["runner_id"] is None
 
-    runner_logger.info(test_message)
 
-    # Check if the expected log message is in the caplog record
-    assert any(expected_log_message in record.message for record in caplog.records)
+def test_pynenc_context_filter() -> None:
+    """Test that PynencContextFilter adds context to log records."""
+    set_logging_context(
+        task_id="test_task", invocation_id="test_inv", runner_id="test_runner"
+    )
+
+    context_filter = PynencContextFilter()
+    record = logging.LogRecord(
+        name="test_logger",
+        level=logging.INFO,
+        pathname="test.py",
+        lineno=1,
+        msg="Test message",
+        args=(),
+        exc_info=None,
+    )
+
+    context_filter.filter(record)
+
+    assert getattr(record, "task_id", None) == "test_task"
+    assert getattr(record, "invocation_id", None) == "test_inv"
+    assert getattr(record, "runner_id", None) == "test_runner"
+
+    clear_logging_context()
 
 
 def test_colored_formatter_simple_message() -> None:
@@ -152,3 +163,159 @@ def test_colored_formatter_unclosed_bracket() -> None:
     assert f"{expected_color}[unclosed bracket message{Colors.RESET}" in formatted
     # Verify there's no split coloring (which would happen if treated as prefix)
     assert f"{Colors.RESET}{expected_color}" not in formatted
+
+
+def test_colored_formatter_with_context() -> None:
+    """Test that ColoredFormatter includes context in formatted output."""
+    formatter = ColoredFormatter()
+    record = logging.LogRecord(
+        name="test_logger",
+        level=logging.INFO,
+        pathname="test.py",
+        lineno=1,
+        msg="Test message",
+        args=(),
+        exc_info=None,
+    )
+
+    # Add context to record (simulating what PynencContextFilter does)
+    record.task_id = "test_task"
+    record.invocation_id = "test_inv"
+    record.runner_id = None
+
+    formatted = formatter.format(record)
+
+    # Should include context prefix with task and invocation
+    assert "[task:test_task inv:test_inv]" in formatted
+    assert "Test message" in formatted
+
+
+def test_colored_formatter_with_runner_context() -> None:
+    """Test that ColoredFormatter includes runner context when task context is absent."""
+    formatter = ColoredFormatter()
+    record = logging.LogRecord(
+        name="test_logger",
+        level=logging.INFO,
+        pathname="test.py",
+        lineno=1,
+        msg="Runner message",
+        args=(),
+        exc_info=None,
+    )
+
+    # Add only runner context
+    record.task_id = None
+    record.invocation_id = None
+    record.runner_id = "runner_123"
+
+    formatted = formatter.format(record)
+
+    # Should include runner context prefix
+    assert "[runner:runner_123]" in formatted
+    assert "Runner message" in formatted
+
+
+def test_colored_formatter_with_all_context() -> None:
+    """Test that ColoredFormatter shows all context when available."""
+    formatter = ColoredFormatter()
+    record = logging.LogRecord(
+        name="test_logger",
+        level=logging.INFO,
+        pathname="test.py",
+        lineno=1,
+        msg="Full context message",
+        args=(),
+        exc_info=None,
+    )
+
+    # Add all context
+    record.task_id = "test_task"
+    record.invocation_id = "test_inv"
+    record.runner_id = "runner_123"
+
+    formatted = formatter.format(record)
+
+    # Should include all context in order: runner, task, invocation
+    assert "[runner:runner_123 task:test_task inv:test_inv]" in formatted
+    assert "Full context message" in formatted
+
+
+def test_colored_formatter_with_task_only() -> None:
+    """Test that ColoredFormatter shows only task when that's all that's available."""
+    formatter = ColoredFormatter()
+    record = logging.LogRecord(
+        name="test_logger",
+        level=logging.INFO,
+        pathname="test.py",
+        lineno=1,
+        msg="Task only message",
+        args=(),
+        exc_info=None,
+    )
+
+    # Add only task context
+    record.task_id = "test_task"
+    record.invocation_id = None
+    record.runner_id = None
+
+    formatted = formatter.format(record)
+
+    # Should include only task context
+    assert "[task:test_task]" in formatted
+    assert "Task only message" in formatted
+
+
+def test_colored_formatter_no_context() -> None:
+    """Test that ColoredFormatter works without any context."""
+    formatter = ColoredFormatter()
+    record = logging.LogRecord(
+        name="test_logger",
+        level=logging.INFO,
+        pathname="test.py",
+        lineno=1,
+        msg="No context message",
+        args=(),
+        exc_info=None,
+    )
+
+    # No context added
+    record.task_id = None
+    record.invocation_id = None
+    record.runner_id = None
+
+    formatted = formatter.format(record)
+
+    # Should not include any context prefix (runner:, task:, inv:)
+    # ANSI codes contain [ but that's not a context prefix
+    assert "runner:" not in formatted
+    assert "task:" not in formatted
+    assert "inv:" not in formatted
+    assert "No context message" in formatted
+
+
+def test_logging_with_context_integration(caplog: "LogCaptureFixture") -> None:
+    """Test end-to-end logging with context."""
+    caplog.set_level(logging.DEBUG)
+
+    # Create logger with context filter
+    logger = logging.getLogger("test_integration")
+    context_filter = PynencContextFilter()
+    logger.addFilter(context_filter)
+
+    # Set context
+    set_logging_context(task_id="task_123", invocation_id="inv_456")
+
+    # Log message
+    logger.info("Integration test message")
+
+    # Verify message was logged
+    assert any(
+        "Integration test message" in record.message for record in caplog.records
+    )
+
+    # Verify context was applied
+    context = get_logging_context()
+    assert context["task_id"] == "task_123"
+    assert context["invocation_id"] == "inv_456"
+
+    clear_logging_context()

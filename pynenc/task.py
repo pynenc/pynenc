@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+from logging import Logger
 import json
 import time
 from collections.abc import Callable, Iterable
@@ -19,8 +20,8 @@ from pynenc.invocation.conc_invocation import (
 )
 from pynenc.invocation.dist_invocation import DistributedInvocationGroup
 from pynenc.types import Func, Params, Result
-from pynenc.util.log import TaskLoggerAdapter
 from pynenc.workflow.context import WorkflowContext
+from pynenc.util.log import set_logging_context
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
@@ -84,7 +85,6 @@ class Task(Generic[Params, Result]):
             )
         self.task_id = f"{func.__module__}.{func.__name__}"
         self.app = app
-        self.logger = TaskLoggerAdapter(self.app.logger, self.task_id)
         self.func = func
         self.options = options
         self.validate_options()
@@ -111,6 +111,11 @@ class Task(Generic[Params, Result]):
             config_filepath=self.app.config_filepath,
             task_options=self.options,
         )
+
+    @property
+    def logger(self) -> Logger:
+        """The logger for the task"""
+        return self.app.logger
 
     @property
     def invocation(self) -> BaseInvocation:
@@ -191,7 +196,6 @@ class Task(Generic[Params, Result]):
         self.app = self.app
         self.func = func
         self.options = options
-        self.logger = TaskLoggerAdapter(self.app.logger, self.task_id)
 
     @staticmethod
     def _get_from_task_id(task_id: str) -> Task | Callable:
@@ -356,7 +360,9 @@ class Task(Generic[Params, Result]):
         print(list(invocation_group.results))  # [len("huge_string") + i for i in range(3)]
         ```
         """
-        self.logger.info(f"parallelizing {self.task_id}")
+        # Set logging context for this task operation
+        set_logging_context(task_id=self.task_id)
+        self.app.logger.info(f"parallelizing {self.task_id}")
 
         # Convert param_iter to a list to allow multiple iterations and length checking
         param_list = list(param_iter)

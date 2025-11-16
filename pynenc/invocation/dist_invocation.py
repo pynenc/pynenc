@@ -16,6 +16,7 @@ from pynenc.invocation.base_invocation import (
 from pynenc.invocation.status import InvocationStatus
 from pynenc.types import Params, Result
 from pynenc.util.asyncio_helper import run_task_sync
+from pynenc.util.log import set_logging_context
 from pynenc.workflow.exceptions import WorkflowPauseError
 from pynenc.workflow.identity import WorkflowIdentity
 
@@ -257,6 +258,11 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         """
         # runner_args are passed from/to the runner (e.g. used to sync subprocesses)
         context.runner_args = runner_args
+        set_logging_context(
+            task_id=self.task.task_id,
+            invocation_id=self.invocation_id,
+            runner_id=runner_ctx.runner_id,
+        )
         try:
             self.task.logger.info("Invocation STARTED")
             previous_invocation_context = self.swap_context()
@@ -285,6 +291,11 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
                 self.invocation_id, ex, runner_ctx
             )
             self.task.logger.warning(f"Invocation WILL-RETRY {ex=}")
+        except exceptions.InvocationStatusOwnershipError as ex:
+            self.task.logger.error(
+                "fWe do not own the status anymore, re-raising without setting exception"
+            )
+            raise ex
         except Exception as ex:
             self.app.logger.exception("Invocation EXCEPTION")
             self.app.orchestrator.set_invocation_exception(self, ex, runner_ctx)

@@ -1,4 +1,5 @@
 import asyncio
+from logging import Logger
 import os
 import signal
 import socket
@@ -12,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from pynenc.conf.config_runner import ConfigRunner
 from pynenc.exceptions import RunnerNotExecutableError
-from pynenc.util.log import RunnerLogAdapter
+from pynenc.util.log import set_logging_context
 from pynenc.runner.runner_context import RunnerContext
 
 
@@ -62,8 +63,8 @@ class BaseRunner(ABC):
         self.app = app
         self.app.runner = self
 
-        # Initialize logger after runner_id is accessible
-        self.logger = RunnerLogAdapter(self.app.logger, self.runner_id)
+        # Set logging context
+        set_logging_context(runner_id=self.runner_id)
         self._last_recovery_check_time = 0.0
 
     @cached_property
@@ -73,7 +74,11 @@ class BaseRunner(ABC):
 
     def set_extra_id(self, extra_id: str) -> None:
         self._extra_id = extra_id
-        self.logger = RunnerLogAdapter(self.app.logger, self.runner_id)
+        set_logging_context(runner_id=self.runner_id)
+
+    @property
+    def logger(self) -> Logger:
+        return self.app.logger
 
     @property
     def runner_id(self) -> str:
@@ -143,7 +148,7 @@ class BaseRunner(ABC):
                 stacklevel=2,
             )
         self.running = True
-        self.logger.info("Starting runner...")
+        self.app.logger.info("Starting runner...")
         self._on_start()
 
     @abstractmethod
@@ -154,7 +159,7 @@ class BaseRunner(ABC):
         """This method is called when the runner stops"""
         self.app.logger.info(f"Stopping runner {self.runner_id}")
         self.running = False
-        self.logger.info("Stopping runner...")
+        self.app.logger.info("Stopping runner...")
         self._on_stop()
 
     @abstractmethod
@@ -281,9 +286,9 @@ class BaseRunner(ABC):
                 self._check_recovery_service()
                 time.sleep(self.conf.runner_loop_sleep_time_sec)
         except KeyboardInterrupt:
-            self.logger.warning("KeyboardInterrupt received. Stopping runner...")
+            self.app.logger.warning("KeyboardInterrupt received. Stopping runner...")
         except Exception as e:
-            self.logger.exception(f"Exception in runner loop: {e}")
+            self.app.logger.exception(f"Exception in runner loop: {e}")
             raise e
         finally:
             self.on_stop()

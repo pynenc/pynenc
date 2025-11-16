@@ -30,17 +30,28 @@ class ConfigOrchestrator(ConfigPynencBase):
         ideally operate with minimal latency. Detailed information about the invocations
         is stored in the result backend, which can handle more data and afford to be slower.
 
-    :cvar ConfigField[float] non_atomic_status_retry_sleep_seconds:
-        This float value, defaulting to 0.1 seconds, defines the sleep duration between
-        retries when updating invocation statuses in non-atomic mode. In non-atomic mode,
-        there is a possibility of race conditions when multiple runners attempt to update
-        the status of the same invocation simultaneously. This sleep interval helps
-        mitigate such race conditions by introducing a brief pause between retries.
-
     :cvar ConfigField[float] run_invocation_recovery_service_every_minutes:
         This float value, defaulting to 5.0 minutes, sets the interval at which the
         invocation recovery service runs. The recovery service checks for invocations
         stuck in PENDING status beyond the allowed time and recovers them.
+
+        ```{warning}
+        This value must be coordinated with `recovery_service_check_interval_minutes`
+        in the runner configuration. The runner's check interval should be significantly
+        shorter than this recovery interval to ensure timely recovery execution.
+
+        Additionally, ensure `runner_heartbeat_timeout_minutes` is longer than the
+        runner's check interval to avoid marking active runners as inactive.
+
+        Recommended ratios:
+        - `recovery_service_check_interval_minutes` ≤ `run_invocation_recovery_service_every_minutes` / 10
+        - `runner_heartbeat_timeout_minutes` ≥ 2 × `recovery_service_check_interval_minutes`
+
+        Example safe configuration:
+        - `recovery_service_check_interval_minutes = 0.5` (30 seconds)
+        - `run_invocation_recovery_service_every_minutes = 5.0` (5 minutes)
+        - `runner_heartbeat_timeout_minutes = 10.0` (10 minutes)
+        ```
 
     :cvar ConfigField[float] recovery_service_spread_margin_minutes:
         This float value, defaulting to 1.0 minutes, defines the time margin used to
@@ -56,7 +67,6 @@ class ConfigOrchestrator(ConfigPynencBase):
     cycle_control = ConfigField(True)
     blocking_control = ConfigField(True)
     auto_final_invocation_purge_hours = ConfigField(24.0)
-    non_atomic_status_retry_sleep_seconds = ConfigField(0.1)
     run_invocation_recovery_service_every_minutes = ConfigField(5.0)
     recovery_service_spread_margin_minutes = ConfigField(1.0)
     runner_heartbeat_timeout_minutes = ConfigField(10.0)

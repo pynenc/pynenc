@@ -1023,7 +1023,8 @@ class BaseOrchestrator(ABC):
         Service to recover invocations stuck in PENDING status beyond the allowed time.
 
         This method checks for invocations that have been in PENDING status longer than
-        the configured max_pending_seconds and reverts them to their previous status.
+        the configured max_pending_seconds and transitions them through PENDING_RECOVERY
+        to REROUTED, bypassing ownership validation.
 
         :param RunnerContext runner_ctx: The context of the runner executing this service.
         """
@@ -1040,6 +1041,9 @@ class BaseOrchestrator(ABC):
         for invocation_id in self.get_pending_invocations_for_recovery():
             pending_invocations.add(invocation_id)
             self.app.logger.info(
-                f"Pending {invocation_id=} would be rerouted for recovery"
+                f"Recovering timed-out pending invocation {invocation_id}"
+            )
+            self.set_invocation_status(
+                invocation_id, InvocationStatus.PENDING_RECOVERY, runner_ctx
             )
         self.reroute_invocations(pending_invocations, runner_ctx)

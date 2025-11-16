@@ -1,11 +1,17 @@
 import logging
-from collections.abc import MutableMapping
-from typing import TYPE_CHECKING, Any, Literal
+from contextvars import ContextVar
+from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     from logging import LogRecord
 
     from pynenc.app import Pynenc
+
+
+# Context variables for thread-safe logging context
+_task_id: ContextVar[str | None] = ContextVar("task_id", default=None)
+_invocation_id: ContextVar[str | None] = ContextVar("invocation_id", default=None)
+_runner_id: ContextVar[str | None] = ContextVar("runner_id", default=None)
 
 
 # Define ANSI color codes
@@ -20,6 +26,27 @@ class Colors:
     CYAN = "\033[36m"
     RED_BG = "\033[41m"
     WHITE = "\033[37m"
+
+
+class PynencContextFilter(logging.Filter):
+    """
+    Logging filter that injects Pynenc context into log records.
+
+    Automatically adds task_id, invocation_id, and runner_id to log records
+    based on the current execution context.
+    """
+
+    def filter(self, record: "LogRecord") -> bool:
+        """
+        Add context information to the log record.
+
+        :param LogRecord record: The log record to filter
+        :return: Always True to allow the record
+        """
+        record.task_id = _task_id.get()
+        record.invocation_id = _invocation_id.get()
+        record.runner_id = _runner_id.get()
+        return True
 
 
 class ColoredFormatter(logging.Formatter):
@@ -45,11 +72,10 @@ class ColoredFormatter(logging.Formatter):
     ) -> None:
         """Initialize the formatter with specified format strings.
 
-        Args:
-            fmt: The format string for the message
-            datefmt: The format string for datetime objects
-            style: The style of the fmt string
-            validate: Whether to validate the format string
+        :param str | None fmt: The format string for the message
+        :param str | None datefmt: The format string for datetime objects
+        :param Literal["%", "{", "$"] style: The style of the fmt string
+        :param bool validate: Whether to validate the format string
         """
         super().__init__(fmt=fmt, datefmt=datefmt, style=style, validate=validate)
 
@@ -59,26 +85,38 @@ class ColoredFormatter(logging.Formatter):
         name = record.name
         msg = record.msg
 
+        # Extract context values, using N/A for missing ones
+        task_id = getattr(record, "task_id", None)
+        invocation_id = getattr(record, "invocation_id", None)
+        runner_id = getattr(record, "runner_id", None)
+
+        # Build context prefix with all available information
+        context_parts = []
+
+        # Add runner context if available
+        if runner_id:
+            context_parts.append(f"runner:{runner_id}")
+
+        # Add task context if available
+        if task_id:
+            context_parts.append(f"task:{task_id}")
+
+        # Add invocation context if available
+        if invocation_id:
+            context_parts.append(f"inv:{invocation_id}")
+
         # Apply colors
         if levelname in self.LEVEL_COLORS:
             color = self.LEVEL_COLORS[levelname]
             record.levelname = f"{color}{levelname:<8}{Colors.RESET}"
             record.name = f"{Colors.BLUE}{name}{Colors.RESET}"
 
-            # Only color the prefix part of the message for adapters
-            if isinstance(record.msg, str) and record.msg.startswith("["):
-                # Find the closing bracket
-                closing_bracket = record.msg.find("]")
-                if closing_bracket != -1:
-                    prefix = record.msg[: closing_bracket + 1]
-                    rest = record.msg[closing_bracket + 1 :]
-                    record.msg = (
-                        f"{color}{prefix}{Colors.RESET}{color}{rest}{Colors.RESET}"
-                    )
-                else:
-                    record.msg = f"{color}{record.msg}{Colors.RESET}"
+            # Add colored context prefix if any context is available
+            if context_parts:
+                prefix = f"[{' '.join(context_parts)}]"
+                record.msg = f"{color}{prefix}{Colors.RESET} {color}{msg}{Colors.RESET}"
             else:
-                record.msg = f"{color}{record.msg}{Colors.RESET}"
+                record.msg = f"{color}{msg}{Colors.RESET}"
 
         # Format the record
         result = super().format(record)
@@ -101,6 +139,10 @@ def create_logger(app: "Pynenc", use_colors: bool = True) -> logging.Logger:
     :raises ValueError: If the logging level is invalid.
     """
     logger = logging.getLogger(f"pynenc.{app.app_id}")
+
+    # Add context filter
+    context_filter = PynencContextFilter()
+    logger.addFilter(context_filter)
 
     # Create handler
     handler = logging.StreamHandler()
@@ -136,65 +178,41 @@ def create_logger(app: "Pynenc", use_colors: bool = True) -> logging.Logger:
     return logger
 
 
-class TaskLoggerAdapter(logging.LoggerAdapter):
+def set_logging_context(
+    task_id: str | None = None,
+    invocation_id: str | None = None,
+    runner_id: str | None = None,
+) -> None:
     """
-    Logger adapter for tasks.
+    Set the logging context for the current execution context.
 
-    This adapter adds task and invocation context to log messages.
+    :param str | None task_id: The task ID to set in context
+    :param str | None invocation_id: The invocation ID to set in context
+    :param str | None runner_id: The runner ID to set in context
     """
-
-    def __init__(
-        self, logger: logging.Logger, task_id: str, invocation_id: str | None = None
-    ):
-        super().__init__(logger, {})
-        self.set_context(task_id, invocation_id)
-
-    def set_context(self, task_id: str, invocation_id: str | None) -> None:
-        """
-        Sets the context for logging.
-
-        :param str task_id: The ID of the task.
-        :param str | None invocation_id: The ID of the invocation.
-        """
-        self.task_id = task_id
-        self.invocation_id = invocation_id
-
-    def process(self, msg: Any, kwargs: MutableMapping[str, Any]) -> tuple:
-        """
-        Processes a log message, adding task and invocation context.
-
-        :param Any msg: The log message.
-        :param MutableMapping[str, Any] kwargs: Additional keyword arguments.
-        :return: The processed message and kwargs.
-        """
-        if self.invocation_id:
-            prefix = f"[{self.task_id}: {self.invocation_id}]"
-        else:
-            prefix = f"[{self.task_id}]"
-        return f"{prefix} {msg}", kwargs
+    if task_id is not None:
+        _task_id.set(task_id)
+    if invocation_id is not None:
+        _invocation_id.set(invocation_id)
+    if runner_id is not None:
+        _runner_id.set(runner_id)
 
 
-class RunnerLogAdapter(logging.LoggerAdapter):
+def clear_logging_context() -> None:
+    """Clear all logging context variables."""
+    _task_id.set(None)
+    _invocation_id.set(None)
+    _runner_id.set(None)
+
+
+def get_logging_context() -> dict[str, str | None]:
     """
-    Logger adapter for runners.
+    Get the current logging context.
 
-    This adapter adds runner context to log messages.
-
-    :param logging.Logger logger: The logger instance.
-    :param str runner_id: The ID of the runner.
+    :return: Dictionary with task_id, invocation_id, and runner_id
     """
-
-    def __init__(self, logger: logging.Logger, runner_id: str):
-        super().__init__(logger, {})
-        self.runner_id = runner_id
-
-    def process(self, msg: Any, kwargs: MutableMapping[str, Any]) -> tuple:
-        """
-        Processes a log message, adding runner context.
-
-        :param Any msg: The log message.
-        :param MutableMapping[str, Any] kwargs: Additional keyword arguments.
-        :return: The processed message and kwargs.
-        """
-        prefix = f"[runner: {self.runner_id}]"
-        return f"{prefix} {msg}", kwargs
+    return {
+        "task_id": _task_id.get(),
+        "invocation_id": _invocation_id.get(),
+        "runner_id": _runner_id.get(),
+    }

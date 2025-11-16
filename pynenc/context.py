@@ -3,12 +3,18 @@ This module maintains the context of invocations and runners within the Pynenc a
 
 It stores the current invocation context and runner arguments,
 facilitating the management and tracking of nested or sub-invocations within different execution environments.
+
+Key components:
+- Invocation context tracking (sync and distributed)
+- Runner context management
+- Logging context integration
 """
 
 import threading
 from typing import TYPE_CHECKING, Any, Optional
 
 from pynenc.runner.runner_context import RunnerContext
+from pynenc.util.log import set_logging_context, clear_logging_context
 
 # Create a thread-local data storage
 thread_local = threading.local()
@@ -79,10 +85,26 @@ def set_current_runner(app_id: str, runner: "BaseRunner") -> None:
     MultiThreadRunner, where each spawned process needs to set its own ThreadRunner
     to avoid cross-process interference.
 
-    :param app_id: The application identifier.
-    :param runner: The runner instance to set.
+    Also sets the runner_id in the logging context for automatic log annotation.
+
+    :param str app_id: The application identifier.
+    :param BaseRunner runner: The runner instance to set.
     """
     _current_runner[app_id] = runner
+    set_logging_context(runner_id=runner.runner_id)
+
+
+def clear_current_runner(app_id: str) -> None:
+    """
+    Clear the current runner for the given app_id.
+
+    Also clears the runner_id from the logging context.
+
+    :param str app_id: The application identifier.
+    """
+    if app_id in _current_runner:
+        del _current_runner[app_id]
+    clear_logging_context()
 
 
 def get_current_runner_context(app_id: str) -> RunnerContext | None:

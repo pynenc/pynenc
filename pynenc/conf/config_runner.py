@@ -27,12 +27,19 @@ class ConfigRunner(ConfigPynencBase):
         Time in minutes between recovery service checks. This prevents the runner from checking for stuck
         invocations on every loop iteration, reducing pressure on the orchestrator. The actual recovery
         execution is further controlled by the orchestrator's recovery service scheduling logic.
+
+    ```{warning}
+    Must be coordinated with orchestrator settings to avoid marking runners as inactive:
+    - Must be **less than** `runner_heartbeat_timeout_minutes` (orchestrator config)
+    - Should be **much less than** `run_invocation_recovery_service_every_minutes` (orchestrator config)
+    ```
+
     """
 
     invocation_wait_results_sleep_time_sec = ConfigField(0.1)
     runner_loop_sleep_time_sec = ConfigField(0.1)
     min_parallel_slots = ConfigField(1)
-    recovery_service_check_interval_minutes = ConfigField(2.0)
+    recovery_service_check_interval_minutes = ConfigField(0.5)
 
 
 class ConfigThreadRunner(ConfigRunner):

@@ -38,6 +38,7 @@ class InvocationStatus(StrEnum):
     :cvar CONCURRENCY_CONTROLLED: The task call is not allowed to run due to concurrency control
     :cvar REROUTED: The task call has been re-routed and is registered
     :cvar PENDING: The task call was picked by a runner but is not yet executed
+    :cvar PENDING_RECOVERY: The task call exceeded PENDING timeout and is being recovered
     :cvar RUNNING: The task call is currently running
     :cvar PAUSED: The task call execution is paused
     :cvar RESUMED: The task call execution has been resumed
@@ -51,6 +52,7 @@ class InvocationStatus(StrEnum):
     CONCURRENCY_CONTROLLED = auto()
     REROUTED = auto()
     PENDING = auto()
+    PENDING_RECOVERY = auto()
     RUNNING = auto()
     PAUSED = auto()
     RESUMED = auto()
@@ -124,6 +126,7 @@ class StatusDefinition:
     :ivar bool requires_ownership: Only owner can modify
     :ivar bool acquires_ownership: Claims ownership on entry
     :ivar bool releases_ownership: Releases ownership on entry
+    :ivar bool overrides_ownership: Bypasses ownership validation (for recovery scenarios)
     """
 
     allowed_transitions: frozenset[InvocationStatus] = field(default_factory=frozenset)
@@ -132,12 +135,15 @@ class StatusDefinition:
     requires_ownership: bool = False
     acquires_ownership: bool = False
     releases_ownership: bool = False
+    overrides_ownership: bool = False
 
     def __post_init__(self) -> None:
         if self.acquires_ownership and self.releases_ownership:
             raise ValueError("Status cannot both acquire and release ownership")
         if self.is_final and self.allowed_transitions:
             raise ValueError("Final statuses cannot have allowed transitions")
+        if self.overrides_ownership and self.requires_ownership:
+            raise ValueError("Status cannot both override and require ownership")
 
 
 @dataclass(frozen=True)
@@ -226,16 +232,25 @@ _CONFIG: Final[StatusConfiguration] = StatusConfiguration(
         InvocationStatus.PENDING: StatusDefinition(
             # An invocation can FAILED without running by the CYCLE-CONTROL mechanism
             # to avoid deadlocks.
+            # PENDING_RECOVERY is for timeout recovery without ownership validation
             allowed_transitions=frozenset(
                 {
                     InvocationStatus.RUNNING,
                     InvocationStatus.KILLED,
                     InvocationStatus.REROUTED,
                     InvocationStatus.FAILED,
+                    InvocationStatus.PENDING_RECOVERY,
                 }
             ),
             requires_ownership=True,
             acquires_ownership=True,
+        ),
+        # Recovery status for PENDING invocations that exceeded timeout
+        # Overrides ownership validation since original owner is unresponsive
+        InvocationStatus.PENDING_RECOVERY: StatusDefinition(
+            allowed_transitions=frozenset({InvocationStatus.REROUTED}),
+            releases_ownership=True,
+            overrides_ownership=True,
         ),
         InvocationStatus.RUNNING: StatusDefinition(
             allowed_transitions=frozenset(
@@ -329,8 +344,13 @@ def validate_ownership(
     if not current_record:
         return
 
-    current_def = _CONFIG.get_definition(current_record.status)
     new_def = _CONFIG.get_definition(new_status)
+
+    # Allow transitions to statuses that override ownership validation
+    if new_def.overrides_ownership:
+        return
+
+    current_def = _CONFIG.get_definition(current_record.status)
 
     msg: str | None = None
     attempted_owner: str | None = runner_id

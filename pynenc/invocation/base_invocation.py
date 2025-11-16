@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from pynenc.call import Call
 from pynenc.types import Params, Result
-from pynenc.util.log import TaskLoggerAdapter
+from pynenc.util.log import set_logging_context
 from pynenc.workflow.identity import WorkflowIdentity
 
 if TYPE_CHECKING:
@@ -88,10 +88,8 @@ class BaseInvocation(ABC, Generic[Params, Result]):
         self.init_logger()
 
     def init_logger(self) -> None:
-        """Initialize the logger for the invocation."""
-        self.task.logger = TaskLoggerAdapter(
-            self.app.logger, self.task.task_id, self.invocation_id
-        )
+        """Initialize logging context for the invocation."""
+        set_logging_context(task_id=self.task.task_id, invocation_id=self.invocation_id)
 
     def is_main_workflow_task(self) -> bool:
         """Check if the task is the main workflow task.

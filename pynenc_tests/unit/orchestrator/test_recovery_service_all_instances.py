@@ -11,7 +11,7 @@ Key components tested:
 
 from typing import TYPE_CHECKING
 from time import sleep
-
+from unittest.mock import patch
 
 from pynenc.invocation import InvocationStatus
 from pynenc.runner.runner_context import RunnerContext
@@ -229,26 +229,53 @@ def test_recovery_service_skips_when_not_scheduled(app_instance: "Pynenc") -> No
     app_instance.orchestrator.conf.run_invocation_recovery_service_every_minutes = 100.0
 
     try:
-        runner1 = create_runner_context("runner-1")
-        runner2 = create_runner_context("runner-2")
+        # Mock time() to return 0, ensuring we're at the start of the recovery cycle
+        # With 2 runners, the cycle is split: runner1 gets [0-50min), runner2 gets [50-100min)
+        # At time=0, only runner1 is scheduled
+        with patch("pynenc.orchestrator.base_orchestrator.time", return_value=0):
+            runner1 = create_runner_context("runner-1")
+            runner2 = create_runner_context("runner-2")
 
-        app_instance.orchestrator.register_runner_heartbeat(runner1)
-        sleep(0.01)
-        app_instance.orchestrator.register_runner_heartbeat(runner2)
+            app_instance.orchestrator.register_runner_heartbeat(runner1)
+            sleep(0.01)
+            app_instance.orchestrator.register_runner_heartbeat(runner2)
 
-        inv: DistributedInvocation = dummy_task()  # type: ignore
-        app_instance.orchestrator._register_new_invocations([inv])
-        app_instance.orchestrator._atomic_status_transition(
-            inv.invocation_id, InvocationStatus.PENDING, "owner-1"
-        )
+            inv: DistributedInvocation = dummy_task()  # type: ignore
+            # Properly register the invocation (this stores it in state backend)
+            app_instance.orchestrator.register_new_invocations([inv])
+            # Then transition to PENDING
+            app_instance.orchestrator.set_invocation_status(
+                inv.invocation_id, InvocationStatus.PENDING, runner1
+            )
 
-        sleep(0.1)
+            sleep(0.1)
 
-        # Runner 2 is not scheduled to run recovery at this time
-        app_instance.orchestrator.invocation_recovery_service(runner2)
+            # Verify runner scheduling
+            should_run_1 = app_instance.orchestrator.should_run_recovery_service(
+                runner1
+            )
+            should_run_2 = app_instance.orchestrator.should_run_recovery_service(
+                runner2
+            )
 
-        status = app_instance.orchestrator.get_invocation_status(inv.invocation_id)
-        assert status == InvocationStatus.PENDING
+            assert should_run_1 is True, "Runner 1 should be scheduled at time=0"
+            assert should_run_2 is False, "Runner 2 should NOT be scheduled at time=0"
+
+            # Runner 2 is not scheduled to run recovery at this time
+            app_instance.orchestrator.invocation_recovery_service(runner2)
+
+            status = app_instance.orchestrator.get_invocation_status(inv.invocation_id)
+            assert status == InvocationStatus.PENDING, (
+                "Invocation should remain PENDING when runner2 is not scheduled"
+            )
+
+            # Runner 1 is scheduled to run recovery at this time
+            app_instance.orchestrator.invocation_recovery_service(runner1)
+
+            status = app_instance.orchestrator.get_invocation_status(inv.invocation_id)
+            assert status == InvocationStatus.REROUTED, (
+                "Invocation should be REROUTED when runner1 runs recovery"
+            )
     finally:
         app_instance.conf.max_pending_seconds = original_timeout
         app_instance.orchestrator.conf.run_invocation_recovery_service_every_minutes = (

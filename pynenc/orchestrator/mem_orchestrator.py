@@ -603,7 +603,10 @@ class MemOrchestrator(BaseOrchestrator):
         current_time = time()
         cutoff_time = current_time - max_pending_seconds
 
-        pending_invocations = self.status_index.get(InvocationStatus.PENDING, set())
+        # Create a snapshot to avoid RuntimeError when status changes during iteration
+        pending_invocations = list(
+            self.status_index.get(InvocationStatus.PENDING, set())
+        )
 
         for invocation_id in pending_invocations:
             status_record = self.invocation_status_record.get(invocation_id)

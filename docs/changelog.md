@@ -31,6 +31,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Created `StatusDefinition` for declarative status rules (final, available_for_run, ownership, transitions).
   - Added `StatusConfiguration` for centralized status and transition configuration.
   - Implemented state machine functions: `validate_transition`, `validate_ownership`, `compute_new_owner`, and `transition`.
+  - New invocation status `PENDING_RECOVERY` for handling stuck PENDING invocations that exceed timeout, allowing recovery without ownership validation.
 
 - **Runner Heartbeat Tracking and Recovery Service**:
 
@@ -153,6 +154,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - The orhcestrator will ensure the invocation is stored in the state backend
   - On Future implementations of queues and priorities, the orchestrator will forward the required data to the broker,
     instead of the broker using an instance of an invocation to get data relevant for queueing and priorizing.
+
+- **Logging**:
+  - Introduced `contextvars`-based logging context that automatically injects `runner_id`, `task_id`, and `invocation_id` into log messages without requiring explicit logger adapters
+  - Unified context display showing `[runner:id task:id inv:id]` prefix when context is available
 
 ### Fixed
 
