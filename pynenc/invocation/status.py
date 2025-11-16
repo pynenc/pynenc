@@ -303,6 +303,16 @@ _CONFIG: Final[StatusConfiguration] = StatusConfiguration(
 )
 
 
+def get_status_definition(status: InvocationStatus) -> StatusDefinition:
+    """
+    Get the status definition for a given invocation status.
+
+    :param status: The invocation status to look up
+    :return: The status definition with rules and behavior
+    """
+    return _CONFIG.get_definition(status)
+
+
 # ============================================================================
 # State Machine Functions
 # ============================================================================
