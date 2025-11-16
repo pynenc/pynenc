@@ -72,10 +72,10 @@ def test_upsert_and_get_invocation(invocation: "DistributedInvocation") -> None:
     """
     backend = invocation.app.state_backend
 
-    backend._upsert_invocations([invocation])
-    backend._upsert_invocations([invocation])
-    backend._upsert_invocations([invocation])
-    backend._upsert_invocations([invocation])
+    backend.upsert_invocations([invocation])
+    backend.upsert_invocations([invocation])
+    backend.upsert_invocations([invocation])
+    backend.upsert_invocations([invocation])
     fetched = backend.get_invocation(invocation.invocation_id)
     assert fetched == invocation
 

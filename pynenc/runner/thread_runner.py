@@ -87,7 +87,7 @@ class ThreadRunner(BaseRunner):
                     thread_info.invocation.invocation_id, InvocationStatus.KILLED
                 )
                 self.app.orchestrator.reroute_invocations(
-                    {thread_info.invocation},
+                    {thread_info.invocation.invocation_id},
                     runner_ctx,
                 )
             except InvocationStatusError as e:
@@ -154,7 +154,9 @@ class ThreadRunner(BaseRunner):
                 self.logger.error(
                     f"Failed to start thread for {invocation.invocation_id}: {e}"
                 )
-                self.app.orchestrator.reroute_invocations({invocation}, runner_ctx)
+                self.app.orchestrator.reroute_invocations(
+                    {invocation.invocation_id}, runner_ctx
+                )
 
         self.logger.debug(
             f"Finished loop iteration, sleeping for {self.conf.runner_loop_sleep_time_sec}s"

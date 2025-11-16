@@ -2,11 +2,7 @@ from abc import ABC, abstractmethod
 from functools import cached_property
 from typing import TYPE_CHECKING
 
-from pynenc import context
-from pynenc.call import Call
 from pynenc.conf.config_broker import ConfigBroker
-from pynenc.invocation.dist_invocation import DistributedInvocation
-from pynenc.types import Params, Result
 
 if TYPE_CHECKING:
     from ..app import Pynenc
@@ -48,13 +44,6 @@ class BaseBroker(ABC):
     For production deployments, consider Redis or MongoDB plugins which provide
     persistent, distributed message queuing capabilities.
     ```
-
-    ### Examples
-    ```{code-block} python
-        # The broker is automatically selected based on your plugin configuration
-        # No direct instantiation needed - handled by Pynenc application
-        invocation = app.broker.route_call(call)
-    ```
     """
 
     def __init__(self, app: "Pynenc") -> None:
@@ -68,19 +57,19 @@ class BaseBroker(ABC):
         )
 
     @abstractmethod
-    def route_invocation(self, invocation: DistributedInvocation) -> None:
+    def route_invocation(self, invocation_id: str) -> None:
         """
-        Abstract method for routing a given invocation.
+        Abstract method for routing a given invocation id.
 
         This method should define the process of handling and dispatching a given
-        DistributedInvocation within the broker system. Implementations might involve
+        invocation id within the broker system. Implementations might involve
         sending the invocation to a queue or handling it internally.
 
-        :param DistributedInvocation invocation: The invocation to be routed.
+        :param str invocation_id: The invocation id to be routed.
         """
 
     @abstractmethod
-    def route_invocations(self, invocations: list[DistributedInvocation]) -> None:
+    def route_invocations(self, invocation_ids: list[str]) -> None:
         """
         Routes multiple invocations at once.
 
@@ -90,20 +79,20 @@ class BaseBroker(ABC):
         Default implementation sequentially routes each invocation. Subclasses can
         override this with more efficient batch processing implementations.
 
-        :param list[DistributedInvocation] invocations: The invocations to be routed.
+        :param list[str] invocation_ids: The invocation ids to be routed.
         """
 
     @abstractmethod
-    def retrieve_invocation(self) -> DistributedInvocation | None:
+    def retrieve_invocation(self) -> str | None:
         """
-        Method to retrieve a distributed invocation.
+        Method to retrieve a distributed invocation id.
 
         Implementations of this method should detail how to retrieve the next
         available invocation from the broker's queue or storage system. It is
-        expected to return a DistributedInvocation if one is available, or None
+        expected to return a invocation id if one is available, or None
         if the queue is empty.
 
-        :return: The next invocation to be processed, or None.
+        :return: The next invocation id to be processed, or None.
         """
 
     @abstractmethod
@@ -126,41 +115,3 @@ class BaseBroker(ABC):
         removing all pending invocations. It's crucial for error handling and
         managing the queue in specific situations like maintenance or reset.
         """
-
-    # @abstractmethod
-    # def _acknowledge_invocation(self, invocation: DistributedInvocation) -> None:
-    #     ...
-
-    # @abstractmethod
-    # def _requeue_invocation(self, invocation: DistributedInvocation) -> None:
-    #     ...
-
-    def route_call(
-        self, call: "Call[Params, Result]"
-    ) -> DistributedInvocation[Params, Result]:
-        """
-        Creates and routes a new DistributedInvocation based on the given call.
-
-        This method instantiates a DistributedInvocation with the provided call
-        and the current invocation context. It then routes this invocation using
-        the `route_invocation` method. This demonstrates the basic use of the
-        broker's functionality.
-
-        :param Call[Params, Result] call: The call object to be transformed into an invocation.
-
-        :return: The routed invocation.
-
-        ```{note}
-        The method also logs the routing process for debugging purposes.
-        ```
-        """
-        parent_invocation = context.get_dist_invocation_context(self.app.app_id)
-        self.route_invocation(
-            invocation := DistributedInvocation(
-                call, parent_invocation=parent_invocation
-            )
-        )
-        self.app.logger.debug(
-            f"Routed {call=} on invocation {invocation.invocation_id}"
-        )
-        return invocation

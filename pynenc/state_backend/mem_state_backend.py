@@ -54,7 +54,7 @@ class MemStateBackend(BaseStateBackend[Params, Result]):
         self._workflow_runs.clear()
         self._workflow_sub_invocations.clear()
 
-    def _upsert_invocations(self, invocations: list["DistributedInvocation"]) -> None:
+    def upsert_invocations(self, invocations: list["DistributedInvocation"]) -> None:
         """Inserts or updates multiple invocations in the memory cache."""
         for invocation in invocations:
             self._cache[invocation.invocation_id] = invocation

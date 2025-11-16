@@ -248,7 +248,9 @@ class ProcessRunner(BaseRunner):
                 self.logger.error(
                     f"Failed to start process for invocation {invocation.invocation_id}, rerouting it"
                 )
-                self.app.orchestrator.reroute_invocations({invocation}, runner_ctx)
+                self.app.orchestrator.reroute_invocations(
+                    {invocation.invocation_id}, runner_ctx
+                )
         self.handle_waiting_invocations()
 
     def _waiting_for_results(

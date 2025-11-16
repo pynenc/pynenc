@@ -34,7 +34,7 @@ def test_no_concurrency_default(task_sum_io: "Task") -> None:
     app.orchestrator.set_invocation_status(
         fake_running_invocation.invocation_id, InvocationStatus.RUNNING, runner_ctx
     )
-    app.broker.route_invocations([trying_to_run_invocation])
+    app.broker.route_invocations([trying_to_run_invocation.invocation_id])
     trying_to_run_invocation.task.conf.running_concurrency = (
         config_task.ConcurrencyControlType.DISABLED
     )
@@ -81,6 +81,6 @@ def test_running_concurrency_type_task(task_sum_io: "Task") -> None:
     # First it will return the invocation tryin to run
     logger.info(f"Routing invocation {trying_to_run_invocation.invocation_id=}")
     # With concurrency control the task should not return
-    app.broker.route_invocations([trying_to_run_invocation])
+    app.broker.route_invocations([trying_to_run_invocation.invocation_id])
     invocations_to_run = list(app.orchestrator.get_invocations_to_run(10, runner_ctx))
     assert invocations_to_run == []

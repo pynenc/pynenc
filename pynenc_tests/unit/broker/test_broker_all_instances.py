@@ -29,18 +29,18 @@ def test_route_and_retrieve_invocation(task: "Task") -> None:
     broker = task.app.broker
 
     inv_1: DistributedInvocation = task()  # type: ignore
-    assert broker.retrieve_invocation() == inv_1
+    assert broker.retrieve_invocation() == inv_1.invocation_id
     inv_2: DistributedInvocation = task()  # type: ignore
-    assert broker.retrieve_invocation() == inv_2
+    assert broker.retrieve_invocation() == inv_2.invocation_id
 
-    broker.route_invocation(inv_1)
-    broker.route_invocation(inv_1)
-    broker.route_invocation(inv_2)
-    broker.route_invocation(inv_1)
-    assert broker.retrieve_invocation() == inv_1
-    assert broker.retrieve_invocation() == inv_1
-    assert broker.retrieve_invocation() == inv_2
-    assert broker.retrieve_invocation() == inv_1
+    broker.route_invocation(inv_1.invocation_id)
+    broker.route_invocation(inv_1.invocation_id)
+    broker.route_invocation(inv_2.invocation_id)
+    broker.route_invocation(inv_1.invocation_id)
+    assert broker.retrieve_invocation() == inv_1.invocation_id
+    assert broker.retrieve_invocation() == inv_1.invocation_id
+    assert broker.retrieve_invocation() == inv_2.invocation_id
+    assert broker.retrieve_invocation() == inv_1.invocation_id
     assert broker.retrieve_invocation() is None
 
 
@@ -54,15 +54,17 @@ def test_route_and_retrieve_multiple_invocations(task: "Task") -> None:
     inv_1: DistributedInvocation = task()  # type: ignore
     inv_2: DistributedInvocation = task()  # type: ignore
 
-    assert broker.retrieve_invocation() == inv_1
-    assert broker.retrieve_invocation() == inv_2
+    assert broker.retrieve_invocation() == inv_1.invocation_id
+    assert broker.retrieve_invocation() == inv_2.invocation_id
     assert broker.retrieve_invocation() is None
 
     # Route again with reoute_invocations
-    broker.route_invocations([inv_1, inv_2, inv_1])
-    assert broker.retrieve_invocation() == inv_1
-    assert broker.retrieve_invocation() == inv_2
-    assert broker.retrieve_invocation() == inv_1
+    broker.route_invocations(
+        [inv_1.invocation_id, inv_2.invocation_id, inv_1.invocation_id]
+    )
+    assert broker.retrieve_invocation() == inv_1.invocation_id
+    assert broker.retrieve_invocation() == inv_2.invocation_id
+    assert broker.retrieve_invocation() == inv_1.invocation_id
     assert broker.retrieve_invocation() is None
 
 
@@ -76,16 +78,18 @@ def test_count_invocations(task: "Task") -> None:
     inv_2: DistributedInvocation = task()  # type: ignore
 
     assert broker.count_invocations() == 2
-    assert broker.retrieve_invocation() == inv_1
+    assert broker.retrieve_invocation() == inv_1.invocation_id
     assert broker.count_invocations() == 1
-    assert broker.retrieve_invocation() == inv_2
+    assert broker.retrieve_invocation() == inv_2.invocation_id
     assert broker.count_invocations() == 0
     assert broker.retrieve_invocation() is None
     assert broker.count_invocations() == 0
 
-    broker.route_invocations([inv_1, inv_2, inv_1])
+    broker.route_invocations(
+        [inv_1.invocation_id, inv_2.invocation_id, inv_1.invocation_id]
+    )
     assert broker.count_invocations() == 3
-    assert broker.retrieve_invocation() == inv_1
+    assert broker.retrieve_invocation() == inv_1.invocation_id
     assert broker.count_invocations() == 2
 
 

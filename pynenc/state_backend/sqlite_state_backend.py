@@ -197,7 +197,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
             )
             conn.commit()
 
-    def _upsert_invocations(self, invocations: list["DistributedInvocation"]) -> None:
+    def upsert_invocations(self, invocations: list["DistributedInvocation"]) -> None:
         """Updates or inserts multiple invocations."""
         with sqlite_conn(self.sqlite_db_path) as conn:
             for invocation in invocations:

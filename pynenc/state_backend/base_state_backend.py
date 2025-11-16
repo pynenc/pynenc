@@ -120,16 +120,6 @@ class BaseStateBackend(ABC, Generic[Params, Result]):
         """Purges all store state backend data for the current application"""
 
     @abstractmethod
-    def _upsert_invocations(
-        self, invocations: list["DistributedInvocation[Params, Result]"]
-    ) -> None:
-        """
-        Updates or inserts multiple invocations.
-
-        :param list[DistributedInvocation] invocations: The invocations to upsert.
-        """
-
-    @abstractmethod
     def _get_invocation(self, invocation_id: str) -> Optional["DistributedInvocation"]:
         """
         Retrieves an invocation by its ID.
@@ -235,13 +225,13 @@ class BaseStateBackend(ABC, Generic[Params, Result]):
         :param Exception exception: The exception raised
         """
 
+    @abstractmethod
     def upsert_invocations(self, invocations: list["DistributedInvocation"]) -> None:
         """
-        Starts an asynchronous operation to update or insert invocations.
+        Update or insert invocations.
 
-        :param DistributedInvocation invocation: The invocation to upsert.
+        :param list[DistributedInvocation] invocations: The invocations to upsert.
         """
-        self._upsert_invocations(invocations)
 
     def get_invocation(self, invocation_id: str) -> "DistributedInvocation":
         """

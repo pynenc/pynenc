@@ -263,7 +263,9 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             if not self.app.orchestrator.is_authorize_to_run_by_concurrency_control(
                 self
             ):
-                self.app.orchestrator.reroute_invocations({self}, runner_ctx)
+                self.app.orchestrator.reroute_invocations(
+                    {self.invocation_id}, runner_ctx
+                )
             self.app.orchestrator.set_invocation_run(
                 self.parent_invocation, self, runner_ctx
             )
@@ -279,7 +281,9 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
                 self.app.logger.exception("Invocation MAX-RETRY")
                 self.app.orchestrator.set_invocation_exception(self, ex, runner_ctx)
                 raise ex
-            self.app.orchestrator.set_invocation_retry(self, ex, runner_ctx)
+            self.app.orchestrator.set_invocation_retry(
+                self.invocation_id, ex, runner_ctx
+            )
             self.task.logger.warning(f"Invocation WILL-RETRY {ex=}")
         except Exception as ex:
             self.app.logger.exception("Invocation EXCEPTION")

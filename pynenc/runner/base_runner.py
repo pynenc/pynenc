@@ -50,14 +50,19 @@ class BaseRunner(ABC):
         app: "Pynenc",
         runner_cache: dict | None = None,
     ) -> None:
-        self.app = app
-        self.app.runner = self
+        # Initialize instance attributes first, before making runner accessible
         self.running = False
         self._runner_cache = runner_cache
         self._extra_id: str | None = None
         self._uuid = uuid.uuid4().hex
         self._hostname = socket.gethostname()
         self._pid = os.getpid()
+
+        # Set app relationship last, after all attributes are initialized
+        self.app = app
+        self.app.runner = self
+
+        # Initialize logger after runner_id is accessible
         self.logger = RunnerLogAdapter(self.app.logger, self.runner_id)
         self._last_recovery_check_time = 0.0
 

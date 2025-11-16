@@ -147,6 +147,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Commit message validation via pre-commit hooks to enforce conventional commit format
   - Release Drafter integration for automated release note generation from merged PRs
 
+- **Broker handles invocation_ids instead of entire invocations**:
+
+  - Broker do not deal with serialization of Invocations, it only distributed invocation_ids
+  - The orhcestrator will ensure the invocation is stored in the state backend
+  - On Future implementations of queues and priorities, the orchestrator will forward the required data to the broker,
+    instead of the broker using an instance of an invocation to get data relevant for queueing and priorizing.
+
 ### Fixed
 
 - **MemBroker FIFO Fix**:

@@ -90,4 +90,4 @@ def test_reroute_on_thread_start_failure(monkeypatch: pytest.MonkeyPatch) -> Non
     # Check that reroute_invocations was called with the dummy invocation.
     assert reroute_calls, "reroute_invocations was not called"
     # Expect reroute_calls[0] is a set containing dummy
-    assert dummy in reroute_calls[0], "Dummy invocation was not rerouted"  # type: ignore
+    assert dummy.invocation_id in reroute_calls[0], "Dummy invocation was not rerouted"  # type: ignore

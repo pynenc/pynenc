@@ -20,18 +20,16 @@ def test_routing(app_instance: "Pynenc") -> None:
     app = app_instance
     dummy.app = app
     call: Call = Call(dummy)
-    inv1: DistributedInvocation = app.broker.route_call(call)
+    inv1: DistributedInvocation = DistributedInvocation(call, None)
+    app.broker.route_invocation(inv1.invocation_id)
     inv2: DistributedInvocation = DistributedInvocation(call, None)
     expected_ids = {inv1.invocation_id, inv2.invocation_id}
-    app.broker.route_invocation(inv2)
+    app.broker.route_invocation(inv2.invocation_id)
     assert app.broker.count_invocations() == 2
-    assert (retrieved_inv_a := app.broker.retrieve_invocation())
-    assert (retrieved_inv_b := app.broker.retrieve_invocation())
-    assert retrieved_inv_a != retrieved_inv_b
-    assert expected_ids == {
-        retrieved_inv_a.invocation_id,
-        retrieved_inv_b.invocation_id,
-    }
+    assert (retrieved_inv_a_id := app.broker.retrieve_invocation())
+    assert (retrieved_inv_b_id := app.broker.retrieve_invocation())
+    assert retrieved_inv_a_id != retrieved_inv_b_id
+    assert expected_ids == {retrieved_inv_a_id, retrieved_inv_b_id}
 
 
 def test_broker_purge(app_instance: "Pynenc") -> None:
@@ -39,9 +37,10 @@ def test_broker_purge(app_instance: "Pynenc") -> None:
     app = app_instance
     dummy.app = app
     call: Call = Call(dummy)
-    _ = app.broker.route_call(call)
+    inv1: DistributedInvocation = DistributedInvocation(call, None)
+    app.broker.route_invocation(inv1.invocation_id)
     inv2: DistributedInvocation = DistributedInvocation(call, None)
-    app.broker.route_invocation(inv2)
+    app.broker.route_invocation(inv2.invocation_id)
     assert app.broker.count_invocations() == 2
     app.broker.purge()
     assert app.broker.count_invocations() == 0

@@ -98,18 +98,18 @@ def test_broker_queue_shows_pending_invocations(app_broker: "Pynenc") -> None:
     )
 
     # Manually route them to the broker to ensure they are queued
-    app_broker.broker.route_invocation(invocation1)
-    app_broker.broker.route_invocation(invocation2)
+    app_broker.broker.route_invocation(invocation1.invocation_id)
+    app_broker.broker.route_invocation(invocation2.invocation_id)
 
     print(f"Queue count after routing: {app_broker.broker.count_invocations()}")
 
     # Test retrieve directly
-    retrieved = app_broker.broker.retrieve_invocation()
-    print(f"Retrieved: {retrieved.invocation_id[:8] if retrieved else None}")
+    retrieved_id = app_broker.broker.retrieve_invocation()
+    print(f"Retrieved: {retrieved_id[:8] if retrieved_id else None}")
 
     # Re-route for the actual test
-    if retrieved:
-        app_broker.broker.route_invocation(retrieved)
+    if retrieved_id:
+        app_broker.broker.route_invocation(retrieved_id)
 
     # Setup routes before creating test client
     setup_routes()

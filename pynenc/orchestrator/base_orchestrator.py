@@ -10,7 +10,6 @@ from pynenc.conf.config_orchestrator import ConfigOrchestrator
 from pynenc.conf.config_task import ConcurrencyControlType
 from pynenc.exceptions import (
     InvocationConcurrencyWithDifferentArgumentsError,
-    InvocationNotFoundError,
     TaskParallelProcessingError,
     InvocationStatusError,
 )
@@ -559,7 +558,7 @@ class BaseOrchestrator(ABC):
 
     def set_invocation_retry(
         self,
-        invocation: "DistributedInvocation",
+        invocation_id: str,
         exception: Exception,
         runner_ctx: "RunnerContext",
     ) -> None:
@@ -573,10 +572,10 @@ class BaseOrchestrator(ABC):
         # eg. on case of interruption from a kubernetes pod (SIGTERM, SIGKILL)
         #     it should try to finish all the calls in this function
         self.app.orchestrator.set_invocation_status(
-            invocation.invocation_id, InvocationStatus.RETRY, runner_ctx
+            invocation_id, InvocationStatus.RETRY, runner_ctx
         )
-        self.app.orchestrator.increment_invocation_retries(invocation.invocation_id)
-        self.app.broker.route_invocation(invocation)
+        self.app.orchestrator.increment_invocation_retries(invocation_id)
+        self.app.broker.route_invocation(invocation_id)
 
     def is_candidate_to_run_by_concurrency_control(
         self, invocation: "DistributedInvocation[Params, Result]"
@@ -632,8 +631,6 @@ class BaseOrchestrator(ABC):
                 :param list[InvocationStatus] statuses: The statuses to check for existing invocations.
         :return: True if the invocation is authorized, False otherwise.
         """
-        if not invocation:
-            return False
         if invocation.task.conf.running_concurrency == ConcurrencyControlType.DISABLED:
             return True
         running_invocation = next(
@@ -689,7 +686,7 @@ class BaseOrchestrator(ABC):
         self,
         missing_invocations: int,
         blocking_invocation_ids: set[str],
-        invocations_to_reroute: set["DistributedInvocation"],
+        invocations_to_reroute: set[str],
         runner_ctx: "RunnerContext",
     ) -> Iterator["DistributedInvocation"]:
         """
@@ -702,25 +699,26 @@ class BaseOrchestrator(ABC):
         :rtype: Iterator[DistributedInvocation]
         """
         while missing_invocations > 0:
-            if invocation := self.app.broker.retrieve_invocation():
-                if invocation.invocation_id not in blocking_invocation_ids:
-                    invocation_status = self.get_invocation_status(
-                        invocation.invocation_id
-                    )
+            if invocation_id := self.app.broker.retrieve_invocation():
+                if invocation_id not in blocking_invocation_ids:
+                    invocation_status = self.get_invocation_status(invocation_id)
                     if invocation_status.is_available_for_run():
+                        invocation = self.app.state_backend.get_invocation(
+                            invocation_id
+                        )
                         if not self.is_candidate_to_run_by_concurrency_control(
                             invocation
                         ):
                             self.set_invocation_status(
-                                invocation.invocation_id,
+                                invocation_id,
                                 InvocationStatus.CONCURRENCY_CONTROLLED,
                                 runner_ctx,
                             )
-                            invocations_to_reroute.add(invocation)
+                            invocations_to_reroute.add(invocation_id)
                             continue
                         try:
                             self.set_invocation_status(
-                                invocation.invocation_id,
+                                invocation_id,
                                 InvocationStatus.PENDING,
                                 runner_ctx,
                             )
@@ -728,7 +726,7 @@ class BaseOrchestrator(ABC):
                             yield invocation
                         except InvocationStatusError as ex:
                             self.app.logger.warning(
-                                f"Could not set invocation {invocation.invocation_id} to PENDING: {ex}"
+                                f"Could not set invocation {invocation_id} to PENDING: {ex}"
                             )
                             continue
             else:
@@ -736,22 +734,19 @@ class BaseOrchestrator(ABC):
 
     def reroute_invocations(
         self,
-        invocations_to_reroute: set["DistributedInvocation"],
+        invocations_to_reroute: set[str],
         runner_ctx: "RunnerContext",
     ) -> None:
         """
-        Reroutes the specified invocations, typically when they are not authorized to run.
+        Reroutes the specified invocations , typically when they are not authorized to run.
 
-        :param set[DistributedInvocation] invocations_to_reroute: The invocations to be rerouted.
+        :param set[str] invocations_to_reroute: The invocations to be rerouted.
         """
-        for invocation in invocations_to_reroute:
-            invocation.task.logger.debug(
-                f"Rerouting invocation {invocation.invocation_id} because it was not authorized to run"
-            )
+        for invocation_id in invocations_to_reroute:
             self.set_invocation_status(
-                invocation.invocation_id, InvocationStatus.REROUTED, runner_ctx
+                invocation_id, InvocationStatus.REROUTED, runner_ctx
             )
-            self.app.broker.route_invocation(invocation)
+            self.app.broker.route_invocation(invocation_id)
 
     def get_invocations_to_run(
         self, max_num_invocations: int, runner_ctx: "RunnerContext"
@@ -773,7 +768,7 @@ class BaseOrchestrator(ABC):
             ):
                 yield invocation
 
-        invocations_to_reroute: set[DistributedInvocation] = set()
+        invocations_to_reroute: set[str] = set()
         missing_invocations = max_num_invocations - len(blocking_invocation_ids)
         yield from self.get_additional_invocations_to_run(
             missing_invocations,
@@ -800,7 +795,7 @@ class BaseOrchestrator(ABC):
         inv_ids = [invocation.invocation_id for invocation in invocations]
         self.app.state_backend.add_histories(inv_ids, status_record, runner_ctx)
         self.app.trigger.report_tasks_status(inv_ids, status_record.status)
-        self.app.broker.route_invocations(invocations)
+        self.app.broker.route_invocations(inv_ids)
 
     def _route_new_call_invocation(
         self, call: "Call[Params, Result]", owner_id: str | None = None
@@ -1043,15 +1038,8 @@ class BaseOrchestrator(ABC):
 
         pending_invocations = set()
         for invocation_id in self.get_pending_invocations_for_recovery():
-            try:
-                pending_invocations.add(
-                    self.app.state_backend.get_invocation(invocation_id)
-                )
-                self.app.logger.info(
-                    f"Invocation {invocation_id} added to recovery service"
-                )
-            except InvocationNotFoundError:
-                self.app.logger.warning(
-                    f"Invocation {invocation_id} not found during recovery service"
-                )
+            pending_invocations.add(invocation_id)
+            self.app.logger.info(
+                f"Pending {invocation_id=} would be rerouted for recovery"
+            )
         self.reroute_invocations(pending_invocations, runner_ctx)

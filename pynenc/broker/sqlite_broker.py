@@ -18,7 +18,6 @@ from pynenc.util.sqlite_utils import (
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
-    from pynenc.invocation.dist_invocation import DistributedInvocation
 
 
 class Tables:
@@ -56,7 +55,6 @@ class SQLiteBroker(BaseBroker):
                 CREATE TABLE IF NOT EXISTS {Tables.QUEUE} (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     invocation_id TEXT NOT NULL,
-                    invocation_json TEXT NOT NULL,
                     created_at REAL NOT NULL DEFAULT (julianday('now'))
                 )
             """
@@ -75,45 +73,43 @@ class SQLiteBroker(BaseBroker):
             config_filepath=self.app.config_filepath,
         )
 
-    def send_message(self, invocation: "DistributedInvocation") -> None:
-        """Send a message (invocation) to the queue."""
+    def send_message(self, invocation_id: str) -> None:
+        """Send a message (invocation ID) to the queue."""
         with sqlite_conn(self.sqlite_db_path) as conn:
             conn.execute(
-                f"INSERT INTO {Tables.QUEUE} (invocation_id, invocation_json, created_at) VALUES (?, ?, julianday('now'))",
-                (invocation.invocation_id, invocation.to_json()),
+                f"INSERT INTO {Tables.QUEUE} (invocation_id, created_at) VALUES (?, julianday('now'))",
+                (invocation_id,),
             )
             conn.commit()
 
-    def route_invocation(self, invocation: "DistributedInvocation") -> None:
-        """Route a single invocation by sending it to the message queue."""
-        self.send_message(invocation)
+    def route_invocation(self, invocation_id: str) -> None:
+        """Route a single invocation ID by sending it to the message queue."""
+        self.send_message(invocation_id)
 
-    def route_invocations(self, invocations: list["DistributedInvocation"]) -> None:
-        """Route multiple invocations by sending them to the message queue."""
-        for invocation in invocations:
-            self.route_invocation(invocation)
+    def route_invocations(self, invocation_ids: list[str]) -> None:
+        """Route multiple invocation IDs by sending them to the message queue."""
+        for invocation_id in invocation_ids:
+            self.route_invocation(invocation_id)
 
-    def retrieve_invocation(self) -> "DistributedInvocation | None":
+    def retrieve_invocation(self) -> str | None:
         """
         Atomically retrieve and remove a single invocation from the queue.
         Ensures that no two processes can retrieve the same invocation.
-        :return: The next DistributedInvocation in the queue, or None if empty.
+        :return: The next invocation ID in the queue, or None if empty.
         """
-        from pynenc.invocation.dist_invocation import DistributedInvocation
-
         with sqlite_conn(self.sqlite_db_path) as conn:
             conn.execute("BEGIN IMMEDIATE")  # Lock for atomicity
             cursor = conn.execute(
-                f"SELECT id, invocation_json FROM {Tables.QUEUE} ORDER BY created_at ASC LIMIT 1"
+                f"SELECT id, invocation_id FROM {Tables.QUEUE} ORDER BY created_at ASC LIMIT 1"
             )
             row = cursor.fetchone()
             cursor.close()
             if not row:
                 return None
-            message_id, invocation_json = row
+            message_id, invocation_id = row
             conn.execute(f"DELETE FROM {Tables.QUEUE} WHERE id = ?", (message_id,))
             conn.commit()
-            return DistributedInvocation.from_json(self.app, invocation_json)
+            return invocation_id
 
     def count_invocations(self) -> int:
         """Count the number of invocations in the queue."""

@@ -83,7 +83,9 @@ def test_reroute_on_running_control() -> None:
         runner_ctx = RunnerContext.from_runner(app.runner)  # type: ignore
         invocation.run(runner_ctx)  # type: ignore
         mock_is_authorized.assert_called_once()
-        mock_reroute_invocations.assert_called_once_with({invocation}, runner_ctx)
+        mock_reroute_invocations.assert_called_once_with(
+            {invocation.invocation_id}, runner_ctx
+        )
 
 
 app2 = MockPynenc()
