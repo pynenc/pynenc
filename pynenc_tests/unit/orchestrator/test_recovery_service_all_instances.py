@@ -117,7 +117,7 @@ def test_cleanup_inactive_runners(app_instance: "Pynenc") -> None:
 def test_get_pending_invocations_for_recovery(app_instance: "Pynenc") -> None:
     """Test retrieval of stuck pending invocations."""
     original_timeout = app_instance.conf.max_pending_seconds
-    app_instance.conf.max_pending_seconds = 0.06
+    app_instance.conf.max_pending_seconds = 0.3
 
     try:
         inv1: DistributedInvocation = dummy_task()  # type: ignore
@@ -229,7 +229,7 @@ def test_recovery_service_skips_when_not_scheduled(app_instance: "Pynenc") -> No
     original_interval = (
         app_instance.orchestrator.conf.run_invocation_recovery_service_every_minutes
     )
-    app_instance.conf.max_pending_seconds = 0.06
+    app_instance.conf.max_pending_seconds = 0.2
     app_instance.orchestrator.conf.run_invocation_recovery_service_every_minutes = 100.0
 
     try:
