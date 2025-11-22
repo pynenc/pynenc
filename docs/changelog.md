@@ -35,10 +35,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - **Runner Heartbeat Tracking and Recovery Service**:
 
-  - Implemented runner heartbeat tracking system in orchestrators
-  - Implemented invocation recovery service to detect and reroute stuck PENDING invocations
-  - Added distributed recovery scheduling across multiple runners using time-slot allocation to prevent race conditions
-  - Only one runner executes recovery at any given time based on runner position and time cycles
+  - Implemented runner heartbeat tracking and invocation recovery service for stuck PENDING invocations
+  - Added distributed atomic service coordination using time-slot allocation to prevent race conditions
+  - Enhanced with execution time validation and history-aware scheduling to detect configuration issues
 
 - **Pynmon Runner Monitoring Interface**:
 

@@ -147,23 +147,21 @@ def test_get_pending_invocations_for_recovery(app_instance: "Pynenc") -> None:
         app_instance.conf.max_pending_seconds = original_timeout
 
 
-def test_should_run_recovery_service_single_runner(app_instance: "Pynenc") -> None:
-    """Test recovery service scheduling with single runner."""
+def test_should_run_atomic_service_single_runner(app_instance: "Pynenc") -> None:
+    """Test atomic service scheduling with single runner."""
     runner_ctx = create_runner_context("runner-1")
 
     app_instance.orchestrator.register_runner_heartbeat(runner_ctx)
 
-    should_run = app_instance.orchestrator.should_run_recovery_service(runner_ctx)
+    should_run = app_instance.orchestrator.should_run_atomic_service(runner_ctx)
 
     assert should_run is True
 
 
-def test_should_run_recovery_service_multiple_runners(app_instance: "Pynenc") -> None:
-    """Test recovery service scheduling distributes across runners."""
-    original_interval = (
-        app_instance.orchestrator.conf.run_invocation_recovery_service_every_minutes
-    )
-    app_instance.orchestrator.conf.run_invocation_recovery_service_every_minutes = 1.0
+def test_should_run_atomic_service_multiple_runners(app_instance: "Pynenc") -> None:
+    """Test atomic service scheduling distributes across runners."""
+    original_interval = app_instance.orchestrator.conf.atomic_service_interval_minutes
+    app_instance.orchestrator.conf.atomic_service_interval_minutes = 1.0
 
     try:
         runner1 = create_runner_context("runner-1")
@@ -177,15 +175,15 @@ def test_should_run_recovery_service_multiple_runners(app_instance: "Pynenc") ->
         app_instance.orchestrator.register_runner_heartbeat(runner3)
 
         results = [
-            app_instance.orchestrator.should_run_recovery_service(runner1),
-            app_instance.orchestrator.should_run_recovery_service(runner2),
-            app_instance.orchestrator.should_run_recovery_service(runner3),
+            app_instance.orchestrator.should_run_atomic_service(runner1),
+            app_instance.orchestrator.should_run_atomic_service(runner2),
+            app_instance.orchestrator.should_run_atomic_service(runner3),
         ]
 
         # Only one runner should be scheduled at any given time
         assert sum(results) <= 1
     finally:
-        app_instance.orchestrator.conf.run_invocation_recovery_service_every_minutes = (
+        app_instance.orchestrator.conf.atomic_service_interval_minutes = (
             original_interval
         )
 
@@ -195,11 +193,9 @@ def test_invocation_recovery_service_recovers_stuck_invocations(
 ) -> None:
     """Test that recovery service reroutes stuck invocations."""
     original_timeout = app_instance.conf.max_pending_seconds
-    original_interval = (
-        app_instance.orchestrator.conf.run_invocation_recovery_service_every_minutes
-    )
+    original_interval = app_instance.orchestrator.conf.atomic_service_interval_minutes
     app_instance.conf.max_pending_seconds = 0.06
-    app_instance.orchestrator.conf.run_invocation_recovery_service_every_minutes = 0.01
+    app_instance.orchestrator.conf.atomic_service_interval_minutes = 0.01
 
     try:
         runner_ctx = create_runner_context("recovery-runner")
@@ -218,7 +214,7 @@ def test_invocation_recovery_service_recovers_stuck_invocations(
         assert status == InvocationStatus.REROUTED
     finally:
         app_instance.conf.max_pending_seconds = original_timeout
-        app_instance.orchestrator.conf.run_invocation_recovery_service_every_minutes = (
+        app_instance.orchestrator.conf.atomic_service_interval_minutes = (
             original_interval
         )
 
@@ -226,11 +222,9 @@ def test_invocation_recovery_service_recovers_stuck_invocations(
 def test_recovery_service_skips_when_not_scheduled(app_instance: "Pynenc") -> None:
     """Test that recovery service is skipped when runner is not scheduled."""
     original_timeout = app_instance.conf.max_pending_seconds
-    original_interval = (
-        app_instance.orchestrator.conf.run_invocation_recovery_service_every_minutes
-    )
+    original_interval = app_instance.orchestrator.conf.atomic_service_interval_minutes
     app_instance.conf.max_pending_seconds = 0.2
-    app_instance.orchestrator.conf.run_invocation_recovery_service_every_minutes = 100.0
+    app_instance.orchestrator.conf.atomic_service_interval_minutes = 100.0
 
     try:
         # Mock time() to return 0, ensuring we're at the start of the recovery cycle
@@ -255,12 +249,8 @@ def test_recovery_service_skips_when_not_scheduled(app_instance: "Pynenc") -> No
             sleep(0.1)
 
             # Verify runner scheduling
-            should_run_1 = app_instance.orchestrator.should_run_recovery_service(
-                runner1
-            )
-            should_run_2 = app_instance.orchestrator.should_run_recovery_service(
-                runner2
-            )
+            should_run_1 = app_instance.orchestrator.should_run_atomic_service(runner1)
+            should_run_2 = app_instance.orchestrator.should_run_atomic_service(runner2)
 
             assert should_run_1 is True, "Runner 1 should be scheduled at time=0"
             assert should_run_2 is False, "Runner 2 should NOT be scheduled at time=0"
@@ -285,7 +275,7 @@ def test_recovery_service_skips_when_not_scheduled(app_instance: "Pynenc") -> No
             )
     finally:
         app_instance.conf.max_pending_seconds = original_timeout
-        app_instance.orchestrator.conf.run_invocation_recovery_service_every_minutes = (
+        app_instance.orchestrator.conf.atomic_service_interval_minutes = (
             original_interval
         )
 

@@ -12,7 +12,7 @@ from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
 from pynenc.conf.config_runner import ConfigRunner
-from pynenc.exceptions import RunnerNotExecutableError
+from pynenc.exceptions import RunnerNotExecutableError, PynencError
 from pynenc.util.log import set_logging_context
 from pynenc.runner.runner_context import RunnerContext
 
@@ -65,7 +65,7 @@ class BaseRunner(ABC):
 
         # Set logging context
         set_logging_context(runner_id=self.runner_id)
-        self._last_recovery_check_time = 0.0
+        self._last_atomic_service_check_time = 0.0
 
     @cached_property
     def _base_runner_id(self) -> str:
@@ -261,29 +261,58 @@ class BaseRunner(ABC):
             running_invocation_id, result_invocation_ids, runner_args
         )
 
-    def _check_recovery_service(self) -> None:
+    def _check_atomic_services(self) -> None:
         """
-        Check and run recovery service if enough time has passed.
+        Check and run atomic global services if this runner is authorized.
 
-        Uses recovery_service_check_interval_minutes to throttle checks
-        and avoid putting pressure on the orchestrator every loop iteration.
+        Executes trigger processing and invocation recovery in a single
+        atomic window to prevent conflicts across distributed runners.
+        Handles any PynencError exceptions to prevent service failures from
+        stopping the runner loop.
         """
         current_time = time.time()
-        check_interval_seconds = self.conf.recovery_service_check_interval_minutes * 60
+        check_interval_seconds = self.conf.atomic_service_check_interval_minutes * 60
 
-        if current_time - self._last_recovery_check_time >= check_interval_seconds:
-            self._last_recovery_check_time = current_time
-            runner_ctx = RunnerContext.from_runner(self)
+        if current_time - self._last_atomic_service_check_time < check_interval_seconds:
+            return
+
+        self._last_atomic_service_check_time = current_time
+
+        start_time = None
+        runner_ctx = RunnerContext.from_runner(self)
+        try:
+            self.app.orchestrator.register_runner_heartbeat(runner_ctx)
+            if not self.app.orchestrator.should_run_atomic_service(runner_ctx):
+                return
+            start_time = time.time()
+            self.app.logger.info(
+                f"Runner {runner_ctx.runner_id} executing atomic global services"
+            )
+            self.app.trigger.trigger_loop_iteration()
             self.app.orchestrator.invocation_recovery_service(runner_ctx)
+        except PynencError as e:
+            self.app.logger.error(
+                f"Error during atomic service execution: {e}", exc_info=True
+            )
+        except Exception as e:
+            self.app.logger.exception(
+                f"Unexpected error during atomic service execution: {e}"
+            )
+            raise
+        finally:
+            if start_time is not None:
+                end_time = time.time()
+                self.app.orchestrator.record_atomic_service_execution(
+                    runner_ctx, start_time, end_time
+                )
 
     def run(self) -> None:
         """Starts the runner, initiating its main loop."""
         self.on_start()
         try:
             while self.running:
-                self.app.trigger.trigger_loop_iteration()
+                self._check_atomic_services()
                 self.runner_loop_iteration()
-                self._check_recovery_service()
                 time.sleep(self.conf.runner_loop_sleep_time_sec)
         except KeyboardInterrupt:
             self.app.logger.warning("KeyboardInterrupt received. Stopping runner...")

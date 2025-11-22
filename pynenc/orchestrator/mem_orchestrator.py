@@ -13,11 +13,11 @@ from pynenc.invocation.status import (
     status_record_transition,
 )
 from pynenc.orchestrator.base_orchestrator import (
-    ActiveRunnerInfo,
     BaseBlockingControl,
     BaseCycleControl,
     BaseOrchestrator,
 )
+from pynenc.orchestrator.atomic_service import ActiveRunnerInfo
 from pynenc.types import Params, Result
 
 if TYPE_CHECKING:
@@ -291,6 +291,12 @@ class MemOrchestrator(BaseOrchestrator):
         self.runner_last_heartbeat: dict[
             str, float
         ] = {}  # runner_id -> last heartbeat timestamp
+        self.runner_last_service_start: dict[
+            str, float
+        ] = {}  # runner_id -> last service start timestamp
+        self.runner_last_service_end: dict[
+            str, float
+        ] = {}  # runner_id -> last service end timestamp
 
         self._cycle_control: MemCycleControl | None = None
         self._blocking_control: MemBlockingControl | None = None
@@ -567,11 +573,19 @@ class MemOrchestrator(BaseOrchestrator):
                 ctx_json = self.runner_contexts[runner_id]
                 runner_ctx = RunnerContext.from_json(ctx_json)
                 creation_ts = self.runner_creation_time.get(runner_id, current_time)
+                service_start = self.runner_last_service_start.get(runner_id)
+                service_end = self.runner_last_service_end.get(runner_id)
                 active_runners.append(
                     ActiveRunnerInfo(
                         runner_ctx=runner_ctx,
                         creation_time=datetime.fromtimestamp(creation_ts, tz=UTC),
                         last_heartbeat=datetime.fromtimestamp(last_heartbeat, tz=UTC),
+                        last_service_start=datetime.fromtimestamp(service_start, tz=UTC)
+                        if service_start
+                        else None,
+                        last_service_end=datetime.fromtimestamp(service_end, tz=UTC)
+                        if service_end
+                        else None,
                     )
                 )
 
@@ -596,6 +610,16 @@ class MemOrchestrator(BaseOrchestrator):
             self.runner_contexts.pop(runner_id, None)
             self.runner_creation_time.pop(runner_id, None)
             self.runner_last_heartbeat.pop(runner_id, None)
+            self.runner_last_service_start.pop(runner_id, None)
+            self.runner_last_service_end.pop(runner_id, None)
+
+    def record_atomic_service_execution(
+        self, runner_ctx: "RunnerContext", start_time: float, end_time: float
+    ) -> None:
+        """Record the latest atomic service execution window for a runner."""
+        runner_id = runner_ctx.runner_id
+        self.runner_last_service_start[runner_id] = start_time
+        self.runner_last_service_end[runner_id] = end_time
 
     def get_pending_invocations_for_recovery(self) -> Iterator[str]:
         """Retrieve invocation IDs stuck in PENDING status beyond the allowed time."""
@@ -631,3 +655,5 @@ class MemOrchestrator(BaseOrchestrator):
         self.runner_contexts.clear()
         self.runner_creation_time.clear()
         self.runner_last_heartbeat.clear()
+        self.runner_last_service_start.clear()
+        self.runner_last_service_end.clear()

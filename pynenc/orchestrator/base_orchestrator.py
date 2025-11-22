@@ -1,9 +1,8 @@
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
-from datetime import datetime
 from functools import cached_property
 from time import time
-from typing import TYPE_CHECKING, Any, NamedTuple, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from pynenc import context
 from pynenc.conf.config_orchestrator import ConfigOrchestrator
@@ -15,6 +14,7 @@ from pynenc.exceptions import (
 )
 from pynenc.invocation.dist_invocation import DistributedInvocation, ReusedInvocation
 from pynenc.invocation.status import InvocationStatus, InvocationStatusRecord
+from pynenc.orchestrator import atomic_service
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
@@ -24,18 +24,8 @@ if TYPE_CHECKING:
     from pynenc.types import Params, Result
 
 
-class ActiveRunnerInfo(NamedTuple):
-    """
-    Information about an active runner including heartbeat tracking.
-
-    :param RunnerContext runner_ctx: The runner context with execution details.
-    :param datetime creation_time: When the runner was first registered.
-    :param datetime last_heartbeat: When the last heartbeat was received.
-    """
-
-    runner_ctx: "RunnerContext"
-    creation_time: datetime
-    last_heartbeat: datetime
+# Re-export for backward compatibility
+ActiveRunnerInfo = atomic_service.ActiveRunnerInfo
 
 
 class BaseCycleControl(ABC):
@@ -153,7 +143,7 @@ class BaseOrchestrator(ABC):
     def get_existing_invocations(
         self,
         task: "Task[Params, Result]",
-        key_serialized_arguments: dict[str, str] | None = None,
+        key_serialized_arguments: dict[str, str] | None,
         statuses: "list[InvocationStatus] | None" = None,
     ) -> Iterator[str]:
         """
@@ -937,15 +927,15 @@ class BaseOrchestrator(ABC):
         """
 
     @abstractmethod
-    def get_active_runners(self) -> list[ActiveRunnerInfo]:
+    def get_active_runners(self) -> list[atomic_service.ActiveRunnerInfo]:
         """
         Retrieve all active runners with heartbeat information.
 
         Only returns runners that have sent a heartbeat within the configured timeout period.
         Results are ordered by creation time (oldest first).
 
-        :return: List of active runner information ordered by creation time (oldest first).
-        :rtype: list[ActiveRunnerInfo]
+        :return: List of active runner information ordered by creation time (oldest first)
+        :rtype: list[atomic_service.ActiveRunnerInfo]
         """
 
     @abstractmethod
@@ -963,80 +953,49 @@ class BaseOrchestrator(ABC):
         :rtype: Iterator[str]
         """
 
-    def should_run_recovery_service(self, runner_ctx: "RunnerContext") -> bool:
+    def should_run_atomic_service(self, runner_ctx: "RunnerContext") -> bool:
         """
-        Determine if the current runner should execute the recovery service.
+        Determine if the current runner should execute atomic global services.
 
-        Uses runner count and timing to distribute recovery checks across runners,
+        Uses runner count and timing to distribute service execution across runners,
         preventing simultaneous execution and race conditions.
 
         :param RunnerContext runner_ctx: The context of the current runner.
-        :return: True if this runner should execute recovery now.
+        :return: True if this runner should execute services now.
         :rtype: bool
         """
         self.cleanup_inactive_runners()
         active_runners = self.get_active_runners()
 
-        if not active_runners:
-            return False
+        return atomic_service.should_run_atomic_service(
+            runner_ctx=runner_ctx,
+            active_runners=active_runners,
+            current_time=time(),
+            service_interval_minutes=self.conf.atomic_service_interval_minutes,
+            spread_margin_minutes=self.conf.atomic_service_spread_margin_minutes,
+        )
 
-        # Find position of current runner in ordered list
-        try:
-            runner_position = next(
-                i
-                for i, r in enumerate(active_runners)
-                if r.runner_ctx.runner_id == runner_ctx.runner_id
-            )
-        except StopIteration:
-            self.app.logger.warning(
-                f"Runner {runner_ctx.runner_id} not found in active runners for recovery service"
-            )
-            return False
+    @abstractmethod
+    def record_atomic_service_execution(
+        self, runner_ctx: "RunnerContext", start_time: float, end_time: float
+    ) -> None:
+        """
+        Record the latest atomic service execution window for a runner.
 
-        total_runners = len(active_runners)
+        Replaces any previous execution record for this runner with the current one.
+        Used for diagnostics and detecting potential collisions.
 
-        # Single runner always runs recovery
-        if total_runners == 1:
-            return True
-
-        recovery_interval = self.conf.run_invocation_recovery_service_every_minutes * 60
-        spread_margin = self.conf.recovery_service_spread_margin_minutes * 60
-
-        # Calculate time window for this runner
-        # Each runner gets a window within the recovery interval
-        time_slot_size = recovery_interval / total_runners
-        runner_start_time = runner_position * time_slot_size
-        runner_end_time = runner_start_time + time_slot_size - spread_margin
-
-        # Ensure end time doesn't go negative
-        if runner_end_time <= runner_start_time:
-            runner_end_time = runner_start_time + (time_slot_size / 2)
-
-        # Current position within the recovery cycle
-        current_time = time()
-        time_in_cycle = current_time % recovery_interval
-
-        return runner_start_time <= time_in_cycle < runner_end_time
+        :param RunnerContext runner_ctx: The runner that executed the service.
+        :param float start_time: Unix timestamp when execution started.
+        :param float end_time: Unix timestamp when execution ended.
+        """
 
     def invocation_recovery_service(self, runner_ctx: "RunnerContext") -> None:
         """
-        Service to recover invocations stuck in PENDING status beyond the allowed time.
-
-        This method checks for invocations that have been in PENDING status longer than
-        the configured max_pending_seconds and transitions them through PENDING_RECOVERY
-        to REROUTED, bypassing ownership validation.
+        Recover invocations stuck in PENDING status beyond the allowed time.
 
         :param RunnerContext runner_ctx: The context of the runner executing this service.
         """
-        self.register_runner_heartbeat(runner_ctx)
-
-        if not self.should_run_recovery_service(runner_ctx):
-            return
-
-        self.app.logger.info(
-            f"Runner {runner_ctx.runner_id} executing invocation recovery service"
-        )
-
         pending_invocations = set()
         for invocation_id in self.get_pending_invocations_for_recovery():
             pending_invocations.add(invocation_id)

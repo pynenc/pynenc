@@ -19,11 +19,11 @@ from pynenc.invocation.status import (
     status_record_transition,
 )
 from pynenc.orchestrator.base_orchestrator import (
-    ActiveRunnerInfo,
     BaseBlockingControl,
     BaseCycleControl,
     BaseOrchestrator,
 )
+from pynenc.orchestrator.atomic_service import ActiveRunnerInfo
 from pynenc.util.sqlite_utils import create_sqlite_connection as sqlite_conn
 from pynenc.util.sqlite_utils import (
     delete_tables_with_prefix,
@@ -399,7 +399,9 @@ class SQLiteOrchestrator(BaseOrchestrator):
                     runner_id TEXT PRIMARY KEY,
                     runner_context_json TEXT NOT NULL,
                     creation_timestamp REAL NOT NULL,
-                    last_heartbeat REAL NOT NULL
+                    last_heartbeat REAL NOT NULL,
+                    last_service_start REAL,
+                    last_service_end REAL
                 )
             """
             )
@@ -736,7 +738,8 @@ class SQLiteOrchestrator(BaseOrchestrator):
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
                 f"""
-                SELECT runner_context_json, creation_timestamp, last_heartbeat
+                SELECT runner_context_json, creation_timestamp, last_heartbeat,
+                       last_service_start, last_service_end
                 FROM {Tables.RUNNER_HEARTBEATS}
                 WHERE last_heartbeat >= ?
                 ORDER BY creation_timestamp ASC
@@ -747,7 +750,13 @@ class SQLiteOrchestrator(BaseOrchestrator):
             cursor.close()
 
             active_runners = []
-            for runner_json, creation_ts, last_hb in cursor_rows:
+            for (
+                runner_json,
+                creation_ts,
+                last_hb,
+                service_start,
+                service_end,
+            ) in cursor_rows:
                 try:
                     runner_ctx = RunnerContext.from_json(runner_json)
                     active_runners.append(
@@ -755,6 +764,14 @@ class SQLiteOrchestrator(BaseOrchestrator):
                             runner_ctx=runner_ctx,
                             creation_time=datetime.fromtimestamp(creation_ts, tz=UTC),
                             last_heartbeat=datetime.fromtimestamp(last_hb, tz=UTC),
+                            last_service_start=datetime.fromtimestamp(
+                                service_start, tz=UTC
+                            )
+                            if service_start
+                            else None,
+                            last_service_end=datetime.fromtimestamp(service_end, tz=UTC)
+                            if service_end
+                            else None,
                         )
                     )
                 except ValueError:
@@ -773,6 +790,21 @@ class SQLiteOrchestrator(BaseOrchestrator):
             conn.execute(
                 f"DELETE FROM {Tables.RUNNER_HEARTBEATS} WHERE last_heartbeat < ?",
                 (cutoff_time,),
+            )
+            conn.commit()
+
+    def record_atomic_service_execution(
+        self, runner_ctx: "RunnerContext", start_time: float, end_time: float
+    ) -> None:
+        """Record the latest atomic service execution window for a runner."""
+        with sqlite_conn(self.sqlite_db_path) as conn:
+            conn.execute(
+                f"""
+                UPDATE {Tables.RUNNER_HEARTBEATS}
+                SET last_service_start = ?, last_service_end = ?
+                WHERE runner_id = ?
+                """,
+                (start_time, end_time, runner_ctx.runner_id),
             )
             conn.commit()
 
