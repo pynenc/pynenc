@@ -10,10 +10,14 @@ Key components tested:
 """
 
 from datetime import UTC, datetime
-from time import time
+from time import sleep, time
+from typing import TYPE_CHECKING
 
 from pynenc.orchestrator import atomic_service
 from pynenc.runner.runner_context import RunnerContext
+
+if TYPE_CHECKING:
+    from pynenc import Pynenc
 
 
 def create_runner_context(runner_id: str) -> RunnerContext:
@@ -295,3 +299,107 @@ def test_get_max_execution_duration_should_return_zero_when_no_history() -> None
     max_duration = atomic_service.get_max_execution_duration(active_runners)
 
     assert max_duration == 0.0
+
+
+def test_should_run_atomic_service_should_respect_time_slots_with_multiple_runners(
+    app_instance: "Pynenc",
+) -> None:
+    """Test that atomic service scheduling assigns different time slots to runners."""
+    from unittest.mock import patch
+
+    original_interval = app_instance.orchestrator.conf.atomic_service_interval_minutes
+    app_instance.orchestrator.conf.atomic_service_interval_minutes = 100.0
+
+    try:
+        # Mock time to be at the start of the cycle
+        with patch("pynenc.orchestrator.base_orchestrator.time", return_value=0.0):
+            runner1 = create_runner_context("runner-1")
+            runner2 = create_runner_context("runner-2")
+
+            app_instance.orchestrator.register_runner_heartbeat(runner1)
+            sleep(0.01)
+            app_instance.orchestrator.register_runner_heartbeat(runner2)
+
+            # At time=0, runner1 should be scheduled, runner2 should not
+            should_run_1 = app_instance.orchestrator.should_run_atomic_service(runner1)
+            should_run_2 = app_instance.orchestrator.should_run_atomic_service(runner2)
+
+            assert should_run_1 is True, "Runner 1 should be scheduled at time=0"
+            assert should_run_2 is False, "Runner 2 should NOT be scheduled at time=0"
+    finally:
+        app_instance.orchestrator.conf.atomic_service_interval_minutes = (
+            original_interval
+        )
+
+
+def test_should_run_atomic_service_should_handle_runner_cycling(
+    app_instance: "Pynenc",
+) -> None:
+    """Test that runners get scheduled in rotation over time."""
+    from unittest.mock import patch
+
+    original_interval = app_instance.orchestrator.conf.atomic_service_interval_minutes
+    app_instance.orchestrator.conf.atomic_service_interval_minutes = 60.0
+
+    try:
+        runner1 = create_runner_context("runner-1")
+        runner2 = create_runner_context("runner-2")
+        runner3 = create_runner_context("runner-3")
+
+        app_instance.orchestrator.register_runner_heartbeat(runner1)
+        sleep(0.01)
+        app_instance.orchestrator.register_runner_heartbeat(runner2)
+        sleep(0.01)
+        app_instance.orchestrator.register_runner_heartbeat(runner3)
+
+        # Test at different points in the cycle
+        # 60min interval / 3 runners = 20min slots each
+        # Runner1: [0-19min), Runner2: [20-39min), Runner3: [40-59min)
+
+        with patch("pynenc.orchestrator.base_orchestrator.time", return_value=0):
+            assert app_instance.orchestrator.should_run_atomic_service(runner1) is True
+            assert app_instance.orchestrator.should_run_atomic_service(runner2) is False
+            assert app_instance.orchestrator.should_run_atomic_service(runner3) is False
+
+        with patch(
+            "pynenc.orchestrator.base_orchestrator.time", return_value=1200
+        ):  # 20min
+            assert app_instance.orchestrator.should_run_atomic_service(runner1) is False
+            assert app_instance.orchestrator.should_run_atomic_service(runner2) is True
+            assert app_instance.orchestrator.should_run_atomic_service(runner3) is False
+
+        with patch(
+            "pynenc.orchestrator.base_orchestrator.time", return_value=2400
+        ):  # 40min
+            assert app_instance.orchestrator.should_run_atomic_service(runner1) is False
+            assert app_instance.orchestrator.should_run_atomic_service(runner2) is False
+            assert app_instance.orchestrator.should_run_atomic_service(runner3) is True
+    finally:
+        app_instance.orchestrator.conf.atomic_service_interval_minutes = (
+            original_interval
+        )
+
+
+def test_record_atomic_service_execution_should_update_timestamps(
+    app_instance: "Pynenc",
+) -> None:
+    """Test that atomic service execution timestamps are recorded."""
+    runner_ctx = create_runner_context("test-runner")
+    app_instance.orchestrator.register_runner_heartbeat(runner_ctx)
+
+    start_time = time()
+    sleep(0.01)
+    end_time = time()
+
+    app_instance.orchestrator.record_atomic_service_execution(
+        runner_ctx, start_time, end_time
+    )
+
+    active_runners = app_instance.orchestrator.get_active_runners()
+    assert len(active_runners) == 1
+
+    runner_info = active_runners[0]
+    assert runner_info.last_service_start is not None
+    assert runner_info.last_service_end is not None
+    assert abs(runner_info.last_service_start.timestamp() - start_time) < 0.001
+    assert abs(runner_info.last_service_end.timestamp() - end_time) < 0.001
