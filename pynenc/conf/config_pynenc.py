@@ -34,7 +34,9 @@ class ConfigPynenc(ConfigPynencBase):
     :cvar str orchestrator_cls:
         The orchestrator class to use.
     :cvar str trigger_cls:
-        The trigger class to use.
+        The trigger class to use. Default is "DisabledTrigger" which provides no trigger
+        functionality. Enable triggers by setting to "MemTrigger", "SqliteTrigger", or a
+        distributed trigger backend from a plugin (e.g., "RedisTrigger" from pynenc-redis).
     :cvar str broker_cls:
         The broker class to use.
     :cvar str state_backend_cls:

@@ -13,6 +13,9 @@ def test_workflow_purge(temp_sqlite_db_path: str) -> None:
     Test that purge removes all data from SQLiteStateBackend tables.
     """
     app = PynencBuilder().sqlite(sqlite_db_path=temp_sqlite_db_path).build()
+    # Force initialization of state backend
+    # It lazily registers the app info on first time backend is instantiated
+    _ = app.state_backend
     # Check tables exist
     with sqlite3.connect(temp_sqlite_db_path) as conn:
         tables = {

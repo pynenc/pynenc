@@ -5,7 +5,7 @@ These tests verify the core functionality of the trigger system using
 the in-memory implementation.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from unittest.mock import Mock, patch
 
@@ -257,10 +257,10 @@ def test_distributed_cron_execution(trigger: "BaseTrigger") -> None:
     trigger.register_condition(cron_condition)
     condition_id = cron_condition.condition_id
 
-    # Set up times for testing
-    time1 = datetime(2024, 1, 1, 12, 0, 0)  # 12:00
-    time2 = datetime(2024, 1, 1, 12, 0, 30)  # 12:00:30 (same minute)
-    time3 = datetime(2024, 1, 1, 12, 1, 0)  # 12:01 (next minute)
+    # Set up times for testing (all UTC)
+    time1 = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)  # 12:00 UTC
+    time2 = datetime(2024, 1, 1, 12, 0, 30, tzinfo=UTC)  # 12:00:30 UTC (same minute)
+    time3 = datetime(2024, 1, 1, 12, 1, 0, tzinfo=UTC)  # 12:01 UTC (next minute)
 
     # First runner checks at 12:00
     # Mock is_satisfied_by to always return True for our test when no last_execution is present
@@ -294,8 +294,8 @@ def test_cron_should_trigger_after_time() -> None:
     condition = CronCondition("* * * * *")
 
     # Same minute should not trigger again
-    time1 = datetime(2024, 1, 1, 12, 0, 0)
-    time2 = datetime(2024, 1, 1, 12, 0, 30)
+    time1 = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
+    time2 = datetime(2024, 1, 1, 12, 0, 30, tzinfo=UTC)
 
     # Create context with last execution time
     context = CronContext(timestamp=time2, last_execution=time1)
@@ -304,7 +304,7 @@ def test_cron_should_trigger_after_time() -> None:
     assert condition.is_satisfied_by(context) is False
 
     # Different minute should trigger
-    time3 = datetime(2024, 1, 1, 12, 1, 0)
+    time3 = datetime(2024, 1, 1, 12, 1, 0, tzinfo=UTC)
     context2 = CronContext(timestamp=time3, last_execution=time1)
     assert condition.is_satisfied_by(context2) is True
 
@@ -335,12 +335,12 @@ def test_optimistic_locking_for_cron_execution(trigger: "BaseTrigger") -> None:
         trigger.register_condition(condition)
         condition_id = condition.condition_id
 
-        # First execution at 12:00
-        time1 = datetime(2024, 1, 1, 12, 0, 0)
+        # First execution at 12:00 UTC
+        time1 = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
         assert trigger.store_last_cron_execution(condition_id, time1) is True
 
         # Try to store an earlier execution time (should fail)
-        earlier_time = datetime(2024, 1, 1, 11, 59, 0)
+        earlier_time = datetime(2024, 1, 1, 11, 59, 0, tzinfo=UTC)
         assert (
             trigger.store_last_cron_execution(
                 condition_id, earlier_time, expected_last_execution=time1
@@ -349,8 +349,8 @@ def test_optimistic_locking_for_cron_execution(trigger: "BaseTrigger") -> None:
         )
 
         # Try to store a later time with wrong expected_last_execution (should fail)
-        later_time = datetime(2024, 1, 1, 12, 1, 0)
-        wrong_expected = datetime(2024, 1, 1, 11, 30, 0)
+        later_time = datetime(2024, 1, 1, 12, 1, 0, tzinfo=UTC)
+        wrong_expected = datetime(2024, 1, 1, 11, 30, 0, tzinfo=UTC)
         assert (
             trigger.store_last_cron_execution(
                 condition_id, later_time, expected_last_execution=wrong_expected
@@ -368,6 +368,26 @@ def test_optimistic_locking_for_cron_execution(trigger: "BaseTrigger") -> None:
 
         # Verify the time was updated
         assert trigger.get_last_cron_execution(condition_id) == later_time
+
+
+def test_cron_execution_should_preserve_utc_timezone_when_storing_and_retrieving(
+    trigger: "BaseTrigger",
+) -> None:
+    """Test that cron execution timestamps preserve UTC timezone information."""
+    # Arrange
+    condition = CronCondition("* * * * *")
+    trigger.register_condition(condition)
+    condition_id = condition.condition_id
+    utc_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
+
+    # Act
+    trigger.store_last_cron_execution(condition_id, utc_time)
+    retrieved_time = trigger.get_last_cron_execution(condition_id)
+
+    # Assert
+    assert retrieved_time is not None
+    assert retrieved_time.tzinfo == UTC
+    assert retrieved_time == utc_time
 
 
 def test_trigger_loop_iteration(trigger: "BaseTrigger") -> None:

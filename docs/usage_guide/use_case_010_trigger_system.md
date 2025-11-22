@@ -4,29 +4,83 @@
 
 This guide explores Pynenc's powerful trigger system, which enables declarative task scheduling and event-driven execution. The trigger system allows you to automatically execute tasks in response to various conditions, such as cron schedules, task statuses, results, exceptions, or custom events.
 
+**Important**: Triggers are **disabled by default** in Pynenc. You must explicitly configure a trigger backend to enable trigger functionality.
+
 ## Prerequisites
 
-For distributed trigger functionality, you'll need a backend plugin:
+**Trigger Backend Configuration**:
 
-**Redis Backend**:
+By default, Pynenc uses `DisabledTrigger` which provides no trigger functionality. To enable triggers, you must configure one of the available trigger backends:
 
-```bash
-pip install pynenc-redis
+**For Development and Testing**:
+
+- **Memory-based triggers**: Built-in, single-process only, data is lost on restart
+
+  - Configure with: `trigger_cls = "MemTrigger"`
+  - Compatible only with `ThreadRunner` for thread-safe memory access
+  - Suitable for: Development, testing, single-process applications
+
+- **SQLite-based triggers**: Built-in, single-host, persistent storage
+  - Configure with: `trigger_cls = "SqliteTrigger"`
+  - Compatible with any runner that shares the same database file
+  - Suitable for: Development, testing, single-host production
+
+**For Distributed Production Systems**:
+
+Distributed trigger backends require their respective plugins:
+
+- **Redis Backend**: `pip install pynenc-redis`
+
+  - Configure with: `trigger_cls = "RedisTrigger"`
+  - Requires Redis server
+
+- **MongoDB Backend**: `pip install pynenc-mongodb`
+
+  - Configure with: `trigger_cls = "MongoTrigger"`
+  - Requires MongoDB server
+
+- **RabbitMQ Backend**: `pip install pynenc-rabbitmq`
+  - Configure with: `trigger_cls = "RabbitMQTrigger"`
+  - Requires RabbitMQ server
+
+### Configuration Examples
+
+**Using pyproject.toml**:
+
+```toml
+[tool.pynenc]
+app_id = "my_app"
+trigger_cls = "MemTrigger"  # or "SqliteTrigger", "RedisTrigger", etc.
+# ...other configuration...
 ```
 
-**MongoDB Backend**:
+**Using PynencBuilder**:
 
-```bash
-pip install pynenc-mongodb
+```python
+from pynenc.builder import PynencBuilder
+
+# With memory-based triggers (development)
+app = (
+    PynencBuilder()
+    .thread_runner()
+    .trigger_memory()  # Enables memory-based triggers
+    .build()
+)
+
+# With Redis-based triggers (production, requires pynenc-redis)
+app = (
+    PynencBuilder()
+    .redis(url="redis://localhost:6379")
+    .process_runner()
+    .build()
+)
 ```
 
-**RabbitMQ Backend**:
+**Using environment variables**:
 
 ```bash
-pip install pynenc-rabbitmq
+PYNENC__TRIGGER_CLS=MemTrigger python your_app.py
 ```
-
-The memory-based and SQLite-based trigger systems are included with the core Pynenc package for development and testing.
 
 ## Scenario
 
@@ -42,19 +96,21 @@ The trigger system addresses several common use cases in distributed task orches
 
 ### Basic Trigger Usage
 
-To create triggers, use the `TriggerBuilder` interface provided by the Pynenc application:
+To create triggers, use the `TriggerBuilder` interface provided by the Pynenc application. **Note**: Triggers will only execute if you've configured a trigger backend (see Prerequisites above).
 
 ```python
 from pynenc import Pynenc
 from pynenc.trigger.trigger_builder import TriggerBuilder
 
-app = Pynenc()
+# Ensure triggers are enabled by configuring a trigger backend
+app = Pynenc()  # Make sure trigger_cls is configured in pyproject.toml
 
 @app.task
 def source_task(x: int) -> str:
     return f"Processed {x}"
 
 # Define a task that runs when source_task completes successfully
+# This will only work if triggers are enabled
 @app.task(triggers=TriggerBuilder().on_status(source_task, statuses=["SUCCESS"]))
 def notification_task() -> str:
     return "Source task completed successfully"
@@ -441,11 +497,17 @@ trigger = (
 
 ### Multiple Backends
 
-- **Memory-based**: For testing and development (built-in, single-host only, not suitable for distributed systems; only compatible with ThreadRunner for memory save)
-- **SQLite-based**: For testing on a single host (built-in, not suitable for distributed systems; compatible with any runner that shares the same database file)
-- **Redis-based**: For production-grade distributed systems (requires `pynenc-redis` plugin)
-- **MongoDB-based**: For document-based distributed systems (requires `pynenc-mongodb` plugin)
-- **RabbitMQ-based**: For message queue-based distributed systems (requires `pynenc-rabbitmq` plugin)
+**Built-in Backends** (no plugin required):
+
+- **Disabled** (`DisabledTrigger`): Default, no trigger functionality
+- **Memory-based** (`MemTrigger`): Single-process, data lost on restart, thread-safe with ThreadRunner only
+- **SQLite-based** (`SqliteTrigger`): Single-host, persistent storage, works with any runner sharing the database
+
+**Plugin-Based Distributed Backends**:
+
+- **Redis-based** (`RedisTrigger`): Requires `pynenc-redis` plugin
+- **MongoDB-based** (`MongoTrigger`): Requires `pynenc-mongodb` plugin
+- **RabbitMQ-based** (`RabbitMQTrigger`): Requires `pynenc-rabbitmq` plugin
 
 ### Comprehensive Context Access
 
@@ -458,9 +520,20 @@ Each trigger condition provides rich context information:
 
 ## Best Practices
 
-1. **Keep triggers focused**: Each trigger should have a clear, specific purpose.
-2. **Use appropriate filters**: Filters reduce unnecessary task executions.
-3. **Consider idempotence**: Triggered tasks should handle potential duplicate executions gracefully.
-4. **Monitor trigger performance**: Complex trigger conditions can impact system performance.
-5. **Use consistent naming**: Develop a naming convention for triggered tasks to improve maintainability.
-6. **Avoid lambdas in filters or providers**: Always use module-level named functions for argument filters and providers.
+1. **Enable triggers before using**: Verify that `trigger_cls` is configured to something other than `DisabledTrigger`
+2. **Choose appropriate backend**: Use memory/SQLite for development, distributed backends for production
+3. **Keep triggers focused**: Each trigger should have a clear, specific purpose
+4. **Use appropriate filters**: Filters reduce unnecessary task executions
+5. **Consider idempotence**: Triggered tasks should handle potential duplicate executions gracefully
+6. **Monitor trigger performance**: Complex trigger conditions can impact system performance
+7. **Use consistent naming**: Develop a naming convention for triggered tasks to improve maintainability
+8. **Avoid lambdas in filters or providers**: Always use module-level named functions for argument filters and providers
+
+## Troubleshooting
+
+**Triggers not executing?**
+
+- Verify `trigger_cls` is not set to `DisabledTrigger` (the default)
+- Ensure the trigger backend service (Redis, MongoDB, RabbitMQ) is running for distributed backends
+- Check that the required plugin is installed for distributed backends
+- Verify the runner is compatible with your trigger backend (e.g., MemTrigger requires ThreadRunner)

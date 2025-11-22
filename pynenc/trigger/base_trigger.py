@@ -451,8 +451,8 @@ class BaseTrigger(ABC):
         """
         Get the timestamp of the last execution of a cron condition from persistent storage.
 
-        :param condition_id: ID of the cron condition
-        :return: Timestamp of last execution, or None if never executed
+        :param str condition_id: ID of the cron condition
+        :return: Timestamp of last execution in UTC timezone, or None if never executed
         """
         pass
 
@@ -469,9 +469,9 @@ class BaseTrigger(ABC):
         This should be implemented as an atomic operation to prevent race conditions
         in distributed environments.
 
-        :param condition_id: ID of the cron condition
-        :param execution_time: Timestamp of the execution
-        :param expected_last_execution: Expected current value for optimistic locking
+        :param str condition_id: ID of the cron condition
+        :param datetime execution_time: Timestamp of the execution (must be UTC timezone-aware)
+        :param datetime | None expected_last_execution: Expected current value for optimistic locking (UTC timezone-aware)
         :return: True if stored successfully, False if another process already updated it
         """
         pass
@@ -483,10 +483,11 @@ class BaseTrigger(ABC):
         Determine if a cron condition should be triggered based on its schedule and last execution.
 
         This method uses both local cache and persistent storage to efficiently determine
-        if a cron condition should be triggered in a distributed environment.
+        if a cron condition should be triggered in a distributed environment. All datetime
+        values are expected to be UTC timezone-aware.
 
-        :param condition: The cron condition to check
-        :param current_time: Current time to check against
+        :param CronCondition condition: The cron condition to check
+        :param datetime current_time: Current time to check against (UTC timezone-aware)
         :return: True if the condition should be triggered, False otherwise
         """
         condition_id = condition.condition_id

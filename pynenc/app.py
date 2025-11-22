@@ -75,7 +75,6 @@ class Pynenc:
         self._tasks: dict[str, Task] = {}
         self.logger.info(f"Initialized Pynenc app with id {self.app_id}")
         load_all_plugins()
-        self.state_backend.store_app_info(AppInfo.from_app(self))
 
     @classmethod
     def from_info(cls, app_info: AppInfo) -> "Pynenc":
@@ -168,7 +167,9 @@ class Pynenc:
 
     @cached_property
     def state_backend(self) -> BaseStateBackend:
-        return get_subclass(BaseStateBackend, self.conf.state_backend_cls)(self)  # type: ignore # mypy issue #4717
+        backend = get_subclass(BaseStateBackend, self.conf.state_backend_cls)(self)  # type: ignore # mypy issue #4717
+        backend.store_app_info(AppInfo.from_app(self))
+        return backend
 
     @cached_property
     def serializer(self) -> BaseSerializer:
