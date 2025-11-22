@@ -30,19 +30,19 @@ def warn_missing_main_guard() -> None:
     warnings.warn(
         "\n"
         "┌─────────────────────────────────────────────────────────────────────┐\n"
-        "│ MultiThreadRunner requires if __name__ == '__main__': guard        │\n"
+        "│ MultiThreadRunner requires if __name__ == '__main__': guard         │\n"
         "├─────────────────────────────────────────────────────────────────────┤\n"
         "│                                                                     │\n"
-        "│ On macOS and Windows, wrap your application startup code:          │\n"
+        "│ On macOS and Windows, wrap your application startup code:           │\n"
         "│                                                                     │\n"
         "│     if __name__ == '__main__':                                      │\n"
         "│         from multiprocessing import freeze_support                  │\n"
         "│         freeze_support()                                            │\n"
         "│         app.runner.run()                                            │\n"
         "│                                                                     │\n"
-        "│ This prevents recursive spawning when creating worker processes.   │\n"
+        "│ This prevents recursive spawning when creating worker processes.    │\n"
         "│                                                                     │\n"
-        "│ See: https://docs.python.org/3/library/multiprocessing.html        │\n"
+        "│ See: https://docs.python.org/3/library/multiprocessing.html         │\n"
         "└─────────────────────────────────────────────────────────────────────┘\n",
         RuntimeWarning,
         stacklevel=4,
