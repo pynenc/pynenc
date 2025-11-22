@@ -400,8 +400,8 @@ class SQLiteOrchestrator(BaseOrchestrator):
                     runner_context_json TEXT NOT NULL,
                     creation_timestamp REAL NOT NULL,
                     last_heartbeat REAL NOT NULL,
-                    last_service_start REAL,
-                    last_service_end REAL
+                    last_service_start TEXT,
+                    last_service_end TEXT
                 )
             """
             )
@@ -764,12 +764,10 @@ class SQLiteOrchestrator(BaseOrchestrator):
                             runner_ctx=runner_ctx,
                             creation_time=datetime.fromtimestamp(creation_ts, tz=UTC),
                             last_heartbeat=datetime.fromtimestamp(last_hb, tz=UTC),
-                            last_service_start=datetime.fromtimestamp(
-                                service_start, tz=UTC
-                            )
+                            last_service_start=datetime.fromisoformat(service_start)
                             if service_start
                             else None,
-                            last_service_end=datetime.fromtimestamp(service_end, tz=UTC)
+                            last_service_end=datetime.fromisoformat(service_end)
                             if service_end
                             else None,
                         )
@@ -794,7 +792,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
             conn.commit()
 
     def record_atomic_service_execution(
-        self, runner_ctx: "RunnerContext", start_time: float, end_time: float
+        self, runner_ctx: "RunnerContext", start_time: datetime, end_time: datetime
     ) -> None:
         """Record the latest atomic service execution window for a runner."""
         with sqlite_conn(self.sqlite_db_path) as conn:
@@ -804,7 +802,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
                 SET last_service_start = ?, last_service_end = ?
                 WHERE runner_id = ?
                 """,
-                (start_time, end_time, runner_ctx.runner_id),
+                (start_time.isoformat(), end_time.isoformat(), runner_ctx.runner_id),
             )
             conn.commit()
 

@@ -387,9 +387,9 @@ def test_record_atomic_service_execution_should_update_timestamps(
     runner_ctx = create_runner_context("test-runner")
     app_instance.orchestrator.register_runner_heartbeat(runner_ctx)
 
-    start_time = time()
+    start_time = datetime.now(UTC)
     sleep(0.01)
-    end_time = time()
+    end_time = datetime.now(UTC)
 
     app_instance.orchestrator.record_atomic_service_execution(
         runner_ctx, start_time, end_time
@@ -401,5 +401,6 @@ def test_record_atomic_service_execution_should_update_timestamps(
     runner_info = active_runners[0]
     assert runner_info.last_service_start is not None
     assert runner_info.last_service_end is not None
-    assert abs(runner_info.last_service_start.timestamp() - start_time) < 0.001
-    assert abs(runner_info.last_service_end.timestamp() - end_time) < 0.001
+    # Compare datetime objects directly
+    assert abs((runner_info.last_service_start - start_time).total_seconds()) < 0.001
+    assert abs((runner_info.last_service_end - end_time).total_seconds()) < 0.001

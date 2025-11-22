@@ -292,11 +292,11 @@ class MemOrchestrator(BaseOrchestrator):
             str, float
         ] = {}  # runner_id -> last heartbeat timestamp
         self.runner_last_service_start: dict[
-            str, float
-        ] = {}  # runner_id -> last service start timestamp
+            str, datetime
+        ] = {}  # runner_id -> last service start datetime
         self.runner_last_service_end: dict[
-            str, float
-        ] = {}  # runner_id -> last service end timestamp
+            str, datetime
+        ] = {}  # runner_id -> last service end datetime
 
         self._cycle_control: MemCycleControl | None = None
         self._blocking_control: MemBlockingControl | None = None
@@ -580,12 +580,8 @@ class MemOrchestrator(BaseOrchestrator):
                         runner_ctx=runner_ctx,
                         creation_time=datetime.fromtimestamp(creation_ts, tz=UTC),
                         last_heartbeat=datetime.fromtimestamp(last_heartbeat, tz=UTC),
-                        last_service_start=datetime.fromtimestamp(service_start, tz=UTC)
-                        if service_start
-                        else None,
-                        last_service_end=datetime.fromtimestamp(service_end, tz=UTC)
-                        if service_end
-                        else None,
+                        last_service_start=service_start,
+                        last_service_end=service_end,
                     )
                 )
 
@@ -614,7 +610,7 @@ class MemOrchestrator(BaseOrchestrator):
             self.runner_last_service_end.pop(runner_id, None)
 
     def record_atomic_service_execution(
-        self, runner_ctx: "RunnerContext", start_time: float, end_time: float
+        self, runner_ctx: "RunnerContext", start_time: datetime, end_time: datetime
     ) -> None:
         """Record the latest atomic service execution window for a runner."""
         runner_id = runner_ctx.runner_id

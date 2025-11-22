@@ -1,4 +1,5 @@
 import asyncio
+from datetime import UTC, datetime
 from logging import Logger
 import os
 import signal
@@ -284,7 +285,7 @@ class BaseRunner(ABC):
             self.app.orchestrator.register_runner_heartbeat(runner_ctx)
             if not self.app.orchestrator.should_run_atomic_service(runner_ctx):
                 return
-            start_time = time.time()
+            start_time = datetime.now(UTC)
             self.app.logger.info(
                 f"Runner {runner_ctx.runner_id} executing atomic global services"
             )
@@ -301,7 +302,7 @@ class BaseRunner(ABC):
             raise
         finally:
             if start_time is not None:
-                end_time = time.time()
+                end_time = datetime.now(UTC)
                 self.app.orchestrator.record_atomic_service_execution(
                     runner_ctx, start_time, end_time
                 )
