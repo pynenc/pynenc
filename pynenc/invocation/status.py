@@ -36,6 +36,7 @@ class InvocationStatus(StrEnum):
 
     :cvar REGISTERED: The task call has been routed and is registered
     :cvar CONCURRENCY_CONTROLLED: The task call is not allowed to run due to concurrency control
+    :cvar CONCURRENCY_CONTROLLED_FINAL: The task call was blocked by concurrency control and will not be retried
     :cvar REROUTED: The task call has been re-routed and is registered
     :cvar PENDING: The task call was picked by a runner but is not yet executed
     :cvar PENDING_RECOVERY: The task call exceeded PENDING timeout and is being recovered
@@ -50,6 +51,7 @@ class InvocationStatus(StrEnum):
 
     REGISTERED = auto()
     CONCURRENCY_CONTROLLED = auto()
+    CONCURRENCY_CONTROLLED_FINAL = auto()
     REROUTED = auto()
     PENDING = auto()
     PENDING_RECOVERY = auto()
@@ -211,7 +213,11 @@ _CONFIG: Final[StatusConfiguration] = StatusConfiguration(
         ),
         InvocationStatus.REGISTERED: StatusDefinition(
             allowed_transitions=frozenset(
-                {InvocationStatus.PENDING, InvocationStatus.CONCURRENCY_CONTROLLED}
+                {
+                    InvocationStatus.PENDING,
+                    InvocationStatus.CONCURRENCY_CONTROLLED,
+                    InvocationStatus.CONCURRENCY_CONTROLLED_FINAL,
+                }
             ),
             available_for_run=True,
             releases_ownership=True,
@@ -296,6 +302,11 @@ _CONFIG: Final[StatusConfiguration] = StatusConfiguration(
             releases_ownership=True,
         ),
         InvocationStatus.FAILED: StatusDefinition(
+            is_final=True,
+            releases_ownership=True,
+        ),
+        # Final status for invocations blocked by concurrency control that should not retry
+        InvocationStatus.CONCURRENCY_CONTROLLED_FINAL: StatusDefinition(
             is_final=True,
             releases_ownership=True,
         ),

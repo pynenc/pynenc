@@ -700,12 +700,19 @@ class BaseOrchestrator(ABC):
                         if not self.is_candidate_to_run_by_concurrency_control(
                             invocation
                         ):
-                            self.set_invocation_status(
-                                invocation_id,
-                                InvocationStatus.CONCURRENCY_CONTROLLED,
-                                runner_ctx,
-                            )
-                            invocations_to_reroute.add(invocation_id)
+                            if invocation.task.conf.reroute_on_concurrency_control:
+                                self.set_invocation_status(
+                                    invocation_id,
+                                    InvocationStatus.CONCURRENCY_CONTROLLED,
+                                    runner_ctx,
+                                )
+                                invocations_to_reroute.add(invocation_id)
+                            else:
+                                self.set_invocation_status(
+                                    invocation_id,
+                                    InvocationStatus.CONCURRENCY_CONTROLLED_FINAL,
+                                    runner_ctx,
+                                )
                             continue
                         try:
                             self.set_invocation_status(

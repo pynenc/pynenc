@@ -32,8 +32,21 @@ def sleep_without_running_concurrency(seconds: float) -> SleepResult:
     return SleepResult(start=start, end=time.time())
 
 
-@mock_app.task(running_concurrency=ConcurrencyControlType.TASK)
+@mock_app.task(
+    running_concurrency=ConcurrencyControlType.TASK,
+    reroute_on_concurrency_control=True,
+)
 def sleep_with_running_concurrency(seconds: float) -> SleepResult:
+    start = time.time()
+    time.sleep(seconds)
+    return SleepResult(start=start, end=time.time())
+
+
+@mock_app.task(
+    running_concurrency=ConcurrencyControlType.TASK,
+    reroute_on_concurrency_control=False,
+)
+def sleep_with_running_concurrency_no_reroute(seconds: float) -> SleepResult:
     start = time.time()
     time.sleep(seconds)
     return SleepResult(start=start, end=time.time())
@@ -56,6 +69,7 @@ def app(request: "FixtureRequest", app_instance: "Pynenc") -> "Pynenc":
     app._tasks = mock_app._tasks
     sleep_without_running_concurrency.app = app
     sleep_with_running_concurrency.app = app
+    sleep_with_running_concurrency_no_reroute.app = app
     app.purge()
     request.addfinalizer(app.purge)
     return app
@@ -107,3 +121,57 @@ def test_basic_running_concurrency_check(app: "Pynenc") -> None:
         app.orchestrator.is_authorize_to_run_by_concurrency_control(invocation2)
         is False
     )
+
+
+def test_running_concurrency_no_reroute(app: "Pynenc") -> None:
+    """
+    Test that concurrency control without reroute marks blocked invocations as CONCURRENCY_CONTROLLED_FINAL.
+    """
+    app.purge()
+
+    # Start a runner
+    def run_in_thread() -> None:
+        app.runner.run()
+
+    thread = threading.Thread(target=run_in_thread, daemon=True)
+    thread.start()
+
+    logger.info("Testing concurrency control without reroute")
+
+    # Create multiple invocations
+    invocations = [sleep_with_running_concurrency_no_reroute(0.3) for _ in range(5)]
+
+    # Give runner time to process
+    time.sleep(0.5)
+
+    # Check statuses - only one should have run (SUCCESS), others should be CONCURRENCY_CONTROLLED_FINAL
+    statuses = [
+        app.orchestrator.get_invocation_status(inv.invocation_id) for inv in invocations
+    ]
+
+    success_count = sum(1 for s in statuses if s == InvocationStatus.SUCCESS)
+    concurrency_final_count = sum(
+        1 for s in statuses if s == InvocationStatus.CONCURRENCY_CONTROLLED_FINAL
+    )
+
+    logger.info(f"Statuses: {statuses}")
+    logger.info(
+        f"Success: {success_count}, Concurrency Final: {concurrency_final_count}"
+    )
+
+    assert success_count == 1, (
+        f"Expected exactly 1 successful invocation, got {success_count}"
+    )
+    assert concurrency_final_count == 4, (
+        f"Expected 4 concurrency-controlled-final invocations, got {concurrency_final_count}"
+    )
+
+    # Verify that blocked invocations have no result
+    for inv, status in zip(invocations, statuses, strict=False):
+        if status == InvocationStatus.CONCURRENCY_CONTROLLED_FINAL:
+            with pytest.raises(KeyError):
+                _ = inv.result
+
+    # Stop the runner
+    app.runner.stop_runner_loop()
+    thread.join()

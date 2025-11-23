@@ -76,6 +76,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
   - Added `Resumed` status to explicitly track the PAUSED-RESUME cycle in runners like the process runner, where processes executing invocations that wait for other invocations can be paused and resumed.
 
+- **Concurrency Control Task Saturation Prevention**:
+
+  - Added safeguards to prevent unbounded task accumulation when tasks are repeatedly triggered while blocked by running concurrency limits (e.g., cron jobs triggering tasks faster than they can execute).
+  - Introduced `CONCURRENCY_CONTROLLED_FINAL` status for invocations permanently blocked by concurrency control, preventing continuous rerouting.
+  - Added `reroute_on_concurrency_control` configuration option (defaults to `False`) to control whether concurrency-blocked tasks should be rerouted or marked as final.
+  - Updated orchestrator logic to check task configuration before rerouting concurrency-controlled invocations.
+  - Added comprehensive tests validating both rerouting and non-rerouting behavior for concurrency-controlled tasks.
+
 - **Retry Logic for SQLite Connection**:
 
   - Implemented retry logic in SQLite connection handling to improve reliability and handle transient connection issues.

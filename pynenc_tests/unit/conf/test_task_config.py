@@ -29,6 +29,7 @@ class CustomException(Exception):
     call_result_cache=False,
     disable_cache_args=("*",),
     force_new_workflow=True,
+    reroute_on_concurrency_control=False,
 )
 def store_with_opt(id: int, value: int) -> None:
     del id, value

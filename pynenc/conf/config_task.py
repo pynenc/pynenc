@@ -151,6 +151,17 @@ class ConfigTask(ConfigPynencBase):
         Even when called from within another workflow, it creates a subworkflow
         that maintains a reference to its parent workflow.
 
+    :cvar ConfigField[bool] reroute_on_concurrency_control:
+        If True, tasks blocked by concurrency control will be automatically rerouted.
+        If False (default), they will be marked as CONCURRENCY_CONTROLLED_FINAL and never run.
+
+        ```{warning}
+        Setting this to True can cause system saturation if tasks are repeatedly triggered
+        (e.g., by cron jobs) while a running instance blocks new invocations. The blocked
+        tasks will continuously reroute, creating an ever-growing queue of pending work.
+        Only enable this if you have safeguards against unbounded task accumulation.
+        ```
+
     Examples
     --------
     Using environment variables to configure tasks:
@@ -198,6 +209,7 @@ class ConfigTask(ConfigPynencBase):
     call_result_cache = ConfigField(False)
     disable_cache_args: ConfigField[tuple[str, ...]] = ConfigField(())
     force_new_workflow = ConfigField(False)
+    reroute_on_concurrency_control = ConfigField(False)
 
     def __init__(
         self,

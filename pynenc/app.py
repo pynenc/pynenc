@@ -231,6 +231,7 @@ class Pynenc:
         disable_cache_args: tuple[str, ...] | None = None,
         triggers: Union["TriggerBuilder", list["TriggerBuilder"]] | None = None,
         force_new_workflow: bool | None = None,
+        reroute_on_concurrency_control: bool | None = None,
     ) -> "Task": ...
 
     @overload
@@ -249,6 +250,7 @@ class Pynenc:
         disable_cache_args: tuple[str, ...] | None = None,
         triggers: Union["TriggerBuilder", list["TriggerBuilder"]] | None = None,
         force_new_workflow: bool | None = None,
+        reroute_on_concurrency_control: bool | None = None,
     ) -> Callable[["Func"], "Task"]: ...
 
     def task(
@@ -266,6 +268,7 @@ class Pynenc:
         disable_cache_args: tuple[str, ...] | None = None,
         triggers: Union["TriggerBuilder", list["TriggerBuilder"]] | None = None,
         force_new_workflow: bool | None = None,
+        reroute_on_concurrency_control: bool | None = None,
     ) -> "Task | Callable[[Func], Task]":
         """
         The task decorator converts the function into an instance of a BaseTask. It accepts any kind of options,
@@ -359,6 +362,7 @@ class Pynenc:
             "call_result_cache": call_result_cache,
             "disable_cache_args": disable_cache_args,
             "force_new_workflow": force_new_workflow,
+            "reroute_on_concurrency_control": reroute_on_concurrency_control,
         }
         options = {k: v for k, v in options.items() if v is not None}
 
@@ -393,6 +397,7 @@ class Pynenc:
         call_result_cache: bool | None = None,
         disable_cache_args: tuple[str, ...] | None = None,
         force_new_workflow: bool | None = None,
+        reroute_on_concurrency_control: bool | None = None,
     ) -> "Func": ...
 
     @overload
@@ -412,6 +417,7 @@ class Pynenc:
         call_result_cache: bool | None = None,
         disable_cache_args: tuple[str, ...] | None = None,
         force_new_workflow: bool | None = None,
+        reroute_on_concurrency_control: bool | None = None,
     ) -> "Func": ...
 
     @overload
@@ -431,6 +437,7 @@ class Pynenc:
         call_result_cache: bool | None = None,
         disable_cache_args: tuple[str, ...] | None = None,
         force_new_workflow: bool | None = None,
+        reroute_on_concurrency_control: bool | None = None,
     ) -> Callable[["Func[Params, Result]"], "Func[Params, Result]"]: ...
 
     def direct_task(
@@ -449,6 +456,7 @@ class Pynenc:
         call_result_cache: bool | None = None,
         disable_cache_args: tuple[str, ...] | None = None,
         force_new_workflow: bool | None = None,
+        reroute_on_concurrency_control: bool | None = None,
     ) -> (
         "Func[Params, Result] | Callable[[Func[Params, Result]], Func[Params, Result]]"
     ):
@@ -589,6 +597,7 @@ class Pynenc:
                 "call_result_cache": call_result_cache,
                 "disable_cache_args": disable_cache_args,
                 "force_new_workflow": force_new_workflow,
+                "reroute_on_concurrency_control": reroute_on_concurrency_control,
             }
             task_options = {k: v for k, v in task_options.items() if v is not None}
             task = self.task(func, **task_options)  # type: ignore
