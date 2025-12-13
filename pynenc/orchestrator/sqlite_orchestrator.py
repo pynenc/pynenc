@@ -23,6 +23,7 @@ from pynenc.orchestrator.base_orchestrator import (
     BaseCycleControl,
     BaseOrchestrator,
 )
+from pynenc.runner.runner_context import RunnerContext
 from pynenc.orchestrator.atomic_service import ActiveRunnerInfo
 from pynenc.util.sqlite_utils import create_sqlite_connection as sqlite_conn
 from pynenc.util.sqlite_utils import (
@@ -33,7 +34,6 @@ from pynenc.util.sqlite_utils import (
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
     from pynenc.invocation.dist_invocation import DistributedInvocation
-    from pynenc.runner.runner_context import RunnerContext
     from pynenc.task import Task
     from pynenc.types import Params, Result
     from pynenc.util.sqlite_utils import SQLiteConnection
@@ -712,8 +712,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
         """Register or update a runner's heartbeat timestamp."""
         current_time = time()
         runner_id = runner_ctx.runner_id
-        runner_json = runner_ctx.to_json()
-
+        node_coordinator_json = runner_ctx.to_json()
         with sqlite_conn(self.sqlite_db_path) as conn:
             conn.execute(
                 f"""
@@ -723,14 +722,12 @@ class SQLiteOrchestrator(BaseOrchestrator):
                 ON CONFLICT(runner_id) DO UPDATE SET
                     last_heartbeat = excluded.last_heartbeat
                 """,
-                (runner_id, runner_json, current_time, current_time),
+                (runner_id, node_coordinator_json, current_time, current_time),
             )
             conn.commit()
 
     def get_active_runners(self) -> list[ActiveRunnerInfo]:
         """Retrieve all active runners with heartbeat information."""
-        from pynenc.runner.runner_context import RunnerContext
-
         timeout_seconds = self.conf.runner_heartbeat_timeout_minutes * 60
         current_time = time()
         cutoff_time = current_time - timeout_seconds

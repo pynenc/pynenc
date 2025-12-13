@@ -55,7 +55,9 @@ def retry_once() -> int:
     return retry_once.invocation.num_retries
 
 
-@mock_app.task(running_concurrency=ConcurrencyControlType.TASK)
+@mock_app.task(
+    running_concurrency=ConcurrencyControlType.TASK, reroute_on_concurrency_control=True
+)
 def sleep_seconds(seconds: int) -> bool:
     sleep_seconds.app.logger.info(f"Sleeping for {seconds} seconds...")
     sleep(seconds)

@@ -5,7 +5,7 @@
       <div
         class="card-header d-flex justify-content-between align-items-center compact-header"
       >
-        <span>Task Details</span>
+        <span>{{ task.task_id }}</span>
         <a href="/tasks" class="btn btn-sm btn-outline-secondary">
           Back to Tasks
         </a>
@@ -110,8 +110,9 @@
                           <a
                             href="/calls/?call_id={{ call.call_id|urlencode }}"
                           >
-                            {{ call.call_id.split('#')[-1][:8] if '#' in
-                            call.call_id else call.call_id[:8] }}...
+                            <code style="font-size: 11px; word-break: break-all"
+                              >{{ call.call_id }}</code
+                            >
                           </a>
                           {% else %}
                           <span class="text-muted">Invalid ID</span>

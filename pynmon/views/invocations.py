@@ -2,7 +2,7 @@ import json
 import logging
 import time
 import traceback
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Request
@@ -11,11 +11,17 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pynenc.exceptions import InvocationNotFoundError
 from pynenc.invocation.status import InvocationStatus
 from pynmon.app import get_pynenc_instance, templates
+from pynmon.util.formatting import RunnerContextInfo, format_task_extra_info
+from pynmon.util.time_ranges import parse_time_range, parse_resolution
+from pynmon.util.view_helpers import format_call_arguments
+from pynmon.util.svg.builder import TimelineDataBuilder
+from pynmon.util.svg.models import TimelineConfig
+from pynmon.util.svg.renderer import TimelineSVGRenderer
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
-    from pynenc.call import Call
     from pynenc.invocation.dist_invocation import DistributedInvocation
+    from pynenc.runner.runner_context import RunnerContext
 
 router = APIRouter(prefix="/invocations", tags=["invocations"])
 logger = logging.getLogger("pynmon.views.invocations")
@@ -100,50 +106,6 @@ async def invocations_list(
             },
         },
     )
-
-
-def _parse_timeline_date_range(
-    time_range: str, start_date: str | None, end_date: str | None
-) -> tuple[datetime, datetime]:
-    """Parse the time range parameters into start and end datetime objects."""
-    now = datetime.now(UTC)
-    end_datetime = now
-
-    if time_range == "custom" and start_date and end_date:
-        try:
-            # Parse custom dates and convert to UTC if they don't have timezone info
-            start_datetime = datetime.fromisoformat(start_date)
-            if start_datetime.tzinfo is None:
-                start_datetime = start_datetime.replace(tzinfo=UTC)
-
-            end_datetime = datetime.fromisoformat(end_date)
-            if end_datetime.tzinfo is None:
-                end_datetime = end_datetime.replace(tzinfo=UTC)
-        except ValueError:
-            logger.warning(f"Invalid date format: {start_date} - {end_date}")
-            # Fall back to last hour
-            start_datetime = now - timedelta(hours=1)
-    else:
-        # Parse time range - using UTC time
-        if time_range == "15m":
-            start_datetime = now - timedelta(minutes=15)
-        elif time_range == "1h":
-            start_datetime = now - timedelta(hours=1)
-        elif time_range == "3h":
-            start_datetime = now - timedelta(hours=3)
-        elif time_range == "12h":
-            start_datetime = now - timedelta(hours=12)
-        elif time_range == "1d":
-            start_datetime = now - timedelta(days=1)
-        elif time_range == "3d":
-            start_datetime = now - timedelta(days=3)
-        elif time_range == "1w":
-            start_datetime = now - timedelta(weeks=1)
-        else:
-            # Default to last hour
-            start_datetime = now - timedelta(hours=1)
-
-    return start_datetime, end_datetime
 
 
 def _get_tasks_to_check(app: "Pynenc", task_id: str | None) -> list:
@@ -272,86 +234,101 @@ def _filter_invocations_by_time(
     return filtered_invocations
 
 
+def _build_svg_timeline(
+    app: "Pynenc",
+    start_datetime: datetime,
+    end_datetime: datetime,
+    limit: int = 100,
+    resolution_seconds: int | None = None,
+) -> str:
+    """
+    Build SVG timeline using iter_history_in_timerange.
+
+    Uses the new efficient time-range iteration for history entries.
+
+    :param Pynenc app: The Pynenc application instance
+    :param datetime start_datetime: Start of the time range
+    :param datetime end_datetime: End of the time range
+    :param int limit: Maximum number of invocations to include
+    :param int | None resolution_seconds: Tick interval in seconds (None for auto)
+    :return: SVG string for the timeline
+    """
+    config = TimelineConfig(resolution_seconds=resolution_seconds)
+    builder = TimelineDataBuilder(config=config)
+
+    # Count invocations seen to enforce limit
+    invocations_seen: set[str] = set()
+    history_count = 0
+
+    # Use the new efficient iterator
+    for batch in app.state_backend.iter_history_in_timerange(
+        start_time=start_datetime,
+        end_time=end_datetime,
+        batch_size=100,
+    ):
+        # Filter batch by limit
+        filtered_batch = []
+        for history in batch:
+            if history.invocation_id not in invocations_seen:
+                if len(invocations_seen) >= limit:
+                    break
+                invocations_seen.add(history.invocation_id)
+            filtered_batch.append(history)
+            history_count += 1
+
+        if filtered_batch:
+            builder.add_history_batch(filtered_batch)
+
+        # Stop if we've hit the limit
+        if len(invocations_seen) >= limit:
+            break
+
+    logger.info(
+        f"Built timeline with {len(invocations_seen)} invocations, "
+        f"{history_count} history entries"
+    )
+
+    # Build and render timeline using the full requested time range
+    timeline_data = builder.build(start_time=start_datetime, end_time=end_datetime)
+    renderer = TimelineSVGRenderer()
+    return renderer.render(timeline_data)
+
+
 @router.get("/timeline", response_class=HTMLResponse)
 async def invocations_timeline(
     request: Request,
     time_range: str = "1h",
     start_date: str | None = None,
     end_date: str | None = None,
-    task_id: str | None = None,
-    show_relationships: bool = False,
     limit: int = 100,
+    resolution: str = "auto",
 ) -> HTMLResponse:
-    """Display a visual timeline of invocations with filters."""
+    """Display a visual SVG timeline of invocations with filters."""
     app = get_pynenc_instance()
     logger.info(f"Generating invocation timeline with time_range={time_range}")
     start_time = time.time()
 
     try:
-        # Parse date range parameters
-        start_datetime, end_datetime = _parse_timeline_date_range(
+        # Parse date range and resolution parameters
+        start_datetime, end_datetime = parse_time_range(
             time_range, start_date, end_date
         )
+        resolution_seconds = parse_resolution(resolution)
         logger.info(
             f"Using time range: {start_datetime.isoformat()} to {end_datetime.isoformat()}"
         )
 
-        # Get tasks to check - this may raise ValueError for invalid task_id
-        try:
-            tasks_to_check = _get_tasks_to_check(app, task_id)
-        except ValueError as e:
-            logger.warning(f"Invalid task ID: {task_id} - {str(e)}")
-            return templates.TemplateResponse(
-                "shared/error.html",
-                {
-                    "request": request,
-                    "title": "Task Not Found",
-                    "message": str(e),
-                },
-                status_code=404,
-            )
-
-        # Collect invocations from tasks
-        all_invocations = _collect_invocations_from_tasks(app, tasks_to_check, limit)
-
-        # Filter invocations by time range
-        filtered_invocations = _filter_invocations_by_time(
-            app, all_invocations, start_datetime, end_datetime, show_relationships
+        # Build SVG timeline using efficient history iteration
+        svg_content = _build_svg_timeline(
+            app,
+            start_datetime,
+            end_datetime,
+            limit=limit,
+            resolution_seconds=resolution_seconds,
         )
-
-        logger.info(
-            f"After time filtering: {len(filtered_invocations)} invocations match criteria"
-        )
-
-        # Prepare timeline data for JavaScript
-        timeline_data = {
-            "invocations": filtered_invocations,
-            "start_time": start_datetime.isoformat(),
-            "end_time": end_datetime.isoformat(),
-        }
 
         # Get all available task IDs for the dropdown
         all_task_ids = list(app.tasks.keys())
-
-        logger.info(f"Rendering timeline with {len(filtered_invocations)} invocations")
-        logger.info(f"Timeline data structure: {timeline_data}")
-        logger.info(
-            f"Filtered invocations structure: {filtered_invocations[:2] if filtered_invocations else 'empty'}"
-        )
-
-        # Try to serialize timeline_data to catch any JSON issues
-        try:
-            serialized_timeline_data = json.dumps(timeline_data)
-            logger.info(
-                f"Successfully serialized timeline_data, length: {len(serialized_timeline_data)}"
-            )
-        except Exception as e:
-            logger.error(f"Failed to serialize timeline_data: {e}")
-            timeline_data = {
-                "invocations": [],
-                "start_time": start_datetime.isoformat(),
-                "end_time": end_datetime.isoformat(),
-            }
 
         return templates.TemplateResponse(
             "invocations/timeline.html",
@@ -359,8 +336,7 @@ async def invocations_timeline(
                 "request": request,
                 "title": "Invocations Timeline",
                 "app_id": app.app_id,
-                "invocations": filtered_invocations,
-                "timeline_data": json.dumps(timeline_data),
+                "svg_content": svg_content,
                 "all_task_ids": all_task_ids,
                 "start_datetime": start_datetime,
                 "end_datetime": end_datetime,
@@ -368,9 +344,8 @@ async def invocations_timeline(
                     "time_range": time_range,
                     "start_date": start_date or "",
                     "end_date": end_date or "",
-                    "task_id": task_id or "",
-                    "show_relationships": show_relationships,
                     "limit": limit,
+                    "resolution": resolution,
                 },
             },
         )
@@ -444,9 +419,8 @@ def _get_formatted_invocation_history(
                 logger.warning("History retrieval timeout reached")
                 break
 
-            runner_context_summary = None
-            if entry.runner_context:
-                runner_context_summary = entry.runner_context.runner_id
+            # Extract full context info from runner_context
+            context_info = _format_owner_context(entry.runner_context)
 
             formatted_history.append(
                 {
@@ -454,7 +428,17 @@ def _get_formatted_invocation_history(
                     "status": entry.status_record.status.name,
                     "status_owner_id": entry.status_record.owner_id,
                     "running_context": entry.runner_context,
-                    "runner_context_summary": runner_context_summary,
+                    "runner_context_summary": context_info["summary"],
+                    "runner_cls": context_info["runner_cls"],
+                    "runner_id": context_info["runner_id"],
+                    "hostname": context_info["hostname"],
+                    "pid": context_info["pid"],
+                    "thread_id": context_info["thread_id"],
+                    "parent_runner_cls": context_info["parent_runner_cls"],
+                    "parent_runner_id": context_info["parent_runner_id"],
+                    "parent_hostname": context_info["parent_hostname"],
+                    "parent_pid": context_info["parent_pid"],
+                    "parent_thread_id": context_info["parent_thread_id"],
                 }
             )
 
@@ -474,6 +458,11 @@ def _get_formatted_invocation_history(
         logger.error(f"Error retrieving history: {str(e)}")
         logger.error(traceback.format_exc())
         return []
+
+
+def _format_owner_context(owner_context: "RunnerContext") -> dict[str, str | None]:
+    """Format owner context into display-friendly dict using RunnerContextInfo."""
+    return RunnerContextInfo.from_context(owner_context).to_dict()
 
 
 def _get_invocation_timestamps_and_duration(
@@ -503,25 +492,6 @@ def _get_invocation_timestamps_and_duration(
             logger.warning(f"Error calculating duration: {str(e)}")
 
     return created_at, completed_at, duration_seconds
-
-
-def _format_invocation_arguments(call: "Call") -> dict[str, str]:
-    """Format invocation arguments for display."""
-    try:
-        formatted_arguments = {}
-        max_length = 500  # Limit display length for very large values
-
-        for key, value in call.arguments.kwargs.items():
-            str_value = str(value)
-            if len(str_value) > max_length:
-                formatted_arguments[key] = f"{str_value[:max_length]}... (truncated)"
-            else:
-                formatted_arguments[key] = str_value
-
-        return formatted_arguments
-    except Exception as e:
-        logger.error(f"Error formatting arguments: {str(e)}")
-        return {"Error": f"Could not format arguments: {str(e)}"}
 
 
 @router.get("/{invocation_id}", response_class=HTMLResponse)
@@ -556,14 +526,9 @@ async def invocation_detail(request: Request, invocation_id: str) -> HTMLRespons
             duration_seconds,
         ) = _get_invocation_timestamps_and_duration(formatted_history)
 
-        # Format arguments
-        formatted_arguments = _format_invocation_arguments(call)
+        formatted_arguments = format_call_arguments(call)
 
-        # Add additional info for the template
-        task_extra = {
-            "module": task.func.__module__,
-            "func_qualname": task.func.__qualname__,
-        }
+        task_extra = format_task_extra_info(task)
 
         logger.info(
             f"Rendering invocation detail template in {time.time() - start_time:.2f}s"
@@ -644,16 +609,25 @@ async def invocation_history(request: Request, invocation_id: str) -> JSONRespon
             if timestamp.tzinfo is None:
                 timestamp = timestamp.replace(tzinfo=UTC)
 
-            runner_context_summary = "N/A"
-            if entry.runner_context:
-                runner_context_summary = entry.runner_context.runner_id
+            # Get full context info from runner_context
+            context_info = _format_owner_context(entry.runner_context)
 
             formatted_history.append(
                 {
                     "timestamp": timestamp.isoformat(),
                     "status": entry.status_record.status.value,
                     "status_owner_id": entry.status_record.owner_id,
-                    "runner_context_summary": runner_context_summary,
+                    "runner_context_summary": context_info["summary"],
+                    "runner_cls": context_info["runner_cls"],
+                    "runner_id": context_info["runner_id"],
+                    "hostname": context_info["hostname"],
+                    "pid": context_info["pid"],
+                    "thread_id": context_info["thread_id"],
+                    "parent_runner_cls": context_info["parent_runner_cls"],
+                    "parent_runner_id": context_info["parent_runner_id"],
+                    "parent_hostname": context_info["parent_hostname"],
+                    "parent_pid": context_info["parent_pid"],
+                    "parent_thread_id": context_info["parent_thread_id"],
                 }
             )
 

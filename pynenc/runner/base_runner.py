@@ -6,17 +6,15 @@ import signal
 import socket
 import threading
 import time
-import uuid
 import warnings
 from abc import ABC, abstractmethod
 from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
+from pynenc import context
 from pynenc.conf.config_runner import ConfigRunner
 from pynenc.exceptions import RunnerNotExecutableError, PynencError
-from pynenc.util.log import set_logging_context
 from pynenc.runner.runner_context import RunnerContext
-
 
 if TYPE_CHECKING:
     from types import FrameType
@@ -51,31 +49,18 @@ class BaseRunner(ABC):
         self,
         app: "Pynenc",
         runner_cache: dict | None = None,
+        runner_context: RunnerContext | None = None,
     ) -> None:
         # Initialize instance attributes first, before making runner accessible
         self.running = False
         self._runner_cache = runner_cache
-        self._extra_id: str | None = None
-        self._uuid = uuid.uuid4().hex
-        self._hostname = socket.gethostname()
-        self._pid = os.getpid()
+        self._runner_context = runner_context or RunnerContext(self.__class__.__name__)
 
         # Set app relationship last, after all attributes are initialized
         self.app = app
         self.app.runner = self
 
-        # Set logging context
-        set_logging_context(runner_id=self.runner_id)
         self._last_atomic_service_check_time = 0.0
-
-    @cached_property
-    def _base_runner_id(self) -> str:
-        """Base ID without extra_id."""
-        return f"{self.__class__.__name__}@{self._hostname}-{self._pid}"
-
-    def set_extra_id(self, extra_id: str) -> None:
-        self._extra_id = extra_id
-        set_logging_context(runner_id=self.runner_id)
 
     @property
     def logger(self) -> Logger:
@@ -83,16 +68,13 @@ class BaseRunner(ABC):
 
     @property
     def runner_id(self) -> str:
-        """
-        Unique identifier for the runner instance.
+        """Unique identifier for the runner instance."""
+        return self._runner_context.runner_id
 
-        :return: A string representing the unique identifier of the runner
-        """
-        return (
-            f"{self._base_runner_id}[{self._extra_id}]"
-            if self._extra_id
-            else self._base_runner_id
-        )
+    @property
+    def runner_context(self) -> RunnerContext:
+        """The RunnerContext associated with this runner."""
+        return self._runner_context
 
     @cached_property
     def conf(self) -> ConfigRunner:
@@ -280,17 +262,16 @@ class BaseRunner(ABC):
         self._last_atomic_service_check_time = current_time
 
         start_time = None
-        runner_ctx = RunnerContext.from_runner(self)
         try:
-            self.app.orchestrator.register_runner_heartbeat(runner_ctx)
-            if not self.app.orchestrator.should_run_atomic_service(runner_ctx):
+            self.app.orchestrator.register_runner_heartbeat(self.runner_context)
+            if not self.app.orchestrator.should_run_atomic_service(self.runner_context):
                 return
             start_time = datetime.now(UTC)
             self.app.logger.info(
-                f"Runner {runner_ctx.runner_id} executing atomic global services"
+                f"Runner {self.runner_id} executing atomic global services"
             )
             self.app.trigger.trigger_loop_iteration()
-            self.app.orchestrator.invocation_recovery_service(runner_ctx)
+            self.app.orchestrator.invocation_recovery_service(self.runner_context)
         except PynencError as e:
             self.app.logger.error(
                 f"Error during atomic service execution: {e}", exc_info=True
@@ -304,12 +285,23 @@ class BaseRunner(ABC):
             if start_time is not None:
                 end_time = datetime.now(UTC)
                 self.app.orchestrator.record_atomic_service_execution(
-                    runner_ctx, start_time, end_time
+                    self.runner_context, start_time, end_time
                 )
 
     def run(self) -> None:
-        """Starts the runner, initiating its main loop."""
+        """
+        Starts the runner, initiating its main loop.
+
+        Sets the current runner in the context so that any invocations
+        registered from within running tasks will use this runner's context
+        instead of falling back to ExternalRunner.
+        """
+        # Calls for initial setup on Runner implementations
         self.on_start()
+        # Set it after on_start to ensure we get latest runner_id
+        # Set this runner as the current runner in the context
+        # This ensures tasks that register new invocations use this runner's context
+        context.set_current_runner(self.app.app_id, self)
         try:
             while self.running:
                 self._check_atomic_services()
@@ -322,6 +314,7 @@ class BaseRunner(ABC):
             raise e
         finally:
             self.on_stop()
+            context.clear_current_runner(self.app.app_id)
 
 
 class DummyRunner(BaseRunner):
@@ -381,3 +374,28 @@ class DummyRunner(BaseRunner):
         del running_invocation_id, result_invocation_ids, runner_args
         # invocation.result() was called from outside a runner; sleep briefly
         time.sleep(self.conf.invocation_wait_results_sleep_time_sec)
+
+
+class ExternalRunner(DummyRunner):
+    """
+    Represents an external/client context outside Pynenc runners.
+
+    This runner captures hostname and PID information from the external process
+    (e.g., user script, CLI) that registers invocations but doesn't execute them.
+    It extends DummyRunner since it cannot execute tasks, but provides valid
+    RunnerContext for tracking purposes.
+
+    Uses hostname-pid as runner_id since external processes are not managed
+    by Pynenc and we cannot guarantee UUID persistence across calls.
+    """
+
+    def __init__(
+        self,
+        app: "Pynenc",
+        runner_cache: dict | None = None,
+    ) -> None:
+        runner_context = RunnerContext(
+            runner_cls=self.__class__.__name__,
+            runner_id=f"ExternalRunner@{socket.gethostname()}-{os.getpid()}",
+        )
+        super().__init__(app, runner_cache, runner_context)

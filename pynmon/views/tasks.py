@@ -7,6 +7,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 from pynmon.app import get_pynenc_instance, templates
+from pynmon.util.formatting import format_task_extra_info
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
@@ -29,60 +30,32 @@ def _get_task_calls(
     :param timeout: Maximum time to spend collecting calls
     :return: List of unique calls for the task
     """
-    calls = []
+    calls: list[Call] = []
     start_time = time.time()
     invocation_count = 0
 
     try:
-        logger.info("Starting to retrieve existing invocations")
-        invocations_gen = app.orchestrator.get_existing_invocations(task=task)
-        logger.info("Got invocations generator")
-
-        for invocation_id in invocations_gen:
+        for invocation_id in app.orchestrator.get_existing_invocations(task=task):
             if time.time() - start_time > timeout:
                 logger.warning("Timeout reached when processing invocations")
                 break
 
             invocation_count += 1
-            logger.debug(f"Processing invocation {invocation_count}: {invocation_id}")
-
-            invocation = app.state_backend.get_invocation(invocation_id)
-            if invocation is None:
-                logger.warning(f"Invocation not found: {invocation_id}")
-                continue
-
-            if invocation.call not in calls:
-                calls.append(invocation.call)
-                logger.debug(f"Added call {len(calls)}: {invocation.call.call_id}")
+            if invocation := app.state_backend.get_invocation(invocation_id):
+                if invocation.call not in calls:
+                    calls.append(invocation.call)
 
             if len(calls) >= max_calls:
-                logger.info(f"Reached maximum of {max_calls} calls")
                 break
 
         logger.info(
-            f"Processed {invocation_count} invocations, found {len(calls)} unique calls"
+            f"Processed {invocation_count} invocations, found {len(calls)} calls"
         )
 
     except Exception as e:
-        logger.error(f"Error processing invocations: {str(e)}")
-        logger.error(traceback.format_exc())
-        # Continue with whatever calls we found so far
+        logger.error(f"Error processing invocations: {e}")
 
     return calls
-
-
-def _create_task_extra_info(task: "Task") -> dict[str, str | list[str]]:
-    """
-    Create additional task information for template display.
-
-    :param task: The task to extract information from
-    :return: Dictionary with extra task information
-    """
-    return {
-        "module": task.func.__module__,
-        "func_qualname": task.func.__qualname__,
-        "retry_for": [e.__name__ for e in task.conf.retry_for],
-    }
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -170,7 +143,7 @@ async def task_detail(request: Request, task_id: str) -> HTMLResponse:
         calls = _get_task_calls(app, task, max_calls=50, timeout=10.0)
 
         # Create additional task information for template
-        task_extra = _create_task_extra_info(task)
+        task_extra = format_task_extra_info(task)
 
         logger.info(f"Rendering template with {len(calls)} calls")
         return templates.TemplateResponse(

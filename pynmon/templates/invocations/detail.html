@@ -1,4 +1,5 @@
-{% extends "base.html" %} {% block content %}
+{% extends "base.html" %} {% from "partials/status_badge.html" import
+status_badge %} {% block content %}
 <div class="pynmon-container">
   <div class="row">
     <div class="col-12">
@@ -6,15 +7,26 @@
         <div
           class="card-header pynmon-card-header d-flex justify-content-between align-items-center"
         >
-          <span class="compact-header"
-            >Invocation {{ invocation.invocation_id }}</span
-          >
+          <span class="compact-header">Invocation Details</span>
           <div>
             <a
               href="/invocations"
               class="btn btn-sm btn-outline-secondary me-2 pynmon-action-btn"
             >
               Back to Invocations
+            </a>
+            <a
+              href="#"
+              id="view-in-timeline-btn"
+              class="btn btn-sm btn-outline-success me-2 pynmon-action-btn"
+              title="View this invocation in the timeline"
+            >
+              <span
+                class="material-icons"
+                style="font-size: 16px; vertical-align: middle"
+                >timeline</span
+              >
+              Timeline
             </a>
             <a
               href="/calls?call_id={{ call.call_id|urlencode }}"
@@ -42,13 +54,7 @@
                     <tbody>
                       <tr>
                         <th>Status:</th>
-                        <td>
-                          <span
-                            class="badge {% if invocation.status.name == 'SUCCESS' %}bg-success {% elif invocation.status.name == 'FAILED' %}bg-danger {% elif invocation.status.name == 'RUNNING' %}bg-primary {% elif invocation.status.name == 'PENDING' %}bg-warning {% elif invocation.status.name == 'PAUSED' %}bg-info {% elif invocation.status.name == 'RETRY' %}bg-secondary {% else %}bg-dark{% endif %}"
-                          >
-                            {{ invocation.status.name }}
-                          </span>
-                        </td>
+                        <td>{{ status_badge(invocation.status.name) }}</td>
                       </tr>
                       <tr>
                         <th>Retries:</th>
@@ -104,8 +110,9 @@
                           <a
                             href="/calls/?call_id={{ call.call_id|urlencode }}"
                           >
-                            {{ call.call_id.split('#')[-1][:8] if '#' in
-                            call.call_id else call.call_id[:8] }}...
+                            <code style="font-size: 11px; word-break: break-all"
+                              >{{ call.call_id }}</code
+                            >
                           </a>
                         </td>
                       </tr>
@@ -187,26 +194,119 @@
                     {% for entry in history %}
                     <div class="timeline-item compact-timeline-item">
                       <div
-                        class="timeline-marker {% if entry.status == 'SUCCESS' %}bg-success{% elif entry.status == 'FAILED' %}bg-danger{% elif entry.status == 'RUNNING' %}bg-primary{% elif entry.status == 'PENDING' %}bg-warning{% elif entry.status == 'PAUSED' %}bg-info{% elif entry.status == 'RETRY' %}bg-secondary{% else %}bg-dark{% endif %}"
+                        class="timeline-marker {% if entry.status == 'SUCCESS' %}bg-success{% elif entry.status == 'FAILED' %}bg-danger{% elif entry.status == 'RUNNING' %}bg-info{% elif entry.status == 'PENDING' %}bg-warning{% elif entry.status == 'PAUSED' %}bg-primary{% elif entry.status == 'RETRY' %}bg-secondary{% else %}bg-dark{% endif %}"
                       ></div>
                       <div class="timeline-content compact-timeline-content">
                         <div class="timeline-title compact-timeline-title">
-                          <span
-                            class="badge {% if entry.status == 'SUCCESS' %}bg-success{% elif entry.status == 'FAILED' %}bg-danger{% elif entry.status == 'RUNNING' %}bg-primary{% elif entry.status == 'PENDING' %}bg-warning{% elif entry.status == 'PAUSED' %}bg-info{% elif entry.status == 'RETRY' %}bg-secondary{% else %}bg-dark{% endif %}"
-                          >
-                            {{ entry.status }}
-                          </span>
+                          {{ status_badge(entry.status) }}
                         </div>
                         <div class="timeline-date metadata-text">
-                          {{ entry.timestamp }} {% if
-                          entry.runner_context_summary %}
-                          <br />
-                          <span class="text-muted" style="font-size: 12px"
-                            >{{ entry.runner_context_summary }}</span
+                          {{ entry.timestamp }}
+                        </div>
+                        {% if entry.runner_context_summary %}
+                        <div
+                          class="timeline-runner-info"
+                          style="
+                            font-size: 11px;
+                            margin-top: 6px;
+                            background: #f8f9fa;
+                            padding: 8px;
+                            border-radius: 4px;
+                            border-left: 3px solid #6c757d;
+                          "
+                        >
+                          <!-- Current Runner Context -->
+                          <div style="margin-bottom: 4px">
+                            <strong style="color: #495057">Runner:</strong>
+                            <span
+                              class="badge bg-primary"
+                              style="font-size: 10px"
+                              >{{ entry.runner_cls or 'Unknown' }}</span
+                            >
+                            <code
+                              style="
+                                font-size: 10px;
+                                background: #e9ecef;
+                                padding: 1px 4px;
+                                border-radius: 2px;
+                              "
+                              >{{ entry.runner_id }}</code
+                            >
+                          </div>
+                          <div
+                            style="
+                              color: #6c757d;
+                              font-size: 10px;
+                              margin-left: 8px;
+                            "
                           >
+                            {% if entry.hostname %}<span
+                              >host: <strong>{{ entry.hostname }}</strong></span
+                            >{% endif %} {% if entry.pid %}<span
+                              style="margin-left: 8px"
+                              >pid: <strong>{{ entry.pid }}</strong></span
+                            >{% endif %} {% if entry.thread_id %}<span
+                              style="margin-left: 8px"
+                              >thread:
+                              <strong>{{ entry.thread_id }}</strong></span
+                            >{% endif %}
+                          </div>
+
+                          <!-- Parent Runner Context (if available) -->
+                          {% if entry.parent_runner_id %}
+                          <div
+                            style="
+                              margin-top: 6px;
+                              padding-top: 6px;
+                              border-top: 1px dashed #dee2e6;
+                            "
+                          >
+                            <strong style="color: #6c757d; font-size: 10px"
+                              >↳ Parent:</strong
+                            >
+                            <span
+                              class="badge bg-secondary"
+                              style="font-size: 10px"
+                              >{{ entry.parent_runner_cls or 'Unknown' }}</span
+                            >
+                            <code
+                              style="
+                                font-size: 10px;
+                                background: #e9ecef;
+                                padding: 1px 4px;
+                                border-radius: 2px;
+                              "
+                              >{{ entry.parent_runner_id }}</code
+                            >
+                            <div
+                              style="
+                                color: #6c757d;
+                                font-size: 10px;
+                                margin-left: 16px;
+                                margin-top: 2px;
+                              "
+                            >
+                              {% if entry.parent_hostname %}<span
+                                >host:
+                                <strong
+                                  >{{ entry.parent_hostname }}</strong
+                                ></span
+                              >{% endif %} {% if entry.parent_pid %}<span
+                                style="margin-left: 8px"
+                                >pid:
+                                <strong>{{ entry.parent_pid }}</strong></span
+                              >{% endif %} {% if entry.parent_thread_id %}<span
+                                style="margin-left: 8px"
+                                >thread:
+                                <strong
+                                  >{{ entry.parent_thread_id }}</strong
+                                ></span
+                              >{% endif %}
+                            </div>
+                          </div>
                           {% endif %}
                         </div>
-                        {% if entry.execution_context %}
+                        {% endif %} {% if entry.execution_context %}
                         <div class="timeline-text data-text">
                           {{ entry.execution_context }}
                         </div>
@@ -290,5 +390,53 @@
       font-size: 0.875rem;
     }
   </style>
+  {% endblock %} {% block extra_js %}
+  <script>
+    // View in timeline functionality
+    document
+      .getElementById("view-in-timeline-btn")
+      ?.addEventListener("click", function (e) {
+        e.preventDefault();
+
+        // Fetch invocation history to get time range
+        fetch("/invocations/{{ invocation.invocation_id }}/history")
+          .then((response) => response.json())
+          .then((historyData) => {
+            if (!historyData || historyData.length === 0) {
+              alert("No history data available for this invocation");
+              return;
+            }
+
+            // Get first and last timestamp
+            const startTime = new Date(historyData[0].timestamp);
+            const endTime = new Date(
+              historyData[historyData.length - 1].timestamp
+            );
+
+            // Add 10% padding on each side
+            const durationMs = endTime - startTime;
+            const paddingMs = Math.max(durationMs * 0.1, 1000); // At least 1 second padding
+
+            const paddedStart = new Date(startTime.getTime() - paddingMs);
+            const paddedEnd = new Date(endTime.getTime() + paddingMs);
+
+            // Format for datetime-local input (YYYY-MM-DDTHH:MM:SS)
+            const formatForInput = (date) => date.toISOString().slice(0, 19);
+
+            // Build the timeline URL with custom range
+            const params = new URLSearchParams();
+            params.set("time_range", "custom");
+            params.set("start_date", formatForInput(paddedStart));
+            params.set("end_date", formatForInput(paddedEnd));
+
+            // Navigate to timeline
+            window.location.href = "/invocations/timeline?" + params.toString();
+          })
+          .catch((error) => {
+            console.error("Error fetching history:", error);
+            alert("Failed to load invocation history");
+          });
+      });
+  </script>
   {% endblock %}
 </div>

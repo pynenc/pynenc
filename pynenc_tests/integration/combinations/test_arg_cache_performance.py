@@ -31,9 +31,12 @@ def test_batch_parallelization_overhead(task_process_large_shared_arg: Task) -> 
 
     large_data = "x" * 10_000_000  # 10 MB
 
-    # Start runner thread
+    # Start runner thread - keep it running for both batches
     runner_thread = threading.Thread(target=lambda: app.runner.run(), daemon=True)
     runner_thread.start()
+
+    # Give the runner time to start up and spawn processes
+    time.sleep(0.5)
 
     # Run batch with cache disabled
     num_tasks = 3
@@ -46,9 +49,7 @@ def test_batch_parallelization_overhead(task_process_large_shared_arg: Task) -> 
     for i, e in enumerate(batch_elapsed_no_cache):
         logger.info(f"No cache, batch task {i}: elapsed={e:.3f} seconds")
 
-    # Enable cache and rerun batch
-    runner_thread = threading.Thread(target=lambda: app.runner.run(), daemon=True)
-    runner_thread.start()
+    # Run batch with cache enabled (same runner, no restart needed)
     batch_results_cache = batch_process_shared_data(
         app, large_data, num_tasks, use_arg_cache=True
     )

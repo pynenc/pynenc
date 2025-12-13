@@ -71,16 +71,14 @@ def test_call_detail_with_query_parameter(pynmon_client: "PynmonClient") -> None
 
         # Should show call details
         assert call_id in content
-        assert "Call Details" in content
         assert "hello_task" in content
         assert "Integration Test" in content
 
         # Should show task information
-        assert "Task Information" in content
         assert "test-pynmon-calls-app" in content
 
         # Should have navigation links
-        assert "View Task" in content
+        assert "Task:" in content
         assert "Back to Invocations" in content
 
     finally:
@@ -119,7 +117,6 @@ def test_call_detail_with_path_parameter(pynmon_client: "PynmonClient") -> None:
 
         # Should show call details
         assert call_id in content
-        assert "Call Details" in content
         assert "add_task" in content
 
         # Should show arguments
@@ -127,7 +124,7 @@ def test_call_detail_with_path_parameter(pynmon_client: "PynmonClient") -> None:
         assert "58" in content
 
         # Should show task information
-        assert "Task Information" in content
+        assert add_task.task_id in content
 
     finally:
         app.runner.stop_runner_loop()
@@ -207,9 +204,6 @@ def test_call_detail_shows_task_information(pynmon_client: "PynmonClient") -> No
 
         assert response.status_code == 200
         content = response.text
-
-        # Should show task information section
-        assert "Task Information" in content
 
         # Should show task details
         task_id = hello_task.task_id

@@ -141,8 +141,8 @@ def test_running_concurrency_no_reroute(app: "Pynenc") -> None:
     # Create multiple invocations
     invocations = [sleep_with_running_concurrency_no_reroute(0.3) for _ in range(5)]
 
-    # Give runner time to process
-    time.sleep(0.5)
+    # Give runner time to process (task sleeps 0.3s + runner overhead)
+    time.sleep(0.8)
 
     # Check statuses - only one should have run (SUCCESS), others should be CONCURRENCY_CONTROLLED_FINAL
     statuses = [

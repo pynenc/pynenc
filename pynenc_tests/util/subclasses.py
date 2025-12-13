@@ -9,6 +9,7 @@ def get_runner_subclasses() -> list[type[BaseRunner]]:
         if (
             "mock" in c.__name__.lower()
             or c.__name__.startswith("Dummy")
+            or c.__name__.startswith("External")
             or c.__name__.startswith("Patched")
         ):
             continue

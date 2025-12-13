@@ -4,6 +4,8 @@ from unittest.mock import Mock
 
 import pytest
 
+from pynenc import context
+from pynenc.runner.runner_context import RunnerContext
 from pynenc.util.log import (
     ColoredFormatter,
     Colors,
@@ -21,6 +23,7 @@ if TYPE_CHECKING:
 mock_app = Mock()
 mock_app.app_id = "test_app"
 mock_app.conf.logging_level = "INFO"
+mock_app.conf.truncate_log_ids = True
 
 
 def test_create_logger_valid_level() -> None:
@@ -38,36 +41,50 @@ def test_create_logger_invalid_level() -> None:
 
 def test_set_logging_context() -> None:
     """Test that logging context can be set and retrieved."""
-    set_logging_context(
-        task_id="test_task", invocation_id="test_inv", runner_id="test_runner"
+    # Set up runner context in context.py (single source of truth)
+    runner_ctx = RunnerContext(
+        runner_cls="TestRunner",
+        runner_id="test_runner_id",
     )
+    context.set_runner_context("test_app", runner_ctx)
 
-    context = get_logging_context()
-    assert context["task_id"] == "test_task"
-    assert context["invocation_id"] == "test_inv"
-    assert context["runner_id"] == "test_runner"
+    # Set logging-specific context
+    set_logging_context(task_id="test_task", invocation_id="test_inv")
+
+    log_context = get_logging_context("test_app")
+    assert log_context["task_id"] == "test_task"
+    assert log_context["invocation_id"] == "test_inv"
+    assert log_context["runner_id"] == "test_runner_id"
 
     clear_logging_context()
+    context.clear_runner_context("test_app")
 
 
 def test_clear_logging_context() -> None:
     """Test that logging context can be cleared."""
-    set_logging_context(task_id="test_task", runner_id="test_runner")
+    set_logging_context(task_id="test_task", invocation_id="test_inv")
     clear_logging_context()
 
-    context = get_logging_context()
-    assert context["task_id"] is None
-    assert context["invocation_id"] is None
-    assert context["runner_id"] is None
+    log_context = get_logging_context("test_app")
+    assert log_context["task_id"] is None
+    assert log_context["invocation_id"] is None
 
 
 def test_pynenc_context_filter() -> None:
     """Test that PynencContextFilter adds context to log records."""
-    set_logging_context(
-        task_id="test_task", invocation_id="test_inv", runner_id="test_runner"
+    # Set up runner context in context.py
+    runner_ctx = RunnerContext(
+        runner_cls="TestRunner",
+        runner_id="test_runner_id",
     )
+    context.set_runner_context("test_app", runner_ctx)
+    set_logging_context(task_id="test_task", invocation_id="test_inv")
 
-    context_filter = PynencContextFilter()
+    # Create mock conf for the filter
+    mock_conf = Mock()
+    mock_conf.truncate_log_ids = True
+
+    context_filter = PynencContextFilter("test_app", mock_conf)
     record = logging.LogRecord(
         name="test_logger",
         level=logging.INFO,
@@ -82,9 +99,11 @@ def test_pynenc_context_filter() -> None:
 
     assert getattr(record, "task_id", None) == "test_task"
     assert getattr(record, "invocation_id", None) == "test_inv"
-    assert getattr(record, "runner_id", None) == "test_runner"
+    assert getattr(record, "runner_ctx", None) == runner_ctx
+    assert getattr(record, "truncate_log_ids", None) is True
 
     clear_logging_context()
+    context.clear_runner_context("test_app")
 
 
 def test_colored_formatter_simple_message() -> None:
@@ -181,12 +200,13 @@ def test_colored_formatter_with_context() -> None:
     # Add context to record (simulating what PynencContextFilter does)
     record.task_id = "test_task"
     record.invocation_id = "test_inv"
-    record.runner_id = None
+    record.runner_ctx = None
+    record.truncate_log_ids = True
 
     formatted = formatter.format(record)
 
-    # Should include context prefix with task and invocation
-    assert "[task:test_task inv:test_inv]" in formatted
+    # Should include context prefix with task and invocation (7-char truncation)
+    assert "[task:test_task inv:test_in]" in formatted
     assert "Test message" in formatted
 
 
@@ -203,15 +223,20 @@ def test_colored_formatter_with_runner_context() -> None:
         exc_info=None,
     )
 
-    # Add only runner context
+    # Add runner context (no task/invocation)
+    runner_ctx = RunnerContext(
+        runner_cls="TestRunner",
+        runner_id="runner_123456789",  # Will be truncated to 7 chars
+    )
     record.task_id = None
     record.invocation_id = None
-    record.runner_id = "runner_123"
+    record.runner_ctx = runner_ctx
+    record.truncate_log_ids = True
 
     formatted = formatter.format(record)
 
-    # Should include runner context prefix
-    assert "[runner:runner_123]" in formatted
+    # Should include runner context prefix (7-char truncation)
+    assert "[TestRunner(runner_)]" in formatted
     assert "Runner message" in formatted
 
 
@@ -229,14 +254,19 @@ def test_colored_formatter_with_all_context() -> None:
     )
 
     # Add all context
+    runner_ctx = RunnerContext(
+        runner_cls="TestRunner",
+        runner_id="runner_123456789",
+    )
     record.task_id = "test_task"
-    record.invocation_id = "test_inv"
-    record.runner_id = "runner_123"
+    record.invocation_id = "test_invocation_id"
+    record.runner_ctx = runner_ctx
+    record.truncate_log_ids = True
 
     formatted = formatter.format(record)
 
-    # Should include all context in order: runner, task, invocation
-    assert "[runner:runner_123 task:test_task inv:test_inv]" in formatted
+    # Should include all context in order: runner display, task, invocation (7-char truncation)
+    assert "[TestRunner(runner_) task:test_task inv:test_in]" in formatted
     assert "Full context message" in formatted
 
 
@@ -256,7 +286,8 @@ def test_colored_formatter_with_task_only() -> None:
     # Add only task context
     record.task_id = "test_task"
     record.invocation_id = None
-    record.runner_id = None
+    record.runner_ctx = None
+    record.truncate_log_ids = True
 
     formatted = formatter.format(record)
 
@@ -281,15 +312,15 @@ def test_colored_formatter_no_context() -> None:
     # No context added
     record.task_id = None
     record.invocation_id = None
-    record.runner_id = None
+    record.runner_ctx = None
+    record.truncate_log_ids = True
 
     formatted = formatter.format(record)
 
-    # Should not include any context prefix (runner:, task:, inv:)
-    # ANSI codes contain [ but that's not a context prefix
-    assert "runner:" not in formatted
+    # Should not include any context prefix
     assert "task:" not in formatted
     assert "inv:" not in formatted
+    assert "TestRunner" not in formatted
     assert "No context message" in formatted
 
 
@@ -297,12 +328,23 @@ def test_logging_with_context_integration(caplog: "LogCaptureFixture") -> None:
     """Test end-to-end logging with context."""
     caplog.set_level(logging.DEBUG)
 
+    # Set up runner context
+    runner_ctx = RunnerContext(
+        runner_cls="TestRunner",
+        runner_id="runner_integration",
+    )
+    context.set_runner_context("test_integration", runner_ctx)
+
+    # Create mock conf for the filter
+    mock_conf = Mock()
+    mock_conf.truncate_log_ids = True
+
     # Create logger with context filter
     logger = logging.getLogger("test_integration")
-    context_filter = PynencContextFilter()
+    context_filter = PynencContextFilter("test_integration", mock_conf)
     logger.addFilter(context_filter)
 
-    # Set context
+    # Set logging-specific context
     set_logging_context(task_id="task_123", invocation_id="inv_456")
 
     # Log message
@@ -314,8 +356,10 @@ def test_logging_with_context_integration(caplog: "LogCaptureFixture") -> None:
     )
 
     # Verify context was applied
-    context = get_logging_context()
-    assert context["task_id"] == "task_123"
-    assert context["invocation_id"] == "inv_456"
+    log_context = get_logging_context("test_integration")
+    assert log_context["task_id"] == "task_123"
+    assert log_context["invocation_id"] == "inv_456"
+    assert log_context["runner_id"] == "runner_integration"
 
     clear_logging_context()
+    context.clear_runner_context("test_integration")

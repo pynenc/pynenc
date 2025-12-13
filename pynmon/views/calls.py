@@ -1,13 +1,17 @@
-import json
 import logging
 import time
 import traceback
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 from pynmon.app import get_pynenc_instance, templates
+from pynmon.util.formatting import format_task_extra_info
+from pynmon.util.view_helpers import (
+    format_serialized_arguments,
+    render_error_response,
+)
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
@@ -17,14 +21,6 @@ if TYPE_CHECKING:
 
 router = APIRouter(prefix="/calls", tags=["calls"])
 logger = logging.getLogger("pynmon.views.calls")
-
-
-class TaskInfo(TypedDict):
-    """Type for task information dictionary."""
-
-    task_id: str
-    module: str
-    func_qualname: str
 
 
 def _check_timeout_for_call_search(
@@ -154,54 +150,6 @@ def find_call_and_invocations(
     return target_call, target_task, all_invocations
 
 
-def format_call_arguments(call: "Call") -> tuple[dict[str, str], dict | None]:
-    """
-    Format the arguments of a call for display.
-
-    :param call: The call object containing arguments
-    :return: Tuple of (formatted_args, raw_args)
-    """
-    formatted_args: dict[str, str] = {}
-    raw_args = None
-
-    if not hasattr(call, "serialized_arguments"):
-        return formatted_args, raw_args
-
-    try:
-        # If it's already a dictionary, use it directly
-        if isinstance(call.serialized_arguments, dict):
-            raw_args = call.serialized_arguments
-        # Otherwise try to parse it as JSON
-        else:
-            raw_args = json.loads(call.serialized_arguments)
-
-        # Format each argument for better display
-        for key, value in raw_args.items():
-            if isinstance(value, dict | list):
-                formatted_args[key] = json.dumps(value, indent=2)
-            else:
-                formatted_args[key] = str(value)
-    except (json.JSONDecodeError, TypeError, AttributeError):
-        # If it can't be parsed as JSON, use it as-is
-        formatted_args = {"raw": str(call.serialized_arguments)}
-
-    return formatted_args, raw_args
-
-
-def create_task_info(task: "Task") -> TaskInfo:
-    """
-    Create a dictionary with task information.
-
-    :param task: The task object
-    :return: Dictionary with task information
-    """
-    return {
-        "task_id": task.task_id,
-        "module": task.func.__module__,
-        "func_qualname": task.func.__qualname__,
-    }
-
-
 async def process_call_detail(
     request: Request, call_id: str, request_source: str
 ) -> HTMLResponse:
@@ -216,7 +164,8 @@ async def process_call_detail(
     app = get_pynenc_instance()
 
     if not call_id or call_id.strip() == "":
-        return _create_error_response(
+        return render_error_response(
+            templates,
             request,
             "Missing Call ID",
             "No call_id was provided. Please check the URL and try again.",
@@ -232,8 +181,12 @@ async def process_call_detail(
 
         if not target_call or not target_task:
             logger.warning(f"No call found with ID: {call_id}")
-            return _create_error_response(
-                request, "Call Not Found", f"No call found with ID: {call_id}", 404
+            return render_error_response(
+                templates,
+                request,
+                "Call Not Found",
+                f"No call found with ID: {call_id}",
+                404,
             )
 
         # Create template context
@@ -249,30 +202,14 @@ async def process_call_detail(
     except Exception as e:
         logger.error(f"Unexpected error in call_detail ({request_source}): {str(e)}")
         logger.error(traceback.format_exc())
-        return _create_error_response(
-            request, "Error", f"An error occurred: {str(e)}", 500
+        return render_error_response(
+            templates, request, "Error", f"An error occurred: {str(e)}", 500
         )
     finally:
         elapsed = time.time() - start_time
         logger.info(
             f"call_detail ({request_source}) completed in {elapsed:.2f} seconds"
         )
-
-
-def _create_error_response(
-    request: Request, title: str, message: str, status_code: int
-) -> HTMLResponse:
-    """Create a standardized error response."""
-    logger.warning(f"{title}: {message}")
-    return templates.TemplateResponse(
-        "shared/error.html",
-        {
-            "request": request,
-            "title": title,
-            "message": message,
-        },
-        status_code=status_code,
-    )
 
 
 def _create_call_detail_context(
@@ -284,15 +221,22 @@ def _create_call_detail_context(
     call_id: str,
 ) -> dict[str, Any]:
     """Create the template context for call detail page."""
-    # Format the arguments
-    formatted_args, raw_args = format_call_arguments(target_call)
+    serialized = getattr(target_call, "serialized_arguments", None)
+    formatted_args, raw_args = format_serialized_arguments(serialized)
 
-    # Get task information
-    task_info = create_task_info(target_task)
+    task_info = {
+        "task_id": target_task.task_id,
+        **format_task_extra_info(target_task),
+    }
+
+    # Use a simple title for the browser tab only
+    func_name = task_info.get("func_qualname", "")
+    module_name = task_info.get("module", "")
+    title = f"{module_name}.{func_name}" if module_name else func_name
 
     return {
         "request": request,
-        "title": f"Call {call_id}",
+        "title": title,
         "app_id": app.app_id,
         "call": target_call,
         "task": task_info,

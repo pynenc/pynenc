@@ -257,11 +257,16 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             Raises the original exception if a non-retriable exception occurs or the maximum retries are reached for a retriable exception.
         """
         # runner_args are passed from/to the runner (e.g. used to sync subprocesses)
-        context.runner_args = runner_args
+        # Always set runner_args in thread-local storage so nested invocations can access them
+        context.set_runner_args(runner_args)
+        # Set the runner context for this thread so any sub-invocations
+        # registered from within this task use the correct runner context
+        # (log.py reads directly from context.py, so this is the single source of truth)
+        context.set_runner_context(self.app.app_id, runner_ctx)
+        # Set logging-specific context (task_id and invocation_id)
         set_logging_context(
             task_id=self.task.task_id,
             invocation_id=self.invocation_id,
-            runner_id=runner_ctx.runner_id,
         )
         try:
             self.task.logger.info("Invocation STARTED")
@@ -291,11 +296,14 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
                 self.invocation_id, ex, runner_ctx
             )
             self.task.logger.warning(f"Invocation WILL-RETRY {ex=}")
-        except exceptions.InvocationStatusOwnershipError as ex:
-            self.task.logger.error(
-                "fWe do not own the status anymore, re-raising without setting exception"
+        except exceptions.InvocationStatusTransitionError as ex:
+            # Expected race condition: another runner already picked up this invocation
+            self.task.logger.warning(
+                f"Status transition conflict (another runner took ownership): {ex}"
             )
-            raise ex
+        except exceptions.InvocationStatusOwnershipError as ex:
+            # Expected race condition: we lost ownership to another runner
+            self.task.logger.warning(f"Lost ownership to another runner: {ex}")
         except Exception as ex:
             self.app.logger.exception("Invocation EXCEPTION")
             self.app.orchestrator.set_invocation_exception(self, ex, runner_ctx)
@@ -334,7 +342,9 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
 
         while not self.status.is_final():
             self.app.runner.waiting_for_results(
-                self.parent_invocation_id, [self.invocation_id], context.runner_args
+                self.parent_invocation_id,
+                [self.invocation_id],
+                context.get_runner_args(),
             )
         self.app.logger.debug(f"end waiting for invocation {self.invocation_id} result")
         return self.get_final_result()
@@ -347,7 +357,9 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             )
         while not self.status.is_final():
             await self.app.runner.async_waiting_for_results(
-                self.parent_invocation_id, [self.invocation_id], context.runner_args
+                self.parent_invocation_id,
+                [self.invocation_id],
+                context.get_runner_args(),
             )
         return self.get_final_result()
 
@@ -431,7 +443,7 @@ class DistributedInvocationGroup(
                 )
                 notified_orchestrator = True
             self.app.runner.waiting_for_results(
-                parent_invocation_id, waiting_invocation_ids, context.runner_args
+                parent_invocation_id, waiting_invocation_ids, context.get_runner_args()
             )
 
     async def async_results(self) -> AsyncGenerator[Result, None]:
@@ -456,7 +468,7 @@ class DistributedInvocationGroup(
                 )
                 notified_orchestrator = True
             await self.app.runner.async_waiting_for_results(
-                parent_invocation_id, waiting_invocation_ids, context.runner_args
+                parent_invocation_id, waiting_invocation_ids, context.get_runner_args()
             )
 
 

@@ -2,7 +2,7 @@ import signal
 import time
 from collections.abc import Callable, Generator
 from typing import Any
-from unittest.mock import ANY, Mock, PropertyMock, patch
+from unittest.mock import ANY, Mock, patch
 
 import pytest
 
@@ -12,6 +12,7 @@ from pynenc.runner.persistent_process_runner import (
     PersistentProcessRunner,
     persistent_process_main,
 )
+from pynenc.runner.runner_context import RunnerContext
 from pynenc_tests.conftest import MockPynenc
 
 
@@ -40,8 +41,19 @@ def add_task(runner: PersistentProcessRunner) -> Task:
 @pytest.fixture
 def mock_process() -> Generator[Mock, None, None]:
     with patch("pynenc.runner.persistent_process_runner.Process") as mock:
-        mock.return_value.is_alive.return_value = True
-        mock.return_value.pid = 12345  # Mock a PID for logging checks
+        # Track all created process mocks for inspection
+        created_mocks: list[Mock] = []
+        pid_counter = iter(range(12345, 12345 + 100))
+
+        def create_process_mock(*args: Any, **kwargs: Any) -> Mock:
+            process_mock = Mock()
+            process_mock.is_alive.return_value = True
+            process_mock.pid = next(pid_counter)
+            created_mocks.append(process_mock)
+            return process_mock
+
+        mock.side_effect = create_process_mock
+        mock.created_mocks = created_mocks  # Allow tests to access created mocks
         yield mock
 
 
@@ -61,9 +73,16 @@ def mock_manager() -> Generator[Mock, None, None]:
 def test_persistent_process_main_handles_sigterm(
     app: MockPynenc, mock_manager: Mock
 ) -> None:
-    process_extra_id = "test-process"
     runner_cache: dict[str, Any] = {}
     stop_event = mock_manager.return_value.Event.return_value
+
+    # Create a RunnerContext and serialize to JSON
+    runner_ctx = RunnerContext(
+        runner_cls="PersistentProcessRunner",
+        runner_id="PersistentProcessRunner@test-host-123[test-process]",
+        pid=123,
+        hostname="test-host",
+    )
 
     def simulate_sigterm(signum: int, frame: Any) -> None:
         stop_event.set()
@@ -74,9 +93,9 @@ def test_persistent_process_main_handles_sigterm(
             stop_event.is_set.side_effect = [False, True]  # Ensure loop exits
             persistent_process_main(
                 app,
-                process_extra_id=process_extra_id,
                 runner_cache=runner_cache,
                 stop_event=stop_event,
+                runner_ctx_json=runner_ctx.to_json(),
             )
             mock_signal.assert_called_once_with(signal.SIGTERM, ANY)
             stop_event.set.assert_called_once()
@@ -100,12 +119,16 @@ def test_spawn_persistent_process(
     runner: PersistentProcessRunner, mock_process: Mock, mock_manager: Mock
 ) -> None:
     runner._on_start()
+    initial_count = len(runner.processes)
     with patch.object(runner.logger, "info") as mock_logger:
         process_key = runner._spawn_persistent_process()
+        assert process_key is not None
         assert process_key in runner.processes
+        assert len(runner.processes) == initial_count + 1
         assert mock_process.called
+        # Verify the log message contains the spawned PID
         mock_logger.assert_any_call(
-            f"Spawned persistent process {process_key} with pid 12345"
+            f"Spawned persistent process with pid {process_key}"
         )
 
 
@@ -125,8 +148,8 @@ def test_terminate_all_processes(
 ) -> None:
     runner._on_start()
     runner.processes = {
-        "proc1": mock_process.return_value,
-        "proc2": mock_process.return_value,
+        1: mock_process.return_value,
+        2: mock_process.return_value,
     }
 
     runner._terminate_all_processes()
@@ -141,7 +164,7 @@ def test_on_stop(
     runner: PersistentProcessRunner, mock_process: Mock, mock_manager: Mock
 ) -> None:
     runner._on_start()
-    runner.processes = {"proc1": mock_process.return_value}
+    runner.processes = {1: mock_process.return_value}
     with patch.object(runner, "_terminate_all_processes") as mock_terminate:
         runner._on_stop()
         mock_terminate.assert_called_once()
@@ -156,16 +179,16 @@ def test_runner_loop_iteration_replaces_dead_processes(
     runner.num_processes = 2
     dead_proc = Mock(is_alive=Mock(return_value=False))
     alive_proc = Mock(is_alive=Mock(return_value=True))
-    runner.processes = {"proc1": alive_proc, "proc2": dead_proc}
+    runner.processes = {1: alive_proc, 2: dead_proc}
 
-    def mock_spawn() -> str:
-        process_key = "procX"
-        runner.processes[process_key] = Mock(is_alive=Mock(return_value=True))
+    def mock_spawn() -> int:
+        process_key = 99
+        runner.processes[process_key] = Mock(is_alive=Mock(return_value=True))  # type: ignore[assignment]
         return process_key
 
     with patch.object(runner, "_spawn_persistent_process", side_effect=mock_spawn):
         runner.runner_loop_iteration()
-        assert "proc2" not in runner.processes
+        assert 2 not in runner.processes
         assert len(runner.processes) == 2
 
 
@@ -175,8 +198,8 @@ def test_runner_loop_iteration_no_action_if_all_alive(
     runner._on_start()
     runner.num_processes = 2
     runner.processes = {
-        "proc1": Mock(is_alive=Mock(return_value=True)),
-        "proc2": Mock(is_alive=Mock(return_value=True)),
+        1: Mock(is_alive=Mock(return_value=True)),  # type: ignore[assignment]
+        2: Mock(is_alive=Mock(return_value=True)),  # type: ignore[assignment]
     }
     with patch.object(runner, "_spawn_persistent_process") as mock_spawn:
         runner.runner_loop_iteration()
@@ -219,25 +242,20 @@ def test_cache_property(runner: PersistentProcessRunner, mock_manager: Mock) -> 
     assert runner.cache is runner.runner_cache
 
 
-def test_generate_process_extra_id(
-    runner: PersistentProcessRunner, app: MockPynenc
-) -> None:
-    with patch.object(
-        PersistentProcessRunner, "runner_id", new_callable=PropertyMock
-    ) as mock_runner_id:
-        mock_runner_id.return_value = "test-runner"
-        key1 = runner._generate_process_extra_id()
-        key2 = runner._generate_process_extra_id()
-        assert key1 != key2
-        assert runner._process_id_counter == 2
-
-
 def test_persistent_process_main_handle_terminate(
     app: MockPynenc, mock_manager: Mock
 ) -> None:
     """Test that SIGTERM triggers the handle_terminate function"""
     runner_cache: dict[str, Any] = {}
     stop_event = mock_manager.return_value.Event.return_value
+
+    # Create a RunnerContext and serialize to JSON
+    runner_ctx = RunnerContext(
+        runner_cls="PersistentProcessRunner",
+        runner_id="PersistentProcessRunner@test-host-123[test-process]",
+        pid=123,
+        hostname="test-host",
+    )
 
     def simulate_sigterm(signum: int, frame: Any) -> None:
         stop_event.set()
@@ -249,9 +267,9 @@ def test_persistent_process_main_handle_terminate(
             stop_event.is_set.side_effect = [False, True]
             persistent_process_main(
                 app,
-                process_extra_id="test-process",
                 runner_cache=runner_cache,
                 stop_event=stop_event,
+                runner_ctx_json=runner_ctx.to_json(),
             )
             mock_signal.assert_called_once_with(signal.SIGTERM, ANY)
 
@@ -262,8 +280,8 @@ def test_on_stop_runner_loop(
     """Test the on_stop_runner_loop method"""
     runner._on_start()
     runner.processes = {
-        "proc1": mock_process.return_value,
-        "proc2": mock_process.return_value,
+        1: mock_process.return_value,
+        2: mock_process.return_value,
     }
     with patch.object(runner, "_terminate_all_processes") as mock_terminate:
         runner._on_stop_runner_loop()
@@ -274,21 +292,35 @@ def test_spawn_persistent_process_failure(
     runner: PersistentProcessRunner, mock_process: Mock, mock_manager: Mock
 ) -> None:
     """Test error handling when process spawning fails"""
-    runner._on_start()
-    # Mock the Process.start() method to raise an exception
-    mock_process.return_value.start.side_effect = Exception("Process creation failed")
+
+    # Configure the mock to fail on start BEFORE _on_start is called
+    def create_failing_process(*args: Any, **kwargs: Any) -> Mock:
+        process_mock = Mock()
+        process_mock.is_alive.return_value = True
+        process_mock.pid = 99999
+        process_mock.start.side_effect = Exception("Process creation failed")
+        return process_mock
+
+    mock_process.side_effect = create_failing_process
 
     with pytest.raises(Exception, match="Process creation failed"):
-        runner._spawn_persistent_process()
+        runner._on_start()  # This will try to spawn processes and fail
 
 
 def test_persistent_process_main_sigterm_calls_handle_terminate(
     app: MockPynenc, mock_manager: Mock
 ) -> None:
     """Test that receiving SIGTERM explicitly calls handle_terminate and stops the process"""
-    process_extra_id = "test-process"
     runner_cache: dict[str, Any] = {}
     stop_event = mock_manager.return_value.Event.return_value
+
+    # Create a RunnerContext and serialize to JSON
+    runner_ctx = RunnerContext(
+        runner_cls="PersistentProcessRunner",
+        runner_id="PersistentProcessRunner@test-host-123[test-process]",
+        pid=123,
+        hostname="test-host",
+    )
 
     # Capture the actual handler function that gets registered
     registered_handler: Callable[[int, Any], None] | None = None
@@ -309,9 +341,9 @@ def test_persistent_process_main_sigterm_calls_handle_terminate(
                 target=persistent_process_main,
                 kwargs={
                     "app": app,
-                    "process_extra_id": process_extra_id,
                     "runner_cache": runner_cache,
                     "stop_event": stop_event,
+                    "runner_ctx_json": runner_ctx.to_json(),
                 },
             )
             process_thread.start()

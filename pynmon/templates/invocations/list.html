@@ -80,6 +80,9 @@
                                             <a href="/invocations/{{ invocation.invocation_id }}" class="text-decoration-none">
                                                 <code class="text-primary">{{ invocation.invocation_id }}</code>
                                             </a>
+                                            <a href="#" class="ms-2 view-in-timeline-link" data-invocation-id="{{ invocation.invocation_id }}" title="View in timeline">
+                                                <span class="material-icons" style="font-size: 14px; vertical-align: middle; color: #28a745;">timeline</span>
+                                            </a>
                                         </td>
                                         <td>
                                             <a href="/tasks/{{ invocation.task.task_id }}" class="text-decoration-none">
@@ -87,8 +90,8 @@
                                             </a>
                                         </td>
                                         <td>
-                                            <a href="/calls/?call_id={{ invocation.call_id|urlencode }}" class="text-decoration-none">
-                                                <code class="text-secondary">{{ invocation.call_id }}</code>
+                                            <a href="/calls/?call_id={{ invocation.call_id|urlencode }}">
+                                                <code class="text-primary">{{ invocation.call_id }}</code>
                                             </a>
                                         </td>
                                         <td>
@@ -125,4 +128,55 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // View in timeline functionality for list items
+  document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.view-in-timeline-link').forEach(link => {
+      link.addEventListener('click', function(e) {
+        e.preventDefault();
+        const invocationId = this.dataset.invocationId;
+
+        // Fetch invocation history to get time range
+        fetch(`/invocations/${invocationId}/history`)
+          .then(response => response.json())
+          .then(historyData => {
+            if (!historyData || historyData.length === 0) {
+              alert('No history data available for this invocation');
+              return;
+            }
+
+            // Get first and last timestamp
+            const startTime = new Date(historyData[0].timestamp);
+            const endTime = new Date(historyData[historyData.length - 1].timestamp);
+
+            // Add 10% padding on each side
+            const durationMs = endTime - startTime;
+            const paddingMs = Math.max(durationMs * 0.1, 1000); // At least 1 second padding
+
+            const paddedStart = new Date(startTime.getTime() - paddingMs);
+            const paddedEnd = new Date(endTime.getTime() + paddingMs);
+
+            // Format for datetime-local input (YYYY-MM-DDTHH:MM:SS)
+            const formatForInput = (date) => date.toISOString().slice(0, 19);
+
+            // Build the timeline URL with custom range
+            const params = new URLSearchParams();
+            params.set('time_range', 'custom');
+            params.set('start_date', formatForInput(paddedStart));
+            params.set('end_date', formatForInput(paddedEnd));
+
+            // Navigate to timeline
+            window.location.href = '/invocations/timeline?' + params.toString();
+          })
+          .catch(error => {
+            console.error('Error fetching history:', error);
+            alert('Failed to load invocation history');
+          });
+      });
+    });
+  });
+</script>
 {% endblock %}

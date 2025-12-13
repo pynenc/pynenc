@@ -23,7 +23,11 @@ KEEP_ALIVE = 0
 app = (
     PynencBuilder()
     .memory()
-    .thread_runner()
+    .thread_runner(max_threads=8)  # More threads for parallel workflow execution
+    .runner_tuning(
+        runner_loop_sleep_time_sec=0.01,
+        invocation_wait_results_sleep_time_sec=0.01,
+    )
     .app_id("test-pynmon-workflow-runs")
     .serializer_json()
     .build()

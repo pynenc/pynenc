@@ -36,7 +36,7 @@ async def runners_view(request: Request) -> HTMLResponse:
             "runner_classes": list(runner_classes),
             "hostnames": list(hostnames),
             "heartbeat_timeout_minutes": app.orchestrator.conf.runner_heartbeat_timeout_minutes,
-            "recovery_interval_minutes": app.orchestrator.conf.run_invocation_recovery_service_every_minutes,
+            "atomic_service_check_interval_minutes": app.runner.conf.atomic_service_check_interval_minutes,
         },
     )
 

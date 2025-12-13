@@ -1,18 +1,24 @@
 """
 Runner context for tracking execution environment details.
 
-This module provides the RunnerContext class, which captures essential information
-about the runner environment when executing invocations. It includes fixed attributes
-like runner class, ID, process ID, and hostname, along with extensible extra data
-for subrunners.
+This module provides a simple, composable context class that can be nested
+to represent hierarchical execution environments (runner -> worker -> etc).
 
-The class supports JSON serialization/deserialization for persistence and communication.
+Key components:
+- RunnerContext: Single context class with optional parent reference
+- Automatic capture of pid, hostname, and thread_id
+- JSON serialization for cross-process communication
+
+The context is designed to be simple and flexible - callers specify
+runner_cls and runner_id, and can create child contexts as needed.
 """
 
 import json
 import os
 import socket
-from dataclasses import dataclass
+import uuid
+import threading
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -24,61 +30,119 @@ class RunnerContext:
     """
     Context information for a runner execution environment.
 
-    Captures key details about the runner instance and execution context,
-    with support for extensible custom data.
+    A simple, composable context that captures execution environment details.
+    Can be nested via parent_ctx to represent hierarchical relationships
+    (e.g., main runner -> worker process -> thread).
 
     :param str runner_cls: The class name of the runner.
-    :param str runner_id: Unique identifier for the runner instance.
-    :param int pid: Process ID of the running process.
-    :param str hostname: Hostname of the machine running the process.
-    :param dict[str, str | int | float | bool] extra_data: Extensible dictionary for additional context data.
+    :param str runner_id: Identifier for this runner/context level.
+    :param RunnerContext | None parent_ctx: Optional parent context for hierarchy.
+    :param int pid: Process ID (auto-captured).
+    :param str hostname: Hostname (auto-captured).
+    :param int thread_id: Thread ID (auto-captured).
+    :param dict[str, str | int | float | bool] extra_data: Extensible data dictionary.
     """
 
     runner_cls: str
-    runner_id: str
-    pid: int
-    hostname: str
-    extra_data: dict[str, str | int | float | bool]
+    runner_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    parent_ctx: "RunnerContext | None" = None
+    pid: int = field(default_factory=os.getpid)
+    hostname: str = field(default_factory=socket.gethostname)
+    thread_id: int = field(
+        default_factory=lambda: threading.current_thread().ident or 0
+    )
+    extra_data: dict[str, str | int | float | bool] = field(default_factory=dict)
 
     @classmethod
     def from_runner(
         cls,
         runner: "BaseRunner",
-        extra_data: dict[str, str | int | float | bool] | None = None,
+        parent_ctx: "RunnerContext | None" = None,
     ) -> "RunnerContext":
         """
         Create RunnerContext from a BaseRunner instance.
 
-        Extracts relevant information from the runner and calculates
-        system-level details like PID and hostname.
-
         :param BaseRunner runner: The runner instance to extract context from.
-        :param dict[str, str | int | float | bool] | None extra_data: Optional extensible data dictionary.
+        :param RunnerContext | None parent_ctx: Optional parent context.
+        :param dict[str, str | int | float | bool] | None extra_data: Optional data.
         :return: A new RunnerContext instance populated with runner data.
-        :rtype: RunnerContext
         """
         return cls(
             runner_cls=runner.__class__.__name__,
             runner_id=runner.runner_id,
-            pid=os.getpid(),
-            hostname=socket.gethostname(),
-            extra_data=extra_data or {},
+            parent_ctx=parent_ctx,
+        )
+
+    @property
+    def owner_id(self) -> str:
+        """
+        Get the owner identifier for this context.
+
+        If there's a parent context, the owner_id includes the parent's owner_id
+        to create a hierarchical identifier.
+        """
+        if self.parent_ctx:
+            return f"{self.parent_ctx.owner_id}{{{self.runner_id}}}"
+        return self.runner_id
+
+    @property
+    def root_runner_id(self) -> str:
+        """
+        Get the root runner_id by traversing up the parent chain.
+
+        Returns the runner_id of the topmost context in the hierarchy.
+        """
+        if self.parent_ctx:
+            return self.parent_ctx.root_runner_id
+        return self.runner_id
+
+    @property
+    def root_runner_cls(self) -> str:
+        """
+        Get the root runner_cls by traversing up the parent chain.
+
+        Returns the runner_cls of the topmost context in the hierarchy.
+        """
+        if self.parent_ctx:
+            return self.parent_ctx.root_runner_cls
+        return self.runner_cls
+
+    def new_child_context(
+        self,
+        runner_cls: str,
+        runner_id: str | None = None,
+    ) -> "RunnerContext":
+        """
+        Create a child context with this context as parent.
+
+        :param str runner_cls: Class name for the child context.
+        :param str runner_id: Identifier for the child context.
+        :param dict[str, str | int | float | bool] | None extra_data: Optional data.
+        :return: A new RunnerContext with this context as parent.
+        """
+        return RunnerContext(
+            runner_cls=runner_cls,
+            runner_id=runner_id or str(uuid.uuid4()),
+            parent_ctx=self,
         )
 
     def to_json(self) -> str:
         """
         Serialize the RunnerContext to a JSON string.
 
+        Recursively serializes the parent context if present.
+
         :return: JSON representation of the context.
-        :rtype: str
         """
-        data = {
+        data: dict = {
             "runner_cls": self.runner_cls,
             "runner_id": self.runner_id,
             "pid": self.pid,
             "hostname": self.hostname,
-            "extra_data": self.extra_data,
+            "thread_id": self.thread_id,
         }
+        if self.parent_ctx:
+            data["parent_ctx"] = json.loads(self.parent_ctx.to_json())
         return json.dumps(data, sort_keys=True)
 
     @classmethod
@@ -88,17 +152,27 @@ class RunnerContext:
 
         :param str json_str: JSON string containing serialized context data.
         :return: A new RunnerContext instance.
-        :rtype: RunnerContext
         :raises ValueError: If the JSON data is invalid or missing required fields.
         """
         try:
             data = json.loads(json_str)
+            parent_ctx = None
+            if "parent_ctx" in data and data["parent_ctx"]:
+                parent_ctx = cls.from_json(json.dumps(data["parent_ctx"]))
             return cls(
                 runner_cls=data["runner_cls"],
                 runner_id=data["runner_id"],
-                pid=data["pid"],
-                hostname=data["hostname"],
-                extra_data=data.get("extra_data", {}),
+                parent_ctx=parent_ctx,
+                pid=data.get("pid", os.getpid()),
+                hostname=data.get("hostname", socket.gethostname()),
+                thread_id=data.get("thread_id", threading.current_thread().ident or 0),
             )
         except (json.JSONDecodeError, KeyError) as e:
             raise ValueError(f"Invalid JSON data for RunnerContext: {e}") from e
+
+    def __repr__(self) -> str:
+        """Return a concise string representation."""
+        parent_info = (
+            f", parent={self.parent_ctx.runner_cls}" if self.parent_ctx else ""
+        )
+        return f"RunnerContext({self.runner_cls}, {self.runner_id[:8]}...{parent_info})"

@@ -11,6 +11,7 @@ from pynenc.runner.multi_thread_runner import (
     ProcessStatus,
     thread_runner_process_main,
 )
+from pynenc.runner.runner_context import RunnerContext
 from pynenc_tests.conftest import MockPynenc
 
 
@@ -71,14 +72,17 @@ def test_thread_runner_process_main_updates_status(app: MockPynenc) -> None:
     runner_cache: dict = {}
     shared_status: dict[str, ProcessStatus] = {}
     process_key = "test-process"
+    parent_ctx = RunnerContext("SomeClass", "some-id")
 
     # Mock ThreadRunner to avoid actual execution
     with patch("pynenc.runner.multi_thread_runner.ThreadRunner") as mock_runner:
         # Make runner_loop_iteration raise KeyboardInterrupt after one iteration
+        mock_runner.__name__ = "ThreadRunner"
         mock_runner.return_value.runner_loop_iteration.side_effect = KeyboardInterrupt()
 
         thread_runner_process_main(
             app,
+            parent_ctx_json=parent_ctx.to_json(),
             runner_cache=runner_cache,
             shared_status=shared_status,
             process_key=process_key,

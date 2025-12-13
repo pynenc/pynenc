@@ -38,7 +38,7 @@ def test_route_default(mock_trigger_report_task_status: Mock) -> None:
     # test that app.orchestrator.set_invocation_status (MockBaseOrchestrator.set_invocation_status)
     # has been called with (result, InvocationStatus.REGISTERED)
     mock_base_app.orchestrator._register_new_invocations.assert_called_once_with(
-        [invocation], None
+        [invocation], ANY
     )
 
     # This method do change the status internally, so it should also propagate it to the backend

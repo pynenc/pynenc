@@ -1,6 +1,7 @@
 import itertools
 from collections import defaultdict
 from collections.abc import Iterator
+from datetime import datetime
 from typing import TYPE_CHECKING, Any, Optional
 
 from pynenc.state_backend.base_state_backend import BaseStateBackend
@@ -229,3 +230,45 @@ class MemStateBackend(BaseStateBackend[Params, Result]):
         :return: Iterator of invocation IDs that run inside the workflow
         """
         return iter(self._workflow_sub_invocations.get(workflow_id, set()))
+
+    def iter_invocations_in_timerange(
+        self,
+        start_time: datetime,
+        end_time: datetime,
+        batch_size: int = 100,
+    ) -> Iterator[list[str]]:
+        """Iterate over invocation IDs that have history within time range."""
+        # Collect all invocation IDs that have history entries in the time range
+        matching_ids: set[str] = set()
+        for invocation_id, history_list in self._history.items():
+            for history_entry in history_list:
+                if start_time <= history_entry.timestamp <= end_time:
+                    matching_ids.add(invocation_id)
+                    break  # Found match, no need to check more entries
+
+        # Yield in batches
+        id_list = sorted(matching_ids)
+        for i in range(0, len(id_list), batch_size):
+            yield id_list[i : i + batch_size]
+
+    def iter_history_in_timerange(
+        self,
+        start_time: datetime,
+        end_time: datetime,
+        batch_size: int = 100,
+    ) -> Iterator[list["InvocationHistory"]]:
+        """Iterate over history entries within time range."""
+        # Collect all history entries in the time range
+        matching_entries: list[tuple[datetime, InvocationHistory]] = []
+        for history_list in self._history.values():
+            for history_entry in history_list:
+                if start_time <= history_entry.timestamp <= end_time:
+                    matching_entries.append((history_entry.timestamp, history_entry))
+
+        # Sort by timestamp
+        matching_entries.sort(key=lambda x: x[0])
+
+        # Yield in batches
+        for i in range(0, len(matching_entries), batch_size):
+            batch = [entry for _, entry in matching_entries[i : i + batch_size]]
+            yield batch

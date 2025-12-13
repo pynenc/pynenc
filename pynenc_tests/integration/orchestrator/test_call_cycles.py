@@ -95,7 +95,7 @@ def test_causes_cycles(test_vars_cc: Vars, mock_register_task_run: MagicMock) ->
         test_vars_cc.inv3.invocation_id, InvocationStatus.PENDING, runner_context
     )
 
-    runner_context = RunnerContext.from_runner(DummyRunner(test_vars_cc.app))
+    # reuse the same runner_context that was used to set PENDING above
     test_vars_cc.app.orchestrator.set_invocation_run(
         test_vars_cc.inv1, test_vars_cc.inv2, runner_context
     )

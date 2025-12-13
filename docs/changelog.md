@@ -51,10 +51,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Added validation for enum synchronization between builder and configuration classes
   - Added robust plugin method chaining and cleanup mechanisms
 
-- **Enhanced Invocation History**:
+- **Enhanced Invocation History and Context Tracking**:
 
-  - Added `RunnerContext` class in `runner_context.py` to capture detailed runner execution context (hostname, PID, etc.) for task invocations.
-  - Updated `InvocationHistory` in `base_state_backend.py` to include runner context for improved debugging and monitoring of task executions.
+  - Made `RunnerContext` mandatory for all status transitions, introducing `ExternalRunner` to track invocations registered outside Pynenc
+  - Added parent runner tracking in `RunnerContext` for hierarchical execution visibility
+  - Enhanced `InvocationHistory` to include parent invocation references and runner context
+  - Added efficient time-range iteration methods (`iter_invocations_in_timerange`, `iter_history_in_timerange`) for timeline visualization
+  - Improved logging context to display runner, task, and invocation information when available
+  - Added `truncate_log_ids` configuration option to control ID truncation in logs (default: True)
 
 - **Test Coverage for ArgCache Implementations**:
 
@@ -223,10 +227,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Complete Pynmon UI coherence with consistent styling
 
 - **Enhanced Pynmon Monitoring Interface**:
+  - Replaced timeline with SVG-based visualization showing invocations and state transitions across runners
+  - Added "View in Timeline" functionality with timeline icon links across invocation views
+  - Refactored codebase for improved readability and maintainability
+  - Enhanced call detail view with cleaner UX, full invocation IDs, and improved metadata display
   - Complete visual redesign with minimalist, professional aesthetic
   - Dark navigation menu with light content area for optimal contrast and readability
   - Material Design Icons integration replacing emoji icons for consistency
-  - Comprehensive design system with structured color palette and typography guidelines
 
 ### Improved
 
@@ -236,7 +243,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Enhanced table layouts with tighter row spacing and optimized column widths
   - Improved status badge system with distinct colors for all invocation states
   - Responsive grid layouts using Bootstrap for better mobile experience
-  - Reduced visual noise through selective use of colors and minimalist card designs
 
 - **HTMX Integration**:
 

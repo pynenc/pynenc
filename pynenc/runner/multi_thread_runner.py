@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 from pynenc import context
 from pynenc.conf.config_runner import ConfigMultiThreadRunner
 from pynenc.runner.base_runner import BaseRunner
+from pynenc.runner.runner_context import RunnerContext
 from pynenc.runner.thread_runner import ThreadRunner
 from pynenc.util.multiprocessing_utils import warn_missing_main_guard
 
@@ -35,6 +36,7 @@ class ProcessStatus(NamedTuple):
 def thread_runner_process_main(
     app: "Pynenc",
     *,
+    parent_ctx_json: str,
     runner_cache: dict,
     shared_status: dict[str, ProcessStatus],
     process_key: str,
@@ -51,10 +53,11 @@ def thread_runner_process_main(
     as it operates in a single-threaded or single-process environment where the
     instance-level runner suffices.
     """
-    runner = ThreadRunner(app, runner_cache)
-    runner.set_extra_id(process_key)
+    parent_ctx = RunnerContext.from_json(parent_ctx_json)
+    runner_ctx = parent_ctx.new_child_context(ThreadRunner.__name__)
+    runner = ThreadRunner(app, runner_cache, runner_context=runner_ctx)
     # Replace the MultiThreadRunner with ThreadRunner in this process
-    context.set_current_runner(app.app_id, runner)
+    context.set_runner_context(app.app_id, runner_ctx)
     runner._on_start()
     app.logger.info(f"ThreadRunner process {process_key} started")
     try:
@@ -145,6 +148,7 @@ class MultiThreadRunner(BaseRunner):
         process_key = f"trp-{time.time()}-{len(self.processes)}"
         args = {
             "app": self.app,
+            "parent_ctx_json": self.runner_context.to_json(),
             "runner_cache": self.runner_cache,
             "shared_status": self.shared_status,
             "process_key": process_key,

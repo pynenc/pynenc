@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta, UTC
 from time import sleep
 from typing import TYPE_CHECKING
 
@@ -7,6 +7,7 @@ import pytest
 from pynenc.app import AppInfo
 from pynenc.exceptions import InvocationNotFoundError
 from pynenc.invocation.status import InvocationStatus
+from pynenc.runner import RunnerContext
 from pynenc.state_backend.base_state_backend import (
     InvocationHistory,
     InvocationStatusRecord,
@@ -40,18 +41,35 @@ def test_history_records_are_stored_and_ordered(app_instance: "Pynenc") -> None:
     and are returned in timestamp order.
     """
     backend = app_instance.state_backend
+    runner_ctx = RunnerContext(
+        runner_cls="TestRunner",
+        runner_id="test-runner",
+        pid=12345,
+        hostname="test-host",
+        extra_data={},
+    )
 
     # Use the actual InvocationHistory class and set timestamps explicitly
     # This keeps the test simple and ensures type compatibility.
     hist1 = InvocationHistory(
-        InvocationStatusRecord(status=InvocationStatus.REGISTERED)
+        invocation_id="inv-1",
+        status_record=InvocationStatusRecord(status=InvocationStatus.REGISTERED),
+        runner_context=runner_ctx,
     )
     hist1._timestamp = datetime.fromtimestamp(1.0)
 
-    hist2 = InvocationHistory(InvocationStatusRecord(status=InvocationStatus.RUNNING))
+    hist2 = InvocationHistory(
+        invocation_id="inv-1",
+        status_record=InvocationStatusRecord(status=InvocationStatus.RUNNING),
+        runner_context=runner_ctx,
+    )
     hist2._timestamp = datetime.fromtimestamp(2.0)
 
-    hist3 = InvocationHistory(InvocationStatusRecord(status=InvocationStatus.FAILED))
+    hist3 = InvocationHistory(
+        invocation_id="inv-1",
+        status_record=InvocationStatusRecord(status=InvocationStatus.FAILED),
+        runner_context=runner_ctx,
+    )
     hist3._timestamp = datetime.fromtimestamp(3.0)
 
     backend._add_histories(["inv-1"], hist2)
@@ -100,14 +118,31 @@ def test_add_and_get_ordered_histories(app_instance: "Pynenc") -> None:
     """
     backend = app_instance.state_backend
     invocation_id = "inv-xyz"
+    runner_ctx = RunnerContext(
+        runner_cls="TestRunner",
+        runner_id="test-runner",
+        pid=12345,
+        hostname="test-host",
+        extra_data={},
+    )
 
     hist1 = InvocationHistory(
-        InvocationStatusRecord(status=InvocationStatus.REGISTERED)
+        invocation_id=invocation_id,
+        status_record=InvocationStatusRecord(status=InvocationStatus.REGISTERED),
+        runner_context=runner_ctx,
     )
     sleep(0.01)
-    hist2 = InvocationHistory(InvocationStatusRecord(status=InvocationStatus.RUNNING))
+    hist2 = InvocationHistory(
+        invocation_id=invocation_id,
+        status_record=InvocationStatusRecord(status=InvocationStatus.RUNNING),
+        runner_context=runner_ctx,
+    )
     sleep(0.01)
-    hist3 = InvocationHistory(InvocationStatusRecord(status=InvocationStatus.FAILED))
+    hist3 = InvocationHistory(
+        invocation_id=invocation_id,
+        status_record=InvocationStatusRecord(status=InvocationStatus.FAILED),
+        runner_context=runner_ctx,
+    )
 
     backend._add_histories([invocation_id], hist1)
     backend._add_histories([invocation_id], hist3)
@@ -289,3 +324,277 @@ def test_store_and_get_workflow_subinvocations(app_instance: "Pynenc") -> None:
     backend.store_workflow_sub_invocation(parent_workflow_id, sub_invocation2)
     sub_invocations = backend.get_workflow_sub_invocations(parent_workflow_id)
     assert set(sub_invocations) == {sub_invocation1, sub_invocation2}
+
+
+def test_iter_history_in_timerange_returns_entries_within_range(
+    app_instance: "Pynenc",
+) -> None:
+    """
+    Test that iter_history_in_timerange returns only history entries
+    whose timestamps fall within the specified time range.
+    """
+    backend = app_instance.state_backend
+    runner_ctx = RunnerContext(
+        runner_cls="TestRunner",
+        runner_id="test-runner",
+        pid=12345,
+        hostname="test-host",
+        extra_data={},
+    )
+
+    # Create a base time and define the query range
+    base_time = datetime(2025, 1, 15, 12, 0, 0, tzinfo=UTC)
+    query_start = base_time
+    query_end = base_time + timedelta(hours=1)
+
+    # Create history entries: before range, within range, after range
+    hist_before = InvocationHistory(
+        invocation_id="inv-before",
+        status_record=InvocationStatusRecord(status=InvocationStatus.RUNNING),
+        runner_context=runner_ctx,
+    )
+    hist_before._timestamp = base_time - timedelta(minutes=30)
+
+    hist_within_1 = InvocationHistory(
+        invocation_id="inv-within-1",
+        status_record=InvocationStatusRecord(status=InvocationStatus.RUNNING),
+        runner_context=runner_ctx,
+    )
+    hist_within_1._timestamp = base_time + timedelta(minutes=10)
+
+    hist_within_2 = InvocationHistory(
+        invocation_id="inv-within-2",
+        status_record=InvocationStatusRecord(status=InvocationStatus.SUCCESS),
+        runner_context=runner_ctx,
+    )
+    hist_within_2._timestamp = base_time + timedelta(minutes=30)
+
+    hist_after = InvocationHistory(
+        invocation_id="inv-after",
+        status_record=InvocationStatusRecord(status=InvocationStatus.SUCCESS),
+        runner_context=runner_ctx,
+    )
+    hist_after._timestamp = base_time + timedelta(hours=2)
+
+    # Add all histories
+    backend._add_histories(["inv-before"], hist_before)
+    backend._add_histories(["inv-within-1"], hist_within_1)
+    backend._add_histories(["inv-within-2"], hist_within_2)
+    backend._add_histories(["inv-after"], hist_after)
+
+    # Query the time range
+    all_entries: list[InvocationHistory] = []
+    for batch in backend.iter_history_in_timerange(query_start, query_end):
+        all_entries.extend(batch)
+
+    # Should only return entries within the range
+    inv_ids = {entry.invocation_id for entry in all_entries}
+    assert inv_ids == {"inv-within-1", "inv-within-2"}
+    assert "inv-before" not in inv_ids
+    assert "inv-after" not in inv_ids
+
+
+def test_iter_history_in_timerange_returns_all_statuses_for_invocation(
+    app_instance: "Pynenc",
+) -> None:
+    """
+    Test that iter_history_in_timerange returns all status transitions
+    for an invocation when they fall within the time range.
+
+    This tests the scenario where an invocation has multiple status changes
+    (e.g., RUNNING -> SUCCESS) and both should be returned.
+    """
+    backend = app_instance.state_backend
+    runner_ctx = RunnerContext(
+        runner_cls="TestRunner",
+        runner_id="test-runner",
+        pid=12345,
+        hostname="test-host",
+        extra_data={},
+    )
+
+    base_time = datetime(2025, 1, 15, 12, 0, 0, tzinfo=UTC)
+    query_start = base_time
+    query_end = base_time + timedelta(hours=1)
+
+    # Create an invocation with RUNNING and SUCCESS within the range
+    hist_running = InvocationHistory(
+        invocation_id="inv-complete",
+        status_record=InvocationStatusRecord(status=InvocationStatus.RUNNING),
+        runner_context=runner_ctx,
+    )
+    hist_running._timestamp = base_time + timedelta(minutes=10)
+
+    hist_success = InvocationHistory(
+        invocation_id="inv-complete",
+        status_record=InvocationStatusRecord(status=InvocationStatus.SUCCESS),
+        runner_context=runner_ctx,
+    )
+    hist_success._timestamp = base_time + timedelta(minutes=20)
+
+    backend._add_histories(["inv-complete"], hist_running)
+    backend._add_histories(["inv-complete"], hist_success)
+
+    # Query the time range
+    all_entries: list[InvocationHistory] = []
+    for batch in backend.iter_history_in_timerange(query_start, query_end):
+        all_entries.extend(batch)
+
+    # Both entries should be returned
+    assert len(all_entries) == 2
+    statuses = {entry.status_record.status for entry in all_entries}
+    assert statuses == {InvocationStatus.RUNNING, InvocationStatus.SUCCESS}
+
+
+def test_iter_history_in_timerange_ongoing_invocation_within_range(
+    app_instance: "Pynenc",
+) -> None:
+    """
+    Test that an invocation that started RUNNING within the range but has
+    no subsequent status (still ongoing) is included in the results.
+
+    This is the key scenario for the SVG timeline - ongoing invocations
+    should be visible if they started within the queried range.
+    """
+    backend = app_instance.state_backend
+    runner_ctx = RunnerContext(
+        runner_cls="TestRunner",
+        runner_id="test-runner",
+        pid=12345,
+        hostname="test-host",
+        extra_data={},
+    )
+
+    base_time = datetime(2025, 1, 15, 12, 0, 0, tzinfo=UTC)
+    query_start = base_time
+    query_end = base_time + timedelta(hours=1)
+
+    # Create an invocation that started RUNNING within the range but never completed
+    hist_running = InvocationHistory(
+        invocation_id="inv-ongoing",
+        status_record=InvocationStatusRecord(status=InvocationStatus.RUNNING),
+        runner_context=runner_ctx,
+    )
+    hist_running._timestamp = base_time + timedelta(minutes=15)
+
+    backend._add_histories(["inv-ongoing"], hist_running)
+
+    # Query the time range
+    all_entries: list[InvocationHistory] = []
+    for batch in backend.iter_history_in_timerange(query_start, query_end):
+        all_entries.extend(batch)
+
+    # The ongoing invocation should be included since its RUNNING started within range
+    assert len(all_entries) == 1
+    assert all_entries[0].invocation_id == "inv-ongoing"
+    assert all_entries[0].status_record.status == InvocationStatus.RUNNING
+
+
+def test_iter_history_in_timerange_entries_ordered_by_timestamp(
+    app_instance: "Pynenc",
+) -> None:
+    """
+    Test that iter_history_in_timerange returns entries ordered by timestamp.
+    """
+    backend = app_instance.state_backend
+    runner_ctx = RunnerContext(
+        runner_cls="TestRunner",
+        runner_id="test-runner",
+        pid=12345,
+        hostname="test-host",
+        extra_data={},
+    )
+
+    base_time = datetime(2025, 1, 15, 12, 0, 0, tzinfo=UTC)
+    query_start = base_time
+    query_end = base_time + timedelta(hours=1)
+
+    # Create entries at different times, add them out of order
+    times = [
+        base_time + timedelta(minutes=30),
+        base_time + timedelta(minutes=10),
+        base_time + timedelta(minutes=50),
+        base_time + timedelta(minutes=20),
+    ]
+
+    for i, ts in enumerate(times):
+        hist = InvocationHistory(
+            invocation_id=f"inv-{i}",
+            status_record=InvocationStatusRecord(status=InvocationStatus.SUCCESS),
+            runner_context=runner_ctx,
+        )
+        hist._timestamp = ts
+        backend._add_histories([f"inv-{i}"], hist)
+
+    # Query the time range
+    all_entries: list[InvocationHistory] = []
+    for batch in backend.iter_history_in_timerange(query_start, query_end):
+        all_entries.extend(batch)
+
+    # Entries should be ordered by timestamp
+    timestamps = [entry.timestamp for entry in all_entries]
+    assert timestamps == sorted(timestamps)
+
+
+def test_iter_invocations_in_timerange(app_instance: "Pynenc") -> None:
+    """
+    Test that iter_invocations_in_timerange returns distinct invocation IDs
+    for invocations that have history entries within the time range.
+    """
+    backend = app_instance.state_backend
+    runner_ctx = RunnerContext(
+        runner_cls="TestRunner",
+        runner_id="test-runner",
+        pid=12345,
+        hostname="test-host",
+        extra_data={},
+    )
+
+    base_time = datetime(2025, 1, 15, 12, 0, 0, tzinfo=UTC)
+    query_start = base_time
+    query_end = base_time + timedelta(hours=1)
+
+    # Create an invocation with multiple entries within range (should appear once)
+    hist1 = InvocationHistory(
+        invocation_id="inv-multi",
+        status_record=InvocationStatusRecord(status=InvocationStatus.RUNNING),
+        runner_context=runner_ctx,
+    )
+    hist1._timestamp = base_time + timedelta(minutes=10)
+
+    hist2 = InvocationHistory(
+        invocation_id="inv-multi",
+        status_record=InvocationStatusRecord(status=InvocationStatus.SUCCESS),
+        runner_context=runner_ctx,
+    )
+    hist2._timestamp = base_time + timedelta(minutes=20)
+
+    # Create another invocation within range
+    hist3 = InvocationHistory(
+        invocation_id="inv-single",
+        status_record=InvocationStatusRecord(status=InvocationStatus.RUNNING),
+        runner_context=runner_ctx,
+    )
+    hist3._timestamp = base_time + timedelta(minutes=30)
+
+    # Create an invocation outside range
+    hist4 = InvocationHistory(
+        invocation_id="inv-outside",
+        status_record=InvocationStatusRecord(status=InvocationStatus.SUCCESS),
+        runner_context=runner_ctx,
+    )
+    hist4._timestamp = base_time + timedelta(hours=2)
+
+    backend._add_histories(["inv-multi"], hist1)
+    backend._add_histories(["inv-multi"], hist2)
+    backend._add_histories(["inv-single"], hist3)
+    backend._add_histories(["inv-outside"], hist4)
+
+    # Query the time range
+    all_ids: list[str] = []
+    for batch in backend.iter_invocations_in_timerange(query_start, query_end):
+        all_ids.extend(batch)
+
+    # Should return distinct IDs for invocations within range
+    assert set(all_ids) == {"inv-multi", "inv-single"}
+    assert "inv-outside" not in all_ids

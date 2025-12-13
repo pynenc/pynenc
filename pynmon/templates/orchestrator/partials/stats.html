@@ -1,14 +1,11 @@
+{% from "partials/status_badge.html" import status_badge %}
 <div class="metric-card">
   <h6 class="section-title">Invocation Status</h6>
   <div class="d-flex flex-wrap gap-2 mb-3">
     {% for status, count in status_counts.items() %}
     <div class="badge-item d-flex align-items-center">
-      <span
-        class="badge {% if status == 'SUCCESS' %}bg-success{% elif status == 'FAILED' %}bg-danger{% elif status == 'RUNNING' %}bg-primary{% elif status == 'PENDING' %}bg-warning{% elif status == 'PAUSED' %}bg-info{% elif status == 'RETRY' %}bg-secondary{% elif status == 'REGISTERED' %}bg-secondary{% elif status == 'REROUTED' %}bg-info{% elif status == 'SCHEDULED' %}bg-warning text-dark{% else %}bg-dark{% endif %} me-2"
-      >
-        {{ status }}
-      </span>
-      <span class="fw-semibold" style="font-size: 14px">{{ count }}</span>
+      {{ status_badge(status) }}
+      <span class="fw-semibold ms-2" style="font-size: 14px">{{ count }}</span>
     </div>
     {% endfor %}
   </div>
@@ -48,14 +45,7 @@
           <td style="font-size: 12px">
             {{ invocation.task.task_id.split('.')[-1] }}
           </td>
-          <td>
-            <span
-              class="badge {% if invocation.status.name == 'SUCCESS' %}bg-success{% elif invocation.status.name == 'FAILED' %}bg-danger{% elif invocation.status.name == 'RUNNING' %}bg-primary{% elif invocation.status.name == 'PENDING' %}bg-warning{% elif invocation.status.name == 'PAUSED' %}bg-info{% elif invocation.status.name == 'RETRY' %}bg-secondary{% elif invocation.status.name == 'REGISTERED' %}bg-secondary{% elif invocation.status.name == 'REROUTED' %}bg-info{% elif invocation.status.name == 'SCHEDULED' %}bg-warning text-dark{% else %}bg-dark{% endif %}"
-              style="font-size: 10px"
-            >
-              {{ invocation.status.name }}
-            </span>
-          </td>
+          <td>{{ status_badge(invocation.status.name, 'small') }}</td>
         </tr>
         {% endfor %}
       </tbody>

@@ -20,7 +20,7 @@ from pynenc.orchestrator import atomic_service
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
     from pynenc.call import Call, PreSerializedCall
-    from pynenc.runner import RunnerContext
+    from pynenc.runner.runner_context import RunnerContext
     from pynenc.task import Task
     from pynenc.types import Params, Result
 
@@ -144,7 +144,7 @@ class BaseOrchestrator(ABC):
     def get_existing_invocations(
         self,
         task: "Task[Params, Result]",
-        key_serialized_arguments: dict[str, str] | None,
+        key_serialized_arguments: dict[str, str] | None = None,
         statuses: "list[InvocationStatus] | None" = None,
     ) -> Iterator[str]:
         """
@@ -464,7 +464,7 @@ class BaseOrchestrator(ABC):
         self,
         invocation_id: str,
         status: "InvocationStatus",
-        runner_ctx: Optional["RunnerContext"] = None,
+        runner_ctx: "RunnerContext",
     ) -> None:
         """
         Sets the status of a specific invocation.
@@ -476,17 +476,14 @@ class BaseOrchestrator(ABC):
         :raises InvocationStatusOwnershipError: If ownership rules are violated
         :raises InvocationStatusRaceConditionError: If a race condition is detected during status update
         """
-        owner_id = runner_ctx.runner_id if runner_ctx else None
         new_status_record = self._atomic_status_transition(
-            invocation_id, status, owner_id
+            invocation_id, status, runner_ctx.owner_id
         )
         if status.is_final():
             self.release_waiters(invocation_id)
             self.clean_up_invocation_cycles(invocation_id)
             self.set_up_invocation_auto_purge(invocation_id)
-        self.app.state_backend.add_histories(
-            [invocation_id], new_status_record, runner_ctx
-        )
+        self.app.state_backend.add_history(invocation_id, new_status_record, runner_ctx)
         self.app.trigger.report_tasks_status([invocation_id], status)
 
     def set_invocation_run(
@@ -785,13 +782,13 @@ class BaseOrchestrator(ABC):
         :param DistributedInvocation[Params, Result] invocation: The invocation to register.
         :param str | None owner_id: The owner ID for ownership validation
         """
-        runner_ctx = context.get_current_runner_context(self.app.app_id)
+        runner_ctx = context.get_or_create_runner_context(self.app.app_id)
         owner_id = runner_ctx.runner_id if runner_ctx else None
         self.app.state_backend.upsert_invocations(invocations)
         # This should add the status registered to the backend
         status_record = self._register_new_invocations(invocations, owner_id)
         inv_ids = [invocation.invocation_id for invocation in invocations]
-        self.app.state_backend.add_histories(inv_ids, status_record, runner_ctx)
+        self.app.state_backend.add_histories(invocations, status_record, runner_ctx)
         self.app.trigger.report_tasks_status(inv_ids, status_record.status)
         self.app.broker.route_invocations(inv_ids)
 

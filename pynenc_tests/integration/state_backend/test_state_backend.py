@@ -12,6 +12,7 @@ from pynenc.invocation import (
     InvocationStatus,
     InvocationStatusRecord,
 )
+from pynenc.runner import RunnerContext
 from pynenc.util.subclasses import get_all_subclasses
 from pynenc_tests.conftest import MockPynenc
 
@@ -62,14 +63,23 @@ def test_store_history_status(
             prev_datetime = inv_hist.timestamp
 
     assert [] == app.state_backend.get_history(invocation.invocation_id)
+    runner_ctx = RunnerContext(
+        runner_cls="TestRunner",
+        runner_id="test-runner",
+        pid=12345,
+        hostname="test-host",
+        extra_data={},
+    )
     app.state_backend.add_histories(
-        [invocation.invocation_id],
+        [invocation],
         status_record=InvocationStatusRecord(status=InvocationStatus.REGISTERED),
+        runner_context=runner_ctx,
     )
     _check_history(invocation.invocation_id, [InvocationStatus.REGISTERED])
     app.state_backend.add_histories(
-        [invocation.invocation_id],
+        [invocation],
         status_record=InvocationStatusRecord(status=InvocationStatus.RUNNING),
+        runner_context=runner_ctx,
     )
     _check_history(
         invocation.invocation_id,

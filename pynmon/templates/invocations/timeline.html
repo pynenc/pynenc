@@ -3,17 +3,19 @@
 {% block content %}
 <div class="container-fluid mt-4">
   <div class="row">
-    <div class="col-md-3">
+    <div class="col-md-2">
       <div class="card mb-4 filter-form">
         <div class="card-header">
           Filters
-          <small class="text-muted ms-2">All times shown in UTC</small>
+          <small class="text-muted ms-2">All times in UTC</small>
         </div>
         <div class="card-body">
           <form action="/invocations/timeline" method="get">
             <div class="mb-2">
               <label for="time_range" class="form-label">Time Range</label>
-              <select class="form-select" id="time_range" name="time_range">
+              <select class="form-select form-select-sm" id="time_range" name="time_range">
+                <option value="1m" {% if current_filters.time_range == '1m' %}selected{% endif %}>Last 1 minute</option>
+                <option value="5m" {% if current_filters.time_range == '5m' %}selected{% endif %}>Last 5 minutes</option>
                 <option value="15m" {% if current_filters.time_range == '15m' %}selected{% endif %}>Last 15 minutes</option>
                 <option value="1h" {% if current_filters.time_range == '1h' %}selected{% endif %}>Last hour</option>
                 <option value="3h" {% if current_filters.time_range == '3h' %}selected{% endif %}>Last 3 hours</option>
@@ -27,527 +29,495 @@
 
             <div id="custom_date_range" class="mb-2 {% if current_filters.time_range != 'custom' %}d-none{% endif %}">
               <div class="mb-2">
-                <label for="start_date" class="form-label">Start Date</label>
-                <input type="datetime-local" class="form-control" id="start_date" name="start_date"
-                       value="{{ current_filters.start_date }}">
+                <label for="start_date" class="form-label">Start Date (UTC)</label>
+                <input type="datetime-local" class="form-control form-control-sm" id="start_date" name="start_date"
+                       value="{{ current_filters.start_date }}" step="1">
               </div>
               <div class="mb-2">
-                <label for="end_date" class="form-label">End Date</label>
-                <input type="datetime-local" class="form-control" id="end_date" name="end_date"
-                       value="{{ current_filters.end_date }}">
+                <label for="end_date" class="form-label">End Date (UTC)</label>
+                <input type="datetime-local" class="form-control form-control-sm" id="end_date" name="end_date"
+                       value="{{ current_filters.end_date }}" step="1">
               </div>
-            </div>
-
-            <div class="mb-2">
-              <label for="task_id" class="form-label">Task ID</label>
-              <select class="form-select" id="task_id" name="task_id">
-                <option value="">All Tasks</option>
-                {% for tid in all_task_ids %}
-                <option value="{{ tid }}" {% if current_filters.task_id == tid %}selected{% endif %}>{{ tid }}</option>
-                {% endfor %}
-              </select>
-            </div>
-
-            <div class="form-check mb-2">
-              <input class="form-check-input" type="checkbox" id="show_relationships" name="show_relationships"
-                     {% if current_filters.show_relationships %}checked{% endif %}>
-              <label class="form-check-label" for="show_relationships">
-                Show Relationships
-              </label>
             </div>
 
             <div class="mb-2">
               <label for="limit" class="form-label">Limit</label>
-              <input type="number" class="form-control" id="limit" name="limit"
+              <input type="number" class="form-control form-control-sm" id="limit" name="limit"
                      value="{{ current_filters.limit }}" min="1" max="500">
             </div>
 
-            <button type="submit" class="btn btn-primary">Apply Filters</button>
+            <button type="submit" class="btn btn-primary btn-sm w-100">Apply Filters</button>
           </form>
         </div>
       </div>
 
-      <!-- Debug Information Card -->
+      <!-- Time Range Info -->
       <div class="card mb-4">
-        <div class="card-header">
-          <h5 class="mb-0">Debug Info</h5>
+        <div class="card-header py-2">
+          <small class="mb-0">Time Range (UTC)</small>
         </div>
-        <div class="card-body">
-          <p><strong>Time Range:</strong> {{ start_datetime.strftime('%Y-%m-%d %H:%M:%S') }} to {{ end_datetime.strftime('%Y-%m-%d %H:%M:%S') }} (UTC)</p>
-          <p><strong>Invocations Found:</strong> {{ invocations|length }}</p>
+        <div class="card-body py-2">
+          <small class="text-muted">
+            <strong>Start:</strong> {{ start_datetime.strftime('%Y-%m-%d %H:%M:%S') }} UTC<br>
+            <strong>End:</strong> {{ end_datetime.strftime('%Y-%m-%d %H:%M:%S') }} UTC
+          </small>
         </div>
       </div>
     </div>
 
-    <div class="col-md-9">
+    <div class="col-md-10">
       <div class="card">
-        <div class="card-header">
+        <div class="card-header py-2">
           <h5 class="mb-0">Invocations Timeline</h5>
         </div>
-        <div class="card-body">
-          <div class="alert alert-info">
-            <small>
-              <strong>Time Range:</strong>
-              {{ start_datetime.strftime('%Y-%m-%d %H:%M:%S') }} UTC to
-              {{ end_datetime.strftime('%Y-%m-%d %H:%M:%S') }} UTC
-            </small>
+        <div class="card-body p-2">
+          <!-- SVG Timeline Container -->
+          <div id="timeline-container" class="timeline-svg-container" style="overflow-x: auto; overflow-y: auto; width: 100%;">
+            {{ svg_content|safe }}
           </div>
 
-          <!-- Add a toggle for different visualization modes -->
-          <div class="btn-group mb-3" role="group">
-            <button type="button" class="btn btn-outline-primary active" id="gantt-view">Gantt Chart</button>
-            <button type="button" class="btn btn-outline-primary" id="status-view">Status Transitions</button>
-          </div>
-
-          {% if invocations|length > 0 %}
-            <div id="timeline"></div>
-            <div id="invocation-details-panel" class="mt-4 d-none">
-                <div class="card">
-                  <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">Invocation Details</h5>
-                    <button type="button" class="btn-close" aria-label="Close" id="close-details"></button>
-                  </div>
-                  <div class="card-body">
-                    <div id="invocation-details-content">
-                      <div class="d-flex justify-content-center">
-                        <div class="spinner-border text-primary" role="status">
-                          <span class="visually-hidden">Loading...</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="card-footer">
-                    <a href="#" id="view-full-details" class="btn btn-primary">View Full Details</a>
-                  </div>
-                </div>
-              </div>
-          {% else %}
-            <div class="alert alert-warning">
-              No invocations found for the selected filters.
+          {% if not svg_content or 'No data' in svg_content %}
+            <div class="alert alert-warning mt-3">
+              No invocations found for the selected time range.
             </div>
           {% endif %}
+        </div>
+      </div>
+
+      <!-- Invocation Details Panel -->
+      <div id="invocation-details-panel" class="mt-4 d-none">
+        <div class="card">
+          <div class="card-header d-flex justify-content-between align-items-center py-2">
+            <h6 class="mb-0">Invocation Details</h6>
+            <button type="button" class="btn-close btn-sm" aria-label="Close" id="close-details"></button>
+          </div>
+          <div class="card-body">
+            <div id="invocation-details-content">
+              <div class="d-flex justify-content-center">
+                <div class="spinner-border spinner-border-sm text-primary" role="status">
+                  <span class="visually-hidden">Loading...</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="card-footer py-2 d-flex gap-2">
+            <a href="#" id="view-full-details" class="btn btn-primary btn-sm">View Full Details</a>
+            <button type="button" id="zoom-to-invocation" class="btn btn-outline-secondary btn-sm">Zoom to Invocation</button>
+          </div>
         </div>
       </div>
     </div>
   </div>
 </div>
 
-{% if invocations|length > 0 %}
-<script src="https://cdn.plot.ly/plotly-2.18.2.min.js"></script>
+<style>
+  .timeline-svg-container {
+    min-height: 200px;
+    background-color: #ffffff;
+    border-radius: 4px;
+  }
+
+  .timeline-svg-container svg {
+    display: block;
+    min-width: 100%;
+  }
+
+  /* Style for clickable bars */
+  .timeline-svg-container svg rect[data-invocation-id] {
+    cursor: pointer;
+    transition: opacity 0.2s ease;
+  }
+
+  .timeline-svg-container svg rect[data-invocation-id]:hover {
+    opacity: 1 !important;
+    stroke: #212529;
+    stroke-width: 2px;
+  }
+
+  /* Style for clickable status points */
+  .timeline-svg-container svg circle[data-invocation-id] {
+    cursor: pointer;
+    transition: r 0.2s ease, stroke-width 0.2s ease;
+  }
+
+  .timeline-svg-container svg circle[data-invocation-id]:hover {
+    stroke-width: 3px !important;
+  }
+
+  /* Highlight all elements of the same invocation on hover */
+  .timeline-svg-container svg rect.invocation-highlight {
+    opacity: 1 !important;
+    stroke: #212529;
+    stroke-width: 2px;
+  }
+
+  .timeline-svg-container svg circle.invocation-highlight {
+    stroke-width: 3px !important;
+    stroke: #212529 !important;
+  }
+
+  .timeline-svg-container svg line.invocation-highlight {
+    opacity: 1 !important;
+    stroke-width: 3px !important;
+  }
+
+  /* Clickable invocation links in details panel */
+  .invocation-link {
+    color: #0d6efd;
+    text-decoration: underline;
+  }
+
+  .invocation-link:hover {
+    color: #0a58ca;
+    background-color: #e7f1ff;
+    border-radius: 2px;
+  }
+
+  .filter-form .form-label {
+    font-size: 12px;
+    margin-bottom: 4px;
+  }
+
+  .filter-form .form-select,
+  .filter-form .form-control {
+    font-size: 13px;
+  }
+</style>
+
 <script>
-  // Parse the timeline data from JSON
-  const timelineData = {{ timeline_data|safe }};
-  const invocations = timelineData.invocations;
+  // Store current invocation data for zoom functionality
+  let currentInvocationData = null;
 
-  // Timeline configuration
-  const startTime = new Date(timelineData.start_time);
-  const endTime = new Date(timelineData.end_time);
-
-  // Store both visualizations
-  let ganttPlot;
-  let statusPlot;
-
-  // Track the current view type
-  let currentView = 'gantt';
-
-  // Create color mapping for statuses
-  const statusColors = {
-    'REGISTERED': '#6c757d',   // Gray
-    'PENDING': '#ffc107',      // Yellow
-    'RUNNING': '#17a2b8',      // Teal
-    'PAUSED': '#6610f2',       // Purple
-    'SUCCESS': '#28a745',      // Green
-    'FAILED': '#dc3545',       // Red
-    'CANCELLED': '#ff7f50',    // Coral
-    'TIMEOUT': '#ff4500'       // OrangeRed
-  };
-
-  // Global click handler to avoid duplicating handlers
-  function handlePlotlyClick(data) {
-    if (data.points && data.points[0] && data.points[0].customdata) {
-      const invocationId = data.points[0].customdata[0];
-      loadInvocationDetails(invocationId);
-    }
+  // Highlight all elements of a specific invocation
+  function highlightInvocation(invocationId) {
+    const elements = document.querySelectorAll(`[data-invocation-id="${invocationId}"]`);
+    elements.forEach(el => el.classList.add('invocation-highlight'));
   }
 
-  // Function to create the Gantt chart visualization
-  function createGanttChart() {
-    if (invocations.length === 0) return;
+  // Remove highlight from all elements of a specific invocation
+  function unhighlightInvocation(invocationId) {
+    const elements = document.querySelectorAll(`[data-invocation-id="${invocationId}"]`);
+    elements.forEach(el => el.classList.remove('invocation-highlight'));
+  }
 
-    console.log("Creating Gantt chart with", invocations.length, "invocations");
-
-    // Remove previous event listeners to avoid duplicates
-    const timelineElement = document.getElementById('timeline');
-    if (timelineElement && timelineElement._fullLayout) {
-      Plotly.purge(timelineElement);
-    }
-
-    const data = [];
-
-    // Group invocations by task_id for better organization
-    const taskGroups = {};
-    invocations.forEach(inv => {
-      if (!taskGroups[inv.task_id]) {
-        taskGroups[inv.task_id] = [];
-      }
-      taskGroups[inv.task_id].push(inv);
-    });
-
-    // Convert each invocation to a Gantt chart bar
-    let i = 0;
-    Object.entries(taskGroups).forEach(([taskId, invs]) => {
-      // Add task label
-      data.push({
-        x: [startTime],
-        y: [i],
-        type: 'scatter',
-        mode: 'text',
-        text: [taskId],
-        textposition: 'middle left',
-        hoverinfo: 'none',
-        showlegend: false
-      });
-
-      i++; // Increment for spacing between task groups
-
-      invs.forEach(inv => {
-        const start = new Date(inv.start_time);
-
-        // For invocations without end time, use current time or add small duration
-        let end;
-        if (inv.end_time) {
-          end = new Date(inv.end_time);
+  document.addEventListener('DOMContentLoaded', function() {
+    // Show/hide custom date range based on time_range selection
+    const timeRangeSelect = document.getElementById('time_range');
+    if (timeRangeSelect) {
+      timeRangeSelect.addEventListener('change', function() {
+        const customRange = document.getElementById('custom_date_range');
+        if (this.value === 'custom') {
+          customRange.classList.remove('d-none');
         } else {
-          // For ongoing tasks, extend to now or the end of the time range
-          end = new Date(Math.min(new Date().getTime(), endTime.getTime()));
+          customRange.classList.add('d-none');
         }
-
-        // Make sure very short tasks are visible (at least 10 seconds for visibility)
-        if (end - start < 10000) {
-          end = new Date(start.getTime() + 10000);
-        }
-
-        console.log(`Invocation ${inv.invocation_id}: start=${start.toISOString()}, end=${end.toISOString()}`);
-
-        data.push({
-          x: [start, end],
-          y: [i, i],
-          type: 'scatter',
-          mode: 'lines',
-          line: {
-            color: statusColors[inv.status] || '#000000',
-            width: 20
-          },
-          name: `${inv.invocation_id.substring(0, 8)}... (${inv.status})`,
-          text: [`Task: ${inv.task_id}<br>Status: ${inv.status}<br>ID: ${inv.invocation_id}<br>Start: ${start.toLocaleString()}`],
-          hoverinfo: 'text+name',
-          customdata: [[inv.invocation_id], [inv.invocation_id]],
-        });
-        i++;
       });
-
-      i++; // Add extra space between task groups
-    });
-
-    const layout = {
-      title: 'Invocation Timeline',
-      xaxis: {
-        title: 'Time (UTC)',
-        type: 'date',
-        range: [startTime, endTime]
-      },
-      yaxis: {
-        title: 'Invocations by Task',
-        showticklabels: false
-      },
-      showlegend: false,
-      hovermode: 'closest',
-      height: Math.max(500, i * 25), // Adjust height based on number of rows
-      margin: {
-        l: 50,
-        r: 50,
-        b: 100,
-        t: 50,
-        pad: 4
-      }
-    };
-
-    console.log("Plotting Gantt chart with", data.length, "data points");
-    Plotly.newPlot('timeline', data, layout, {responsive: true});
-
-    // Store for later reuse
-    ganttPlot = {data, layout};
-
-    // Add click event handler
-    document.getElementById('timeline').on('plotly_click', handlePlotlyClick);
-  }
-
-  // Function to create a status transition visualization
-  function createStatusTransitionChart() {
-    if (invocations.length === 0) return;
-
-    console.log("Creating status transition chart");
-
-    // Remove previous event listeners to avoid duplicates
-    const timelineElement = document.getElementById('timeline');
-    if (timelineElement && timelineElement._fullLayout) {
-      Plotly.purge(timelineElement);
     }
 
-    // First, create a loading placeholder
-    const loadingData = [{
-      x: [startTime, endTime],
-      y: [0, 0],
-      type: 'scatter',
-      mode: 'lines',
-      line: { color: 'transparent' },
-      showlegend: false
-    }];
+    // Close button for details panel
+    const closeButton = document.getElementById('close-details');
+    if (closeButton) {
+      closeButton.addEventListener('click', function() {
+        document.getElementById('invocation-details-panel').classList.add('d-none');
+        currentInvocationData = null;
+      });
+    }
 
-    const loadingLayout = {
-      title: 'Loading Status Transitions...',
-      xaxis: {
-        title: 'Time (UTC)',
-        type: 'date',
-        range: [startTime, endTime]
-      },
-      yaxis: {
-        showticklabels: false
-      },
-      annotations: [{
-        x: 0.5,
-        y: 0.5,
-        xref: 'paper',
-        yref: 'paper',
-        text: 'Loading status transitions...',
-        showarrow: false,
-        font: { size: 20 }
-      }],
-      height: 500
-    };
+    // Zoom to invocation button
+    const zoomButton = document.getElementById('zoom-to-invocation');
+    if (zoomButton) {
+      zoomButton.addEventListener('click', function() {
+        if (currentInvocationData && currentInvocationData.length > 0) {
+          zoomToInvocation(currentInvocationData);
+        }
+      });
+    }
 
-    Plotly.newPlot('timeline', loadingData, loadingLayout);
-
-    // Track completed fetches
-    let completedFetches = 0;
-    const totalFetches = invocations.length;
-    const allTraces = [];
-
-    // Process each invocation
-    invocations.forEach((inv, i) => {
-      // Get full history from server for this invocation
-      fetch(`/invocations/${inv.invocation_id}/history`)
-        .then(response => response.json())
-        .then(history => {
-          completedFetches++;
-
-          if (!history || history.length === 0) return;
-
-          // Sort history by timestamp
-          history.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-
-          // Create a line connecting all status points
-          const x = history.map(h => new Date(h.timestamp));
-          const y = history.map(() => i);
-          const text = history.map(h => `Status: ${h.status}<br>Time: ${new Date(h.timestamp).toLocaleString()}`);
-          const colors = history.map(h => statusColors[h.status] || '#000000');
-
-          // Add line connecting status points
-          allTraces.push({
-            x: x,
-            y: y,
-            type: 'scatter',
-            mode: 'lines+markers',
-            line: {
-              color: '#888888',
-              width: 2
-            },
-            marker: {
-              color: colors,
-              size: 10
-            },
-            name: inv.invocation_id.substring(0, 8) + '...',
-            text: text,
-            hoverinfo: 'text+name',
-            customdata: Array(x.length).fill([inv.invocation_id]),
-          });
-
-          // After all fetches are done or at 80% completion, plot the data
-          if (completedFetches === totalFetches ||
-             (completedFetches > totalFetches * 0.8 && completedFetches % 5 === 0)) {
-            const layout = {
-              title: 'Status Transitions',
-              xaxis: {
-                title: 'Time (UTC)',
-                type: 'date',
-                range: [startTime, endTime]
-              },
-              yaxis: {
-                title: 'Invocations',
-                showticklabels: false
-              },
-              showlegend: true,
-              hovermode: 'closest',
-              height: Math.max(500, invocations.length * 40),
-              margin: {
-                l: 50,
-                r: 50,
-                b: 100,
-                t: 50,
-                pad: 4
-              }
-            };
-
-            console.log(`Plotting ${allTraces.length} status transition traces`);
-            Plotly.newPlot('timeline', allTraces, layout, {responsive: true});
-            statusPlot = { data: allTraces, layout };
-
-            // Add click event handler
-            document.getElementById('timeline').on('plotly_click', handlePlotlyClick);
+    // Add click and hover handlers to all invocation elements in the SVG
+    const timelineContainer = document.getElementById('timeline-container');
+    if (timelineContainer) {
+      // Click handler
+      timelineContainer.addEventListener('click', function(event) {
+        // Handle clicks on both rectangles and circles (status points)
+        const target = event.target.closest('rect[data-invocation-id], circle[data-invocation-id]');
+        if (target) {
+          const invocationId = target.getAttribute('data-invocation-id');
+          if (invocationId) {
+            loadInvocationDetails(invocationId);
           }
-        })
-        .catch(error => {
-          completedFetches++;
-          console.error('Error fetching history:', error);
-        });
+        }
+      });
+
+      // Hover handlers for highlighting all elements of same invocation
+      timelineContainer.addEventListener('mouseover', function(event) {
+        const target = event.target.closest('rect[data-invocation-id], circle[data-invocation-id], line[data-invocation-id]');
+        if (target) {
+          const invocationId = target.getAttribute('data-invocation-id');
+          if (invocationId) {
+            highlightInvocation(invocationId, true);
+          }
+        }
+      });
+
+      timelineContainer.addEventListener('mouseout', function(event) {
+        const target = event.target.closest('rect[data-invocation-id], circle[data-invocation-id], line[data-invocation-id]');
+        if (target) {
+          const invocationId = target.getAttribute('data-invocation-id');
+          if (invocationId) {
+            highlightInvocation(invocationId, false);
+          }
+        }
+      });
+    }
+  });
+
+  // Highlight or unhighlight all elements belonging to an invocation
+  function highlightInvocation(invocationId, highlight) {
+    const container = document.getElementById('timeline-container');
+    if (!container) return;
+
+    // Find all elements with this invocation ID
+    const selector = `[data-invocation-id="${invocationId}"]`;
+    const elements = container.querySelectorAll(selector);
+
+    elements.forEach(el => {
+      if (highlight) {
+        el.classList.add('invocation-highlight');
+      } else {
+        el.classList.remove('invocation-highlight');
+      }
     });
   }
 
-  // Function to load invocation details when an invocation is clicked
+  // Zoom the timeline to show just this invocation's time range
+  function zoomToInvocation(historyData) {
+    if (!historyData || historyData.length === 0) return;
+
+    // Get first and last timestamp from history
+    const startTime = new Date(historyData[0].timestamp);
+    const endTime = new Date(historyData[historyData.length - 1].timestamp);
+
+    // Add 10% padding on each side
+    const durationMs = endTime - startTime;
+    const paddingMs = Math.max(durationMs * 0.1, 1000); // At least 1 second padding
+
+    const paddedStart = new Date(startTime.getTime() - paddingMs);
+    const paddedEnd = new Date(endTime.getTime() + paddingMs);
+
+    // Format for datetime-local input (YYYY-MM-DDTHH:MM:SS)
+    const formatForInput = (date) => {
+      return date.toISOString().slice(0, 19);
+    };
+
+    // Build the URL with custom range
+    const params = new URLSearchParams(window.location.search);
+    params.set('time_range', 'custom');
+    params.set('start_date', formatForInput(paddedStart));
+    params.set('end_date', formatForInput(paddedEnd));
+
+    // Navigate to the new URL
+    window.location.href = '/invocations/timeline?' + params.toString();
+  }
+
+  // Load invocation details when clicking on a bar
   function loadInvocationDetails(invocationId) {
-    console.log(`Loading details for invocation: ${invocationId}`);
-
-    // Show the details panel and set it to loading state
-    const detailsPanel = document.getElementById('invocation-details-panel');
+    const panel = document.getElementById('invocation-details-panel');
     const detailsContent = document.getElementById('invocation-details-content');
-    const viewFullDetailsLink = document.getElementById('view-full-details');
+    const viewFullLink = document.getElementById('view-full-details');
 
-    detailsPanel.classList.remove('d-none');
+    // Show loading state
+    panel.classList.remove('d-none');
     detailsContent.innerHTML = `
-      <div class="d-flex justify-content-center p-4">
-        <div class="spinner-border text-primary" role="status">
+      <div class="d-flex justify-content-center">
+        <div class="spinner-border spinner-border-sm text-primary" role="status">
           <span class="visually-hidden">Loading...</span>
         </div>
       </div>
     `;
 
-    // Update the full details link
-    viewFullDetailsLink.href = `/invocations/${invocationId}`;
+    // Set up full details link
+    viewFullLink.href = `/invocations/${invocationId}`;
 
-    // Fetch both basic invocation data and history
+    // Fetch both invocation API data and history
     Promise.all([
-      fetch(`/invocations/${invocationId}/api`).then(r => r.json()),
-      fetch(`/invocations/${invocationId}/history`).then(r => r.json())
+      fetch(`/invocations/${invocationId}/api`).then(r => r.ok ? r.json() : null),
+      fetch(`/invocations/${invocationId}/history`).then(r => r.ok ? r.json() : [])
     ])
-    .then(([invData, historyData]) => {
-      if (invData.error) {
-        detailsContent.innerHTML = `<div class="alert alert-danger">${invData.error}</div>`;
-        return;
-      }
+      .then(([apiData, historyData]) => {
+        // Store for zoom functionality
+        currentInvocationData = historyData;
 
-      // Sort history by timestamp
-      historyData.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        let html = `
+          <table class="table table-sm mb-0">
+            <tr>
+              <th style="width: 130px;">Invocation ID</th>
+              <td><code style="font-size: 11px;">${invocationId}</code></td>
+            </tr>
+        `;
 
-      // Format the details HTML
-      let html = `
-        <div class="row">
-          <div class="col-md-6">
-            <h5>Invocation ${invData.invocation_id.substring(0, 8)}...</h5>
-            <table class="table table-sm">
-              <tr>
-                <th>Status</th>
-                <td>
-                  <span class="badge bg-${getStatusClass(invData.status)}">${invData.status}</span>
-                </td>
-              </tr>
-              <tr>
-                <th>Task</th>
-                <td>${invData.task_id}</td>
-              </tr>
-              <tr>
-                <th>Created</th>
-                <td>${historyData.length > 0 ? new Date(historyData[0].timestamp).toLocaleString() : 'Unknown'}</td>
-              </tr>
-              <tr>
-                <th>Duration</th>
-                <td>${calculateDuration(historyData)}</td>
-              </tr>
+        // Add task_id if available
+        if (apiData && apiData.task_id) {
+          html += `
+            <tr>
+              <th>Task ID</th>
+              <td><code style="font-size: 11px;">${apiData.task_id}</code></td>
+            </tr>
+          `;
+        }
+
+        // Add parent_invocation_id if available with hover highlighting
+        if (apiData && apiData.parent_invocation_id) {
+          html += `
+            <tr>
+              <th>Parent Invocation</th>
+              <td>
+                <code style="font-size: 11px; cursor: pointer;"
+                      class="invocation-link"
+                      data-invocation-id="${apiData.parent_invocation_id}"
+                      onmouseenter="highlightInvocation('${apiData.parent_invocation_id}')"
+                      onmouseleave="unhighlightInvocation('${apiData.parent_invocation_id}')"
+                      onclick="loadInvocationDetails('${apiData.parent_invocation_id}')">${apiData.parent_invocation_id}</code>
+              </td>
+            </tr>
+          `;
+        }
+
+        if (historyData && historyData.length > 0) {
+          // Get first and last status
+          const firstEntry = historyData[0];
+          const lastEntry = historyData[historyData.length - 1];
+
+          html += `
+            <tr>
+              <th>Status</th>
+              <td><span class="badge bg-${getStatusClass(lastEntry.status)}">${lastEntry.status.toLowerCase()}</span></td>
+            </tr>
+            <tr>
+              <th>Duration</th>
+              <td>${calculateDuration(historyData)}</td>
+            </tr>
+          `;
+
+          // Show status history
+          html += `
             </table>
-          </div>
-          <div class="col-md-6">
-            <h5>Status History</h5>
-            <div style="max-height: 200px; overflow-y: auto;">
-              <table class="table table-sm">
+            <h6 class="mt-3 mb-2">Status History</h6>
+            <div>
+              <table class="table table-sm mb-0">
                 <thead>
                   <tr>
                     <th>Status</th>
-                    <th>Timestamp</th>
-                    <th>Runner Id</th>
+                    <th>Timestamp (UTC)</th>
+                    <th>Runner Context</th>
                   </tr>
                 </thead>
                 <tbody>
-      `;
+          `;
 
-      historyData.forEach(h => {
-        html += `
-          <tr>
-            <td><span class="badge bg-${getStatusClass(h.status)}">${h.status}</span></td>
-            <td>${new Date(h.timestamp).toLocaleString()}</td>
-            <td><span class='text-muted' style='font-size:12px;'>${h.runner_context_summary}</span></td>
-          </tr>
-        `;
-      });
+          historyData.forEach(h => {
+            // Build runner context display
+            let runnerHtml = '';
+            if (h.runner_cls) {
+              runnerHtml += `<div style="margin-bottom: 4px;">`;
+              runnerHtml += `<span class="badge bg-primary" style="font-size: 9px;">${h.runner_cls}</span> `;
+              runnerHtml += `<code style="font-size: 9px; background: #e9ecef; padding: 1px 3px; border-radius: 2px;">${h.runner_id || 'N/A'}</code>`;
+              runnerHtml += `</div>`;
+              runnerHtml += `<div style="font-size: 9px; color: #6c757d; margin-left: 4px;">`;
+              if (h.hostname) runnerHtml += `host: <strong>${h.hostname}</strong> `;
+              if (h.pid) runnerHtml += `pid: <strong>${h.pid}</strong> `;
+              if (h.thread_id) runnerHtml += `thread: <strong>${h.thread_id}</strong>`;
+              runnerHtml += `</div>`;
 
-      html += `
+              // Parent context if available
+              if (h.parent_runner_id) {
+                runnerHtml += `<div style="margin-top: 4px; padding-top: 4px; border-top: 1px dashed #dee2e6;">`;
+                runnerHtml += `<span style="font-size: 9px; color: #6c757d;">↳ Parent:</span> `;
+                runnerHtml += `<span class="badge bg-secondary" style="font-size: 9px;">${h.parent_runner_cls || 'Unknown'}</span> `;
+                runnerHtml += `<code style="font-size: 9px; background: #e9ecef; padding: 1px 3px; border-radius: 2px;">${h.parent_runner_id}</code>`;
+                runnerHtml += `<div style="font-size: 9px; color: #6c757d; margin-left: 12px;">`;
+                if (h.parent_hostname) runnerHtml += `host: <strong>${h.parent_hostname}</strong> `;
+                if (h.parent_pid) runnerHtml += `pid: <strong>${h.parent_pid}</strong> `;
+                if (h.parent_thread_id) runnerHtml += `thread: <strong>${h.parent_thread_id}</strong>`;
+                runnerHtml += `</div>`;
+                runnerHtml += `</div>`;
+              }
+            } else {
+              runnerHtml = '<span class="text-muted">-</span>';
+            }
+
+            html += `
+              <tr>
+                <td><span class="badge bg-${getStatusClass(h.status)}">${h.status.toLowerCase()}</span></td>
+                <td style="font-size: 11px;">${formatUTCDate(h.timestamp)}</td>
+                <td style="font-size: 11px;">${runnerHtml}</td>
+              </tr>
+            `;
+          });
+
+          html += `
                 </tbody>
               </table>
             </div>
-          </div>
-        </div>
-      `;
+          `;
+        } else {
+          html += `
+            <tr>
+              <td colspan="2" class="text-muted">No history available</td>
+            </tr>
+          </table>
+          `;
+        }
 
-      // Display formatted content
-      detailsContent.innerHTML = html;
-    })
-    .catch(error => {
-      console.error('Error loading invocation details:', error);
-      detailsContent.innerHTML = `
-        <div class="alert alert-danger">
-          Error loading invocation details: ${error.message || 'Unknown error'}
-        </div>
-      `;
-    });
+        detailsContent.innerHTML = html;
+      })
+      .catch(error => {
+        console.error('Error loading invocation details:', error);
+        currentInvocationData = null;
+        detailsContent.innerHTML = `
+          <div class="alert alert-danger mb-0">
+            Error loading details: ${error.message}
+          </div>
+        `;
+      });
   }
 
-  // Helper function to get appropriate Bootstrap color class for status
   function getStatusClass(status) {
+    // Unified status colors matching SVG timeline
+    // Convert to uppercase for consistent lookup
+    const statusUpper = status ? status.toUpperCase() : '';
     const statusMap = {
       'REGISTERED': 'secondary',
       'PENDING': 'warning',
       'RUNNING': 'info',
-      'PAUSED': 'primary',
       'SUCCESS': 'success',
       'FAILED': 'danger',
+      'RETRY': 'secondary',
+      'PAUSED': 'primary',
+      'RESUMED': 'info',
+      'CONCURRENCY_CONTROLLED': 'warning',
+      'CONCURRENCY_CONTROLLED_FINAL': 'warning',
       'CANCELLED': 'dark',
-      'TIMEOUT': 'danger'
+      'TIMEOUT': 'danger',
+      'SCHEDULED': 'warning',
+      'REROUTED': 'info'
     };
-    return statusMap[status] || 'secondary';
+    return statusMap[statusUpper] || 'secondary';
   }
 
-  // Helper function to calculate duration from history
+  function formatUTCDate(isoString) {
+    // Format date as UTC to match timeline, including milliseconds
+    const date = new Date(isoString);
+    const ms = date.getUTCMilliseconds().toString().padStart(3, '0');
+    return date.toISOString().replace('T', ' ').substring(0, 19) + '.' + ms + ' UTC';
+  }
+
   function calculateDuration(history) {
     if (!history || history.length < 2) return 'N/A';
 
     const start = new Date(history[0].timestamp);
-
-    // Find the last entry
-    const lastStatus = history[history.length - 1].status;
     const end = new Date(history[history.length - 1].timestamp);
-
-    // Calculate duration
     const durationMs = end - start;
 
-    // Format nicely
     if (durationMs < 1000) {
       return `${durationMs}ms`;
     } else if (durationMs < 60000) {
@@ -558,59 +528,5 @@
       return `${Math.floor(durationMs / 3600000)}h ${Math.floor((durationMs % 3600000) / 60000)}m`;
     }
   }
-
-  // Initialize when the document is ready
-  document.addEventListener('DOMContentLoaded', function() {
-    // Create the initial Gantt chart
-    createGanttChart();
-
-    // Set up view toggle handlers
-    document.getElementById('gantt-view').addEventListener('click', function() {
-      if (currentView === 'gantt') return;
-
-      this.classList.add('active');
-      document.getElementById('status-view').classList.remove('active');
-
-      if (ganttPlot) {
-        Plotly.newPlot('timeline', ganttPlot.data, ganttPlot.layout, {responsive: true});
-        document.getElementById('timeline').on('plotly_click', handlePlotlyClick);
-      } else {
-        createGanttChart();
-      }
-
-      currentView = 'gantt';
-    });
-
-    document.getElementById('status-view').addEventListener('click', function() {
-      if (currentView === 'status') return;
-
-      this.classList.add('active');
-      document.getElementById('gantt-view').classList.remove('active');
-
-      if (statusPlot) {
-        Plotly.newPlot('timeline', statusPlot.data, statusPlot.layout, {responsive: true});
-        document.getElementById('timeline').on('plotly_click', handlePlotlyClick);
-      } else {
-        createStatusTransitionChart();
-      }
-
-      currentView = 'status';
-    });
-
-    // Show/hide custom date range based on time_range selection
-    document.getElementById('time_range').addEventListener('change', function() {
-      if (this.value === 'custom') {
-        document.getElementById('custom_date_range').classList.remove('d-none');
-      } else {
-        document.getElementById('custom_date_range').classList.add('d-none');
-      }
-    });
-
-    // Close button for details panel
-    document.getElementById('close-details').addEventListener('click', function() {
-      document.getElementById('invocation-details-panel').classList.add('d-none');
-    });
-  });
 </script>
-{% endif %}
 {% endblock %}

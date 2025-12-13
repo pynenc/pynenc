@@ -7,32 +7,15 @@ It includes listing all workflows, viewing workflow runs, and workflow details.
 
 import logging
 import traceback
-from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 from pynmon.app import get_pynenc_instance, templates
-
-if TYPE_CHECKING:
-    from pynenc.task import Task
+from pynmon.util.formatting import format_task_extra_info
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
 logger = logging.getLogger("pynmon.views.workflows")
-
-
-def _create_task_extra_info(task: "Task") -> dict[str, str | list[str]]:
-    """
-    Create additional task information for template display.
-
-    :param task: The task to extract information from
-    :return: Dictionary with extra task information
-    """
-    return {
-        "module": task.func.__module__,
-        "func_qualname": task.func.__qualname__,
-        "retry_for": [e.__name__ for e in task.conf.retry_for],
-    }
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -196,7 +179,7 @@ async def workflow_detail(request: Request, workflow_task_id: str) -> HTMLRespon
         task = app.tasks.get(workflow_task_id)
 
         # Create additional task information for template
-        task_extra = _create_task_extra_info(task) if task else None
+        task_extra = format_task_extra_info(task) if task else None
 
     except Exception as e:
         logger.error(f"Error retrieving workflow details for {workflow_task_id}: {e}")
@@ -241,7 +224,7 @@ async def refresh_workflow_detail(
         task = app.tasks.get(workflow_task_id)
 
         # Create additional task information for template
-        task_extra = _create_task_extra_info(task) if task else None
+        task_extra = format_task_extra_info(task) if task else None
 
     except Exception as e:
         logger.error(f"Error refreshing workflow details for {workflow_task_id}: {e}")

@@ -1,17 +1,35 @@
+"""Logging utilities for Pynenc.
+
+This module provides logging configuration, formatters, and context-aware logging.
+The formatter reads execution context from pynenc.context module (single source of truth)
+and formats IDs according to configuration.
+
+Key components:
+- ColoredFormatter: Adds ANSI colors and context prefixes to log output
+- PynencContextFilter: Injects context into log records from pynenc.context
+- create_logger: Creates configured logger for a Pynenc app
+"""
+
 import logging
 from contextvars import ContextVar
 from typing import TYPE_CHECKING, Literal
+
+from pynenc import context
 
 if TYPE_CHECKING:
     from logging import LogRecord
 
     from pynenc.app import Pynenc
+    from pynenc.conf.config_pynenc import ConfigPynenc
+    from pynenc.runner.runner_context import RunnerContext
 
+# Truncation length for IDs (7 chars like Git short SHA)
+_TRUNCATE_LENGTH = 7
 
-# Context variables for thread-safe logging context
+# Context variables for logging-specific data
+# These are set directly by invocation.run(), not duplicated from context.py
 _task_id: ContextVar[str | None] = ContextVar("task_id", default=None)
 _invocation_id: ContextVar[str | None] = ContextVar("invocation_id", default=None)
-_runner_id: ContextVar[str | None] = ContextVar("runner_id", default=None)
 
 
 # Define ANSI color codes
@@ -32,20 +50,39 @@ class PynencContextFilter(logging.Filter):
     """
     Logging filter that injects Pynenc context into log records.
 
-    Automatically adds task_id, invocation_id, and runner_id to log records
-    based on the current execution context.
+    Reads execution context from pynenc.context module (single source of truth)
+    and adds it to log records for the formatter to use.
     """
+
+    def __init__(self, app_id: str, conf: "ConfigPynenc") -> None:
+        """
+        Initialize the filter with the app_id to read context for.
+
+        :param str app_id: The application identifier.
+        :param ConfigPynenc conf: The app configuration (read dynamically for truncate_log_ids).
+        """
+        super().__init__()
+        self.app_id = app_id
+        self.conf = conf
 
     def filter(self, record: "LogRecord") -> bool:
         """
         Add context information to the log record.
 
+        Reads from pynenc.context (single source of truth) rather than
+        maintaining duplicate state.
+
         :param LogRecord record: The log record to filter
         :return: Always True to allow the record
         """
+        # Read execution context from context.py (single source of truth)
+        record.runner_ctx = context.get_current_runner_context(self.app_id)
+
+        # Read logging-specific context (task/invocation set during run)
         record.task_id = _task_id.get()
         record.invocation_id = _invocation_id.get()
-        record.runner_id = _runner_id.get()
+        # Read truncate_log_ids dynamically from config (allows runtime changes)
+        record.truncate_log_ids = self.conf.truncate_log_ids
         return True
 
 
@@ -80,22 +117,30 @@ class ColoredFormatter(logging.Formatter):
         super().__init__(fmt=fmt, datefmt=datefmt, style=style, validate=validate)
 
     def format(self, record: "LogRecord") -> str:
+        """
+        Format the log record with colors and context prefix.
+
+        :param LogRecord record: The log record to format
+        :return: Formatted log string
+        """
         # Save original values to restore them after formatting
         levelname = record.levelname
         name = record.name
         msg = record.msg
 
-        # Extract context values, using N/A for missing ones
+        # Extract raw context data (added by PynencContextFilter from context.py)
+        runner_ctx = getattr(record, "runner_ctx", None)
         task_id = getattr(record, "task_id", None)
         invocation_id = getattr(record, "invocation_id", None)
-        runner_id = getattr(record, "runner_id", None)
+        truncate_ids = getattr(record, "truncate_log_ids", True)
 
-        # Build context prefix with all available information
+        # Build context prefix
+        # Format: RunnerClass(id) or RunnerClass(id).Child[id]
         context_parts = []
 
-        # Add runner context if available
-        if runner_id:
-            context_parts.append(f"runner:{runner_id}")
+        # Format the context display from raw data
+        if context_display := self._format_context_display(runner_ctx, truncate_ids):
+            context_parts.append(context_display)
 
         # Add task context if available
         if task_id:
@@ -103,7 +148,8 @@ class ColoredFormatter(logging.Formatter):
 
         # Add invocation context if available
         if invocation_id:
-            context_parts.append(f"inv:{invocation_id}")
+            inv_display = self._maybe_truncate(invocation_id, truncate_ids)
+            context_parts.append(f"inv:{inv_display}")
 
         # Apply colors
         if levelname in self.LEVEL_COLORS:
@@ -128,6 +174,50 @@ class ColoredFormatter(logging.Formatter):
 
         return result
 
+    def _format_context_display(
+        self,
+        runner_ctx: "RunnerContext | None",
+        truncate_ids: bool,
+    ) -> str | None:
+        """
+        Format context data into a display string for logging.
+
+        Builds hierarchical display from RunnerContext chain:
+        - Single context: RunnerClass(id)
+        - With parent: ParentClass(id).ChildClass[id]
+
+        :param RunnerContext | None runner_ctx: The current runner context
+        :param bool truncate_ids: Whether to truncate long IDs
+        :return: Formatted display string or None if no context
+        """
+        if runner_ctx is None:
+            return None
+
+        if runner_ctx.parent_ctx is not None:
+            # Two levels: parent -> current
+            parent = runner_ctx.parent_ctx
+            parent_id = self._maybe_truncate(parent.runner_id, truncate_ids)
+            child_id = self._maybe_truncate(runner_ctx.runner_id, truncate_ids)
+            return (
+                f"{parent.runner_cls}({parent_id}).{runner_ctx.runner_cls}[{child_id}]"
+            )
+
+        # Just current context
+        runner_id = self._maybe_truncate(runner_ctx.runner_id, truncate_ids)
+        return f"{runner_ctx.runner_cls}({runner_id})"
+
+    def _maybe_truncate(self, value: str, truncate: bool) -> str:
+        """
+        Truncate a string to 7 chars (like Git short SHA) if truncate is True.
+
+        :param str value: The string to potentially truncate
+        :param bool truncate: Whether to truncate
+        :return: Original or truncated string
+        """
+        if truncate and len(value) > _TRUNCATE_LENGTH:
+            return value[:_TRUNCATE_LENGTH]
+        return value
+
 
 def create_logger(app: "Pynenc", use_colors: bool = True) -> logging.Logger:
     """
@@ -140,8 +230,9 @@ def create_logger(app: "Pynenc", use_colors: bool = True) -> logging.Logger:
     """
     logger = logging.getLogger(f"pynenc.{app.app_id}")
 
-    # Add context filter
-    context_filter = PynencContextFilter()
+    # Add context filter that reads from context.py
+    # Pass conf reference so truncate_log_ids is read dynamically
+    context_filter = PynencContextFilter(app.app_id, app.conf)
     logger.addFilter(context_filter)
 
     # Create handler
@@ -181,38 +272,47 @@ def create_logger(app: "Pynenc", use_colors: bool = True) -> logging.Logger:
 def set_logging_context(
     task_id: str | None = None,
     invocation_id: str | None = None,
-    runner_id: str | None = None,
 ) -> None:
     """
-    Set the logging context for the current execution context.
+    Set the task and invocation context for logging.
+
+    These are logging-specific values set during invocation.run(),
+    not duplicated from context.py.
 
     :param str | None task_id: The task ID to set in context
     :param str | None invocation_id: The invocation ID to set in context
-    :param str | None runner_id: The runner ID to set in context
     """
     if task_id is not None:
         _task_id.set(task_id)
     if invocation_id is not None:
         _invocation_id.set(invocation_id)
-    if runner_id is not None:
-        _runner_id.set(runner_id)
 
 
 def clear_logging_context() -> None:
-    """Clear all logging context variables."""
+    """Clear logging-specific context variables (task_id and invocation_id)."""
     _task_id.set(None)
     _invocation_id.set(None)
-    _runner_id.set(None)
 
 
-def get_logging_context() -> dict[str, str | None]:
+def get_logging_context(app_id: str) -> dict[str, str | None]:
     """
     Get the current logging context.
 
-    :return: Dictionary with task_id, invocation_id, and runner_id
+    Reads from context.py for execution context (single source of truth).
+
+    :param str app_id: The application identifier.
+    :return: Dictionary with all context values
     """
+    # Import here to avoid circular imports
+    from pynenc import context
+
+    runner_ctx = context.get_current_runner_context(app_id)
     return {
+        "runner_cls": runner_ctx.runner_cls,
+        "runner_id": runner_ctx.runner_id,
+        "parent_runner_id": runner_ctx.parent_ctx.runner_id
+        if runner_ctx.parent_ctx
+        else None,
         "task_id": _task_id.get(),
         "invocation_id": _invocation_id.get(),
-        "runner_id": _runner_id.get(),
     }

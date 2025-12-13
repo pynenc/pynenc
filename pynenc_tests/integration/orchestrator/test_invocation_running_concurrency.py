@@ -68,6 +68,16 @@ def test_running_concurrency_type_task(task_sum_io: "Task") -> None:
     assert isinstance(trying_to_run_invocation, DistributedInvocation)
     assert isinstance(fake_running_invocation, DistributedInvocation)
 
+    # Ensure the invocation/task has the desired running_concurrency explicitly.
+    # Setting it on the invocation object avoids relying on environment timing
+    # or fixture creation order.
+    fake_running_invocation.task.conf.running_concurrency = (
+        config_task.ConcurrencyControlType.TASK
+    )
+    trying_to_run_invocation.task.conf.running_concurrency = (
+        config_task.ConcurrencyControlType.TASK
+    )
+
     app.orchestrator.register_new_invocations(
         [fake_running_invocation, trying_to_run_invocation]
     )

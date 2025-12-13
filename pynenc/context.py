@@ -1,20 +1,24 @@
 """
-This module maintains the context of invocations and runners within the Pynenc application.
+Context management for Pynenc execution environments.
 
-It stores the current invocation context and runner arguments,
-facilitating the management and tracking of nested or sub-invocations within different execution environments.
+This module maintains context for invocations and execution within the Pynenc application.
+It provides thread-local storage for runner contexts that can be hierarchically nested.
 
 Key components:
-- Invocation context tracking (sync and distributed)
-- Runner context management
-- Logging context integration
+- RunnerContext management (set/get/clear)
+- Distributed invocation context tracking
+- Automatic logging context integration
 """
 
+import os
+import socket
 import threading
 from typing import TYPE_CHECKING, Any, Optional
 
 from pynenc.runner.runner_context import RunnerContext
-from pynenc.util.log import set_logging_context, clear_logging_context
+from pynenc.util.log import (
+    clear_logging_context,
+)
 
 # Create a thread-local data storage
 thread_local = threading.local()
@@ -24,23 +28,106 @@ if TYPE_CHECKING:
     from pynenc.invocation.dist_invocation import DistributedInvocation
     from pynenc.runner.base_runner import BaseRunner
 
-# invocation_context keeps the current invocation, so it can be referenced as a parent from any sub-invocation
+# Sync invocation context (module-level, doesn't cross threads)
 # - It is a dictionary with the format {app_id: invocation}
 sync_inv_context: dict[str, Optional["ConcurrentInvocation"]] = {}
-# Global runner dictionary keyed by app_id
-_current_runner: dict[str, "BaseRunner"] = {}
+
+
+# =============================================================================
+# Storage Access Helpers
+# =============================================================================
+
+
+def _get_runner_context_storage() -> dict[str, RunnerContext]:
+    """Get thread-local runner context storage, creating if needed."""
+    if not hasattr(thread_local, "runner_context"):
+        thread_local.runner_context = {}
+    return thread_local.runner_context
+
+
+def _get_dist_inv_context_storage() -> dict[str, Optional["DistributedInvocation"]]:
+    """Get thread-local distributed invocation context storage, creating if needed."""
+    if not hasattr(thread_local, "dist_inv_context"):
+        thread_local.dist_inv_context = {}
+    return thread_local.dist_inv_context
+
+
+# =============================================================================
+# RunnerContext Management
+# =============================================================================
+
+
+def get_runner_context(app_id: str) -> RunnerContext | None:
+    """
+    Get the current runner context for the given app.
+
+    :param str app_id: The app identifier.
+    :return: The current runner context, or None if not set.
+    """
+    return _get_runner_context_storage().get(app_id)
+
+
+def set_runner_context(app_id: str, runner_ctx: RunnerContext) -> None:
+    """
+    Set the runner context for the given app.
+
+    :param str app_id: The app identifier.
+    :param RunnerContext runner_ctx: The runner context to set.
+    """
+    _get_runner_context_storage()[app_id] = runner_ctx
+
+
+def clear_runner_context(app_id: str) -> None:
+    """
+    Clear the runner context for the given app.
+
+    :param str app_id: The app identifier.
+    """
+    storage = _get_runner_context_storage()
+    if app_id in storage:
+        del storage[app_id]
+
+
+def get_or_create_runner_context(app_id: str) -> RunnerContext:
+    """
+    Get the current runner context, creating an ExternalRunner context if none exists.
+
+    :param str app_id: The app identifier.
+    :return: The current runner context (never None).
+    """
+    # First check for directly set RunnerContext
+    if runner_ctx := get_runner_context(app_id):
+        return runner_ctx
+
+    # Then check for a runner instance (set by BaseRunner.run())
+    if runner := get_current_runner(app_id):
+        return RunnerContext.from_runner(runner)
+
+    # No context set - we're in an external process
+    # Create an ExternalRunner context with hostname-pid for stable identification
+    return RunnerContext(
+        runner_cls="ExternalRunner",
+        runner_id=f"ExternalRunner@{socket.gethostname()}-{os.getpid()}",
+    )
+
+
+# Alias for backward compatibility
+get_current_runner_context = get_or_create_runner_context
+
+
+# =============================================================================
+# Distributed Invocation Context
+# =============================================================================
 
 
 def get_dist_invocation_context(app_id: str) -> Optional["DistributedInvocation"]:
     """
-    Get the current invocation context for the given app.
+    Get the current distributed invocation context for the given app.
 
     :param str app_id: The app identifier.
-    :result: The current invocation context for the given app.
+    :return: The current invocation context for the given app.
     """
-    if not hasattr(thread_local, "dist_inv_context"):
-        thread_local.dist_inv_context = {}
-    return thread_local.dist_inv_context.get(app_id)
+    return _get_dist_inv_context_storage().get(app_id)
 
 
 def swap_dist_invocation_context(
@@ -51,14 +138,47 @@ def swap_dist_invocation_context(
 
     :param str app_id: The app identifier.
     :param DistributedInvocation invocation: The invocation to set as the current context.
+    :return: The previous invocation context.
     """
-    previous_invocation = get_dist_invocation_context(app_id)
-    thread_local.dist_inv_context[app_id] = invocation
+    storage = _get_dist_inv_context_storage()
+    previous_invocation = storage.get(app_id)
+    storage[app_id] = invocation
     return previous_invocation
 
 
-# Runner arguments passed from the runner to a distributed invocation.
-runner_args: dict[str, Any] | None = None
+# =============================================================================
+# Runner Args (Legacy - kept for backward compatibility)
+# =============================================================================
+
+
+def get_runner_args() -> dict[str, Any] | None:
+    """
+    Get the runner arguments from thread-local storage.
+
+    :return: The runner arguments for the current thread, or None if not set.
+    """
+    return getattr(thread_local, "runner_args", None)
+
+
+def set_runner_args(args: dict[str, Any] | None) -> None:
+    """
+    Set the runner arguments in thread-local storage.
+
+    :param dict[str, Any] | None args: The runner arguments to set.
+    """
+    thread_local.runner_args = args
+
+
+# =============================================================================
+# Runner Instance Management (for runners that need instance access)
+# =============================================================================
+
+
+def _get_runner_storage() -> dict[str, "BaseRunner"]:
+    """Get thread-local runner storage, creating if needed."""
+    if not hasattr(thread_local, "current_runner"):
+        thread_local.current_runner = {}
+    return thread_local.current_runner
 
 
 def get_current_runner(app_id: str) -> Optional["BaseRunner"]:
@@ -70,10 +190,10 @@ def get_current_runner(app_id: str) -> Optional["BaseRunner"]:
     each process runs a ThreadRunner and needs to reference its own runner instance
     without conflicting with others.
 
-    :param app_id: The application identifier.
+    :param str app_id: The application identifier.
     :return: The current runner instance if set in the current thread/process, else None.
     """
-    return _current_runner.get(app_id)
+    return _get_runner_storage().get(app_id)
 
 
 def set_current_runner(app_id: str, runner: "BaseRunner") -> None:
@@ -81,39 +201,34 @@ def set_current_runner(app_id: str, runner: "BaseRunner") -> None:
     Set the current runner for the given app_id in thread-local storage.
 
     This is used to associate a runner with the current thread or process context,
-    enabling isolated execution environments. It's particularly essential for
-    MultiThreadRunner, where each spawned process needs to set its own ThreadRunner
-    to avoid cross-process interference.
+    enabling isolated execution environments.
 
-    Also sets the runner_id in the logging context for automatic log annotation.
+    Also creates and sets the runner context from the runner.
 
     :param str app_id: The application identifier.
     :param BaseRunner runner: The runner instance to set.
     """
-    _current_runner[app_id] = runner
-    set_logging_context(runner_id=runner.runner_id)
+    _get_runner_storage()[app_id] = runner
+    # Create and set runner context from runner
+    runner_ctx = RunnerContext.from_runner(runner)
+    set_runner_context(app_id, runner_ctx)
 
 
 def clear_current_runner(app_id: str) -> None:
     """
-    Clear the current runner for the given app_id.
+    Clear the current runner and all associated contexts for the given app_id.
 
-    Also clears the runner_id from the logging context.
+    Also clears the logging context.
 
     :param str app_id: The application identifier.
     """
-    if app_id in _current_runner:
-        del _current_runner[app_id]
+    # Clear runner
+    runner_storage = _get_runner_storage()
+    if app_id in runner_storage:
+        del runner_storage[app_id]
+
+    # Clear runner context
+    clear_runner_context(app_id)
+
+    # Clear logging context
     clear_logging_context()
-
-
-def get_current_runner_context(app_id: str) -> RunnerContext | None:
-    """
-    Get the current runner context arguments for the given app.
-
-    :param str app_id: The app identifier.
-    :result: The current runner context arguments for the given app.
-    """
-    if runner := get_current_runner(app_id):
-        return RunnerContext.from_runner(runner)
-    return None

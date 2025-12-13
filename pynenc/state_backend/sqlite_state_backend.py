@@ -7,6 +7,7 @@ SQLite provides ACID transactions and handles concurrent access automatically.
 """
 
 from collections.abc import Iterator
+from datetime import datetime
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -230,6 +231,8 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
         """
         with sqlite_conn(self.sqlite_db_path) as conn:
             # Use the timestamp and status attributes from InvocationHistory as part of the PK
+            # Convert datetime to Unix timestamp for consistent storage and querying
+            timestamp_float = invocation_history._timestamp.timestamp()
             for invocation_id in invocation_ids:
                 conn.execute(
                     f"""
@@ -239,7 +242,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
                     """,
                     (
                         invocation_id,
-                        invocation_history._timestamp,
+                        timestamp_float,
                         invocation_history.status_record.status,
                         invocation_history.to_json(),
                     ),
@@ -403,6 +406,66 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
             cursor.close()
             for row in cursor_rows:
                 yield row[0]
+
+    def iter_invocations_in_timerange(
+        self,
+        start_time: datetime,
+        end_time: datetime,
+        batch_size: int = 100,
+    ) -> Iterator[list[str]]:
+        """Iterate over invocation IDs that have history within time range."""
+        offset = 0
+        while True:
+            with sqlite_conn(self.sqlite_db_path) as conn:
+                cursor = conn.execute(
+                    f"""
+                    SELECT DISTINCT invocation_id
+                    FROM {Tables.HISTORY}
+                    WHERE history_timestamp >= ? AND history_timestamp <= ?
+                    ORDER BY invocation_id
+                    LIMIT ? OFFSET ?
+                """,
+                    (start_time.timestamp(), end_time.timestamp(), batch_size, offset),
+                )
+                batch = [row[0] for row in cursor.fetchall()]
+                cursor.close()
+
+            if not batch:
+                break
+
+            yield batch
+            offset += batch_size
+
+    def iter_history_in_timerange(
+        self,
+        start_time: datetime,
+        end_time: datetime,
+        batch_size: int = 100,
+    ) -> Iterator[list[InvocationHistory]]:
+        """Iterate over history entries within time range."""
+        offset = 0
+        while True:
+            with sqlite_conn(self.sqlite_db_path) as conn:
+                cursor = conn.execute(
+                    f"""
+                    SELECT history_json
+                    FROM {Tables.HISTORY}
+                    WHERE history_timestamp >= ? AND history_timestamp <= ?
+                    ORDER BY history_timestamp ASC
+                    LIMIT ? OFFSET ?
+                """,
+                    (start_time.timestamp(), end_time.timestamp(), batch_size, offset),
+                )
+                batch = [
+                    InvocationHistory.from_json(row[0]) for row in cursor.fetchall()
+                ]
+                cursor.close()
+
+            if not batch:
+                break
+
+            yield batch
+            offset += batch_size
 
     def purge(self) -> None:
         """Clear all state backend data"""

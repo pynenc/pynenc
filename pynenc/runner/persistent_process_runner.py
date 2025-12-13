@@ -30,17 +30,19 @@ if TYPE_CHECKING:
 
 
 def persistent_process_main(
-    app: "Pynenc", *, process_extra_id: str, runner_cache: dict, stop_event: "Event"
+    app: "Pynenc",
+    *,
+    runner_cache: dict,
+    stop_event: "Event",
+    runner_ctx_json: str,
 ) -> None:
     """Main function for persistent process that executes invocations sequentially."""
-    app.logger.info(
-        f"Persistent process {process_extra_id} started with PID {os.getpid()}"
-    )
+    app.logger.info(f"Persistent process worker started with PID {os.getpid()}")
     app.runner._runner_cache = runner_cache
-    app.runner.set_extra_id(process_extra_id)
-    context.set_current_runner(app.app_id, app.runner)
-    runner_ctx = RunnerContext.from_runner(app.runner)
-    runner_id = app.runner.runner_id
+    parent_runner_ctx = RunnerContext.from_json(runner_ctx_json)
+    runner_ctx = parent_runner_ctx.new_child_context("PPRWorker")
+    runner_id = runner_ctx.runner_id
+    context.set_runner_context(app.app_id, runner_ctx)
 
     def handle_terminate(signum: int, frame: Any) -> None:
         app.logger.info(f"Process {runner_id} received SIGTERM, setting stop event")
@@ -75,7 +77,7 @@ class PersistentProcessRunner(BaseRunner):
     PersistentProcessRunner maintains a fixed number of processes that continuously run tasks.
     """
 
-    processes: dict[str, Process]
+    processes: dict[int, Process]
     manager: Manager  # type: ignore
     runner_cache: dict
     num_processes: int
@@ -103,11 +105,6 @@ class PersistentProcessRunner(BaseRunner):
         """Returns the maximum number of concurrent processes."""
         return self.num_processes
 
-    def _generate_process_extra_id(self) -> str:
-        """Generates an extra id for the new process."""
-        self._process_id_counter += 1
-        return f"PerWorker:{self._process_id_counter:05d}"
-
     def _on_start(self) -> None:
         """Initializes the runner and spawns initial processes."""
         self.num_processes = max(
@@ -125,29 +122,29 @@ class PersistentProcessRunner(BaseRunner):
         for _ in range(self.num_processes):
             self._spawn_persistent_process()
 
-    def _spawn_persistent_process(self) -> str:
+    def _spawn_persistent_process(self) -> int | None:
         """Spawns a new persistent process and returns its key."""
         if not hasattr(self, "running") or not self.running:
             raise RuntimeError("Trying to spawn new process after stopping loop")
-        process_extra_id = self._generate_process_extra_id()
-        process_key = f"{self.runner_id}[{process_extra_id}]"
+        # Create the coordinator context for the child process
         args = {
             "app": self.app,
-            "process_extra_id": process_extra_id,
             "runner_cache": self.runner_cache,
             "stop_event": self.stop_event,
+            "runner_ctx_json": self.runner_context.to_json(),
         }
         p = Process(target=persistent_process_main, kwargs=args, daemon=True)
         try:
             p.start()
-            self.processes[process_key] = p
-            self.logger.info(
-                f"Spawned persistent process {process_key} with pid {p.pid}"
-            )
+            if p.pid is None:
+                self.logger.error("Failed to start process: PID is None")
+                return None
+            self.processes[p.pid] = p
+            self.logger.info(f"Spawned persistent process with pid {p.pid}")
         except Exception as e:
-            self.logger.error(f"Failed to spawn process {process_key}: {e}")
+            self.logger.error(f"Failed to spawn process with pid {p.pid}: {e}")
             raise
-        return process_key
+        return p.pid
 
     def _terminate_all_processes(self) -> None:
         """Terminates all running processes with graceful shutdown attempt."""

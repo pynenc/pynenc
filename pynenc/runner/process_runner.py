@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 from pynenc.exceptions import InvocationStatusError, RunnerError
 from pynenc.invocation import InvocationStatus
 from pynenc.runner.base_runner import BaseRunner
-from pynenc.runner.runner_context import RunnerContext
 from pynenc.util.multiprocessing_utils import warn_missing_main_guard
 
 
@@ -116,7 +115,7 @@ class ProcessRunner(BaseRunner):
             process.kill()
             try:
                 self.app.orchestrator.set_invocation_status(
-                    invocation_id, InvocationStatus.RETRY
+                    invocation_id, InvocationStatus.RETRY, self.runner_context
                 )
             except InvocationStatusError:
                 self.logger.warning(
@@ -208,7 +207,9 @@ class ProcessRunner(BaseRunner):
                         )
                         try:
                             self.app.orchestrator.set_invocation_status(
-                                waiting_invocation_id, InvocationStatus.RESUMED
+                                waiting_invocation_id,
+                                InvocationStatus.RESUMED,
+                                self.runner_context,
                             )
                         except InvocationStatusError as ex:
                             self.logger.warning(
@@ -222,16 +223,15 @@ class ProcessRunner(BaseRunner):
         """
         # called from parent process memory space
         self.logger.debug(f"starting runner loop iteration {self.available_processes=}")
-        runner_ctx = RunnerContext.from_runner(self)
         for invocation in self.app.orchestrator.get_invocations_to_run(
-            max_num_invocations=self.available_processes, runner_ctx=runner_ctx
+            max_num_invocations=self.available_processes, runner_ctx=self.runner_context
         ):
             invocation.app.runner = self
             process = Process(
                 target=invocation.run,
                 kwargs={
                     "runner_args": self.runner_args,
-                    "runner_ctx": runner_ctx,
+                    "runner_ctx": self.runner_context,
                 },
                 daemon=True,
             )
@@ -249,7 +249,7 @@ class ProcessRunner(BaseRunner):
                     f"Failed to start process for invocation {invocation.invocation_id}, rerouting it"
                 )
                 self.app.orchestrator.reroute_invocations(
-                    {invocation.invocation_id}, runner_ctx
+                    {invocation.invocation_id}, runner_ctx=self.runner_context
                 )
         self.handle_waiting_invocations()
 
@@ -276,7 +276,7 @@ class ProcessRunner(BaseRunner):
             self.app.orchestrator.set_invocation_status(
                 running_invocation_id,
                 InvocationStatus.PAUSED,
-                runner_ctx=RunnerContext.from_runner(self),
+                runner_ctx=self.runner_context,
             )
             for result_inv_id in result_invocation_ids:
                 current_waiters = set(self.wait_invocation.get(result_inv_id, set()))

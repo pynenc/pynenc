@@ -18,13 +18,13 @@ from pynenc.orchestrator.base_orchestrator import (
     BaseOrchestrator,
 )
 from pynenc.orchestrator.atomic_service import ActiveRunnerInfo
+from pynenc.runner.runner_context import RunnerContext
 from pynenc.types import Params, Result
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
     from pynenc.call import Call
     from pynenc.invocation.dist_invocation import DistributedInvocation
-    from pynenc.runner import RunnerContext
     from pynenc.task import Task
 
 
@@ -561,8 +561,6 @@ class MemOrchestrator(BaseOrchestrator):
 
     def get_active_runners(self) -> list[ActiveRunnerInfo]:
         """Retrieve all active runners with heartbeat information."""
-        from pynenc.runner.runner_context import RunnerContext
-
         timeout_seconds = self.conf.runner_heartbeat_timeout_minutes * 60
         current_time = time()
         cutoff_time = current_time - timeout_seconds

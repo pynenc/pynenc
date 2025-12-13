@@ -8,7 +8,6 @@ from pynenc.conf.config_runner import ConfigThreadRunner
 from pynenc.invocation.dist_invocation import DistributedInvocation, InvocationStatus
 from pynenc.exceptions import InvocationStatusError
 from pynenc.runner.base_runner import BaseRunner
-from pynenc.runner.runner_context import RunnerContext
 
 
 class ThreadInfo(NamedTuple):
@@ -71,24 +70,26 @@ class ThreadRunner(BaseRunner):
         self.threads = {}
         self.waiting_invocation_ids = set()
         self.max_threads = self.conf.max_threads or multiprocessing.cpu_count()
+        # Set unique extra_id based on thread ID to distinguish runner threads
 
     def _on_stop(self) -> None:
         """
         Internal method called when the ThreadRunner stops.
         Joins all running threads and updates their invocation statuses.
         """
-        runner_ctx = RunnerContext.from_runner(self)
         self.logger.debug("Stopping ThreadRunner, joining all threads.")
         # Join all running threads and mark their invocations for retry.
         for thread_info in self.threads.values():
             thread_info.thread.join()
             try:
                 self.app.orchestrator.set_invocation_status(
-                    thread_info.invocation.invocation_id, InvocationStatus.KILLED
+                    thread_info.invocation.invocation_id,
+                    InvocationStatus.KILLED,
+                    self.runner_context,
                 )
                 self.app.orchestrator.reroute_invocations(
                     {thread_info.invocation.invocation_id},
-                    runner_ctx,
+                    self.runner_context,
                 )
             except InvocationStatusError as e:
                 self.logger.warning(
@@ -133,9 +134,8 @@ class ThreadRunner(BaseRunner):
         self.logger.debug(
             f"Starting runner loop iteration with {self.available_threads=}"
         )
-        runner_ctx = RunnerContext.from_runner(self)
         invocations = self.app.orchestrator.get_invocations_to_run(
-            self.available_threads, runner_ctx
+            self.available_threads, self.runner_context
         )
 
         for invocation in invocations:
@@ -143,7 +143,7 @@ class ThreadRunner(BaseRunner):
                 thread = threading.Thread(
                     target=invocation.run,
                     daemon=True,
-                    args=[RunnerContext.from_runner(self)],
+                    args=[self.runner_context],
                 )
                 thread.start()
                 self.threads[invocation.invocation_id] = ThreadInfo(thread, invocation)
@@ -155,7 +155,7 @@ class ThreadRunner(BaseRunner):
                     f"Failed to start thread for {invocation.invocation_id}: {e}"
                 )
                 self.app.orchestrator.reroute_invocations(
-                    {invocation.invocation_id}, runner_ctx
+                    {invocation.invocation_id}, self.runner_context
                 )
 
         self.logger.debug(

@@ -13,6 +13,7 @@ from pynenc.invocation import (
     InvocationStatus,
     InvocationStatusRecord,
 )
+from pynenc.runner import RunnerContext
 from pynenc_tests.conftest import MockPynenc
 
 if TYPE_CHECKING:
@@ -45,9 +46,17 @@ def test_add_history_non_blocking(
     )
 
     start_time = time.time()
+    runner_ctx = RunnerContext(
+        runner_cls="TestRunner",
+        runner_id="test-runner",
+        pid=12345,
+        hostname="test-host",
+        extra_data={},
+    )
     mock_base_app.state_backend.add_histories(
-        [dummy_invocation.invocation_id],
+        [dummy_invocation],
         status_record=InvocationStatusRecord(status=InvocationStatus.REGISTERED),
+        runner_context=runner_ctx,
     )
     end_time = time.time()
 

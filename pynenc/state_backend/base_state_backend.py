@@ -10,8 +10,8 @@ from typing import TYPE_CHECKING, Any, Generic, Optional
 
 from pynenc.conf.config_state_backend import ConfigStateBackend
 from pynenc.exceptions import InvocationNotFoundError, PynencError
-from pynenc.invocation.status import InvocationStatusRecord
-from pynenc.runner import RunnerContext
+from pynenc.invocation.status import InvocationStatus, InvocationStatusRecord
+from pynenc.runner.runner_context import RunnerContext
 from pynenc.types import Params, Result
 
 if TYPE_CHECKING:
@@ -28,14 +28,17 @@ class InvocationHistory:
     Stores the invocation ID, timestamp, status, and execution context.
     Provides methods for serialization and deserialization to and from JSON.
 
+    :ivar str invocation_id: The ID of the invocation this history belongs to
     :ivar _timestamp: Timestamp of the invocation history creation.
-    :ivar status: Current status of the invocation.
-    :ivar execution_context: Context of the execution, reserved for future use.
+    :ivar InvocationStatusRecord status_record: Current status of the invocation.
+    :ivar RunnerContext owner_context: Context of the execution.
     """
 
+    invocation_id: str
     _timestamp: datetime = field(init=False, default_factory=lambda: datetime.now(UTC))
     status_record: InvocationStatusRecord
-    runner_context: RunnerContext | None = None
+    runner_context: "RunnerContext"
+    registered_by_inv_id: str | None = None
 
     @property
     def timestamp(self) -> datetime:
@@ -50,11 +53,11 @@ class InvocationHistory:
         """
         return json.dumps(
             {
+                "invocation_id": self.invocation_id,
                 "_timestamp": self._timestamp.isoformat(),
                 "status_record": self.status_record.to_json(),
-                "runner_context": self.runner_context.to_json()
-                if self.runner_context
-                else None,
+                "runner_context": self.runner_context.to_json(),
+                "registered_by_inv_id": self.registered_by_inv_id,
             }
         )
 
@@ -67,15 +70,18 @@ class InvocationHistory:
         :return: An instance of InvocationHistory.
         """
         hist_dict = json.loads(json_str)
-        history = cls(InvocationStatusRecord.from_json(hist_dict["status_record"]))
+        runner_ctx = RunnerContext.from_json(hist_dict["runner_context"])
+        history = cls(
+            invocation_id=hist_dict["invocation_id"],
+            status_record=InvocationStatusRecord.from_json(hist_dict["status_record"]),
+            runner_context=runner_ctx,
+            registered_by_inv_id=hist_dict.get("registered_by_inv_id"),
+        )
 
         timestamp = datetime.fromisoformat(hist_dict["_timestamp"])
         if timestamp.tzinfo is None:
             timestamp = timestamp.replace(tzinfo=UTC)
         history._timestamp = timestamp
-
-        if runner_ctx_json := hist_dict.get("runner_context"):
-            history.runner_context = RunnerContext.from_json(runner_ctx_json)
 
         return history
 
@@ -133,7 +139,7 @@ class BaseStateBackend(ABC, Generic[Params, Result]):
         self, invocation_ids: list[str], invocation_history: "InvocationHistory"
     ) -> None:
         """
-        Adds a histories record for a list of invocations.
+        Adds a history record for a list of invocations.
 
         :param list[str] invocation_ids: The IDs of the invocations.
         :param InvocationHistory invocation_history: The history record to add.
@@ -247,23 +253,58 @@ class BaseStateBackend(ABC, Generic[Params, Result]):
 
     def add_histories(
         self,
-        invocation_ids: list[str],
+        invocations: list["DistributedInvocation[Params, Result]"],
         status_record: "InvocationStatusRecord",
-        runner_context: Optional["RunnerContext"] = None,
+        runner_context: "RunnerContext",
     ) -> None:
         """
-        Adds a history record for an invocation.
+        Adds a history record for invocations.
 
-        :param str invocation_id: The invocation Id to add history for.
+        :param list[DistributedInvocation] invocations: The invocations to add history for.
         :param InvocationStatusRecord status_record: The status record of the invocation.
-        :param Optional[Any] execution_context: The execution context of the invocation.
+        :param RunnerContext owner_context: The owner context of the execution.
         """
-        invocation_history = InvocationHistory(status_record, runner_context)
-        thread = threading.Thread(
-            target=self._add_histories, args=(invocation_ids, invocation_history)
+        for invocation in invocations:
+            registered_by_inv_id = (
+                invocation.parent_invocation_id
+                if status_record.status == InvocationStatus.REGISTERED
+                else None
+            )
+            invocation_history = InvocationHistory(
+                invocation_id=invocation.invocation_id,
+                status_record=status_record,
+                runner_context=runner_context,
+                registered_by_inv_id=registered_by_inv_id,
+            )
+            thread = threading.Thread(
+                target=self._add_histories,
+                args=([invocation.invocation_id], invocation_history),
+            )
+            self.invocation_threads[invocation.invocation_id].append(thread)
+            thread.start()
+
+    def add_history(
+        self,
+        invocation_id: str,
+        status_record: "InvocationStatusRecord",
+        runner_context: "RunnerContext",
+    ) -> None:
+        """
+        Adds a history record for a single invocation.
+
+        :param str invocation_id: The ID of the invocation.
+        :param InvocationStatusRecord status_record: The status record.
+        :param RunnerContext runner_context: The runner context.
+        """
+        invocation_history = InvocationHistory(
+            invocation_id=invocation_id,
+            status_record=status_record,
+            runner_context=runner_context,
         )
-        for invocation_id in invocation_ids:
-            self.invocation_threads[invocation_id].append(thread)
+        thread = threading.Thread(
+            target=self._add_histories, args=([invocation_id], invocation_history)
+        )
+        self.invocation_threads[invocation_id].append(thread)
         thread.start()
 
     def get_history(self, invocation_id: str) -> list[InvocationHistory]:
@@ -422,4 +463,36 @@ class BaseStateBackend(ABC, Generic[Params, Result]):
 
         :param workflow_id: The workflow ID to get sub-invocations for
         :return: Iterator of invocation IDs that run inside the workflow
+        """
+
+    @abstractmethod
+    def iter_invocations_in_timerange(
+        self,
+        start_time: datetime,
+        end_time: datetime,
+        batch_size: int = 100,
+    ) -> Iterator[list[str]]:
+        """
+        Iterate over invocation IDs that have history within a time range.
+
+        :param datetime start_time: Start of the time range
+        :param datetime end_time: End of the time range
+        :param int batch_size: Number of invocation IDs per batch
+        :return: Iterator yielding batches of invocation IDs
+        """
+
+    @abstractmethod
+    def iter_history_in_timerange(
+        self,
+        start_time: datetime,
+        end_time: datetime,
+        batch_size: int = 100,
+    ) -> Iterator[list["InvocationHistory"]]:
+        """
+        Iterate over history entries within a time range.
+
+        :param datetime start_time: Start of the time range
+        :param datetime end_time: End of the time range
+        :param int batch_size: Number of history entries per batch
+        :return: Iterator yielding batches of InvocationHistory
         """
