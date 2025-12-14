@@ -41,6 +41,7 @@ class MemCycleControl(BaseCycleControl):
         self.app = app
         self.calls: dict[str, Call] = {}
         self.edges: dict[str, set[str]] = defaultdict(set)
+        self._lock = threading.RLock()
 
     def add_call_and_check_cycles(
         self, caller: "DistributedInvocation", callee: "DistributedInvocation"
@@ -54,13 +55,14 @@ class MemCycleControl(BaseCycleControl):
         :param DistributedInvocation callee: The invocation being called.
         :raises CycleDetectedError: If adding the invocation causes a cycle.
         """
-        if caller.call_id == callee.call_id:
-            raise CycleDetectedError.from_cycle([caller.call])
-        if cycle := self.find_cycle_caused_by_new_invocation(caller, callee):
-            raise CycleDetectedError.from_cycle(cycle)
-        self.calls[caller.call_id] = caller.call
-        self.calls[callee.call_id] = callee.call
-        self.edges[caller.call_id].add(callee.call_id)
+        with self._lock:
+            if caller.call_id == callee.call_id:
+                raise CycleDetectedError.from_cycle([caller.call])
+            if cycle := self.find_cycle_caused_by_new_invocation(caller, callee):
+                raise CycleDetectedError.from_cycle(cycle)
+            self.calls[caller.call_id] = caller.call
+            self.calls[callee.call_id] = callee.call
+            self.edges[caller.call_id].add(callee.call_id)
 
     def get_callees(self, caller_call_id: str) -> Iterator[str]:
         """
@@ -78,12 +80,13 @@ class MemCycleControl(BaseCycleControl):
 
         :param str invocation_id: The ID of the invocation to be removed from the graph.
         """
-        call_id = self.app.orchestrator.get_invocation_call_id(invocation_id)
-        if not self.app.orchestrator.any_non_final_invocations(call_id):
-            if call_id in self.edges:
-                del self.edges[call_id]
-            for edges in self.edges.values():
-                edges.discard(call_id)
+        with self._lock:
+            call_id = self.app.orchestrator.get_invocation_call_id(invocation_id)
+            if not self.app.orchestrator.any_non_final_invocations(call_id):
+                if call_id in self.edges:
+                    del self.edges[call_id]
+                for edges in self.edges.values():
+                    edges.discard(call_id)
 
     def find_cycle_caused_by_new_invocation(
         self, caller: "DistributedInvocation", callee: "DistributedInvocation"
@@ -107,8 +110,8 @@ class MemCycleControl(BaseCycleControl):
 
         cycle = self._is_cyclic_util(caller.call_id, visited, path)
 
-        # Remove the temporarily added edge
-        self.edges[caller.call_id].remove(callee.call_id)
+        # Remove the temporarily added edge (use discard to avoid KeyError in concurrent scenarios)
+        self.edges[caller.call_id].discard(callee.call_id)
 
         return cycle
 

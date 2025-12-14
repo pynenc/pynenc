@@ -143,12 +143,14 @@ def test_run_retry(app: Pynenc) -> None:
         app.conf.runner_cls = "ThreadRunner"
         app.runner.run()
 
+    # Create invocation before starting runner to check initial state
+    invocation = retry_once()
+    assert invocation.num_retries == 0
+
     thread = threading.Thread(target=run_in_thread, daemon=True)
     thread.start()
 
-    invocation = retry_once()
-
-    assert invocation.num_retries == 0
+    # After getting result, verify retry happened
     assert invocation.result == 1
     assert invocation.num_retries == 1
 
