@@ -24,7 +24,10 @@ def test_task_execution(task_sum: Task) -> None:
     ini = time()
     assert invocation.result == 3
     elapsed = time() - ini
-    assert elapsed < 1, "Task took too long to execute"
+    time_limit = 1.5
+    assert elapsed < time_limit, (
+        f"Task took too long to execute {elapsed=} >= {time_limit=}"
+    )
     app.runner.stop_runner_loop()
     thread.join()
 

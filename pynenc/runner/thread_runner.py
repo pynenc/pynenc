@@ -2,12 +2,16 @@ import multiprocessing
 import threading
 import time
 from functools import cached_property
-from typing import Any, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from pynenc.conf.config_runner import ConfigThreadRunner
 from pynenc.invocation.dist_invocation import DistributedInvocation, InvocationStatus
 from pynenc.exceptions import InvocationStatusError
 from pynenc.runner.base_runner import BaseRunner
+from pynenc.runner.runner_context import RunnerContext
+
+if TYPE_CHECKING:
+    from pynenc.app import Pynenc
 
 
 class ThreadInfo(NamedTuple):
@@ -26,6 +30,19 @@ class ThreadRunner(BaseRunner):
     threads: dict[str, ThreadInfo]
     max_threads: int
     waiting_invocation_ids: set[str]
+
+    def __init__(
+        self,
+        app: "Pynenc",
+        runner_cache: dict | None = None,
+        runner_context: RunnerContext | None = None,
+    ) -> None:
+        # Initialize ThreadRunner-specific attributes before calling super().__init__
+        # This ensures they exist even if run() is never called
+        self.threads = {}
+        self.waiting_invocation_ids = set()
+        self.max_threads = 0  # Will be set properly in _on_start()
+        super().__init__(app, runner_cache, runner_context)
 
     @cached_property
     def conf(self) -> ConfigThreadRunner:

@@ -174,7 +174,7 @@ def app_instance(request: "FixtureRequest", temp_sqlite_db_path: str) -> Pynenc:
     Runs each test twice: once with an in-memory backend, once with a SQLite backend.
 
     :param request: pytest fixture request object
-    :param tmp_path: pytest fixture for temporary directory
+    :param str temp_sqlite_db_path: pytest fixture for temporary SQLite database path
     :return: Pynenc app instance
     :rtype: Pynenc
     """
@@ -183,11 +183,4 @@ def app_instance(request: "FixtureRequest", temp_sqlite_db_path: str) -> Pynenc:
     elif request.param == "sqlite":
         return PynencBuilder().sqlite(sqlite_db_path=str(temp_sqlite_db_path)).build()
     else:
-        raise ValueError(f"Unknown app backend: {request.param}")
-    if request.param == "memory":
-        return PynencBuilder().memory().build()
-    elif request.param == "sqlite":
-        return PynencBuilder().sqlite(sqlite_db_path=str(temp_sqlite_db_path)).build()
-    else:
-        raise ValueError(f"Unknown app backend: {request.param}")
         raise ValueError(f"Unknown app backend: {request.param}")

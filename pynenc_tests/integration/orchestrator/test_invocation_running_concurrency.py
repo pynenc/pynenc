@@ -1,5 +1,5 @@
-import os
 from typing import TYPE_CHECKING
+
 
 from pynenc.conf import config_task
 from pynenc.invocation import DistributedInvocation, InvocationStatus
@@ -7,6 +7,8 @@ from pynenc.runner.runner_context import RunnerContext
 from pynenc_tests.util import create_test_logger
 
 if TYPE_CHECKING:
+    from _pytest.monkeypatch import MonkeyPatch
+
     from pynenc.task import Task
 
 logger = create_test_logger(__name__)
@@ -42,7 +44,9 @@ def test_no_concurrency_default(task_sum_io: "Task") -> None:
     assert invocations_to_run == [trying_to_run_invocation]
 
 
-def test_running_concurrency_type_task(task_sum_io: "Task") -> None:
+def test_running_concurrency_type_task(
+    task_sum_io: "Task", monkeypatch: "MonkeyPatch"
+) -> None:
     """Test that if `task.conf.running_concurrency=ConcurrencyControlType.task` is set
     it will not return an invocation of the same task to run while there is another running
     """
@@ -60,7 +64,7 @@ def test_running_concurrency_type_task(task_sum_io: "Task") -> None:
     #
     # So we change the environment variable to set the default to TASK
     # This way, when the task is deserialized, it will have running_concurrency=
-    os.environ["PYNENC__RUNNING_CONCURRENCY"] = "task"
+    monkeypatch.setenv("PYNENC__RUNNING_CONCURRENCY", "task")
 
     fake_running_invocation = task_sum_io(0, 0)
     trying_to_run_invocation = task_sum_io(1, 1)

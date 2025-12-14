@@ -19,10 +19,15 @@ if TYPE_CHECKING:
 KEEP_ALIVE = 0
 
 # Configure app for testing with Memory backend
+# Use runner_tuning for faster polling to reduce test time from ~17s to ~5s
 app = (
     PynencBuilder()
     .memory()
-    .thread_runner()
+    .thread_runner(max_threads=8)
+    .runner_tuning(
+        runner_loop_sleep_time_sec=0.01,
+        invocation_wait_results_sleep_time_sec=0.01,
+    )
     .app_id("test-pynmon-timeline-complex")
     .build()
 )
@@ -32,7 +37,7 @@ app = (
 def grandparent_task(family_id: str, num_children: int) -> None:
     """A task that trigger parent tasks."""
     parent_task.logger.info(f"Starting grandparent task {family_id}")
-    time.sleep(0.5)  # Simulate some work
+    time.sleep(0.1)
     invs = parent_task.parallelize(
         [(f"{family_id}-parent-{i}", num_children) for i in range(num_children)]
     )
@@ -43,7 +48,7 @@ def grandparent_task(family_id: str, num_children: int) -> None:
 def parent_task(family_id: str, num_children: int) -> None:
     """A task that acts as a parent in invocation hierarchy."""
     parent_task.logger.info(f"Starting parent task {family_id}")
-    time.sleep(0.25)  # Simulate some work
+    time.sleep(0.05)
     invs = child_task.parallelize(
         [(f"{family_id}-child-{i}",) for i in range(num_children)]
     )
@@ -54,7 +59,7 @@ def parent_task(family_id: str, num_children: int) -> None:
 def child_task(family_id: str) -> None:
     """A task that acts as a child in invocation hierarchy."""
     child_task.logger.info(f"Starting child task {family_id}")
-    time.sleep(0.2)  # Simulate some work
+    time.sleep(0.02)
 
 
 def test_complex_timeline(pynmon_client: "PynmonClient") -> None:
@@ -73,13 +78,13 @@ def test_complex_timeline(pynmon_client: "PynmonClient") -> None:
         runner_thread = threading.Thread(target=runner.run, daemon=True)
         runner_thread.start()
         runner_threads.append(runner_thread)
-    time.sleep(0.1)  # Let runners initialize
+    time.sleep(0.05)
     try:
         # Trigger different grandparent tasks
         invs_0 = grandparent_task.parallelize([("familyA", 2), ("familyB", 3)])
-        time.sleep(0.1)  # Stagger start times
+        time.sleep(0.02)
         invs_1 = grandparent_task.parallelize([("familyC", 4), ("familyD", 1)])
-        time.sleep(0.2)
+        time.sleep(0.02)
         inv_2 = grandparent_task("familyE", 2)
 
         # wait for all to complete

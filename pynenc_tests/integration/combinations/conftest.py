@@ -160,13 +160,19 @@ def app(app_combination_instance: Pynenc) -> Generator[Pynenc, None, None]:
 
 
 def replace_tasks_app(app: Pynenc) -> None:
-    """Replace the .app attribute for all tasks in tasks and tasks_async modules."""
+    """Replace the .app attribute for all tasks in tasks and tasks_async modules.
+
+    Also clears the cached `conf` property so tasks pick up the new app's config.
+    """
     for mod in [tasks, tasks_async]:
         for attr in dir(mod):
             obj = getattr(mod, attr)
             # Only update if it's a Task and has .app
             if hasattr(obj, "app"):
                 obj.app = app
+                # Clear cached_property so conf is re-computed with new app's config_values
+                if "conf" in obj.__dict__:
+                    del obj.__dict__["conf"]
 
 
 @pytest.fixture(scope="function")
