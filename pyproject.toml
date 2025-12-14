@@ -144,8 +144,12 @@ filterwarnings = [
 timeout = 30
 
 [tool.coverage.run]
+source = [
+    "pynenc",
+    "pynmon",
+]
 omit = [
-    "tests/*",  # Exclude all files in the tests directory
+    "pynenc_tests/*",  # Exclude test files from coverage measurement
 ]
 relative_files = true # to combine coverage data from multiple processes
 
