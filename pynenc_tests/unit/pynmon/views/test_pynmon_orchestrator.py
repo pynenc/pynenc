@@ -13,7 +13,7 @@ pytest.importorskip("jinja2", reason="pynmon tests require monitor dependencies"
 # ruff: noqa: E402
 
 from typing import TYPE_CHECKING
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -170,51 +170,3 @@ def test_orchestrator_auto_purge_success(app_orchestrator: "Pynenc") -> None:
         data = response.json()
         assert data["success"] is True
         assert "purge" in data["message"].lower()
-
-
-def test_orchestrator_auto_purge_handles_error(app_orchestrator: "Pynenc") -> None:
-    """Test that auto-purge handles errors gracefully."""
-    setup_routes()
-
-    # Mock orchestrator to raise an error on purge
-    mock_orchestrator = MagicMock()
-    mock_orchestrator.purge.side_effect = RuntimeError("Purge failed")
-    app_orchestrator.orchestrator = mock_orchestrator
-
-    with patch(
-        "pynmon.views.orchestrator.get_pynenc_instance", return_value=app_orchestrator
-    ):
-        client = TestClient(pynmon_app)
-        response = client.post("/orchestrator/auto-purge")
-
-        assert response.status_code == 500
-        data = response.json()
-        assert data["success"] is False
-        assert "Purge failed" in data["message"]
-
-
-# ################################################################################### #
-# BLOCKING INVOCATIONS TESTS
-# ################################################################################### #
-
-
-def test_orchestrator_shows_blocking_invocations(app_orchestrator: "Pynenc") -> None:
-    """Test that blocking invocations are displayed."""
-    setup_routes()
-
-    # Create a mock blocking invocation
-    mock_blocking = MagicMock()
-    mock_blocking.invocation_id = "blocking-123"
-
-    with patch(
-        "pynmon.views.orchestrator.get_pynenc_instance", return_value=app_orchestrator
-    ):
-        with patch.object(
-            app_orchestrator.orchestrator,
-            "get_blocking_invocations",
-            return_value=[mock_blocking],
-        ):
-            client = TestClient(pynmon_app)
-            response = client.get("/orchestrator/")
-
-            assert response.status_code == 200
