@@ -421,6 +421,73 @@ class MemOrchestrator(BaseOrchestrator):
         """
         yield from self.task_id_to_inv_id.get(task_id, set())
 
+    def get_invocation_ids_paginated(
+        self,
+        task_id: str | None = None,
+        statuses: list[InvocationStatus] | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[str]:
+        """
+        Retrieves invocation IDs with pagination support.
+
+        :param str | None task_id: Optional task ID to filter by.
+        :param list[InvocationStatus] | None statuses: Optional statuses to filter by.
+        :param int limit: Maximum number of results to return.
+        :param int offset: Number of results to skip.
+        :return: List of matching invocation IDs.
+        """
+        # Build candidate set based on filters
+        if task_id:
+            candidates = self.task_id_to_inv_id.get(task_id, set()).copy()
+        else:
+            # Collect all invocation IDs across all tasks
+            candidates = set()
+            for inv_ids in self.task_id_to_inv_id.values():
+                candidates.update(inv_ids)
+
+        # Filter by statuses if provided
+        if statuses:
+            status_matches = self.filter_by_statuses(statuses)
+            candidates = candidates.intersection(status_matches)
+
+        # Sort by status timestamp (newest first) for consistent pagination
+        sorted_ids = sorted(
+            candidates,
+            key=lambda inv_id: self.invocation_status_record.get(
+                inv_id, InvocationStatusRecord(InvocationStatus.REGISTERED)
+            ).timestamp,
+            reverse=True,
+        )
+
+        # Apply pagination
+        return sorted_ids[offset : offset + limit]
+
+    def count_invocations(
+        self,
+        task_id: str | None = None,
+        statuses: list[InvocationStatus] | None = None,
+    ) -> int:
+        """
+        Counts invocations matching the given filters.
+
+        :param str | None task_id: Optional task ID to filter by.
+        :param list[InvocationStatus] | None statuses: Optional statuses to filter by.
+        :return: The total count of matching invocations.
+        """
+        if task_id:
+            candidates = self.task_id_to_inv_id.get(task_id, set())
+        else:
+            candidates = set()
+            for inv_ids in self.task_id_to_inv_id.values():
+                candidates.update(inv_ids)
+
+        if statuses:
+            status_matches = self.filter_by_statuses(statuses)
+            candidates = candidates.intersection(status_matches)
+
+        return len(candidates)
+
     def get_call_invocation_ids(self, call_id: str) -> Iterator[str]:
         """Retrieves all invocation IDs associated with a specific call ID."""
         yield from self.call_id_to_inv_id.get(call_id, set())

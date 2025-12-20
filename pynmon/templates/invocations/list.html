@@ -122,6 +122,33 @@
                         {% else %}
                         <div class="alert alert-info m-3">No invocations found matching the filters.</div>
                         {% endif %}
+
+                        <!-- Pagination Controls -->
+                        {% if pagination %}
+                        <nav aria-label="Invocations pagination" class="d-flex justify-content-between align-items-center p-3 border-top">
+                            <div class="text-muted small">
+                                Showing {{ invocations|length }} of {{ pagination.total_count }} invocations
+                                (Page {{ pagination.page }} of {{ pagination.total_pages }})
+                            </div>
+                            <ul class="pagination pagination-sm mb-0">
+                                <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+                                    <a class="page-link" href="?status={{ current_filters.status[0] if current_filters.status else '' }}&task_id={{ current_filters.task_id }}&limit={{ pagination.limit }}&page=1">First</a>
+                                </li>
+                                <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+                                    <a class="page-link" href="?status={{ current_filters.status[0] if current_filters.status else '' }}&task_id={{ current_filters.task_id }}&limit={{ pagination.limit }}&page={{ pagination.page - 1 }}">Previous</a>
+                                </li>
+                                <li class="page-item active">
+                                    <span class="page-link">{{ pagination.page }}</span>
+                                </li>
+                                <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+                                    <a class="page-link" href="?status={{ current_filters.status[0] if current_filters.status else '' }}&task_id={{ current_filters.task_id }}&limit={{ pagination.limit }}&page={{ pagination.page + 1 }}">Next</a>
+                                </li>
+                                <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+                                    <a class="page-link" href="?status={{ current_filters.status[0] if current_filters.status else '' }}&task_id={{ current_filters.task_id }}&limit={{ pagination.limit }}&page={{ pagination.total_pages }}">Last</a>
+                                </li>
+                            </ul>
+                        </nav>
+                        {% endif %}
                     </div>
                 </div>
             </div>

@@ -19,14 +19,14 @@ status_badge %} {% block content %}
               href="#"
               id="view-in-timeline-btn"
               class="btn btn-sm btn-outline-success me-2 pynmon-action-btn"
-              title="View this invocation in the timeline"
+              title="Zoom to this invocation in the timeline"
             >
               <span
                 class="material-icons"
                 style="font-size: 16px; vertical-align: middle"
-                >timeline</span
+                >zoom_in</span
               >
-              Timeline
+              Zoom to Timeline
             </a>
             <a
               href="/calls?call_id={{ call.call_id|urlencode }}"

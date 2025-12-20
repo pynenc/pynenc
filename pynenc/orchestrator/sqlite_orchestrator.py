@@ -513,6 +513,82 @@ class SQLiteOrchestrator(BaseOrchestrator):
             for (invocation_id,) in cursor_rows:
                 yield invocation_id
 
+    def get_invocation_ids_paginated(
+        self,
+        task_id: str | None = None,
+        statuses: list[InvocationStatus] | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[str]:
+        """
+        Retrieves invocation IDs with pagination support.
+
+        :param str | None task_id: Optional task ID to filter by.
+        :param list[InvocationStatus] | None statuses: Optional statuses to filter by.
+        :param int limit: Maximum number of results to return.
+        :param int offset: Number of results to skip.
+        :return: List of matching invocation IDs.
+        """
+        query = f"SELECT invocation_id FROM {Tables.INVOCATIONS}"
+        wheres = []
+        params: list = []
+
+        if task_id:
+            wheres.append("task_id = ?")
+            params.append(task_id)
+
+        if statuses:
+            wheres.append(f"status IN ({','.join(['?' for _ in statuses])})")
+            params.extend([s.value for s in statuses])
+
+        sql = query
+        if wheres:
+            sql += " WHERE " + " AND ".join(wheres)
+
+        # Order by timestamp descending (newest first) for consistent pagination
+        sql += " ORDER BY status_timestamp DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+
+        with sqlite_conn(self.sqlite_db_path) as conn:
+            cursor = conn.execute(sql, tuple(params))
+            result = [row[0] for row in cursor.fetchall()]
+            cursor.close()
+            return result
+
+    def count_invocations(
+        self,
+        task_id: str | None = None,
+        statuses: list[InvocationStatus] | None = None,
+    ) -> int:
+        """
+        Counts invocations matching the given filters.
+
+        :param str | None task_id: Optional task ID to filter by.
+        :param list[InvocationStatus] | None statuses: Optional statuses to filter by.
+        :return: The total count of matching invocations.
+        """
+        query = f"SELECT COUNT(*) FROM {Tables.INVOCATIONS}"
+        wheres = []
+        params: list = []
+
+        if task_id:
+            wheres.append("task_id = ?")
+            params.append(task_id)
+
+        if statuses:
+            wheres.append(f"status IN ({','.join(['?' for _ in statuses])})")
+            params.extend([s.value for s in statuses])
+
+        sql = query
+        if wheres:
+            sql += " WHERE " + " AND ".join(wheres)
+
+        with sqlite_conn(self.sqlite_db_path) as conn:
+            cursor = conn.execute(sql, tuple(params))
+            count = cursor.fetchone()[0]
+            cursor.close()
+            return count
+
     def get_call_invocation_ids(self, call_id: str) -> Iterator[str]:
         """Retrieves all invocation ids for a given call id."""
         with sqlite_conn(self.sqlite_db_path) as conn:

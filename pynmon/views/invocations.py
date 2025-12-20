@@ -33,8 +33,9 @@ async def invocations_list(
     status: str | None = None,
     task_id: str | None = None,
     limit: int = 50,
+    page: int = 1,
 ) -> HTMLResponse:
-    """Display invocations with optional filtering."""
+    """Display invocations with optional filtering and pagination."""
     app = get_pynenc_instance()
 
     # Convert status to list format for consistent processing
@@ -51,35 +52,25 @@ async def invocations_list(
             if hasattr(InvocationStatus, s.upper())
         ]
 
-    # Get all invocations across all tasks
-    all_invocation_ids = []
+    # Calculate offset for pagination
+    offset = (page - 1) * limit
 
-    # Find task by ID if specified
-    if task_id:
-        task = app.get_task(task_id)
-        if task:
-            # Get invocations for this specific task with filters
-            all_invocation_ids = list(
-                app.orchestrator.get_existing_invocations(
-                    task=task,
-                    statuses=statuses,
-                )
-            )[:limit]
-    else:
-        # Get invocations from all tasks
-        for task in app.tasks.values():
-            invocation_ids = list(
-                app.orchestrator.get_existing_invocations(
-                    task=task,
-                    statuses=statuses,
-                )
-            )
-            all_invocation_ids.extend(invocation_ids)
-            if len(all_invocation_ids) >= limit:
-                all_invocation_ids = all_invocation_ids[:limit]
-                break
+    # Use paginated query for efficient data retrieval
+    all_invocation_ids = app.orchestrator.get_invocation_ids_paginated(
+        task_id=task_id,
+        statuses=statuses,
+        limit=limit,
+        offset=offset,
+    )
 
-    # Parse actulal invocation objects
+    # Get total count for pagination info
+    total_count = app.orchestrator.count_invocations(
+        task_id=task_id,
+        statuses=statuses,
+    )
+    total_pages = (total_count + limit - 1) // limit if limit > 0 else 1
+
+    # Parse actual invocation objects
     all_invocations = [
         app.state_backend.get_invocation(inv_id) for inv_id in all_invocation_ids
     ]
@@ -103,6 +94,14 @@ async def invocations_list(
                 "status": status_list or [],
                 "task_id": task_id or "",
                 "limit": limit,
+            },
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total_count": total_count,
+                "total_pages": total_pages,
+                "has_prev": page > 1,
+                "has_next": page < total_pages,
             },
         },
     )

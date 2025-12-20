@@ -99,6 +99,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - The `pyproject.toml` format is now PEP 621-compliant and compatible with UV.
   - See updated documentation for new development and release commands.
 
+- **Pynmon Invocations Pagination and UI Improvements**:
+
+  - Added pagination to invocations list route to handle large numbers of tasks efficiently
+  - Added refresh functionality to Apply Filters button on timeline
+  - Added "Zoom to Timeline" button on invocation details page
+  - Added comprehensive tests for pagination functionality
+
 ### Changed
 
 - **Redis Extraction to Plugin**:

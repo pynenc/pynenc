@@ -167,6 +167,41 @@ class BaseOrchestrator(ABC):
         """
 
     @abstractmethod
+    def get_invocation_ids_paginated(
+        self,
+        task_id: str | None = None,
+        statuses: "list[InvocationStatus] | None" = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[str]:
+        """
+        Retrieves invocation IDs with pagination support.
+
+        This method provides efficient pagination for large datasets by using
+        LIMIT/OFFSET semantics. Results are ordered by registration time (newest first).
+
+        :param str | None task_id: Optional task ID to filter by.
+        :param list[InvocationStatus] | None statuses: Optional statuses to filter by.
+        :param int limit: Maximum number of results to return.
+        :param int offset: Number of results to skip.
+        :return: List of matching invocation IDs.
+        """
+
+    @abstractmethod
+    def count_invocations(
+        self,
+        task_id: str | None = None,
+        statuses: "list[InvocationStatus] | None" = None,
+    ) -> int:
+        """
+        Counts invocations matching the given filters.
+
+        :param str | None task_id: Optional task ID to filter by.
+        :param list[InvocationStatus] | None statuses: Optional statuses to filter by.
+        :return: The total count of matching invocations.
+        """
+
+    @abstractmethod
     def get_call_invocation_ids(self, call_id: str) -> Iterator[str]:
         """
         Retrieves all invocation IDs associated with a specific call ID.

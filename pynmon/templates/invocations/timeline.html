@@ -46,8 +46,12 @@
                      value="{{ current_filters.limit }}" min="1" max="500">
             </div>
 
-            <button type="submit" class="btn btn-primary btn-sm w-100">Apply Filters</button>
+            <button type="submit" class="btn btn-primary btn-sm w-100">Apply Filters & Refresh</button>
           </form>
+          <button type="button" class="btn btn-outline-secondary btn-sm w-100 mt-2" onclick="window.location.reload();">
+            <span class="material-icons" style="font-size: 14px; vertical-align: middle;">refresh</span>
+            Refresh
+          </button>
         </div>
       </div>
 
