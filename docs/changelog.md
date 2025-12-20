@@ -38,6 +38,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Implemented runner heartbeat tracking and invocation recovery service for stuck PENDING invocations
   - Added distributed atomic service coordination using time-slot allocation to prevent race conditions
   - Enhanced with execution time validation and history-aware scheduling to detect configuration issues
+  - New invocation status `RUNNING_RECOVERY` for recovering RUNNING invocations owned by inactive runners
+
+- **Plugin Test Infrastructure**:
+
+  - Added `all_tests.py` pattern for centralized test exports to plugins
+  - Created `all_tests_validator` utility to ensure test completeness
+  - Central validation in `test_all_tests_for_plugins.py` validates all `all_tests.py` files
+  - Plugins import from `all_tests.py` to automatically receive new tests without manual updates
 
 - **Pynmon Runner Monitoring Interface**:
 

@@ -701,6 +701,33 @@ class MemOrchestrator(BaseOrchestrator):
             if status_record and status_record.timestamp.timestamp() <= cutoff_time:
                 yield invocation_id
 
+    def get_running_invocations_for_recovery(self) -> Iterator[str]:
+        """Retrieve RUNNING invocation IDs owned by inactive runners."""
+        timeout_seconds = self.conf.runner_heartbeat_timeout_minutes * 60
+        current_time = time()
+        cutoff_time = current_time - timeout_seconds
+
+        # Get set of active runner IDs (those with recent heartbeats)
+        active_runner_ids = {
+            runner_id
+            for runner_id, last_heartbeat in self.runner_last_heartbeat.items()
+            if last_heartbeat >= cutoff_time
+        }
+
+        # Create a snapshot to avoid RuntimeError when status changes during iteration
+        running_invocations = list(
+            self.status_index.get(InvocationStatus.RUNNING, set())
+        )
+
+        for invocation_id in running_invocations:
+            status_record = self.invocation_status_record.get(invocation_id)
+            if (
+                status_record
+                and status_record.owner_id
+                and status_record.owner_id not in active_runner_ids
+            ):
+                yield invocation_id
+
     def purge(self) -> None:
         self._cycle_control = None
         self._blocking_control = None

@@ -41,6 +41,8 @@ class ConfigOrchestrator(ConfigPynencBase):
     :cvar ConfigField[float] runner_heartbeat_timeout_minutes:
         How long a runner can be inactive before being considered dead and removed
         from the active runners list.
+        Any invocations in RUNNING status assigned to that runner will be recovered
+        by another runner.
     """
 
     cycle_control = ConfigField(True)

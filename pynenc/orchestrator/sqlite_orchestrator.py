@@ -900,6 +900,32 @@ class SQLiteOrchestrator(BaseOrchestrator):
             for (invocation_id,) in cursor_rows:
                 yield invocation_id
 
+    def get_running_invocations_for_recovery(self) -> Iterator[str]:
+        """Retrieve RUNNING invocation IDs owned by inactive runners."""
+        timeout_seconds = self.conf.runner_heartbeat_timeout_minutes * 60
+        current_time = time()
+        cutoff_time = current_time - timeout_seconds
+
+        with sqlite_conn(self.sqlite_db_path) as conn:
+            # Find RUNNING invocations where the owner is not in active runners
+            # A runner is active if it has a recent heartbeat
+            cursor = conn.execute(
+                f"""
+                SELECT i.invocation_id
+                FROM {Tables.INVOCATIONS} i
+                LEFT JOIN {Tables.RUNNER_HEARTBEATS} r ON i.status_owner_id = r.runner_id
+                WHERE i.status = ?
+                  AND i.status_owner_id IS NOT NULL
+                  AND (r.runner_id IS NULL OR r.last_heartbeat < ?)
+                """,
+                (InvocationStatus.RUNNING.value, cutoff_time),
+            )
+            cursor_rows = cursor.fetchall()
+            cursor.close()
+
+            for (invocation_id,) in cursor_rows:
+                yield invocation_id
+
     def purge(self) -> None:
         """
         Clear all orchestrator state.

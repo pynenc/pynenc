@@ -1,0 +1,13 @@
+# ruff: noqa: F403
+# mypy: ignore-errors
+# This file contains the integration tests that should run in plugins.
+# Plugins should import: from pynenc_tests.integration.combinations.all_tests import *
+
+from pynenc_tests.integration.combinations.test_app_combinations import *
+from pynenc_tests.integration.combinations.test_arg_cache_performance import *
+from pynenc_tests.integration.combinations.test_async_combinations import *
+from pynenc_tests.integration.combinations.test_parallelize_performance import *
+from pynenc_tests.integration.combinations.test_performance import *
+
+# Files in this folder that are NOT exported to plugins
+IGNORED_FILES: set[str] = set()

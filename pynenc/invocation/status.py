@@ -41,6 +41,7 @@ class InvocationStatus(StrEnum):
     :cvar PENDING: The task call was picked by a runner but is not yet executed
     :cvar PENDING_RECOVERY: The task call exceeded PENDING timeout and is being recovered
     :cvar RUNNING: The task call is currently running
+    :cvar RUNNING_RECOVERY: The task call is being recovered because the owner runner is inactive
     :cvar PAUSED: The task call execution is paused
     :cvar RESUMED: The task call execution has been resumed
     :cvar KILLED: The task call execution has been killed
@@ -56,6 +57,7 @@ class InvocationStatus(StrEnum):
     PENDING = auto()
     PENDING_RECOVERY = auto()
     RUNNING = auto()
+    RUNNING_RECOVERY = auto()
     PAUSED = auto()
     RESUMED = auto()
     KILLED = auto()
@@ -266,9 +268,17 @@ _CONFIG: Final[StatusConfiguration] = StatusConfiguration(
                     InvocationStatus.RETRY,
                     InvocationStatus.SUCCESS,
                     InvocationStatus.FAILED,
+                    InvocationStatus.RUNNING_RECOVERY,
                 }
             ),
             requires_ownership=True,
+        ),
+        # Recovery status for RUNNING invocations owned by inactive runners
+        # Overrides ownership validation since original owner is unresponsive
+        InvocationStatus.RUNNING_RECOVERY: StatusDefinition(
+            allowed_transitions=frozenset({InvocationStatus.REROUTED}),
+            releases_ownership=True,
+            overrides_ownership=True,
         ),
         InvocationStatus.PAUSED: StatusDefinition(
             allowed_transitions=frozenset(

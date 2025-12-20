@@ -993,6 +993,19 @@ class BaseOrchestrator(ABC):
         :rtype: Iterator[str]
         """
 
+    @abstractmethod
+    def get_running_invocations_for_recovery(self) -> Iterator[str]:
+        """
+        Retrieve invocation IDs in RUNNING status owned by inactive runners.
+
+        An inactive runner is one that hasn't sent a heartbeat within the
+        configured timeout period. Invocations owned by such runners are
+        considered stuck and need recovery.
+
+        :return: Iterator of invocation IDs that need recovery.
+        :rtype: Iterator[str]
+        """
+
     def should_run_atomic_service(self, runner_ctx: "RunnerContext") -> bool:
         """
         Determine if the current runner should execute atomic global services.
@@ -1032,17 +1045,34 @@ class BaseOrchestrator(ABC):
 
     def invocation_recovery_service(self, runner_ctx: "RunnerContext") -> None:
         """
-        Recover invocations stuck in PENDING status beyond the allowed time.
+        Recover invocations stuck in PENDING or RUNNING status.
+
+        Recovers two types of stuck invocations:
+        1. PENDING invocations that exceeded the allowed pending time
+        2. RUNNING invocations owned by runners that haven't sent a heartbeat
 
         :param RunnerContext runner_ctx: The context of the runner executing this service.
         """
-        pending_invocations = set()
+        invocations_to_reroute: set[str] = set()
+
+        # Recover PENDING invocations that exceeded timeout
         for invocation_id in self.get_pending_invocations_for_recovery():
-            pending_invocations.add(invocation_id)
+            invocations_to_reroute.add(invocation_id)
             self.app.logger.info(
                 f"Recovering timed-out pending invocation {invocation_id}"
             )
             self.set_invocation_status(
                 invocation_id, InvocationStatus.PENDING_RECOVERY, runner_ctx
             )
-        self.reroute_invocations(pending_invocations, runner_ctx)
+
+        # Recover RUNNING invocations owned by inactive runners
+        for invocation_id in self.get_running_invocations_for_recovery():
+            invocations_to_reroute.add(invocation_id)
+            self.app.logger.info(
+                f"Recovering running invocation {invocation_id} from inactive runner"
+            )
+            self.set_invocation_status(
+                invocation_id, InvocationStatus.RUNNING_RECOVERY, runner_ctx
+            )
+
+        self.reroute_invocations(invocations_to_reroute, runner_ctx)
