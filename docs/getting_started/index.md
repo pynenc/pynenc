@@ -65,30 +65,170 @@ print(result)  # This will output the result of 1 + 2
 print(direct_add(1, 2))  # Directly waits for result
 ```
 
-### 4. Alternative: Use `PynencBuilder` for Setup
+## Configuration Methods
 
-Pynenc also provides a flexible builder interface for configuring your app. Here's how to configure an app using Redis and a `MultiThreadRunner`:
+Pynenc supports multiple configuration methods. Choose the one that fits your workflow:
+
+### 1. `pyproject.toml` (Recommended for Default Configuration)
+
+The most common approach for production setups. Define your defaults in `pyproject.toml`:
+
+**Basic Production Setup with Plugins:**
+
+```toml
+[tool.pynenc]
+app_id = "my_application"
+orchestrator_cls = "MongoOrchestrator"
+broker_cls = "RabbitMqBroker"
+state_backend_cls = "MongoStateBackend"
+serializer_cls = "JsonPickleSerializer"
+runner_cls = "PersistentProcessRunner"
+trigger_cls = "MongoTrigger"
+```
+
+**Redis-based Setup:**
+
+```toml
+[tool.pynenc]
+app_id = "my_application"
+orchestrator_cls = "RedisOrchestrator"
+broker_cls = "RedisBroker"
+state_backend_cls = "RedisStateBackend"
+runner_cls = "MultiThreadRunner"
+```
+
+**Component-Specific Configuration with Subconfigs:**
+
+Pynenc supports hierarchical configuration for fine-grained control:
+
+```toml
+[tool.pynenc]
+app_id = "my_application"
+orchestrator_cls = "RedisOrchestrator"
+
+[tool.pynenc.orchestrator]
+max_pending_seconds = 300
+
+[tool.pynenc.runner]
+min_threads = 2
+max_threads = 8
+
+[tool.pynenc.task]
+running_concurrency = "task"
+```
+
+### 2. Environment Variables (Production Clusters)
+
+Ideal for deploying across different environments (staging, production, different clusters). Environment variables override `pyproject.toml` settings:
+
+```bash
+# Override app_id per environment
+export PYNENC__APP_ID="my_app_production"
+
+# Database credentials (never commit these!)
+export PYNENC__MONGO_USERNAME="prod_user"
+export PYNENC__MONGO_PASSWORD="secret"
+export PYNENC__MONGO_AUTH_SOURCE="admin"
+export PYNENC__MONGO_HOST="mongo.production.internal"
+
+# Redis configuration
+export PYNENC__REDIS_URL="redis://redis.production.internal:6379"
+
+# Override runner settings per cluster
+export PYNENC__RUNNER__MAX_THREADS="16"
+```
+
+This allows you to:
+
+- Keep secrets out of version control
+- Deploy the same codebase to different environments
+- Scale runner configuration per cluster
+
+### 3. Configuration Files (JSON/YAML)
+
+For complex configurations or when you need to inject config files:
+
+**YAML (`pynenc.yaml`):**
+
+```yaml
+app_id: my_application
+orchestrator_cls: RedisOrchestrator
+broker_cls: RedisBroker
+
+orchestrator:
+  max_pending_seconds: 300
+
+runner:
+  min_threads: 4
+  max_threads: 16
+```
+
+**JSON (`pynenc.json`):**
+
+```json
+{
+  "app_id": "my_application",
+  "orchestrator_cls": "RedisOrchestrator",
+  "orchestrator": {
+    "max_pending_seconds": 300
+  }
+}
+```
+
+Load with:
+
+```python
+from pynenc import Pynenc
+
+app = Pynenc(config_filepath="/path/to/pynenc.yaml")
+```
+
+### 4. `PynencBuilder` (Programmatic Configuration)
+
+For dynamic configuration or when you need programmatic control:
 
 ```python
 from pynenc.builder import PynencBuilder
 
 app = (
     PynencBuilder()
+    .app_id("my_application")
     .redis(url="redis://localhost:6379")
-    .multi_thread_runner()
+    .multi_thread_runner(min_threads=2, max_threads=8)
     .build()
 )
 ```
 
-This creates a production-ready Pynenc app with Redis as the backend and a `MultiThreadRunner` for parallel execution.
-
-You can pass this `app` to your task module and proceed just like before:
+**Development/Testing Setup:**
 
 ```python
-@app.task
-def add(x: int, y: int) -> int:
-    return x + y
+app = (
+    PynencBuilder()
+    .app_id("my_application")
+    .memory()  # In-memory backends, no external dependencies
+    .dev_mode(force_sync_tasks=True)
+    .build()
+)
 ```
+
+The builder provides methods for:
+
+- **Backends**: `.memory()`, `.sqlite()`, `.redis()` (plugin), `.mongodb()` (plugin)
+- **Runners**: `.thread_runner()`, `.multi_thread_runner()`, `.process_runner()`, `.persistent_process_runner()`
+- **Serializers**: `.serializer_json()`, `.serializer_pickle()`, `.serializer_json_pickle()`
+- **Concurrency**: `.concurrency_control()`, `.task_control()`
+- **Advanced**: `.runner_tuning()`, `.max_pending_seconds()`, `.custom_config()`
+
+### Configuration Precedence
+
+When multiple configuration sources are used, they are applied in this order (later overrides earlier):
+
+1. Default values in code
+2. `pyproject.toml` or config file
+3. Environment variables
+4. Programmatic configuration (Builder)
+
+This allows you to set sensible defaults in `pyproject.toml` and override specific values per environment using environment variables.
 
 For a more comprehensive guide on setting up and running this example, visit our [Basic Redis Example on GitHub](https://github.com/pynenc/samples/tree/main/basic_redis_example).
 
@@ -101,9 +241,13 @@ For a more comprehensive guide on setting up and running this example, visit our
 
 ## Requirements
 
-To effectively use Pynenc in a distributed system, the primary requirement is:
+Pynenc supports multiple backend options through its plugin system:
 
-- **Redis**: Currently, Pynenc requires a Redis server for distributed task management. Make sure Redis is installed and running in your environment.
+- **Memory Backend**: Built-in, no additional requirements (for development/testing, single-host only)
+- **SQLite Backend**: Built-in, no additional requirements (for single-host testing with process runners)
+- **Redis Backend**: Requires `pynenc-redis` plugin and a Redis server
+- **MongoDB Backend**: Requires `pynenc-mongodb` plugin and a MongoDB server
+- **RabbitMQ Backend**: Requires `pynenc-rabbitmq` plugin and a RabbitMQ server
 
 Future Updates:
 

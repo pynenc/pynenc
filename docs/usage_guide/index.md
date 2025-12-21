@@ -16,6 +16,7 @@ This Usage Guide is designed to provide you with detailed instructions and pract
 ./use_case_009_argument_caching
 ./use_case_010_trigger_system
 ./use_case_011_workflow_system
+./invocation_status
 ```
 
 ## Getting Started with Pynenc
@@ -259,10 +260,27 @@ Pynenc's modular design is aimed at providing a flexible framework that can be e
 
 Pynenc is built with extensibility in mind, allowing you to create custom components to suit your specific needs. This can be done by subclassing the base classes provided by Pynenc:
 
-- **Custom Orchestrators**: Create a subclass of `BaseOrchestrator` or `RedisOrchestrator` to implement custom orchestration logic.
+- **Custom Orchestrators**: Create a subclass of `BaseOrchestrator` to implement custom orchestration logic.
 - **Custom State Backends**: Develop a state backend that aligns with your data storage and retrieval needs by subclassing the `BaseStateBackend`.
-- **Custom Brokers**: Design a message broker tailored to your messaging and communication requirements.
-- **Custom Runners**: Build a runner that matches your execution environment and task management style.
+- **Custom Brokers**: Design a message broker tailored to your messaging and communication requirements by subclassing `BaseBroker`.
+- **Custom Runners**: Build a runner that matches your execution environment and task management style by subclassing `BaseRunner`.
+
+### Creating a Plugin
+
+Pynenc uses a plugin system based on Python's entry points. You can create a plugin that provides backend implementations and extends the `PynencBuilder` with custom methods.
+
+To create a plugin:
+
+1. Implement your backend classes (orchestrator, broker, state backend, etc.)
+2. Create a plugin class with a `register_builder_methods` class method
+3. Register your plugin via entry points in your `pyproject.toml`
+
+Example plugin registration in `pyproject.toml`:
+
+```{code-block} toml
+[project.entry-points."pynenc.plugins"]
+my_backend = "my_plugin.plugin:MyBackendPlugin"
+```
 
 ### Configuring Your Custom Components
 
@@ -270,7 +288,7 @@ Integrating your custom components into your Pynenc application is straightforwa
 
 To configure using environment variables:
 
-```{code-block} python
+```{code-block} bash
     PYNENC__ORCHESTRATOR_CLS="path.to.CustomOrchestrator"
     PYNENC__STATE_BACKEND_CLS="path.to.CustomStateBackend"
     PYNENC__BROKER_CLS="path.to.CustomBroker"
@@ -285,7 +303,15 @@ By offering various configuration methods, Pynenc ensures flexibility and ease o
 
 ## Use Case 8: Customizing Data Serialization
 
-Pynenc provides built-in support for common serialization formats like JSON and Pickle through its `JsonSerializer` and `PickleSerializer` classes. However, there might be scenarios where these standard serializers are not suitable for your specific needs, particularly when working with complex objects or requiring a different serialization strategy.
+Pynenc provides built-in support for common serialization formats through its serializer classes:
+
+- **JsonPickleSerializer** (default): Preserves Python object types using the `jsonpickle` library. Best for internal persistence with trusted data.
+- **JsonSerializer**: Pure JSON serialization for interoperability.
+- **PickleSerializer**: Native Python pickle serialization for complex objects.
+
+```{warning}
+The `jsonpickle` serializer can reconstruct arbitrary Python objects on deserialization — use it only for trusted, internal persistence (local state backends).
+```
 
 ### Creating Custom Serializers
 
@@ -294,7 +320,7 @@ You can create a custom serializer to handle any specific requirements of your t
 To create a custom serializer, you need to subclass the `BaseSerializer` and implement the required serialization and deserialization methods. Here's a simplified example:
 
 ```{code-block} python
-    from pynenc.serializers import BaseSerializer
+    from pynenc.serializer import BaseSerializer
 
     class CustomSerializer(BaseSerializer):
         def serialize(self, obj):
@@ -308,13 +334,23 @@ To create a custom serializer, you need to subclass the `BaseSerializer` and imp
 
 ### Configuring Your Custom Serializer
 
-Once your custom serializer is implemented, you can configure Pynenc to use it just like any other component:
+Once your custom serializer is implemented, you can configure Pynenc to use it:
+
+Using the builder:
 
 ```{code-block} python
+    from pynenc.builder import PynencBuilder
+
+    app = PynencBuilder().custom_config(serializer_cls="path.to.CustomSerializer").build()
+```
+
+Or using environment variables:
+
+```{code-block} bash
     PYNENC__SERIALIZER_CLS="path.to.CustomSerializer"
 ```
 
-This is just one way to set the configuration. Pynenc allows various methods to configure your application, including environment variables, config files, or directly in code. For more details on configuration options, refer to the {doc}`../configuration/index`.
+For more details on configuration options, refer to the {doc}`../configuration/index`.
 
 ## Use Case 9: Argument Caching
 
@@ -451,3 +487,21 @@ The workflow system provides essential features for enterprise-grade task orches
 This use case demonstrates how to build robust, stateful workflows that can handle complex business logic while providing reliability guarantees and failure recovery capabilities.
 
 For a detailed guide and examples, see {doc}`./use_case_011_workflow_system`.
+
+## Invocation Status System
+
+Pynenc uses a declarative, type-safe state machine to manage the lifecycle of task invocations. This system provides:
+
+- **Ownership Tracking**: Each invocation is owned by a specific runner during execution
+- **Valid State Transitions**: The state machine enforces which transitions are allowed
+- **Automatic Recovery**: Stuck invocations are automatically recovered when runners become inactive
+- **Concurrency Control Integration**: Status transitions integrate with concurrency control rules
+
+Key status categories include:
+
+- **Available for Run**: `REGISTERED`, `REROUTED`, `RETRY`
+- **Owned by Runner**: `PENDING`, `RUNNING`, `PAUSED`, `RESUMED`
+- **Recovery**: `PENDING_RECOVERY`, `RUNNING_RECOVERY`
+- **Final**: `SUCCESS`, `FAILED`, `CONCURRENCY_CONTROLLED_FINAL`
+
+For a detailed guide on the status system, state diagram, and recovery mechanisms, see {doc}`./invocation_status`.

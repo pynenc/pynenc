@@ -42,17 +42,71 @@
 
 Pynenc addresses the complex challenges of task management in distributed environments, offering a robust solution for developers looking to efficiently orchestrate asynchronous tasks across multiple systems. By combining intuitive configuration with advanced features like automatic task prioritization and cycle detection, Pynenc empowers developers to build scalable and reliable distributed applications with ease.
 
+## 🆕 What's New in v0.1.0
+
+- **Plugin Architecture**: Modular backend system with Redis, MongoDB, and RabbitMQ as separate plugins
+- **Invocation State Machine**: Declarative, type-safe status management with ownership tracking and automatic recovery
+- **Runner Heartbeat & Recovery**: Automatic detection of stuck invocations and recovery from inactive runners
+- **Enhanced Monitoring (Pynmon)**: SVG-based timeline visualization, runner monitoring, and workflow tracking
+- **Fluent Builder API**: Extensible `PynencBuilder` with plugin-provided methods for seamless configuration
+
+See the [Changelog](https://docs.pynenc.org/changelog.html) for the complete list of changes.
+
 ## Key Features
+
+- **Modular Plugin Architecture**: Pynenc is built with modularity at its core, supporting various backend implementations through a plugin system:
+
+  - **Memory Backend**: Built-in development/testing mode for local execution (single-host only)
+  - **SQLite Backend**: Built-in backend for testing on a single host (compatible with any runner sharing the same database file)
+  - **Redis Plugin** (`pynenc-redis`): Production-ready distributed task management
+  - **MongoDB Plugin** (`pynenc-mongodb`): Document-based storage with full feature support
+  - **RabbitMQ Plugin** (`pynenc-rabbitmq`): Message queue-based broker for distributed task orchestration
+
+  The plugin system allows easy extension with additional databases, message queues, and services, enabling customization for different operational needs and environments.
 
 - **Intuitive Orchestration**: Simplifies the setup and management of tasks in distributed systems, focusing on usability and practicality.
 
-- **Configurable Concurrency Management**: Pynenc offers versatile concurrency control mechanisms at various levels. It includes:
+- **Flexible Configuration with `PynencBuilder`**: A fluent builder interface allows users to configure apps programmatically with method chaining. Backend plugins automatically extend the builder with their own methods:
+
+  ```python
+  from pynenc.builder import PynencBuilder
+
+  # Production setup with Redis (requires pynenc-redis plugin)
+  app = (
+      PynencBuilder()
+      .app_id("my_app")
+      .redis(url="redis://localhost:6379")  # Plugin-provided method
+      .multi_thread_runner(min_threads=2, max_threads=8)
+      .logging_level("info")
+      .build()
+  )
+
+  # Development/testing setup (no plugins required)
+  app = PynencBuilder().app_id("my_app").memory().dev_mode().build()
+  ```
+
+- **Invocation Status State Machine**: Type-safe, declarative status management with:
+
+  - Ownership tracking for invocations across distributed runners
+  - Automatic recovery of stuck PENDING and RUNNING invocations
+  - Runner heartbeat monitoring to detect inactive runners
+  - Comprehensive state transitions with validation
+
+- **Configurable Concurrency Management**: Pynenc offers versatile concurrency control mechanisms at various levels:
 
   - **Task-Level Concurrency**: Ensures only one instance of a specific task is in a running state at any given time.
   - **Argument-Level Concurrency**: Limits concurrent execution based on the arguments of the task, allowing only one task with a unique set of arguments to be running or pending.
   - **Key Argument-Level Concurrency**: Further refines control by focusing on key arguments, ensuring uniqueness in task execution based on specified key arguments.
 
   This structured approach to concurrency management in Pynenc allows for precise control over task execution, ensuring efficient handling of tasks without overloading the system and adhering to specified constraints.
+
+- **Real-Time Monitoring with Pynmon**: Built-in web-based monitoring interface featuring:
+
+  - SVG-based timeline visualization of invocations and state transitions
+  - Runner health monitoring with heartbeat tracking
+  - Workflow visualization with parent-child relationships
+  - Task details with execution history and context
+  - HTMX-powered real-time updates
 
 - **Comprehensive Trigger System**: Enables declarative task scheduling and event-driven workflows:
 
@@ -72,27 +126,13 @@ Pynenc addresses the complex challenges of task management in distributed enviro
   - **Task Integration**: Integration with existing Pynenc tasks using `force_new_workflow` decorator option.
   - **Failure Recovery**: Workflows can resume from exact points of failure with identical replay behavior.
 
-- **Flexible Configuration with `PynencBuilder`**: A builder interface allows users to configure apps programmatically, including Redis vs memory mode, runners, logging levels, concurrency control, and argument formatting.
-
 - **Automatic Task Prioritization**: Pynenc prioritizes tasks by simply counting the number of dependencies each task has. The task with the most dependencies is selected first.
 
 - **Automatic Task Pausing**: Pynenc pauses tasks that are waiting for other tasks to complete. So those with higher priority (has more dependent task waiting for them) can run instead, instead of blocking a runner and preventing deadlocks.
 
 - **Cycle Detection**: Automatically detects cyclical dependencies among tasks and raises exceptions to prevent endless loops in task execution.
 
-- **Modular Plugin Architecture**: Pynenc is built with modularity at its core, supporting various backend implementations through a plugin system. Choose from:
-
-  - **Memory Backend**: Built-in development/testing mode for local execution (single-host only, not suitable for distributed systems; only compatible with ThreadRunner for memory save)
-  - **SQLite Backend**: Built-in backend for testing on a single host (not suitable for distributed systems; compatible with any runner that shares the same database file)
-  - **Redis Plugin** (`pynenc-redis`): Production-ready distributed task management
-  - **MongoDB Plugin** (`pynenc-mongodb`): Document-based storage with full feature support
-  - **RabbitMQ Plugin** (`pynenc-rabbitmq`): Message queue-based broker for distributed task orchestration
-
-  The plugin system allows easy extension with additional databases, message queues, and services, enabling customization for different operational needs and environments.
-
 - **Direct Task Execution**: Use `@app.direct_task` for tasks that return results directly instead of invocations.
-
-- **Monitoring**: Includes a built-in monitoring web application for real-time task execution insights.
 
 ## Installation
 
@@ -248,12 +288,33 @@ scheduled_task = (app.trigger
 
 For a complete guide on how to set up and run pynenc, visit our [samples library](https://github.com/pynenc/samples).
 
-## Running the Monitor
+## Monitoring with Pynmon
 
-It always requires a `Pynenc` app defined in your codebase:
+Pynenc includes **Pynmon**, a built-in web-based monitoring interface that provides real-time visibility into your distributed task execution. Pynmon offers:
+
+- **Dashboard Overview**: Quick summary of system health, active runners, and task statistics
+- **Timeline Visualization**: SVG-based timeline showing invocations and state transitions across all runners
+- **Runner Monitoring**: Track active runners with heartbeat status, hostname, PID, and uptime
+- **Task Browser**: Explore all registered tasks with execution history and statistics
+- **Invocation Details**: Drill down into individual task executions with full context and status history
+- **Workflow Tracking**: Visualize workflow hierarchies with parent-child relationships
+
+### Starting the Monitor
+
+The monitor requires a Pynenc app defined in your codebase:
 
 ```bash
 pynenc --app your_app_module monitor --host 127.0.0.1 --port 8000
+```
+
+Then open `http://127.0.0.1:8000` in your browser to access the dashboard.
+
+### Installing the Monitor
+
+The monitoring web app is an optional feature:
+
+```bash
+pip install pynenc[monitor]
 ```
 
 ## Requirements
