@@ -197,9 +197,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Now safely ignores errors when killing processes and updating invocation status, ensuring clean shutdown and preventing unnecessary exceptions.
 
 - **Multiprocessing Initialization Consistency**:
+
   - Centralized multiprocessing start method configuration in a shared utility module.
   - Ensured all runners (`MultiThreadRunner`, `ProcessRunner`, `PersistentProcessRunner`) use a single, idempotent setup for the `spawn` method.
   - Prevented duplicate or missing multiprocessing configuration, improving cross-platform reliability (especially on macOS and under debuggers).
+
+- **DisabledTrigger**: Fixed `AttributeError` when registering conditions or triggers while triggering is disabled. Overrode `register_condition` and `register_task_triggers` with no-op implementations that issue a warning.
 
 ### Migration Guide
 

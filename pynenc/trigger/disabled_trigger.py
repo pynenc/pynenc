@@ -17,6 +17,8 @@ if TYPE_CHECKING:
     from pynenc.invocation import DistributedInvocation
     from pynenc.invocation.base_invocation import BaseInvocation
     from pynenc.invocation.status import InvocationStatus
+    from pynenc.task import Task
+    from pynenc.trigger.trigger_builder import TriggerBuilder
     from pynenc.trigger.trigger_definitions import TriggerDefinition
     from pynenc.trigger.types import ConditionId, TaskId
 
@@ -27,6 +29,25 @@ class DisabledTrigger(BaseTrigger):
     def __init__(self, app: "Pynenc") -> None:
         """Initialize with app reference, but skip BaseTrigger initialization."""
         self.app = app
+
+    def register_condition(self, condition: "TriggerCondition") -> None:
+        """No-op implementation for condition registration with a warning."""
+        self.app.logger.warning(
+            f"Registering triggering condition {condition.condition_id} with DisabledTrigger. "
+            "The triggers will not work without a triggering backend."
+        )
+
+    def register_task_triggers(
+        self,
+        task: "Task",
+        triggers: "TriggerBuilder | list[TriggerBuilder] | None" = None,
+    ) -> None:
+        """No-op implementation for task trigger registration with a warning."""
+        if triggers:
+            self.app.logger.warning(
+                f"Registering triggers for task {task.task_id} with DisabledTrigger. "
+                "The triggers will not work without a triggering backend."
+            )
 
     def _register_condition(self, condition: "TriggerCondition") -> None:
         """No-op implementation for condition registration."""
