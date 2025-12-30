@@ -263,7 +263,6 @@ class BaseRunner(ABC):
 
         start_time = None
         try:
-            self.app.orchestrator.register_runner_heartbeat(self.runner_context)
             if not self.app.orchestrator.should_run_atomic_service(self.runner_context):
                 return
             start_time = datetime.now(UTC)

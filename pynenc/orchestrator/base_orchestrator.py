@@ -15,18 +15,15 @@ from pynenc.exceptions import (
 )
 from pynenc.invocation.dist_invocation import DistributedInvocation, ReusedInvocation
 from pynenc.invocation.status import InvocationStatus, InvocationStatusRecord
-from pynenc.orchestrator import atomic_service
+from pynenc.orchestrator.atomic_service import can_run_atomic_service
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
     from pynenc.call import Call, PreSerializedCall
+    from pynenc.orchestrator.atomic_service import ActiveRunnerInfo
     from pynenc.runner.runner_context import RunnerContext
     from pynenc.task import Task
     from pynenc.types import Params, Result
-
-
-# Re-export for backward compatibility
-ActiveRunnerInfo = atomic_service.ActiveRunnerInfo
 
 
 class BaseCycleControl(ABC):
@@ -959,23 +956,31 @@ class BaseOrchestrator(ABC):
         return invocations
 
     @abstractmethod
-    def register_runner_heartbeat(self, runner_ctx: "RunnerContext") -> None:
+    def register_runner_heartbeat(
+        self,
+        runner_ctx: "RunnerContext",
+        can_run_atomic_service: bool = False,
+    ) -> None:
         """
         Register or update a runner's heartbeat timestamp.
 
         :param RunnerContext runner_ctx: The runner context to register.
+        :param bool can_run_atomic_service: Whether this runner is eligible to run atomic services.
         """
 
     @abstractmethod
-    def get_active_runners(self) -> list[atomic_service.ActiveRunnerInfo]:
+    def get_active_runners(
+        self, can_run_atomic_service: bool | None = None
+    ) -> list["ActiveRunnerInfo"]:
         """
         Retrieve all active runners with heartbeat information.
 
         Only returns runners that have sent a heartbeat within the configured timeout period.
         Results are ordered by creation time (oldest first).
 
+        :param bool | None can_run_atomic_service: If specified, filters runners based on their eligibility to run atomic services.
         :return: List of active runner information ordered by creation time (oldest first)
-        :rtype: list[atomic_service.ActiveRunnerInfo]
+        :rtype: list["ActiveRunnerInfo"]
         """
 
     @abstractmethod
@@ -1010,6 +1015,9 @@ class BaseOrchestrator(ABC):
         """
         Determine if the current runner should execute atomic global services.
 
+        This method has a side effect: it registers a heartbeat for the runner with can_run_atomic_service=True.
+        This ensures that only runners actively checking for atomic service eligibility are considered for atomic service distribution.
+
         Uses runner count and timing to distribute service execution across runners,
         preventing simultaneous execution and race conditions.
 
@@ -1017,10 +1025,11 @@ class BaseOrchestrator(ABC):
         :return: True if this runner should execute services now.
         :rtype: bool
         """
+        self.register_runner_heartbeat(runner_ctx, can_run_atomic_service=True)
         self.cleanup_inactive_runners()
-        active_runners = self.get_active_runners()
+        active_runners = self.get_active_runners(can_run_atomic_service=True)
 
-        return atomic_service.should_run_atomic_service(
+        return can_run_atomic_service(
             runner_ctx=runner_ctx,
             active_runners=active_runners,
             current_time=time(),

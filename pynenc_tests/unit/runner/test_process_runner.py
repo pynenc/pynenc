@@ -76,10 +76,19 @@ def test_runner_loop_iteration(
     mock_process: Mock, add_task: Task, runner: ProcessRunner
 ) -> None:
     runner._on_start()
-    runner.app.orchestrator.get_invocations_to_run = Mock(return_value=[add_task(1, 2)])  # type: ignore
-    runner.runner_loop_iteration()
-    runner.app.orchestrator.get_invocations_to_run.assert_called_once()
-    mock_process.assert_called_once()
+    # First call returns a task, subsequent calls return no tasks (simulate real orchestrator behavior)
+    # Patch get_invocations_to_run to avoid assigning to a method
+    with patch.object(
+        runner.app.orchestrator,
+        "get_invocations_to_run",
+        side_effect=[[add_task(1, 2)], []],
+    ) as mock_get_inv:
+        runner.runner_loop_iteration()
+        # Only one process should be started, since only one invocation is available
+        assert mock_get_inv.call_count == 2
+        assert mock_process.call_count == 1
+        assert len(runner.inv_id_to_processes) == 1
+    assert mock_process.call_count == 1
     assert len(runner.inv_id_to_processes) == 1
 
 

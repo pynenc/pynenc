@@ -20,6 +20,7 @@ if (
 from pynenc import context
 from pynenc.conf.config_runner import ConfigPersistentProcessRunner
 from pynenc.runner.base_runner import BaseRunner
+from pynenc.runner.heartbeat import start_invocation_runner_heartbeat
 from pynenc.runner.runner_context import RunnerContext
 from pynenc.util.multiprocessing_utils import warn_missing_main_guard
 
@@ -49,6 +50,7 @@ def persistent_process_main(
         stop_event.set()
 
     signal.signal(signal.SIGTERM, handle_terminate)  # Handle SIGTERM gracefully
+    heartbeat_thread = start_invocation_runner_heartbeat(app, runner_ctx)
     try:
         while not stop_event.is_set():
             invocations = list(app.orchestrator.get_invocations_to_run(1, runner_ctx))
@@ -69,6 +71,7 @@ def persistent_process_main(
     except Exception as e:
         app.logger.exception(f"Process {runner_id} error: {e}")
     finally:
+        heartbeat_thread.join(timeout=0.1)
         app.logger.info(f"Process {runner_id} shutting down")
 
 

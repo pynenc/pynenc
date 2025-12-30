@@ -35,6 +35,7 @@ class ActiveRunnerInfo(NamedTuple):
     runner_ctx: "RunnerContext"
     creation_time: datetime
     last_heartbeat: datetime
+    allow_to_run_atomic_service: bool = False
     last_service_start: datetime | None = None
     last_service_end: datetime | None = None
 
@@ -200,7 +201,7 @@ def is_runner_in_time_slot(
     return start_time <= time_in_cycle < end_time
 
 
-def should_run_atomic_service(
+def can_run_atomic_service(
     runner_ctx: "RunnerContext",
     active_runners: list[ActiveRunnerInfo],
     current_time: float,

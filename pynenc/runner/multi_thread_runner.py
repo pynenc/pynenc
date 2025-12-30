@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 from pynenc import context
 from pynenc.conf.config_runner import ConfigMultiThreadRunner
 from pynenc.runner.base_runner import BaseRunner
+from pynenc.runner.heartbeat import start_invocation_runner_heartbeat
 from pynenc.runner.runner_context import RunnerContext
 from pynenc.runner.thread_runner import ThreadRunner
 from pynenc.util.multiprocessing_utils import warn_missing_main_guard
@@ -58,6 +59,7 @@ def thread_runner_process_main(
     runner = ThreadRunner(app, runner_cache, runner_context=runner_ctx)
     # Replace the MultiThreadRunner with ThreadRunner in this process
     context.set_runner_context(app.app_id, runner_ctx)
+    heartbeat_thread = start_invocation_runner_heartbeat(app, runner_ctx)
     runner._on_start()
     app.logger.info(f"ThreadRunner process {process_key} started")
     try:
@@ -76,6 +78,7 @@ def thread_runner_process_main(
     except KeyboardInterrupt:
         pass
     finally:
+        heartbeat_thread.join(timeout=0.1)
         runner._on_stop()
 
 

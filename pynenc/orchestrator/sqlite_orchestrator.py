@@ -399,6 +399,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
                     runner_id TEXT PRIMARY KEY,
                     runner_context_json TEXT NOT NULL,
                     creation_timestamp REAL NOT NULL,
+                    allow_to_run_atomic_service INTEGER NOT NULL,
                     last_heartbeat REAL NOT NULL,
                     last_service_start TEXT,
                     last_service_end TEXT
@@ -784,8 +785,10 @@ class SQLiteOrchestrator(BaseOrchestrator):
             cursor.close()
             return invocation_ids
 
-    def register_runner_heartbeat(self, runner_ctx: "RunnerContext") -> None:
-        """Register or update a runner's heartbeat timestamp."""
+    def register_runner_heartbeat(
+        self, runner_ctx: "RunnerContext", can_run_atomic_service: bool = False
+    ) -> None:
+        """Register or update a runner's heartbeat timestamp and atomic service eligibility."""
         current_time = time()
         runner_id = runner_ctx.runner_id
         node_coordinator_json = runner_ctx.to_json()
@@ -793,17 +796,26 @@ class SQLiteOrchestrator(BaseOrchestrator):
             conn.execute(
                 f"""
                 INSERT INTO {Tables.RUNNER_HEARTBEATS} (
-                    runner_id, runner_context_json, creation_timestamp, last_heartbeat
-                ) VALUES (?, ?, ?, ?)
+                    runner_id, runner_context_json, creation_timestamp, last_heartbeat, allow_to_run_atomic_service
+                ) VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT(runner_id) DO UPDATE SET
-                    last_heartbeat = excluded.last_heartbeat
+                    last_heartbeat = excluded.last_heartbeat,
+                    allow_to_run_atomic_service = excluded.allow_to_run_atomic_service
                 """,
-                (runner_id, node_coordinator_json, current_time, current_time),
+                (
+                    runner_id,
+                    node_coordinator_json,
+                    current_time,
+                    current_time,
+                    int(can_run_atomic_service),
+                ),
             )
             conn.commit()
 
-    def get_active_runners(self) -> list[ActiveRunnerInfo]:
-        """Retrieve all active runners with heartbeat information."""
+    def get_active_runners(
+        self, can_run_atomic_service: bool | None = None
+    ) -> list[ActiveRunnerInfo]:
+        """Retrieve all active runners with heartbeat information and atomic service eligibility."""
         timeout_seconds = self.conf.runner_heartbeat_timeout_minutes * 60
         current_time = time()
         cutoff_time = current_time - timeout_seconds
@@ -812,12 +824,13 @@ class SQLiteOrchestrator(BaseOrchestrator):
             cursor = conn.execute(
                 f"""
                 SELECT runner_context_json, creation_timestamp, last_heartbeat,
-                       last_service_start, last_service_end
+                       allow_to_run_atomic_service, last_service_start, last_service_end
                 FROM {Tables.RUNNER_HEARTBEATS}
                 WHERE last_heartbeat >= ?
+                AND (? IS NULL OR allow_to_run_atomic_service = ?)
                 ORDER BY creation_timestamp ASC
                 """,
-                (cutoff_time,),
+                (cutoff_time, can_run_atomic_service, can_run_atomic_service),
             )
             cursor_rows = cursor.fetchall()
             cursor.close()
@@ -827,6 +840,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
                 runner_json,
                 creation_ts,
                 last_hb,
+                allow_to_run_atomic_service,
                 service_start,
                 service_end,
             ) in cursor_rows:
@@ -837,6 +851,9 @@ class SQLiteOrchestrator(BaseOrchestrator):
                             runner_ctx=runner_ctx,
                             creation_time=datetime.fromtimestamp(creation_ts, tz=UTC),
                             last_heartbeat=datetime.fromtimestamp(last_hb, tz=UTC),
+                            allow_to_run_atomic_service=bool(
+                                allow_to_run_atomic_service
+                            ),
                             last_service_start=datetime.fromisoformat(service_start)
                             if service_start
                             else None,

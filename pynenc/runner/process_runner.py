@@ -1,16 +1,30 @@
 import os
 import signal
 from multiprocessing import Manager, Process, cpu_count
-from typing import TYPE_CHECKING, Any, NamedTuple
+from typing import Any, NamedTuple, TYPE_CHECKING
 
 from pynenc.exceptions import InvocationStatusError, RunnerError
 from pynenc.invocation import InvocationStatus
 from pynenc.runner.base_runner import BaseRunner
+from pynenc.runner.heartbeat import start_invocation_runner_heartbeat
 from pynenc.util.multiprocessing_utils import warn_missing_main_guard
 
-
 if TYPE_CHECKING:
-    pass
+    from pynenc.app import Pynenc
+    from pynenc.invocation import DistributedInvocation
+    from pynenc.runner.runner_context import RunnerContext
+
+
+def run_with_heartbeat(
+    app: "Pynenc",
+    invocation: "DistributedInvocation",
+    runner_ctx: "RunnerContext",
+    runner_args: dict,
+) -> None:
+    """Run invocation with heartbeat in a separate process (must be top-level for multiprocessing)."""
+    heartbeat_thread = start_invocation_runner_heartbeat(app, runner_ctx)
+    invocation.run(runner_ctx, runner_args=runner_args)
+    heartbeat_thread.join(timeout=0.1)
 
 
 class ClassifiedInvocations(NamedTuple):
@@ -220,36 +234,35 @@ class ProcessRunner(BaseRunner):
         """
         Executes one iteration of the ProcessRunner loop.
         Handles the execution and monitoring of task invocations in separate processes.
+        Each process gets a reserved runner context and only starts if an invocation is available.
         """
-        # called from parent process memory space
-        self.logger.debug(f"starting runner loop iteration {self.available_processes=}")
-        for invocation in self.app.orchestrator.get_invocations_to_run(
-            max_num_invocations=self.available_processes, runner_ctx=self.runner_context
-        ):
+        self.logger.debug("starting runner loop iteration (dynamic process slots)")
+        for _ in range(self.available_processes):
+            # Reserve a unique runner context for this process
+            reserved_ctx = self.runner_context.new_child_context("ProcessRunnerWorker")
+            # Try to get an invocation for this reserved context
+            invocations = list(
+                self.app.orchestrator.get_invocations_to_run(1, reserved_ctx)
+            )
+            if not invocations:
+                break
+            invocation = invocations[0]
             invocation.app.runner = self
+
             process = Process(
-                target=invocation.run,
-                kwargs={
-                    "runner_args": self.runner_args,
-                    "runner_ctx": self.runner_context,
-                },
+                target=run_with_heartbeat,
+                args=(self.app, invocation, reserved_ctx, self.runner_args),
                 daemon=True,
             )
             self.app.logger.info(
-                f"{self.runner_id} starting invocation:{invocation.invocation_id}"
+                f"{self.runner_id} starting invocation:{invocation.invocation_id} with reserved_ctx {reserved_ctx.runner_id}"
             )
             process.start()
-            self.logger.debug(
-                f"Running invocation {invocation.invocation_id} on {process.pid=}"
-            )
             if process.pid:
                 self.inv_id_to_processes[invocation.invocation_id] = process
             else:
                 self.logger.error(
                     f"Failed to start process for invocation {invocation.invocation_id}, rerouting it"
-                )
-                self.app.orchestrator.reroute_invocations(
-                    {invocation.invocation_id}, runner_ctx=self.runner_context
                 )
         self.handle_waiting_invocations()
 
