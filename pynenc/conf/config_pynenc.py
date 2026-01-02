@@ -68,6 +68,31 @@ class ConfigPynenc(ConfigPynencBase):
     :cvar bool truncate_log_ids:
         If True, truncates long IDs (invocation_id, runner_id, etc.) in log output
         to improve readability. If False, displays full IDs. Default True.
+    :cvar float atomic_service_interval_minutes:
+        The total cycle interval for atomic global services (triggers, recovery, etc.).
+        The interval is divided equally among all active runners, with each runner assigned
+        a specific time slot within the cycle. Only one runner executes these services
+        at a time across the entire system. Default 5.0 minutes.
+    :cvar float atomic_service_spread_margin_minutes:
+        Safety margin subtracted from each runner's time slot to prevent overlapping
+        execution of atomic services across distributed runners. Default 1.0 minute.
+    :cvar float atomic_service_check_interval_minutes:
+        How frequently an individual runner checks if it should execute atomic global services.
+        This is the polling interval - each runner checks every N minutes to see if it's within
+        its assigned time slot. Should be significantly less than atomic_service_interval_minutes
+        to ensure runners don't miss their execution window. Default 0.5 minutes (30 seconds).
+    :cvar float atomic_service_runner_considered_dead_after_minutes:
+        Timeout period for considering a runner inactive/dead based on heartbeat silence.
+
+        This value determines the heartbeat timeout that is used for two purposes:
+        1. **Invocation Recovery**: Any invocations in RUNNING status assigned to runners
+           that haven't sent a heartbeat within this period will be recovered by other runners.
+        2. **Atomic Service Scheduling**: Only runners that have sent a heartbeat within
+           this period are considered "active" and eligible to participate in atomic service
+           time slot scheduling.
+
+        In both cases, the logic is the same: a runner is considered inactive if it hasn't
+        sent a heartbeat within this timeout period.
     """
 
     app_id = ConfigField("pynenc")
@@ -86,3 +111,7 @@ class ConfigPynenc(ConfigPynencBase):
     argument_print_mode = ConfigField(ArgumentPrintMode.TRUNCATED)
     cached_status_time = ConfigField(0.1)
     truncate_log_ids = ConfigField(True)
+    atomic_service_interval_minutes = ConfigField(5.0)
+    atomic_service_spread_margin_minutes = ConfigField(1.0)
+    atomic_service_check_interval_minutes = ConfigField(0.5)
+    atomic_service_runner_considered_dead_after_minutes = ConfigField(10.0)

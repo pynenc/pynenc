@@ -22,16 +22,11 @@ class ConfigRunner(ConfigPynencBase):
         Minimum number of parallel execution slots for tasks. This setting determines the minimum number of tasks
         that can run in parallel, regardless of the implementation (threads or processes). For instance, on a
         single-core machine, setting this to 2 would allow at least two tasks to run concurrently.
-
-    :cvar ConfigField[float] atomic_service_check_interval_minutes:
-        How often the runner checks if it should execute atomic global services.
-        Must be less than orchestrator's atomic_service_interval_minutes.
     """
 
     invocation_wait_results_sleep_time_sec = ConfigField(0.1)
     runner_loop_sleep_time_sec = ConfigField(0.1)
     min_parallel_slots = ConfigField(1)
-    atomic_service_check_interval_minutes = ConfigField(0.5)
 
 
 class ConfigThreadRunner(ConfigRunner):

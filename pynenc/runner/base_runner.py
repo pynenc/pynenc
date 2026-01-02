@@ -254,7 +254,9 @@ class BaseRunner(ABC):
         stopping the runner loop.
         """
         current_time = time.time()
-        check_interval_seconds = self.conf.atomic_service_check_interval_minutes * 60
+        check_interval_seconds = (
+            self.app.conf.atomic_service_check_interval_minutes * 60
+        )
 
         if current_time - self._last_atomic_service_check_time < check_interval_seconds:
             return

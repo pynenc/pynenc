@@ -29,28 +29,11 @@ class ConfigOrchestrator(ConfigPynencBase):
         mechanism helps keep the orchestrator lightweight and fast, as it should
         ideally operate with minimal latency. Detailed information about the invocations
         is stored in the result backend, which can handle more data and afford to be slower.
-
-    :cvar ConfigField[float] atomic_service_interval_minutes:
-        Interval at which atomic global services execute (triggers, recovery, etc.).
-        Only one runner executes these services at a time across the entire system.
-
-    :cvar ConfigField[float] atomic_service_spread_margin_minutes:
-        Time margin to spread atomic service execution across runners, preventing
-        simultaneous execution and race conditions.
-
-    :cvar ConfigField[float] runner_heartbeat_timeout_minutes:
-        How long a runner can be inactive before being considered dead and removed
-        from the active runners list.
-        Any invocations in RUNNING status assigned to that runner will be recovered
-        by another runner.
     """
 
     cycle_control = ConfigField(True)
     blocking_control = ConfigField(True)
     auto_final_invocation_purge_hours = ConfigField(24.0)
-    atomic_service_interval_minutes = ConfigField(5.0)
-    atomic_service_spread_margin_minutes = ConfigField(1.0)
-    runner_heartbeat_timeout_minutes = ConfigField(10.0)
 
 
 class ConfigOrchestratorSQLite(ConfigOrchestrator, ConfigSQLite):

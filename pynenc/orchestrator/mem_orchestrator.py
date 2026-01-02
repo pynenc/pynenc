@@ -623,11 +623,10 @@ class MemOrchestrator(BaseOrchestrator):
         self.runner_last_heartbeat[runner_id] = current_time
         self.runner_atomic_service_eligible[runner_id] = can_run_atomic_service
 
-    def get_active_runners(
-        self, can_run_atomic_service: bool | None = None
+    def _get_active_runners(
+        self, timeout_seconds: float, can_run_atomic_service: bool | None = None
     ) -> list[ActiveRunnerInfo]:
         """Retrieve all active runners with heartbeat information."""
-        timeout_seconds = self.conf.runner_heartbeat_timeout_minutes * 60
         current_time = time()
         cutoff_time = current_time - timeout_seconds
 
@@ -661,9 +660,8 @@ class MemOrchestrator(BaseOrchestrator):
 
         return active_runners
 
-    def cleanup_inactive_runners(self) -> None:
+    def _cleanup_inactive_runners(self, timeout_seconds: float) -> None:
         """Remove runners that haven't sent a heartbeat within the timeout period."""
-        timeout_seconds = self.conf.runner_heartbeat_timeout_minutes * 60
         current_time = time()
         cutoff_time = current_time - timeout_seconds
 
@@ -704,9 +702,10 @@ class MemOrchestrator(BaseOrchestrator):
             if status_record and status_record.timestamp.timestamp() <= cutoff_time:
                 yield invocation_id
 
-    def get_running_invocations_for_recovery(self) -> Iterator[str]:
+    def _get_running_invocations_for_recovery(
+        self, timeout_seconds: float
+    ) -> Iterator[str]:
         """Retrieve RUNNING invocation IDs owned by inactive runners."""
-        timeout_seconds = self.conf.runner_heartbeat_timeout_minutes * 60
         current_time = time()
         cutoff_time = current_time - timeout_seconds
 

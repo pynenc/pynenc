@@ -89,8 +89,10 @@ def test_heartbeat_update_does_not_change_order(app_instance: "Pynenc") -> None:
 def test_cleanup_inactive_runners(app_instance: "Pynenc") -> None:
     """Test that inactive runners are cleaned up after timeout."""
     # Override timeout for testing
-    original_timeout = app_instance.orchestrator.conf.runner_heartbeat_timeout_minutes
-    app_instance.orchestrator.conf.runner_heartbeat_timeout_minutes = (
+    original_timeout = (
+        app_instance.conf.atomic_service_runner_considered_dead_after_minutes
+    )
+    app_instance.conf.atomic_service_runner_considered_dead_after_minutes = (
         0.001  # ~0.06 seconds
     )
 
@@ -108,7 +110,7 @@ def test_cleanup_inactive_runners(app_instance: "Pynenc") -> None:
         assert len(active_runners) == 1
         assert active_runners[0].runner_ctx.runner_id == "runner-2"
     finally:
-        app_instance.orchestrator.conf.runner_heartbeat_timeout_minutes = (
+        app_instance.conf.atomic_service_runner_considered_dead_after_minutes = (
             original_timeout
         )
 
@@ -159,19 +161,29 @@ def test_should_run_atomic_service_single_runner(app_instance: "Pynenc") -> None
 
 def test_should_run_atomic_service_multiple_runners(app_instance: "Pynenc") -> None:
     """Test atomic service scheduling distributes across runners."""
-    original_interval = app_instance.orchestrator.conf.atomic_service_interval_minutes
-    app_instance.orchestrator.conf.atomic_service_interval_minutes = 1.0
+    original_interval = app_instance.conf.atomic_service_interval_minutes
+    original_margin = app_instance.conf.atomic_service_spread_margin_minutes
+    # Use larger interval and smaller margin so each runner gets a distinct time slot
+    # With 3 runners, 60s interval, 1s margin: each gets ~19s slot
+    app_instance.conf.atomic_service_interval_minutes = 1.0
+    app_instance.conf.atomic_service_spread_margin_minutes = 0.016  # ~1 second
 
     try:
         runner1 = create_runner_context("runner-1")
         runner2 = create_runner_context("runner-2")
         runner3 = create_runner_context("runner-3")
 
-        app_instance.orchestrator.register_runner_heartbeat(runner1)
-        sleep(0.01)
-        app_instance.orchestrator.register_runner_heartbeat(runner2)
-        sleep(0.01)
-        app_instance.orchestrator.register_runner_heartbeat(runner3)
+        # Pre-register all runners with can_run_atomic_service=True
+        # This ensures all 3 are visible when checking time slots
+        app_instance.orchestrator.register_runner_heartbeat(
+            runner1, can_run_atomic_service=True
+        )
+        app_instance.orchestrator.register_runner_heartbeat(
+            runner2, can_run_atomic_service=True
+        )
+        app_instance.orchestrator.register_runner_heartbeat(
+            runner3, can_run_atomic_service=True
+        )
 
         results = [
             app_instance.orchestrator.should_run_atomic_service(runner1),
@@ -180,11 +192,10 @@ def test_should_run_atomic_service_multiple_runners(app_instance: "Pynenc") -> N
         ]
 
         # Only one runner should be scheduled at any given time
-        assert sum(results) <= 1
+        assert sum(results) == 1
     finally:
-        app_instance.orchestrator.conf.atomic_service_interval_minutes = (
-            original_interval
-        )
+        app_instance.conf.atomic_service_interval_minutes = original_interval
+        app_instance.conf.atomic_service_spread_margin_minutes = original_margin
 
 
 def test_invocation_recovery_service_recovers_stuck_invocations(
@@ -304,8 +315,12 @@ def test_get_running_invocations_for_recovery_from_dead_runner(
     app_instance: "Pynenc",
 ) -> None:
     """Test retrieval of RUNNING invocations owned by inactive runners."""
-    original_timeout = app_instance.orchestrator.conf.runner_heartbeat_timeout_minutes
-    app_instance.orchestrator.conf.runner_heartbeat_timeout_minutes = 0.001  # ~0.06s
+    original_timeout = (
+        app_instance.conf.atomic_service_runner_considered_dead_after_minutes
+    )
+    app_instance.conf.atomic_service_runner_considered_dead_after_minutes = (
+        0.001  # ~0.06s
+    )
 
     try:
         # Create two runners
@@ -337,7 +352,7 @@ def test_get_running_invocations_for_recovery_from_dead_runner(
         )
 
         # Wait for runner_dead to become inactive
-        sleep(0.1)
+        sleep(0.2)
 
         # Keep runner_alive alive
         app_instance.orchestrator.register_runner_heartbeat(runner_alive)
@@ -354,7 +369,7 @@ def test_get_running_invocations_for_recovery_from_dead_runner(
         assert len(stuck_invocations) == 1
         assert stuck_invocations[0] == inv_dead.invocation_id
     finally:
-        app_instance.orchestrator.conf.runner_heartbeat_timeout_minutes = (
+        app_instance.conf.atomic_service_runner_considered_dead_after_minutes = (
             original_timeout
         )
 
@@ -363,8 +378,10 @@ def test_running_invocation_recovery_service_recovers_dead_runner_invocations(
     app_instance: "Pynenc",
 ) -> None:
     """Test that recovery service reroutes RUNNING invocations from dead runners."""
-    original_timeout = app_instance.orchestrator.conf.runner_heartbeat_timeout_minutes
-    app_instance.orchestrator.conf.runner_heartbeat_timeout_minutes = 0.001
+    original_timeout = (
+        app_instance.conf.atomic_service_runner_considered_dead_after_minutes
+    )
+    app_instance.conf.atomic_service_runner_considered_dead_after_minutes = 0.001
 
     try:
         runner_alive = create_runner_context("runner-alive")
@@ -394,7 +411,7 @@ def test_running_invocation_recovery_service_recovers_dead_runner_invocations(
         status = app_instance.orchestrator.get_invocation_status(inv.invocation_id)
         assert status == InvocationStatus.REROUTED
     finally:
-        app_instance.orchestrator.conf.runner_heartbeat_timeout_minutes = (
+        app_instance.conf.atomic_service_runner_considered_dead_after_minutes = (
             original_timeout
         )
 
@@ -430,8 +447,10 @@ def test_running_recovery_handles_multiple_dead_runner_invocations(
     app_instance: "Pynenc",
 ) -> None:
     """Test that recovery service handles multiple RUNNING invocations from dead runners."""
-    original_timeout = app_instance.orchestrator.conf.runner_heartbeat_timeout_minutes
-    app_instance.orchestrator.conf.runner_heartbeat_timeout_minutes = 0.001
+    original_timeout = (
+        app_instance.conf.atomic_service_runner_considered_dead_after_minutes
+    )
+    app_instance.conf.atomic_service_runner_considered_dead_after_minutes = 0.001
 
     try:
         runner_alive = create_runner_context("runner-alive")
@@ -470,7 +489,7 @@ def test_running_recovery_handles_multiple_dead_runner_invocations(
         assert status2 == InvocationStatus.REROUTED
         assert status3 == InvocationStatus.REROUTED
     finally:
-        app_instance.orchestrator.conf.runner_heartbeat_timeout_minutes = (
+        app_instance.conf.atomic_service_runner_considered_dead_after_minutes = (
             original_timeout
         )
 
@@ -479,8 +498,10 @@ def test_running_recovery_with_mixed_dead_and_alive_runners(
     app_instance: "Pynenc",
 ) -> None:
     """Test recovery only affects invocations from dead runners, not alive ones."""
-    original_timeout = app_instance.orchestrator.conf.runner_heartbeat_timeout_minutes
-    app_instance.orchestrator.conf.runner_heartbeat_timeout_minutes = 0.001
+    original_timeout = (
+        app_instance.conf.atomic_service_runner_considered_dead_after_minutes
+    )
+    app_instance.conf.atomic_service_runner_considered_dead_after_minutes = 0.001
 
     try:
         runner_alive = create_runner_context("runner-alive")
@@ -531,6 +552,6 @@ def test_running_recovery_with_mixed_dead_and_alive_runners(
             "Invocation from dead runner should be REROUTED"
         )
     finally:
-        app_instance.orchestrator.conf.runner_heartbeat_timeout_minutes = (
+        app_instance.conf.atomic_service_runner_considered_dead_after_minutes = (
             original_timeout
         )

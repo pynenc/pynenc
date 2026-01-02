@@ -334,8 +334,8 @@ def test_should_run_atomic_service_should_respect_time_slots_with_multiple_runne
     """Test that atomic service scheduling assigns different time slots to runners."""
     from unittest.mock import patch
 
-    original_interval = app_instance.orchestrator.conf.atomic_service_interval_minutes
-    app_instance.orchestrator.conf.atomic_service_interval_minutes = 100.0
+    original_interval = app_instance.conf.atomic_service_interval_minutes
+    app_instance.conf.atomic_service_interval_minutes = 100.0
 
     try:
         # Mock time to be at the start of the cycle
@@ -354,9 +354,7 @@ def test_should_run_atomic_service_should_respect_time_slots_with_multiple_runne
             assert should_run_1 is True, "Runner 1 should be scheduled at time=0"
             assert should_run_2 is False, "Runner 2 should NOT be scheduled at time=0"
     finally:
-        app_instance.orchestrator.conf.atomic_service_interval_minutes = (
-            original_interval
-        )
+        app_instance.conf.atomic_service_interval_minutes = original_interval
 
 
 def test_should_run_atomic_service_should_handle_runner_cycling(
@@ -365,8 +363,8 @@ def test_should_run_atomic_service_should_handle_runner_cycling(
     """Test that runners get scheduled in rotation over time."""
     from unittest.mock import patch
 
-    original_interval = app_instance.orchestrator.conf.atomic_service_interval_minutes
-    app_instance.orchestrator.conf.atomic_service_interval_minutes = 60.0
+    original_interval = app_instance.conf.atomic_service_interval_minutes
+    app_instance.conf.atomic_service_interval_minutes = 60.0
 
     try:
         runner1 = create_runner_context("runner-1")
@@ -402,9 +400,7 @@ def test_should_run_atomic_service_should_handle_runner_cycling(
             assert app_instance.orchestrator.should_run_atomic_service(runner2) is False
             assert app_instance.orchestrator.should_run_atomic_service(runner3) is True
     finally:
-        app_instance.orchestrator.conf.atomic_service_interval_minutes = (
-            original_interval
-        )
+        app_instance.conf.atomic_service_interval_minutes = original_interval
 
 
 def test_record_atomic_service_execution_should_update_timestamps(
@@ -422,7 +418,9 @@ def test_record_atomic_service_execution_should_update_timestamps(
         runner_ctx, start_time, end_time
     )
 
-    active_runners = app_instance.orchestrator.get_active_runners()
+    active_runners = app_instance.orchestrator.get_active_runners(
+        can_run_atomic_service=None
+    )
     assert len(active_runners) == 1
 
     runner_info = active_runners[0]

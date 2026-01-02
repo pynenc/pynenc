@@ -969,25 +969,65 @@ class BaseOrchestrator(ABC):
         """
 
     @abstractmethod
+    def _get_active_runners(
+        self, timeout_seconds: float, can_run_atomic_service: bool | None
+    ) -> list["ActiveRunnerInfo"]:
+        """
+        Retrieve runners that are considered active based on heartbeat activity.
+
+        A runner is considered "active" if it has sent a heartbeat within the timeout period.
+        This is used for atomic service scheduling to determine which runners are eligible
+        to participate in time slot distribution.
+
+        :param float timeout_seconds: Heartbeat timeout in seconds (typically from atomic_service_runner_considered_dead_after_minutes config)
+        :param bool | None can_run_atomic_service: If specified, filters runners based on their eligibility to run atomic services
+        :return: List of active runners ordered by creation time (oldest first)
+        :rtype: list["ActiveRunnerInfo"]
+        """
+
     def get_active_runners(
         self, can_run_atomic_service: bool | None = None
     ) -> list["ActiveRunnerInfo"]:
         """
-        Retrieve all active runners with heartbeat information.
+        Retrieve runners that are considered active based on heartbeat activity.
 
-        Only returns runners that have sent a heartbeat within the configured timeout period.
-        Results are ordered by creation time (oldest first).
+        A runner is considered "active" if it has sent a heartbeat within the timeout period.
+        This is used for atomic service scheduling to determine which runners are eligible
+        to participate in time slot distribution.
 
-        :param bool | None can_run_atomic_service: If specified, filters runners based on their eligibility to run atomic services.
-        :return: List of active runner information ordered by creation time (oldest first)
+        :param bool | None can_run_atomic_service: If specified, filters runners based on their eligibility to run atomic services
+        :return: List of active runners ordered by creation time (oldest first)
         :rtype: list["ActiveRunnerInfo"]
         """
+        timeout_seconds = (
+            self.app.conf.atomic_service_runner_considered_dead_after_minutes * 60
+        )
+        return self._get_active_runners(timeout_seconds, can_run_atomic_service)
 
     @abstractmethod
+    def _cleanup_inactive_runners(self, timeout_seconds: float) -> None:
+        """
+        Remove runners that haven't sent a heartbeat within the timeout period.
+
+        This is part of invocation recovery: runners inactive for longer than timeout_seconds
+        are considered dead, and their RUNNING invocations will be recovered.
+
+        :param float timeout_seconds: Heartbeat timeout in seconds (typically from atomic_service_runner_considered_dead_after_minutes config)
+        """
+
     def cleanup_inactive_runners(self) -> None:
         """
         Remove runners that haven't sent a heartbeat within the timeout period.
+
+        This is part of invocation recovery: runners inactive for longer than timeout_seconds
+        are considered dead, and their RUNNING invocations will be recovered.
+
+        :param float timeout_seconds: Heartbeat timeout in seconds (typically from atomic_service_runner_considered_dead_after_minutes config)
         """
+        timeout_seconds = (
+            self.app.conf.atomic_service_runner_considered_dead_after_minutes * 60
+        )
+        self._cleanup_inactive_runners(timeout_seconds)
 
     @abstractmethod
     def get_pending_invocations_for_recovery(self) -> Iterator[str]:
@@ -999,6 +1039,21 @@ class BaseOrchestrator(ABC):
         """
 
     @abstractmethod
+    def _get_running_invocations_for_recovery(
+        self, timeout_seconds: float
+    ) -> Iterator[str]:
+        """
+        Retrieve invocation IDs in RUNNING status owned by inactive runners.
+
+        An inactive runner is one that hasn't sent a heartbeat within the
+        configured timeout period. Invocations owned by such runners are
+        considered stuck and need recovery.
+
+        :param float timeout_seconds: Heartbeat timeout in seconds
+        :return: Iterator of invocation IDs that need recovery.
+        :rtype: Iterator[str]
+        """
+
     def get_running_invocations_for_recovery(self) -> Iterator[str]:
         """
         Retrieve invocation IDs in RUNNING status owned by inactive runners.
@@ -1007,9 +1062,14 @@ class BaseOrchestrator(ABC):
         configured timeout period. Invocations owned by such runners are
         considered stuck and need recovery.
 
+        :param float timeout_seconds: Heartbeat timeout in seconds
         :return: Iterator of invocation IDs that need recovery.
         :rtype: Iterator[str]
         """
+        timeout_seconds = (
+            self.app.conf.atomic_service_runner_considered_dead_after_minutes * 60
+        )
+        return self._get_running_invocations_for_recovery(timeout_seconds)
 
     def should_run_atomic_service(self, runner_ctx: "RunnerContext") -> bool:
         """
@@ -1033,8 +1093,8 @@ class BaseOrchestrator(ABC):
             runner_ctx=runner_ctx,
             active_runners=active_runners,
             current_time=time(),
-            service_interval_minutes=self.conf.atomic_service_interval_minutes,
-            spread_margin_minutes=self.conf.atomic_service_spread_margin_minutes,
+            service_interval_minutes=self.app.conf.atomic_service_interval_minutes,
+            spread_margin_minutes=self.app.conf.atomic_service_spread_margin_minutes,
         )
 
     @abstractmethod
