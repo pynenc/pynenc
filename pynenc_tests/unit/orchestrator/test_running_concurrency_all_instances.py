@@ -63,7 +63,7 @@ def any_run_in_parallel(results: list[SleepResult]) -> bool:
 
 
 @pytest.fixture
-def app(request: "FixtureRequest", app_instance: "Pynenc") -> "Pynenc":
+def app_fixture(request: "FixtureRequest", app_instance: "Pynenc") -> "Pynenc":
     app = app_instance
     app.runner = ThreadRunner(app)
     app._tasks = mock_app._tasks
@@ -75,14 +75,14 @@ def app(request: "FixtureRequest", app_instance: "Pynenc") -> "Pynenc":
     return app
 
 
-def test_running_concurrency(app: "Pynenc") -> None:
+def test_running_concurrency(app_fixture: "Pynenc") -> None:
     """checks that the concurrency control will prevent running multiple tasks at the same time"""
     # first purge any invocation pending from previous runs
-    app.purge()
+    app_fixture.purge()
 
     # start a runner
     def run_in_thread() -> None:
-        app.runner.run()
+        app_fixture.runner.run()
 
     thread = threading.Thread(target=run_in_thread, daemon=True)
     thread.start()
@@ -102,36 +102,36 @@ def test_running_concurrency(app: "Pynenc") -> None:
         raise AssertionError(f"Expected sequential execution, got {controlled_results}")
 
     # stop the runner
-    app.runner.stop_runner_loop()
+    app_fixture.runner.stop_runner_loop()
     thread.join()
 
 
-def test_basic_running_concurrency_check(app: "Pynenc") -> None:
+def test_basic_running_concurrency_check(app_fixture: "Pynenc") -> None:
     """Basic concurency control check"""
     invocation1 = sleep_with_running_concurrency(0.5)
     owner_id = "test_owner"
-    app.orchestrator._atomic_status_transition(
+    app_fixture.orchestrator._atomic_status_transition(
         invocation1.invocation_id, InvocationStatus.PENDING, owner_id
     )
-    app.orchestrator._atomic_status_transition(
+    app_fixture.orchestrator._atomic_status_transition(
         invocation1.invocation_id, InvocationStatus.RUNNING, owner_id
     )
     invocation2: DistributedInvocation = sleep_with_running_concurrency(0.1)  # type: ignore
     assert (
-        app.orchestrator.is_authorize_to_run_by_concurrency_control(invocation2)
+        app_fixture.orchestrator.is_authorize_to_run_by_concurrency_control(invocation2)
         is False
     )
 
 
-def test_running_concurrency_no_reroute(app: "Pynenc") -> None:
+def test_running_concurrency_no_reroute(app_fixture: "Pynenc") -> None:
     """
     Test that concurrency control without reroute marks blocked invocations as CONCURRENCY_CONTROLLED_FINAL.
     """
-    app.purge()
+    app_fixture.purge()
 
     # Start a runner
     def run_in_thread() -> None:
-        app.runner.run()
+        app_fixture.runner.run()
 
     thread = threading.Thread(target=run_in_thread, daemon=True)
     thread.start()
@@ -146,7 +146,8 @@ def test_running_concurrency_no_reroute(app: "Pynenc") -> None:
 
     # Check statuses - only one should have run (SUCCESS), others should be CONCURRENCY_CONTROLLED_FINAL
     statuses = [
-        app.orchestrator.get_invocation_status(inv.invocation_id) for inv in invocations
+        app_fixture.orchestrator.get_invocation_status(inv.invocation_id)
+        for inv in invocations
     ]
 
     success_count = sum(1 for s in statuses if s == InvocationStatus.SUCCESS)
@@ -173,5 +174,5 @@ def test_running_concurrency_no_reroute(app: "Pynenc") -> None:
                 _ = inv.result
 
     # Stop the runner
-    app.runner.stop_runner_loop()
+    app_fixture.runner.stop_runner_loop()
     thread.join()
