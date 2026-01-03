@@ -421,7 +421,7 @@ def test_record_atomic_service_execution_should_update_timestamps(
     end_time = datetime.now(UTC)
 
     app_instance.orchestrator.record_atomic_service_execution(
-        runner_ctx, start_time, end_time
+        runner_ctx.runner_id, start_time, end_time
     )
 
     active_runners = app_instance.orchestrator.get_active_runners(

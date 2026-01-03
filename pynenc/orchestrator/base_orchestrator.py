@@ -1109,7 +1109,7 @@ class BaseOrchestrator(ABC):
 
     @abstractmethod
     def record_atomic_service_execution(
-        self, runner_ctx: "RunnerContext", start_time: datetime, end_time: datetime
+        self, runner_id: str, start_time: datetime, end_time: datetime
     ) -> None:
         """
         Record the latest atomic service execution window for a runner.
@@ -1117,7 +1117,7 @@ class BaseOrchestrator(ABC):
         Replaces any previous execution record for this runner with the current one.
         Used for diagnostics and detecting potential collisions.
 
-        :param RunnerContext runner_ctx: The runner that executed the service
+        :param str runner_id: The runner that executed the service
         :param datetime start_time: When execution started (UTC timezone-aware)
         :param datetime end_time: When execution ended (UTC timezone-aware)
         """

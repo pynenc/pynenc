@@ -305,7 +305,7 @@ class BaseRunner(ABC):
             if start_time is not None:
                 end_time = datetime.now(UTC)
                 self.app.orchestrator.record_atomic_service_execution(
-                    self.runner_context, start_time, end_time
+                    self.runner_context.runner_id, start_time, end_time
                 )
 
     def run(self) -> None:

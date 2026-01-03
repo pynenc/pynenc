@@ -18,7 +18,6 @@ from pynenc.orchestrator.base_orchestrator import (
     BaseOrchestrator,
 )
 from pynenc.orchestrator.atomic_service import ActiveRunnerInfo
-from pynenc.runner.runner_context import RunnerContext
 from pynenc.types import Params, Result
 
 if TYPE_CHECKING:
@@ -676,10 +675,9 @@ class MemOrchestrator(BaseOrchestrator):
             self.runner_last_service_end.pop(runner_id, None)
 
     def record_atomic_service_execution(
-        self, runner_ctx: "RunnerContext", start_time: datetime, end_time: datetime
+        self, runner_id: str, start_time: datetime, end_time: datetime
     ) -> None:
         """Record the latest atomic service execution window for a runner."""
-        runner_id = runner_ctx.runner_id
         self.runner_last_service_start[runner_id] = start_time
         self.runner_last_service_end[runner_id] = end_time
 

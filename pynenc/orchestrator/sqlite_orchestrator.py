@@ -23,7 +23,6 @@ from pynenc.orchestrator.base_orchestrator import (
     BaseCycleControl,
     BaseOrchestrator,
 )
-from pynenc.runner.runner_context import RunnerContext
 from pynenc.orchestrator.atomic_service import ActiveRunnerInfo
 from pynenc.util.sqlite_utils import create_sqlite_connection as sqlite_conn
 from pynenc.util.sqlite_utils import (
@@ -872,7 +871,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
             conn.commit()
 
     def record_atomic_service_execution(
-        self, runner_ctx: "RunnerContext", start_time: datetime, end_time: datetime
+        self, runner_id: str, start_time: datetime, end_time: datetime
     ) -> None:
         """Record the latest atomic service execution window for a runner."""
         with sqlite_conn(self.sqlite_db_path) as conn:
@@ -882,7 +881,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
                 SET last_service_start = ?, last_service_end = ?
                 WHERE runner_id = ?
                 """,
-                (start_time.isoformat(), end_time.isoformat(), runner_ctx.runner_id),
+                (start_time.isoformat(), end_time.isoformat(), runner_id),
             )
             conn.commit()
 
