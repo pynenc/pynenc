@@ -956,16 +956,24 @@ class BaseOrchestrator(ABC):
         return invocations
 
     @abstractmethod
-    def register_runner_heartbeat(
+    def register_runner_heartbeats(
         self,
-        runner_ctx: "RunnerContext",
+        runner_ids: list[str],
         can_run_atomic_service: bool = False,
     ) -> None:
         """
-        Register or update a runner's heartbeat timestamp.
+        Register or update heartbeat timestamps for one or more runners.
 
-        :param RunnerContext runner_ctx: The runner context to register.
-        :param bool can_run_atomic_service: Whether this runner is eligible to run atomic services.
+        This unified method handles both:
+        - Parent/atomic service runners registering themselves (can_run_atomic_service=True)
+        - Worker runners registering themselves (can_run_atomic_service=False, default)
+        - Parent runners reporting their children's heartbeats (can_run_atomic_service=False)
+
+        For runners that already exist, only updates the heartbeat timestamp.
+        For new runners, creates a new record with the given atomic service eligibility.
+
+        :param list[str] runner_ids: List of runner_ids to register/update heartbeats for.
+        :param bool can_run_atomic_service: Whether these runners are eligible to run atomic services.
         """
 
     @abstractmethod
@@ -1085,12 +1093,14 @@ class BaseOrchestrator(ABC):
         :return: True if this runner should execute services now.
         :rtype: bool
         """
-        self.register_runner_heartbeat(runner_ctx, can_run_atomic_service=True)
+        self.register_runner_heartbeats(
+            [runner_ctx.runner_id], can_run_atomic_service=True
+        )
         self.cleanup_inactive_runners()
         active_runners = self.get_active_runners(can_run_atomic_service=True)
 
         return can_run_atomic_service(
-            runner_ctx=runner_ctx,
+            runner_id=runner_ctx.runner_id,
             active_runners=active_runners,
             current_time=time(),
             service_interval_minutes=self.app.conf.atomic_service_interval_minutes,

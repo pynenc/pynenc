@@ -6,7 +6,6 @@ from typing import Any, NamedTuple, TYPE_CHECKING
 from pynenc.exceptions import InvocationStatusError, RunnerError
 from pynenc.invocation import InvocationStatus
 from pynenc.runner.base_runner import BaseRunner
-from pynenc.runner.heartbeat import start_invocation_runner_heartbeat
 from pynenc.util.multiprocessing_utils import warn_missing_main_guard
 
 if TYPE_CHECKING:
@@ -15,16 +14,14 @@ if TYPE_CHECKING:
     from pynenc.runner.runner_context import RunnerContext
 
 
-def run_with_heartbeat(
+def run_invocation(
     app: "Pynenc",
     invocation: "DistributedInvocation",
     runner_ctx: "RunnerContext",
     runner_args: dict,
 ) -> None:
-    """Run invocation with heartbeat in a separate process (must be top-level for multiprocessing)."""
-    heartbeat_thread = start_invocation_runner_heartbeat(app, runner_ctx)
+    """Run invocation in a separate process (must be top-level for multiprocessing)."""
     invocation.run(runner_ctx, runner_args=runner_args)
-    heartbeat_thread.join(timeout=0.1)
 
 
 class ClassifiedInvocations(NamedTuple):
@@ -39,6 +36,18 @@ class ClassifiedInvocations(NamedTuple):
     non_final: list[str]
 
 
+class ChildProcessInfo(NamedTuple):
+    """
+    Information about a child worker process.
+
+    :param process: The Process object
+    :param invocation_id: The invocation_id being executed by this process
+    """
+
+    process: Process
+    invocation_id: str
+
+
 class ProcessRunner(BaseRunner):
     """
     ProcessRunner is a concrete implementation of BaseRunner that executes tasks in separate processes.
@@ -50,7 +59,8 @@ class ProcessRunner(BaseRunner):
     wait_invocation: dict[
         str, set[str]
     ]  # Maps invocation_id to set of waiting invocation_ids
-    inv_id_to_processes: dict[str, Process]
+    child_runner_ids: dict[str, ChildProcessInfo]  # Maps runner_id to process info
+    inv_id_to_runner_id: dict[str, str]  # Maps invocation_id to runner_id
     manager: Manager  # type: ignore
     runner_cache: dict
 
@@ -76,6 +86,14 @@ class ProcessRunner(BaseRunner):
         :return: An integer representing the maximum number of parallel tasks, based on CPU count.
         """
         return max(self.conf.min_parallel_slots, self.max_processes)
+
+    def get_active_child_runner_ids(self) -> list[str]:
+        """Return runner_ids of child processes that are still alive."""
+        return [
+            runner_id
+            for runner_id, info in self.child_runner_ids.items()
+            if info.process.is_alive()
+        ]
 
     @property
     def runner_args(self) -> dict[str, Any]:
@@ -116,7 +134,8 @@ class ProcessRunner(BaseRunner):
         self.manager = Manager()
         self.wait_invocation = self.manager.dict()  # type: ignore
         self.runner_cache = self._runner_cache or self.manager.dict()  # type: ignore
-        self.inv_id_to_processes = {}
+        self.child_runner_ids = {}
+        self.inv_id_to_runner_id = {}
         self.max_processes = cpu_count()
 
     def _on_stop(self) -> None:
@@ -125,17 +144,19 @@ class ProcessRunner(BaseRunner):
         Terminates all running processes and updates their invocation statuses.
         """
         self.logger.info("Stopping ProcessRunner")
-        for invocation_id, process in self.inv_id_to_processes.items():
-            process.kill()
+        for runner_id, info in self.child_runner_ids.items():
+            info.process.kill()
             try:
                 self.app.orchestrator.set_invocation_status(
-                    invocation_id, InvocationStatus.RETRY, self.runner_context
+                    info.invocation_id, InvocationStatus.RETRY, self.runner_context
                 )
             except InvocationStatusError:
                 self.logger.warning(
-                    f"Could not set invocation {invocation_id} to RETRY status"
+                    f"Could not set invocation {info.invocation_id} to RETRY status"
                 )
-            self.logger.info(f"Killing invocation {invocation_id}")
+            self.logger.info(
+                f"Killing runner {runner_id} with invocation {info.invocation_id}"
+            )
         self.manager.shutdown()  # type: ignore
         self.logger.info("ProcessRunner stopped")
 
@@ -156,15 +177,17 @@ class ProcessRunner(BaseRunner):
         Returns the number of available process slots for new invocations.
         :return: An integer representing available process slots.
         """
-        for invocation_id in list(self.inv_id_to_processes):
-            if not self.inv_id_to_processes[invocation_id].is_alive():
-                self.inv_id_to_processes[invocation_id].join()
-                del self.inv_id_to_processes[invocation_id]
+        for runner_id in list(self.child_runner_ids):
+            info = self.child_runner_ids[runner_id]
+            if not info.process.is_alive():
+                info.process.join()
+                del self.child_runner_ids[runner_id]
+                self.inv_id_to_runner_id.pop(info.invocation_id, None)
         # discount waiting processes, they should do nothing
         # until the blocking invocation is finished
         # otherwise, running one worker with one process
         # will be lock indefintely until the blocking invocation runs
-        return self.max_parallel_slots - len(self.inv_id_to_processes)
+        return self.max_parallel_slots - len(self.child_runner_ids)
 
     def clasify_waiting_invocations(
         self,
@@ -183,13 +206,20 @@ class ProcessRunner(BaseRunner):
         ]
         return ClassifiedInvocations(final_invocation_ids, non_final_invocation_ids)
 
+    def _get_process_for_invocation(self, invocation_id: str) -> Process | None:
+        """Get the Process object for a given invocation_id."""
+        if runner_id := self.inv_id_to_runner_id.get(invocation_id):
+            if info := self.child_runner_ids.get(runner_id):
+                return info.process
+        return None
+
     def handle_waiting_invocations(self) -> None:
         """Handle the waiting invocations"""
         classified = self.clasify_waiting_invocations()
         # Pause processes waiting for non-final invocations
         for invocation_id in classified.non_final:
             for waiting_invocation_id in self.wait_invocation.get(invocation_id, []):
-                if waiting_process := self.inv_id_to_processes.get(
+                if waiting_process := self._get_process_for_invocation(
                     waiting_invocation_id
                 ):
                     if waiting_process.pid:
@@ -211,7 +241,7 @@ class ProcessRunner(BaseRunner):
         if to_resume_invocation_ids:
             for waiting_invocation_id in to_resume_invocation_ids:
                 # Find the process for this waiting invocation ID
-                if waiting_process := self.inv_id_to_processes.get(
+                if waiting_process := self._get_process_for_invocation(
                     waiting_invocation_id
                 ):
                     if waiting_process.pid:
@@ -250,7 +280,7 @@ class ProcessRunner(BaseRunner):
             invocation.app.runner = self
 
             process = Process(
-                target=run_with_heartbeat,
+                target=run_invocation,
                 args=(self.app, invocation, reserved_ctx, self.runner_args),
                 daemon=True,
             )
@@ -259,7 +289,12 @@ class ProcessRunner(BaseRunner):
             )
             process.start()
             if process.pid:
-                self.inv_id_to_processes[invocation.invocation_id] = process
+                self.child_runner_ids[reserved_ctx.runner_id] = ChildProcessInfo(
+                    process=process, invocation_id=invocation.invocation_id
+                )
+                self.inv_id_to_runner_id[invocation.invocation_id] = (
+                    reserved_ctx.runner_id
+                )
             else:
                 self.logger.error(
                     f"Failed to start process for invocation {invocation.invocation_id}, rerouting it"

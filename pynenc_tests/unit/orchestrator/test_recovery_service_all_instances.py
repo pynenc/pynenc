@@ -43,11 +43,11 @@ def test_register_runner_heartbeat(app_instance: "Pynenc") -> None:
     """Test that runner heartbeat registration works."""
     runner_ctx = create_runner_context("test-runner-1")
 
-    app_instance.orchestrator.register_runner_heartbeat(runner_ctx)
+    app_instance.orchestrator.register_runner_heartbeats([runner_ctx.runner_id])
 
     active_runners = app_instance.orchestrator.get_active_runners()
     assert len(active_runners) == 1
-    assert active_runners[0].runner_ctx.runner_id == "test-runner-1"
+    assert active_runners[0].runner_id == "test-runner-1"
 
 
 def test_multiple_runner_heartbeats_ordered_by_creation(app_instance: "Pynenc") -> None:
@@ -56,17 +56,17 @@ def test_multiple_runner_heartbeats_ordered_by_creation(app_instance: "Pynenc") 
     runner2 = create_runner_context("runner-2")
     runner3 = create_runner_context("runner-3")
 
-    app_instance.orchestrator.register_runner_heartbeat(runner1)
+    app_instance.orchestrator.register_runner_heartbeats([runner1.runner_id])
     sleep(0.01)
-    app_instance.orchestrator.register_runner_heartbeat(runner2)
+    app_instance.orchestrator.register_runner_heartbeats([runner2.runner_id])
     sleep(0.01)
-    app_instance.orchestrator.register_runner_heartbeat(runner3)
+    app_instance.orchestrator.register_runner_heartbeats([runner3.runner_id])
 
     active_runners = app_instance.orchestrator.get_active_runners()
     assert len(active_runners) == 3
-    assert active_runners[0].runner_ctx.runner_id == "runner-1"
-    assert active_runners[1].runner_ctx.runner_id == "runner-2"
-    assert active_runners[2].runner_ctx.runner_id == "runner-3"
+    assert active_runners[0].runner_id == "runner-1"
+    assert active_runners[1].runner_id == "runner-2"
+    assert active_runners[2].runner_id == "runner-3"
 
 
 def test_heartbeat_update_does_not_change_order(app_instance: "Pynenc") -> None:
@@ -74,16 +74,16 @@ def test_heartbeat_update_does_not_change_order(app_instance: "Pynenc") -> None:
     runner1 = create_runner_context("runner-1")
     runner2 = create_runner_context("runner-2")
 
-    app_instance.orchestrator.register_runner_heartbeat(runner1)
+    app_instance.orchestrator.register_runner_heartbeats([runner1.runner_id])
     sleep(0.01)
-    app_instance.orchestrator.register_runner_heartbeat(runner2)
+    app_instance.orchestrator.register_runner_heartbeats([runner2.runner_id])
     sleep(0.01)
-    app_instance.orchestrator.register_runner_heartbeat(runner1)
+    app_instance.orchestrator.register_runner_heartbeats([runner1.runner_id])
 
     active_runners = app_instance.orchestrator.get_active_runners()
     assert len(active_runners) == 2
-    assert active_runners[0].runner_ctx.runner_id == "runner-1"
-    assert active_runners[1].runner_ctx.runner_id == "runner-2"
+    assert active_runners[0].runner_id == "runner-1"
+    assert active_runners[1].runner_id == "runner-2"
 
 
 def test_cleanup_inactive_runners(app_instance: "Pynenc") -> None:
@@ -100,15 +100,15 @@ def test_cleanup_inactive_runners(app_instance: "Pynenc") -> None:
         runner1 = create_runner_context("runner-1")
         runner2 = create_runner_context("runner-2")
 
-        app_instance.orchestrator.register_runner_heartbeat(runner1)
+        app_instance.orchestrator.register_runner_heartbeats([runner1.runner_id])
         sleep(0.1)
-        app_instance.orchestrator.register_runner_heartbeat(runner2)
+        app_instance.orchestrator.register_runner_heartbeats([runner2.runner_id])
 
         app_instance.orchestrator.cleanup_inactive_runners()
 
         active_runners = app_instance.orchestrator.get_active_runners()
         assert len(active_runners) == 1
-        assert active_runners[0].runner_ctx.runner_id == "runner-2"
+        assert active_runners[0].runner_id == "runner-2"
     finally:
         app_instance.conf.atomic_service_runner_considered_dead_after_minutes = (
             original_timeout
@@ -152,7 +152,7 @@ def test_should_run_atomic_service_single_runner(app_instance: "Pynenc") -> None
     """Test atomic service scheduling with single runner."""
     runner_ctx = create_runner_context("runner-1")
 
-    app_instance.orchestrator.register_runner_heartbeat(runner_ctx)
+    app_instance.orchestrator.register_runner_heartbeats([runner_ctx.runner_id])
 
     should_run = app_instance.orchestrator.should_run_atomic_service(runner_ctx)
 
@@ -175,14 +175,14 @@ def test_should_run_atomic_service_multiple_runners(app_instance: "Pynenc") -> N
 
         # Pre-register all runners with can_run_atomic_service=True
         # This ensures all 3 are visible when checking time slots
-        app_instance.orchestrator.register_runner_heartbeat(
-            runner1, can_run_atomic_service=True
+        app_instance.orchestrator.register_runner_heartbeats(
+            [runner1.runner_id], can_run_atomic_service=True
         )
-        app_instance.orchestrator.register_runner_heartbeat(
-            runner2, can_run_atomic_service=True
+        app_instance.orchestrator.register_runner_heartbeats(
+            [runner2.runner_id], can_run_atomic_service=True
         )
-        app_instance.orchestrator.register_runner_heartbeat(
-            runner3, can_run_atomic_service=True
+        app_instance.orchestrator.register_runner_heartbeats(
+            [runner3.runner_id], can_run_atomic_service=True
         )
 
         results = [
@@ -207,7 +207,7 @@ def test_invocation_recovery_service_recovers_stuck_invocations(
 
     try:
         runner_ctx = create_runner_context("recovery-runner")
-        app_instance.orchestrator.register_runner_heartbeat(runner_ctx)
+        app_instance.orchestrator.register_runner_heartbeats([runner_ctx.runner_id])
 
         inv: DistributedInvocation = dummy_task()  # type: ignore
         app_instance.orchestrator.register_new_invocations([inv])
@@ -233,7 +233,7 @@ def test_recovery_service_ignores_recent_pending_invocations(
 
     try:
         runner_ctx = create_runner_context("recovery-runner")
-        app_instance.orchestrator.register_runner_heartbeat(runner_ctx)
+        app_instance.orchestrator.register_runner_heartbeats([runner_ctx.runner_id])
 
         inv: DistributedInvocation = dummy_task()  # type: ignore
         app_instance.orchestrator.register_new_invocations([inv])
@@ -261,7 +261,7 @@ def test_recovery_service_handles_multiple_stuck_invocations(
 
     try:
         runner_ctx = create_runner_context("recovery-runner")
-        app_instance.orchestrator.register_runner_heartbeat(runner_ctx)
+        app_instance.orchestrator.register_runner_heartbeats([runner_ctx.runner_id])
 
         inv1: DistributedInvocation = dummy_task()  # type: ignore
         inv2: DistributedInvocation = dummy_task()  # type: ignore
@@ -296,14 +296,14 @@ def test_recovery_service_updates_heartbeat(app_instance: "Pynenc") -> None:
     """Test that recovery service always updates heartbeat."""
     runner_ctx = create_runner_context("runner-1")
 
-    app_instance.orchestrator.register_runner_heartbeat(runner_ctx)
+    app_instance.orchestrator.register_runner_heartbeats([runner_ctx.runner_id])
     sleep(0.05)
 
     app_instance.orchestrator.invocation_recovery_service(runner_ctx)
 
     second_runners = app_instance.orchestrator.get_active_runners()
     assert len(second_runners) == 1
-    assert second_runners[0].runner_ctx.runner_id == runner_ctx.runner_id
+    assert second_runners[0].runner_id == runner_ctx.runner_id
 
 
 # ============================================================================
@@ -328,8 +328,8 @@ def test_get_running_invocations_for_recovery_from_dead_runner(
         runner_dead = create_runner_context("runner-dead")
 
         # Register both runners
-        app_instance.orchestrator.register_runner_heartbeat(runner_alive)
-        app_instance.orchestrator.register_runner_heartbeat(runner_dead)
+        app_instance.orchestrator.register_runner_heartbeats([runner_alive.runner_id])
+        app_instance.orchestrator.register_runner_heartbeats([runner_dead.runner_id])
 
         # Create invocations
         inv_alive: DistributedInvocation = dummy_task()  # type: ignore
@@ -355,7 +355,7 @@ def test_get_running_invocations_for_recovery_from_dead_runner(
         sleep(0.2)
 
         # Keep runner_alive alive
-        app_instance.orchestrator.register_runner_heartbeat(runner_alive)
+        app_instance.orchestrator.register_runner_heartbeats([runner_alive.runner_id])
 
         # Cleanup inactive runners
         app_instance.orchestrator.cleanup_inactive_runners()
@@ -387,8 +387,8 @@ def test_running_invocation_recovery_service_recovers_dead_runner_invocations(
         runner_alive = create_runner_context("runner-alive")
         runner_dead = create_runner_context("runner-dead")
 
-        app_instance.orchestrator.register_runner_heartbeat(runner_alive)
-        app_instance.orchestrator.register_runner_heartbeat(runner_dead)
+        app_instance.orchestrator.register_runner_heartbeats([runner_alive.runner_id])
+        app_instance.orchestrator.register_runner_heartbeats([runner_dead.runner_id])
 
         inv: DistributedInvocation = dummy_task()  # type: ignore
         app_instance.orchestrator.register_new_invocations([inv])
@@ -405,7 +405,7 @@ def test_running_invocation_recovery_service_recovers_dead_runner_invocations(
         sleep(0.1)
 
         # Keep runner_alive alive and run recovery
-        app_instance.orchestrator.register_runner_heartbeat(runner_alive)
+        app_instance.orchestrator.register_runner_heartbeats([runner_alive.runner_id])
         app_instance.orchestrator.invocation_recovery_service(runner_alive)
 
         status = app_instance.orchestrator.get_invocation_status(inv.invocation_id)
@@ -421,7 +421,7 @@ def test_running_recovery_ignores_invocations_from_active_runners(
 ) -> None:
     """Test that recovery service doesn't affect RUNNING invocations from active runners."""
     runner_ctx = create_runner_context("active-runner")
-    app_instance.orchestrator.register_runner_heartbeat(runner_ctx)
+    app_instance.orchestrator.register_runner_heartbeats([runner_ctx.runner_id])
 
     inv: DistributedInvocation = dummy_task()  # type: ignore
     app_instance.orchestrator.register_new_invocations([inv])
@@ -456,8 +456,8 @@ def test_running_recovery_handles_multiple_dead_runner_invocations(
         runner_alive = create_runner_context("runner-alive")
         runner_dead = create_runner_context("runner-dead")
 
-        app_instance.orchestrator.register_runner_heartbeat(runner_alive)
-        app_instance.orchestrator.register_runner_heartbeat(runner_dead)
+        app_instance.orchestrator.register_runner_heartbeats([runner_alive.runner_id])
+        app_instance.orchestrator.register_runner_heartbeats([runner_dead.runner_id])
 
         inv1: DistributedInvocation = dummy_task()  # type: ignore
         inv2: DistributedInvocation = dummy_task()  # type: ignore
@@ -478,7 +478,7 @@ def test_running_recovery_handles_multiple_dead_runner_invocations(
         sleep(0.1)
 
         # Run recovery
-        app_instance.orchestrator.register_runner_heartbeat(runner_alive)
+        app_instance.orchestrator.register_runner_heartbeats([runner_alive.runner_id])
         app_instance.orchestrator.invocation_recovery_service(runner_alive)
 
         status1 = app_instance.orchestrator.get_invocation_status(inv1.invocation_id)
@@ -507,8 +507,8 @@ def test_running_recovery_with_mixed_dead_and_alive_runners(
         runner_alive = create_runner_context("runner-alive")
         runner_dead = create_runner_context("runner-dead")
 
-        app_instance.orchestrator.register_runner_heartbeat(runner_alive)
-        app_instance.orchestrator.register_runner_heartbeat(runner_dead)
+        app_instance.orchestrator.register_runner_heartbeats([runner_alive.runner_id])
+        app_instance.orchestrator.register_runner_heartbeats([runner_dead.runner_id])
 
         inv_alive: DistributedInvocation = dummy_task()  # type: ignore
         inv_dead: DistributedInvocation = dummy_task()  # type: ignore
@@ -535,7 +535,7 @@ def test_running_recovery_with_mixed_dead_and_alive_runners(
         sleep(0.1)
 
         # Keep runner_alive alive and run recovery
-        app_instance.orchestrator.register_runner_heartbeat(runner_alive)
+        app_instance.orchestrator.register_runner_heartbeats([runner_alive.runner_id])
         app_instance.orchestrator.invocation_recovery_service(runner_alive)
 
         status_alive = app_instance.orchestrator.get_invocation_status(

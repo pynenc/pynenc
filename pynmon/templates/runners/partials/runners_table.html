@@ -4,27 +4,18 @@
     <thead>
       <tr>
         <th>Runner ID</th>
-        <th>Class</th>
-        <th>Host</th>
-        <th>PID</th>
         <th>Created</th>
         <th>Last Heartbeat</th>
         <th>Age</th>
+        <th>Atomic Service Eligible</th>
       </tr>
     </thead>
     <tbody>
       {% for runner_info in active_runners %}
       <tr>
         <td>
-          <code class="small">{{ runner_info.runner_ctx.runner_id }}</code>
+          <code class="small">{{ runner_info.runner_id }}</code>
         </td>
-        <td>
-          <span class="badge bg-secondary"
-            >{{ runner_info.runner_ctx.runner_cls }}</span
-          >
-        </td>
-        <td>{{ runner_info.runner_ctx.hostname }}</td>
-        <td>{{ runner_info.runner_ctx.pid }}</td>
         <td>
           <small class="text-muted"
             >{{ runner_info.creation_time.strftime('%Y-%m-%d %H:%M:%S')
@@ -53,19 +44,15 @@
           >
           {% endif %}
         </td>
-      </tr>
-      {% if runner_info.runner_ctx.extra_data %}
-      <tr class="table-light">
-        <td colspan="7">
-          <details class="ms-3">
-            <summary class="small text-muted">Extra Data</summary>
-            <pre class="small mb-0 mt-2">
-{{ runner_info.runner_ctx.extra_data|tojson(indent=2) }}</pre
-            >
-          </details>
+        <td>
+          {% if runner_info.can_run_atomic_service %}
+          <span class="badge bg-success">Yes</span>
+          {% else %}
+          <span class="badge bg-secondary">No</span>
+          {% endif %}
         </td>
       </tr>
-      {% endif %} {% endfor %}
+      {% endfor %}
     </tbody>
   </table>
 </div>

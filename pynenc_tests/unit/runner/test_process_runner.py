@@ -60,7 +60,15 @@ def test_on_start(runner: ProcessRunner) -> None:
 def test_on_stop(mock_process: Mock, runner: ProcessRunner) -> None:
     runner._on_start()
     mock_invocation = Mock(spec=DistributedInvocation)
-    runner.inv_id_to_processes[mock_invocation.invocation_id] = mock_process
+    mock_invocation.invocation_id = "test-inv-id"
+    runner_id = "test-runner-id"
+    # Use the new tracking structure
+    from pynenc.runner.process_runner import ChildProcessInfo
+
+    runner.child_runner_ids[runner_id] = ChildProcessInfo(
+        process=mock_process, invocation_id=mock_invocation.invocation_id
+    )
+    runner.inv_id_to_runner_id[mock_invocation.invocation_id] = runner_id
 
     # Ensure the mock orchestrator returns a non-final status
     runner.app.orchestrator.get_invocation_status_record.return_value = (  # type: ignore
@@ -87,9 +95,9 @@ def test_runner_loop_iteration(
         # Only one process should be started, since only one invocation is available
         assert mock_get_inv.call_count == 2
         assert mock_process.call_count == 1
-        assert len(runner.inv_id_to_processes) == 1
+        assert len(runner.child_runner_ids) == 1
     assert mock_process.call_count == 1
-    assert len(runner.inv_id_to_processes) == 1
+    assert len(runner.child_runner_ids) == 1
 
 
 def test_runner_loop_iteration_pause_waiting_invocations(
@@ -103,7 +111,16 @@ def test_runner_loop_iteration_pause_waiting_invocations(
     result_inv: DistributedInvocation = add_task(1, 2)  # type: ignore
     waiting_inv: DistributedInvocation = add_task(3, 4)  # type: ignore
     runner.wait_invocation[result_inv.invocation_id] = {waiting_inv.invocation_id}
-    runner.inv_id_to_processes[waiting_inv.invocation_id] = mock_process
+
+    # Use the new tracking structure
+    from pynenc.runner.process_runner import ChildProcessInfo
+
+    runner_id = "test-runner-id"
+    runner.child_runner_ids[runner_id] = ChildProcessInfo(
+        process=mock_process, invocation_id=waiting_inv.invocation_id
+    )
+    runner.inv_id_to_runner_id[waiting_inv.invocation_id] = runner_id
+
     app.orchestrator.get_invocations_to_run = Mock(return_value=[])  # type: ignore
     with patch("os.kill") as mock_kill:
         # test that is the result_inv is still running, the waiting_inv is paused

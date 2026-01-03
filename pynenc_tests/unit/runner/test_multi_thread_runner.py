@@ -36,7 +36,7 @@ def app() -> MockPynenc:
 def multi_thread_runner(app: MockPynenc) -> MultiThreadRunner:
     runner = MultiThreadRunner(app)
     runner.conf = TestConfig()
-    runner.processes = {}
+    runner.child_runner_ids = {}
     runner.shared_status = {}
     return runner
 
@@ -71,7 +71,7 @@ def test_process_status_is_idle(
 def test_thread_runner_process_main_updates_status(app: MockPynenc) -> None:
     runner_cache: dict = {}
     shared_status: dict[str, ProcessStatus] = {}
-    process_key = "test-process"
+    child_runner_id = "test-child-runner-id"
     parent_ctx = RunnerContext("SomeClass", "some-id")
 
     # Mock ThreadRunner to avoid actual execution
@@ -83,13 +83,13 @@ def test_thread_runner_process_main_updates_status(app: MockPynenc) -> None:
         thread_runner_process_main(
             app,
             parent_ctx_json=parent_ctx.to_json(),
+            child_runner_id=child_runner_id,
             runner_cache=runner_cache,
             shared_status=shared_status,
-            process_key=process_key,
         )
 
-        assert process_key in shared_status
-        status = shared_status[process_key]
+        assert child_runner_id in shared_status
+        status = shared_status[child_runner_id]
         assert isinstance(status, ProcessStatus)
         assert status.state in (ProcessState.ACTIVE, ProcessState.IDLE)
 
@@ -121,28 +121,31 @@ def test_terminate_idle_processes_respects_min_processes(
     for i in range(3):
         proc = Mock(spec=Process)
         proc.is_alive.return_value = True
-        key = f"process-{i}"
-        multi_thread_runner.processes[key] = proc
-        multi_thread_runner.shared_status[key] = ProcessStatus(
+        runner_id = f"runner-{i}"
+        multi_thread_runner.child_runner_ids[runner_id] = proc
+        multi_thread_runner.shared_status[runner_id] = ProcessStatus(
             current_time - (100 + i),  # Different timestamps for deterministic order
             0,
             ProcessState.IDLE,
         )
 
     # Patch terminate and join to avoid actual process operations
-    for proc in multi_thread_runner.processes.values():  # type: ignore
+    for proc in multi_thread_runner.child_runner_ids.values():  # type: ignore
         proc.terminate = Mock()
         proc.join = Mock()
 
     multi_thread_runner._terminate_idle_processes()
 
     # Verify min_processes (2) processes remain
-    assert len(multi_thread_runner.processes) == multi_thread_runner.conf.min_processes
+    assert (
+        len(multi_thread_runner.child_runner_ids)
+        == multi_thread_runner.conf.min_processes
+    )
     # Verify the oldest idle process was terminated
-    assert "process-0" not in multi_thread_runner.processes
+    assert "runner-0" not in multi_thread_runner.child_runner_ids
     # Verify the two most recent processes remain
-    assert "process-1" in multi_thread_runner.processes
-    assert "process-2" in multi_thread_runner.processes
+    assert "runner-1" in multi_thread_runner.child_runner_ids
+    assert "runner-2" in multi_thread_runner.child_runner_ids
 
 
 def test_cleanup_dead_processes(multi_thread_runner: MultiThreadRunner) -> None:
@@ -152,15 +155,15 @@ def test_cleanup_dead_processes(multi_thread_runner: MultiThreadRunner) -> None:
         "dead1": Mock(spec=Process, is_alive=lambda: False),
         "dead2": Mock(spec=Process, is_alive=lambda: False),
     }
-    multi_thread_runner.processes = processes.copy()  # type: ignore
+    multi_thread_runner.child_runner_ids = processes.copy()  # type: ignore
     multi_thread_runner.shared_status = {k: Mock() for k in processes}
 
     multi_thread_runner._cleanup_dead_processes()
 
-    assert len(multi_thread_runner.processes) == 1
-    assert "alive" in multi_thread_runner.processes
-    assert "dead1" not in multi_thread_runner.processes
-    assert "dead2" not in multi_thread_runner.processes
+    assert len(multi_thread_runner.child_runner_ids) == 1
+    assert "alive" in multi_thread_runner.child_runner_ids
+    assert "dead1" not in multi_thread_runner.child_runner_ids
+    assert "dead2" not in multi_thread_runner.child_runner_ids
 
 
 def test_waiting_for_results_without_invocation(
@@ -190,13 +193,13 @@ def test_scale_up_processes_enforce_max(multi_thread_runner: MultiThreadRunner) 
     multi_thread_runner.conf.enforce_max_processes = True
     multi_thread_runner.max_processes = 3
 
-    # Mock _spawn_thread_runner_process to update processes dict
+    # Mock _spawn_thread_runner_process to update child_runner_ids dict
     spawn_count = 0
 
     def mock_spawn() -> None:
         nonlocal spawn_count
         spawn_count += 1
-        multi_thread_runner.processes[f"mock-process-{spawn_count}"] = Mock()
+        multi_thread_runner.child_runner_ids[f"mock-runner-{spawn_count}"] = Mock()
 
     with patch.object(
         multi_thread_runner, "_spawn_thread_runner_process", side_effect=mock_spawn
@@ -204,7 +207,7 @@ def test_scale_up_processes_enforce_max(multi_thread_runner: MultiThreadRunner) 
         multi_thread_runner._scale_up_processes()
         # Should spawn processes until reaching max_processes (3)
         assert spawn_count == 3
-        assert len(multi_thread_runner.processes) == 3
+        assert len(multi_thread_runner.child_runner_ids) == 3
 
 
 def test_scale_up_processes_based_on_queue(
@@ -238,16 +241,16 @@ def test_terminate_idle_processes_skips_when_enforce_max_exceeded(
         proc.is_alive.return_value = True
         proc.terminate = Mock()
         proc.join = Mock()
-        key = f"process-{i}"
-        multi_thread_runner.processes[key] = proc
-        multi_thread_runner.shared_status[key] = ProcessStatus(
+        runner_id = f"runner-{i}"
+        multi_thread_runner.child_runner_ids[runner_id] = proc
+        multi_thread_runner.shared_status[runner_id] = ProcessStatus(
             time.time() - 100, 0, ProcessState.IDLE
         )
 
     multi_thread_runner._terminate_idle_processes()
 
     # Verify no processes were terminated
-    for proc in multi_thread_runner.processes.values():  # type: ignore
+    for proc in multi_thread_runner.child_runner_ids.values():  # type: ignore
         proc.terminate.assert_not_called()
 
 
@@ -286,16 +289,16 @@ def test_terminate_idle_processes_skips_missing_status(
     proc1.is_alive.return_value = True
     proc1.terminate = Mock()
     proc1.join = Mock()
-    multi_thread_runner.processes["process-1"] = proc1
-    # Deliberately not setting shared_status for process-1
+    multi_thread_runner.child_runner_ids["runner-1"] = proc1
+    # Deliberately not setting shared_status for runner-1
 
     # Process 2 - With idle status (should be terminated)
     proc2 = Mock(spec=Process)
     proc2.is_alive.return_value = True
     proc2.terminate = Mock()
     proc2.join = Mock()
-    multi_thread_runner.processes["process-2"] = proc2
-    multi_thread_runner.shared_status["process-2"] = ProcessStatus(
+    multi_thread_runner.child_runner_ids["runner-2"] = proc2
+    multi_thread_runner.shared_status["runner-2"] = ProcessStatus(
         current_time - 100,  # Old timestamp to ensure idle
         0,
         ProcessState.IDLE,
@@ -306,8 +309,8 @@ def test_terminate_idle_processes_skips_missing_status(
     proc3.is_alive.return_value = True
     proc3.terminate = Mock()
     proc3.join = Mock()
-    multi_thread_runner.processes["process-3"] = proc3
-    multi_thread_runner.shared_status["process-3"] = ProcessStatus(
+    multi_thread_runner.child_runner_ids["runner-3"] = proc3
+    multi_thread_runner.shared_status["runner-3"] = ProcessStatus(
         current_time,  # Recent timestamp, not idle
         1,
         ProcessState.ACTIVE,
@@ -315,18 +318,18 @@ def test_terminate_idle_processes_skips_missing_status(
 
     multi_thread_runner._terminate_idle_processes()
 
-    # Verify process-1 (missing status) wasn't terminated
+    # Verify runner-1 (missing status) wasn't terminated
     proc1.terminate.assert_not_called()
-    assert "process-1" in multi_thread_runner.processes
+    assert "runner-1" in multi_thread_runner.child_runner_ids
 
-    # Verify process-2 (with idle status) was terminated
+    # Verify runner-2 (with idle status) was terminated
     proc2.terminate.assert_called_once()
     proc2.join.assert_called_once()
-    assert "process-2" not in multi_thread_runner.processes
+    assert "runner-2" not in multi_thread_runner.child_runner_ids
 
-    # Verify process-3 (active) wasn't terminated
+    # Verify runner-3 (active) wasn't terminated
     proc3.terminate.assert_not_called()
-    assert "process-3" in multi_thread_runner.processes
+    assert "runner-3" in multi_thread_runner.child_runner_ids
 
 
 def test_safe_remove_shared_state_handles_errors(

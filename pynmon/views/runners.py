@@ -22,8 +22,6 @@ async def runners_view(request: Request) -> HTMLResponse:
 
     # Calculate some statistics
     total_runners = len(active_runners)
-    runner_classes = {runner.runner_ctx.runner_cls for runner in active_runners}
-    hostnames = {runner.runner_ctx.hostname for runner in active_runners}
 
     return templates.TemplateResponse(
         "runners/overview.html",
@@ -33,10 +31,8 @@ async def runners_view(request: Request) -> HTMLResponse:
             "app_id": app.app_id,
             "active_runners": active_runners,
             "total_runners": total_runners,
-            "runner_classes": list(runner_classes),
-            "hostnames": list(hostnames),
-            "heartbeat_timeout_minutes": app.orchestrator.conf.runner_heartbeat_timeout_minutes,
-            "atomic_service_check_interval_minutes": app.runner.conf.atomic_service_check_interval_minutes,
+            "heartbeat_timeout_minutes": app.conf.atomic_service_runner_considered_dead_after_minutes,
+            "atomic_service_check_interval_minutes": app.conf.atomic_service_check_interval_minutes,
         },
     )
 

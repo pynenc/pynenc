@@ -397,7 +397,6 @@ class SQLiteOrchestrator(BaseOrchestrator):
                 f"""
                 CREATE TABLE IF NOT EXISTS {Tables.RUNNER_HEARTBEATS} (
                     runner_id TEXT PRIMARY KEY,
-                    runner_context_json TEXT NOT NULL,
                     creation_timestamp REAL NOT NULL,
                     allow_to_run_atomic_service INTEGER NOT NULL,
                     last_heartbeat REAL NOT NULL,
@@ -785,31 +784,31 @@ class SQLiteOrchestrator(BaseOrchestrator):
             cursor.close()
             return invocation_ids
 
-    def register_runner_heartbeat(
-        self, runner_ctx: "RunnerContext", can_run_atomic_service: bool = False
+    def register_runner_heartbeats(
+        self, runner_ids: list[str], can_run_atomic_service: bool = False
     ) -> None:
-        """Register or update a runner's heartbeat timestamp and atomic service eligibility."""
+        """Register or update heartbeat timestamps for one or more runners."""
+        if not runner_ids:
+            return
         current_time = time()
-        runner_id = runner_ctx.runner_id
-        node_coordinator_json = runner_ctx.to_json()
         with sqlite_conn(self.sqlite_db_path) as conn:
-            conn.execute(
-                f"""
-                INSERT INTO {Tables.RUNNER_HEARTBEATS} (
-                    runner_id, runner_context_json, creation_timestamp, last_heartbeat, allow_to_run_atomic_service
-                ) VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(runner_id) DO UPDATE SET
-                    last_heartbeat = excluded.last_heartbeat,
-                    allow_to_run_atomic_service = excluded.allow_to_run_atomic_service
-                """,
-                (
-                    runner_id,
-                    node_coordinator_json,
-                    current_time,
-                    current_time,
-                    int(can_run_atomic_service),
-                ),
-            )
+            for runner_id in runner_ids:
+                conn.execute(
+                    f"""
+                    INSERT INTO {Tables.RUNNER_HEARTBEATS} (
+                        runner_id, creation_timestamp, last_heartbeat, allow_to_run_atomic_service
+                    ) VALUES (?, ?, ?, ?)
+                    ON CONFLICT(runner_id) DO UPDATE SET
+                        last_heartbeat = excluded.last_heartbeat,
+                        allow_to_run_atomic_service = excluded.allow_to_run_atomic_service
+                    """,
+                    (
+                        runner_id,
+                        current_time,
+                        current_time,
+                        int(can_run_atomic_service),
+                    ),
+                )
             conn.commit()
 
     def _get_active_runners(
@@ -822,7 +821,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
                 f"""
-                SELECT runner_context_json, creation_timestamp, last_heartbeat,
+                SELECT runner_id, creation_timestamp, last_heartbeat,
                        allow_to_run_atomic_service, last_service_start, last_service_end
                 FROM {Tables.RUNNER_HEARTBEATS}
                 WHERE last_heartbeat >= ?
@@ -836,34 +835,27 @@ class SQLiteOrchestrator(BaseOrchestrator):
 
             active_runners = []
             for (
-                runner_json,
+                runner_id,
                 creation_ts,
                 last_hb,
                 allow_to_run_atomic_service,
                 service_start,
                 service_end,
             ) in cursor_rows:
-                try:
-                    runner_ctx = RunnerContext.from_json(runner_json)
-                    active_runners.append(
-                        ActiveRunnerInfo(
-                            runner_ctx=runner_ctx,
-                            creation_time=datetime.fromtimestamp(creation_ts, tz=UTC),
-                            last_heartbeat=datetime.fromtimestamp(last_hb, tz=UTC),
-                            allow_to_run_atomic_service=bool(
-                                allow_to_run_atomic_service
-                            ),
-                            last_service_start=datetime.fromisoformat(service_start)
-                            if service_start
-                            else None,
-                            last_service_end=datetime.fromisoformat(service_end)
-                            if service_end
-                            else None,
-                        )
+                active_runners.append(
+                    ActiveRunnerInfo(
+                        runner_id=runner_id,
+                        creation_time=datetime.fromtimestamp(creation_ts, tz=UTC),
+                        last_heartbeat=datetime.fromtimestamp(last_hb, tz=UTC),
+                        allow_to_run_atomic_service=bool(allow_to_run_atomic_service),
+                        last_service_start=datetime.fromisoformat(service_start)
+                        if service_start
+                        else None,
+                        last_service_end=datetime.fromisoformat(service_end)
+                        if service_end
+                        else None,
                     )
-                except ValueError:
-                    # Skip invalid runner contexts
-                    continue
+                )
 
             return active_runners
 

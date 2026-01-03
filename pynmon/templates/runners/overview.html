@@ -31,25 +31,13 @@
 
   <!-- Stats Overview -->
   <div class="row g-3 mb-4">
-    <div class="col-md-3">
+    <div class="col-md-6">
       <div class="metric-card">
         <h6 class="section-title">Total Runners</h6>
         <p class="h3 mb-0 text-primary">{{ total_runners }}</p>
       </div>
     </div>
-    <div class="col-md-3">
-      <div class="metric-card">
-        <h6 class="section-title">Runner Classes</h6>
-        <p class="h3 mb-0 text-info">{{ runner_classes|length }}</p>
-      </div>
-    </div>
-    <div class="col-md-3">
-      <div class="metric-card">
-        <h6 class="section-title">Unique Hosts</h6>
-        <p class="h3 mb-0 text-success">{{ hostnames|length }}</p>
-      </div>
-    </div>
-    <div class="col-md-3">
+    <div class="col-md-6">
       <div class="metric-card">
         <h6 class="section-title">Heartbeat Timeout</h6>
         <p class="h3 mb-0 text-secondary">{{ heartbeat_timeout_minutes }}m</p>

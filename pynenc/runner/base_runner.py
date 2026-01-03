@@ -116,6 +116,25 @@ class BaseRunner(ABC):
         """
 
     @abstractmethod
+    def get_active_child_runner_ids(self) -> list[str]:
+        """
+        Returns the list of currently active child runner IDs.
+
+        This method enables parent-based health reporting for runners that spawn
+        child processes or workers. The parent can report which child runner_ids
+        are still alive based on OS-level process checks (e.g., Process.is_alive()).
+
+        The orchestrator uses this to register heartbeats for active children,
+        avoiding false recovery of invocations owned by children that are still
+        running.
+
+        Runners that spawn child processes must return the runner_ids of their
+        alive children. Runners that don't spawn children must return an empty list.
+
+        :return: List of runner_ids for currently active child workers.
+        """
+
+    @abstractmethod
     def _on_start(self) -> None:
         """This method is called when the runner starts"""
 
@@ -306,6 +325,7 @@ class BaseRunner(ABC):
         try:
             while self.running:
                 self._check_atomic_services()
+                self._report_child_runner_heartbeats()
                 self.runner_loop_iteration()
                 time.sleep(self.conf.runner_loop_sleep_time_sec)
         except KeyboardInterrupt:
@@ -316,6 +336,18 @@ class BaseRunner(ABC):
         finally:
             self.on_stop()
             context.clear_current_runner(self.app.app_id)
+
+    def _report_child_runner_heartbeats(self) -> None:
+        """
+        Report heartbeats for active child runners to the orchestrator.
+
+        This enables parent-based health reporting where the parent runner
+        reports which child runner_ids are still alive based on OS-level
+        process checks. This provides an additional liveness signal beyond
+        the child's own heartbeat thread.
+        """
+        if active_child_ids := self.get_active_child_runner_ids():
+            self.app.orchestrator.register_runner_heartbeats(active_child_ids)
 
 
 class DummyRunner(BaseRunner):
@@ -364,6 +396,10 @@ class DummyRunner(BaseRunner):
         raise RunnerNotExecutableError(
             "This runner is a placeholder for the Pynenc app"
         )
+
+    def get_active_child_runner_ids(self) -> list[str]:
+        """DummyRunner has no child runners."""
+        return []
 
     def _waiting_for_results(
         self,

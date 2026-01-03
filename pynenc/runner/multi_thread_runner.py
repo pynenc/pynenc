@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 from pynenc import context
 from pynenc.conf.config_runner import ConfigMultiThreadRunner
 from pynenc.runner.base_runner import BaseRunner
-from pynenc.runner.heartbeat import start_invocation_runner_heartbeat
 from pynenc.runner.runner_context import RunnerContext
 from pynenc.runner.thread_runner import ThreadRunner
 from pynenc.util.multiprocessing_utils import warn_missing_main_guard
@@ -38,30 +37,25 @@ def thread_runner_process_main(
     app: "Pynenc",
     *,
     parent_ctx_json: str,
+    child_runner_id: str,
     runner_cache: dict,
     shared_status: dict[str, ProcessStatus],
-    process_key: str,
 ) -> None:
     """
-    MultiThreadRunner manages multiple processes, each running a ThreadRunner.
+    Entry point for ThreadRunner worker processes spawned by MultiThreadRunner.
 
-    Unlike ThreadRunner, which operates within a single process, MultiThreadRunner
-    spawns separate processes to distribute workload. The global context dictionary
-    (via context.py) is critical here because each process must maintain its own
-    ThreadRunner instance in its thread-local storage. This prevents conflicts
-    between processes and ensures that task executions within a process use the
-    correct runner. The context check is not typically needed in ThreadRunner alone,
-    as it operates in a single-threaded or single-process environment where the
-    instance-level runner suffices.
+    The parent pre-generates the child_runner_id before spawning, enabling parent-based
+    health reporting. The parent reports heartbeats for alive children via its main loop.
     """
     parent_ctx = RunnerContext.from_json(parent_ctx_json)
-    runner_ctx = parent_ctx.new_child_context(ThreadRunner.__name__)
+    runner_ctx = parent_ctx.new_child_context(
+        ThreadRunner.__name__, runner_id=child_runner_id
+    )
     runner = ThreadRunner(app, runner_cache, runner_context=runner_ctx)
     # Replace the MultiThreadRunner with ThreadRunner in this process
     context.set_runner_context(app.app_id, runner_ctx)
-    heartbeat_thread = start_invocation_runner_heartbeat(app, runner_ctx)
     runner._on_start()
-    app.logger.info(f"ThreadRunner process {process_key} started")
+    app.logger.info(f"ThreadRunner process {child_runner_id} started")
     try:
         while True:
             # Clean up finished threads.
@@ -70,15 +64,16 @@ def thread_runner_process_main(
             }
             active_count = len(runner.threads)
             state = ProcessState.ACTIVE if active_count > 0 else ProcessState.IDLE
-            shared_status[process_key] = ProcessStatus(time.time(), active_count, state)
+            shared_status[child_runner_id] = ProcessStatus(
+                time.time(), active_count, state
+            )
             app.logger.debug(
-                f"Process {process_key}: {active_count} active threads, state={state}"
+                f"Process {child_runner_id}: {active_count} active threads, state={state}"
             )
             runner.runner_loop_iteration()
     except KeyboardInterrupt:
         pass
     finally:
-        heartbeat_thread.join(timeout=0.1)
         runner._on_stop()
 
 
@@ -93,7 +88,7 @@ class MultiThreadRunner(BaseRunner):
         "This should be handled by the ThreadRunner instance in the process."
     )
 
-    processes: dict[str, Process]
+    child_runner_ids: dict[str, Process]  # Maps child runner_id to Process
     manager: Manager  # type: ignore
     shared_status: dict[str, ProcessStatus]
     max_processes: int
@@ -129,6 +124,14 @@ class MultiThreadRunner(BaseRunner):
         """
         return max(self.conf.min_processes, self.max_processes)
 
+    def get_active_child_runner_ids(self) -> list[str]:
+        """Return runner_ids of child processes that are still alive."""
+        return [
+            runner_id
+            for runner_id, proc in self.child_runner_ids.items()
+            if proc.is_alive()
+        ]
+
     def _on_start(self) -> None:
         """
         Initialize multiprocessing infrastructure for spawning worker processes.
@@ -141,38 +144,42 @@ class MultiThreadRunner(BaseRunner):
         self.manager = Manager()
         self.shared_status = self.manager.dict()  # type: ignore
         self.runner_cache = self._runner_cache or self.manager.dict()  # type: ignore
-        self.processes = {}
+        self.child_runner_ids = {}
         self.max_processes = self.conf.max_processes or cpu_count()
         for _ in range(self.conf.min_processes):
             self._spawn_thread_runner_process()
 
     def _spawn_thread_runner_process(self) -> None:
-        """Spawn a new ThreadRunner worker process."""
-        process_key = f"trp-{time.time()}-{len(self.processes)}"
+        """Spawn a new ThreadRunner worker process with pre-generated runner_id."""
+        import uuid
+
+        child_runner_id = str(uuid.uuid4())
         args = {
             "app": self.app,
             "parent_ctx_json": self.runner_context.to_json(),
+            "child_runner_id": child_runner_id,
             "runner_cache": self.runner_cache,
             "shared_status": self.shared_status,
-            "process_key": process_key,
         }
         p = Process(target=thread_runner_process_main, kwargs=args, daemon=True)
         p.start()
-        self.processes[process_key] = p
+        self.child_runner_ids[child_runner_id] = p
         # Initialize shared_status with current time, 0 active threads, state IDLE.
-        self.shared_status[process_key] = ProcessStatus(
+        self.shared_status[child_runner_id] = ProcessStatus(
             time.time(), 0, ProcessState.IDLE
         )
-        self.logger.info(f"Spawned ThreadRunner process {process_key} with pid {p.pid}")
+        self.logger.info(
+            f"Spawned ThreadRunner process {child_runner_id} with pid {p.pid}"
+        )
 
     def _on_stop(self) -> None:
         """Stop all worker processes and shutdown the manager."""
         self.logger.info("Stopping MultiThreadRunner")
-        for key, proc in self.processes.items():
+        for runner_id, proc in self.child_runner_ids.items():
             if proc.is_alive():
                 proc.terminate()
                 proc.join()
-                self.logger.info(f"Terminated process {key}")
+                self.logger.info(f"Terminated process {runner_id}")
         self.manager.shutdown()  # type: ignore
         self.logger.info("MultiThreadRunner stopped")
 
@@ -190,38 +197,42 @@ class MultiThreadRunner(BaseRunner):
     def _on_stop_runner_loop(self) -> None:
         """Internal method called after receiving a signal to stop the runner loop."""
         self.logger.info("Stopping MultiThreadRunner loop")
-        if hasattr(self, "processes") and self.processes is not None:
-            for key, proc in list(self.processes.items()):
+        if hasattr(self, "child_runner_ids") and self.child_runner_ids is not None:
+            for runner_id, proc in list(self.child_runner_ids.items()):
                 try:
                     if proc.is_alive():
                         proc.terminate()
                         proc.join()
-                        self.processes.pop(key, None)
-                        self._safe_remove_shared_state(key)
-                        self.logger.info(f"Terminated process {key} during loop stop")
+                        self.child_runner_ids.pop(runner_id, None)
+                        self._safe_remove_shared_state(runner_id)
+                        self.logger.info(
+                            f"Terminated process {runner_id} during loop stop"
+                        )
                 except AssertionError:
                     self.logger.info(
-                        f"Skipping process {key} termination - not a child process"
+                        f"Skipping process {runner_id} termination - not a child process"
                     )
         self.logger.info("MultiThreadRunner loop stopped")
 
     def _cleanup_dead_processes(self) -> None:
         """Remove processes that are no longer alive from tracking dictionaries."""
-        dead_keys = [key for key, proc in self.processes.items() if not proc.is_alive()]
-        if dead_keys:
-            self.logger.warning(f"Found {len(dead_keys)} dead processes to clean up")
-            for key in dead_keys:
-                self.processes.pop(key, None)
-                self._safe_remove_shared_state(key)
-                self.logger.info(f"Cleaned up dead process {key}")
+        dead_ids = [
+            rid for rid, proc in self.child_runner_ids.items() if not proc.is_alive()
+        ]
+        if dead_ids:
+            self.logger.warning(f"Found {len(dead_ids)} dead processes to clean up")
+            for runner_id in dead_ids:
+                self.child_runner_ids.pop(runner_id, None)
+                self._safe_remove_shared_state(runner_id)
+                self.logger.info(f"Cleaned up dead process {runner_id}")
 
     def _scale_up_processes(self) -> None:
         """Spawn new processes based on enforce_max_processes setting and pending tasks."""
-        current_processes = len(self.processes)
+        current_processes = len(self.child_runner_ids)
         if self.conf.enforce_max_processes:
             while current_processes < self.max_processes:
                 self._spawn_thread_runner_process()
-                current_processes = len(self.processes)
+                current_processes = len(self.child_runner_ids)
         else:
             queued_invocations = self.app.broker.count_invocations()
             if (
@@ -237,24 +248,30 @@ class MultiThreadRunner(BaseRunner):
 
     def _terminate_idle_processes(self) -> None:
         """Terminate processes that are idle longer than the configured timeout."""
-        if self.conf.enforce_max_processes and len(self.processes) > self.max_processes:
+        if (
+            self.conf.enforce_max_processes
+            and len(self.child_runner_ids) > self.max_processes
+        ):
             return
         now = time.time()
-        keys_to_remove: list[str] = []
-        for key, proc in self.processes.items():
-            if len(self.processes) - len(keys_to_remove) <= self.conf.min_processes:
+        ids_to_remove: list[str] = []
+        for runner_id, proc in self.child_runner_ids.items():
+            if (
+                len(self.child_runner_ids) - len(ids_to_remove)
+                <= self.conf.min_processes
+            ):
                 break
-            if (status := self.shared_status.get(key)) is None:
+            if (status := self.shared_status.get(runner_id)) is None:
                 continue
             if status.is_idle(now, self.conf.idle_timeout_process_sec):
                 idle_time = now - status.last_update
-                self.logger.info(f"Process {key} {idle_time=} sec, terminating.")
+                self.logger.info(f"Process {runner_id} {idle_time=} sec, terminating.")
                 proc.terminate()
                 proc.join()
-                keys_to_remove.append(key)
-        for key in keys_to_remove:
-            self.processes.pop(key, None)
-            self._safe_remove_shared_state(key)
+                ids_to_remove.append(runner_id)
+        for runner_id in ids_to_remove:
+            self.child_runner_ids.pop(runner_id, None)
+            self._safe_remove_shared_state(runner_id)
 
     def runner_loop_iteration(self) -> None:
         """Execute one iteration of the runner loop."""

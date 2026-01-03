@@ -18,21 +18,22 @@ from typing import TYPE_CHECKING, NamedTuple
 from pynenc import context
 
 if TYPE_CHECKING:
-    from pynenc.runner import RunnerContext
+    pass
 
 
 class ActiveRunnerInfo(NamedTuple):
     """
     Information about an active runner including heartbeat and execution tracking.
 
-    :param RunnerContext runner_ctx: The runner context with execution details
+    :param str runner_id: The unique identifier for the runner
     :param datetime creation_time: When the runner was first registered
     :param datetime last_heartbeat: When the last heartbeat was received
+    :param bool allow_to_run_atomic_service: Whether this runner can run atomic services
     :param datetime | None last_service_start: When the last atomic service execution started
     :param datetime | None last_service_end: When the last atomic service execution ended
     """
 
-    runner_ctx: "RunnerContext"
+    runner_id: str
     creation_time: datetime
     last_heartbeat: datetime
     allow_to_run_atomic_service: bool = False
@@ -52,7 +53,7 @@ class ActiveRunnerInfo(NamedTuple):
 
 
 def calculate_runner_position(
-    runner_ctx: "RunnerContext", active_runners: list[ActiveRunnerInfo]
+    runner_id: str, active_runners: list[ActiveRunnerInfo]
 ) -> int | None:
     """
     Find the position of a runner in the ordered list of active runners.
@@ -60,17 +61,13 @@ def calculate_runner_position(
     Runners are ordered by creation time (oldest first), providing stable
     ordering for time slot assignment.
 
-    :param RunnerContext runner_ctx: The runner to find
+    :param str runner_id: The runner ID to find
     :param list[ActiveRunnerInfo] active_runners: Ordered list of active runners
     :return: Zero-based position index, or None if runner not found
     :rtype: int | None
     """
     try:
-        return next(
-            i
-            for i, r in enumerate(active_runners)
-            if r.runner_ctx.runner_id == runner_ctx.runner_id
-        )
+        return next(i for i, r in enumerate(active_runners) if r.runner_id == runner_id)
     except StopIteration:
         return None
 
@@ -171,9 +168,7 @@ def calculate_time_slot(
         runner_info = active_runners[runner_position]
 
         if duration := runner_info.get_last_execution_duration_seconds():
-            validate_execution_time(
-                duration, allocated_slot, runner_info.runner_ctx.runner_id
-            )
+            validate_execution_time(duration, allocated_slot, runner_info.runner_id)
 
     return runner_start_time, runner_end_time
 
@@ -202,7 +197,7 @@ def is_runner_in_time_slot(
 
 
 def can_run_atomic_service(
-    runner_ctx: "RunnerContext",
+    runner_id: str,
     active_runners: list[ActiveRunnerInfo],
     current_time: float,
     service_interval_minutes: float,
@@ -220,7 +215,7 @@ def can_run_atomic_service(
 
     Single-runner optimization: If only one runner exists, it always runs services.
 
-    :param RunnerContext runner_ctx: The context of the runner to check
+    :param str runner_id: The ID of the runner to check
     :param list[ActiveRunnerInfo] active_runners: All currently active runners
     :param float current_time: Current Unix timestamp
     :param float service_interval_minutes: How often services should run
@@ -243,7 +238,7 @@ def can_run_atomic_service(
         return True
 
     # Find this runner's position
-    runner_position = calculate_runner_position(runner_ctx, active_runners)
+    runner_position = calculate_runner_position(runner_id, active_runners)
     if runner_position is None:
         return False
 

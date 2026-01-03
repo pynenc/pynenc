@@ -76,13 +76,14 @@ def test_persistent_process_main_handles_sigterm(
     runner_cache: dict[str, Any] = {}
     stop_event = mock_manager.return_value.Event.return_value
 
-    # Create a RunnerContext and serialize to JSON
-    runner_ctx = RunnerContext(
+    # Create a parent RunnerContext and serialize to JSON
+    parent_runner_ctx = RunnerContext(
         runner_cls="PersistentProcessRunner",
-        runner_id="PersistentProcessRunner@test-host-123[test-process]",
+        runner_id="PersistentProcessRunner@test-host-123",
         pid=123,
         hostname="test-host",
     )
+    child_runner_id = "test-child-runner-id"
 
     def simulate_sigterm(signum: int, frame: Any) -> None:
         stop_event.set()
@@ -95,7 +96,8 @@ def test_persistent_process_main_handles_sigterm(
                 app,
                 runner_cache=runner_cache,
                 stop_event=stop_event,
-                runner_ctx_json=runner_ctx.to_json(),
+                parent_runner_ctx_json=parent_runner_ctx.to_json(),
+                child_runner_id=child_runner_id,
             )
             mock_signal.assert_called_once_with(signal.SIGTERM, ANY)
             stop_event.set.assert_called_once()
@@ -109,7 +111,7 @@ def test_on_start_initializes_processes(
 ) -> None:
     runner.conf.num_processes = 2
     runner._on_start()
-    assert len(runner.processes) == 2
+    assert len(runner.child_runner_ids) == 2
     assert mock_process.call_count == 2
     assert isinstance(runner.runner_cache, dict)
     assert runner.stop_event is not None
@@ -119,17 +121,12 @@ def test_spawn_persistent_process(
     runner: PersistentProcessRunner, mock_process: Mock, mock_manager: Mock
 ) -> None:
     runner._on_start()
-    initial_count = len(runner.processes)
-    with patch.object(runner.logger, "info") as mock_logger:
-        process_key = runner._spawn_persistent_process()
-        assert process_key is not None
-        assert process_key in runner.processes
-        assert len(runner.processes) == initial_count + 1
-        assert mock_process.called
-        # Verify the log message contains the spawned PID
-        mock_logger.assert_any_call(
-            f"Spawned persistent process with pid {process_key}"
-        )
+    initial_count = len(runner.child_runner_ids)
+    child_runner_id = runner._spawn_persistent_process()
+    assert child_runner_id is not None
+    assert child_runner_id in runner.child_runner_ids
+    assert len(runner.child_runner_ids) == initial_count + 1
+    assert mock_process.called
 
 
 def test_spawn_persistent_process_after_stop(
@@ -147,24 +144,32 @@ def test_terminate_all_processes(
     runner: PersistentProcessRunner, mock_process: Mock, mock_manager: Mock
 ) -> None:
     runner._on_start()
-    runner.processes = {
-        1: mock_process.return_value,
-        2: mock_process.return_value,
+    # Create mock processes and assign to child_runner_ids
+    mock_proc1 = Mock()
+    mock_proc1.is_alive.return_value = True
+    mock_proc2 = Mock()
+    mock_proc2.is_alive.return_value = True
+    runner.child_runner_ids = {
+        "runner-1": mock_proc1,
+        "runner-2": mock_proc2,
     }
 
     runner._terminate_all_processes()
     runner.stop_event.set.assert_called()  # type: ignore
-    for proc in runner.processes.values():
-        proc.terminate.assert_called_once()  # type: ignore
-        proc.join.assert_called_once_with(timeout=5)  # type: ignore
-    assert len(runner.processes) == 0
+    mock_proc1.terminate.assert_called_once()
+    mock_proc1.join.assert_called_once_with(timeout=5)
+    mock_proc2.terminate.assert_called_once()
+    mock_proc2.join.assert_called_once_with(timeout=5)
+    assert len(runner.child_runner_ids) == 0
 
 
 def test_on_stop(
     runner: PersistentProcessRunner, mock_process: Mock, mock_manager: Mock
 ) -> None:
     runner._on_start()
-    runner.processes = {1: mock_process.return_value}
+    mock_proc = Mock()
+    mock_proc.is_alive.return_value = True
+    runner.child_runner_ids = {"runner-1": mock_proc}
     with patch.object(runner, "_terminate_all_processes") as mock_terminate:
         runner._on_stop()
         mock_terminate.assert_called_once()
@@ -179,17 +184,17 @@ def test_runner_loop_iteration_replaces_dead_processes(
     runner.num_processes = 2
     dead_proc = Mock(is_alive=Mock(return_value=False))
     alive_proc = Mock(is_alive=Mock(return_value=True))
-    runner.processes = {1: alive_proc, 2: dead_proc}
+    runner.child_runner_ids = {"alive-runner": alive_proc, "dead-runner": dead_proc}
 
-    def mock_spawn() -> int:
-        process_key = 99
-        runner.processes[process_key] = Mock(is_alive=Mock(return_value=True))  # type: ignore[assignment]
-        return process_key
+    def mock_spawn() -> str:
+        new_runner_id = "new-spawned-runner"
+        runner.child_runner_ids[new_runner_id] = Mock(is_alive=Mock(return_value=True))
+        return new_runner_id
 
     with patch.object(runner, "_spawn_persistent_process", side_effect=mock_spawn):
         runner.runner_loop_iteration()
-        assert 2 not in runner.processes
-        assert len(runner.processes) == 2
+        assert "dead-runner" not in runner.child_runner_ids
+        assert len(runner.child_runner_ids) == 2
 
 
 def test_runner_loop_iteration_no_action_if_all_alive(
@@ -197,14 +202,14 @@ def test_runner_loop_iteration_no_action_if_all_alive(
 ) -> None:
     runner._on_start()
     runner.num_processes = 2
-    runner.processes = {
-        1: Mock(is_alive=Mock(return_value=True)),  # type: ignore[assignment]
-        2: Mock(is_alive=Mock(return_value=True)),  # type: ignore[assignment]
+    runner.child_runner_ids = {
+        "runner-1": Mock(is_alive=Mock(return_value=True)),
+        "runner-2": Mock(is_alive=Mock(return_value=True)),
     }
     with patch.object(runner, "_spawn_persistent_process") as mock_spawn:
         runner.runner_loop_iteration()
         mock_spawn.assert_not_called()
-        assert len(runner.processes) == 2
+        assert len(runner.child_runner_ids) == 2
 
 
 def test_waiting_for_results(runner: PersistentProcessRunner, add_task: Task) -> None:
@@ -249,13 +254,14 @@ def test_persistent_process_main_handle_terminate(
     runner_cache: dict[str, Any] = {}
     stop_event = mock_manager.return_value.Event.return_value
 
-    # Create a RunnerContext and serialize to JSON
-    runner_ctx = RunnerContext(
+    # Create a parent RunnerContext and serialize to JSON
+    parent_runner_ctx = RunnerContext(
         runner_cls="PersistentProcessRunner",
-        runner_id="PersistentProcessRunner@test-host-123[test-process]",
+        runner_id="PersistentProcessRunner@test-host-123",
         pid=123,
         hostname="test-host",
     )
+    child_runner_id = "test-child-runner-id"
 
     def simulate_sigterm(signum: int, frame: Any) -> None:
         stop_event.set()
@@ -269,7 +275,8 @@ def test_persistent_process_main_handle_terminate(
                 app,
                 runner_cache=runner_cache,
                 stop_event=stop_event,
-                runner_ctx_json=runner_ctx.to_json(),
+                parent_runner_ctx_json=parent_runner_ctx.to_json(),
+                child_runner_id=child_runner_id,
             )
             mock_signal.assert_called_once_with(signal.SIGTERM, ANY)
 
@@ -279,9 +286,13 @@ def test_on_stop_runner_loop(
 ) -> None:
     """Test the on_stop_runner_loop method"""
     runner._on_start()
-    runner.processes = {
-        1: mock_process.return_value,
-        2: mock_process.return_value,
+    mock_proc1 = Mock()
+    mock_proc1.is_alive.return_value = True
+    mock_proc2 = Mock()
+    mock_proc2.is_alive.return_value = True
+    runner.child_runner_ids = {
+        "runner-1": mock_proc1,
+        "runner-2": mock_proc2,
     }
     with patch.object(runner, "_terminate_all_processes") as mock_terminate:
         runner._on_stop_runner_loop()
@@ -314,13 +325,14 @@ def test_persistent_process_main_sigterm_calls_handle_terminate(
     runner_cache: dict[str, Any] = {}
     stop_event = mock_manager.return_value.Event.return_value
 
-    # Create a RunnerContext and serialize to JSON
-    runner_ctx = RunnerContext(
+    # Create a parent RunnerContext and serialize to JSON
+    parent_runner_ctx = RunnerContext(
         runner_cls="PersistentProcessRunner",
-        runner_id="PersistentProcessRunner@test-host-123[test-process]",
+        runner_id="PersistentProcessRunner@test-host-123",
         pid=123,
         hostname="test-host",
     )
+    child_runner_id = "test-child-runner-id"
 
     # Capture the actual handler function that gets registered
     registered_handler: Callable[[int, Any], None] | None = None
@@ -343,7 +355,8 @@ def test_persistent_process_main_sigterm_calls_handle_terminate(
                     "app": app,
                     "runner_cache": runner_cache,
                     "stop_event": stop_event,
-                    "runner_ctx_json": runner_ctx.to_json(),
+                    "parent_runner_ctx_json": parent_runner_ctx.to_json(),
+                    "child_runner_id": child_runner_id,
                 },
             )
             process_thread.start()
@@ -361,3 +374,35 @@ def test_persistent_process_main_sigterm_calls_handle_terminate(
 
             mock_signal.assert_called_once_with(signal.SIGTERM, ANY)
             stop_event.set.assert_called_once()
+
+
+def test_get_active_child_runner_ids(
+    runner: PersistentProcessRunner, mock_process: Mock, mock_manager: Mock
+) -> None:
+    """Test that get_active_child_runner_ids returns only alive child runners."""
+    runner._on_start()
+
+    # Create mock processes with different alive states
+    alive_proc = Mock(is_alive=Mock(return_value=True))
+    dead_proc = Mock(is_alive=Mock(return_value=False))
+    runner.child_runner_ids = {
+        "alive-runner-1": alive_proc,
+        "alive-runner-2": alive_proc,
+        "dead-runner": dead_proc,
+    }
+
+    active_ids = runner.get_active_child_runner_ids()
+
+    assert "alive-runner-1" in active_ids
+    assert "alive-runner-2" in active_ids
+    assert "dead-runner" not in active_ids
+    assert len(active_ids) == 2
+
+
+def test_get_active_child_runner_ids_empty_before_start(
+    runner: PersistentProcessRunner,
+) -> None:
+    """Test that get_active_child_runner_ids returns empty list before _on_start."""
+    # Don't call _on_start - child_runner_ids attribute doesn't exist yet
+    active_ids = runner.get_active_child_runner_ids()
+    assert active_ids == []

@@ -285,7 +285,6 @@ class MemOrchestrator(BaseOrchestrator):
         self.locks: dict[str, threading.Lock] = {}
 
         # Runner heartbeat tracking
-        self.runner_contexts: dict[str, str] = {}
         self.runner_creation_time: dict[str, float] = {}
         self.runner_last_heartbeat: dict[str, float] = {}
         self.runner_last_service_start: dict[str, datetime] = {}
@@ -609,19 +608,19 @@ class MemOrchestrator(BaseOrchestrator):
             if self.get_invocation_status(inv_id) in status_filter
         ]
 
-    def register_runner_heartbeat(
-        self, runner_ctx: "RunnerContext", can_run_atomic_service: bool = False
+    def register_runner_heartbeats(
+        self, runner_ids: list[str], can_run_atomic_service: bool = False
     ) -> None:
-        """Register or update a runner's heartbeat timestamp and atomic service eligibility."""
+        """Register or update heartbeat timestamps for one or more runners."""
         current_time = time()
-        runner_id = runner_ctx.runner_id
 
-        if runner_id not in self.runner_contexts:
-            self.runner_contexts[runner_id] = runner_ctx.to_json()
-            self.runner_creation_time[runner_id] = current_time
+        for runner_id in runner_ids:
+            # Only update heartbeat for existing runners, or create new ones
+            if runner_id not in self.runner_creation_time:
+                self.runner_creation_time[runner_id] = current_time
 
-        self.runner_last_heartbeat[runner_id] = current_time
-        self.runner_atomic_service_eligible[runner_id] = can_run_atomic_service
+            self.runner_last_heartbeat[runner_id] = current_time
+            self.runner_atomic_service_eligible[runner_id] = can_run_atomic_service
 
     def _get_active_runners(
         self, timeout_seconds: float, can_run_atomic_service: bool | None = None
@@ -640,13 +639,12 @@ class MemOrchestrator(BaseOrchestrator):
                 and allow_to_run_atomic_service != can_run_atomic_service
             ):
                 continue
-            ctx_json = self.runner_contexts[runner_id]
             creation_ts = self.runner_creation_time[runner_id]
             service_start = self.runner_last_service_start.get(runner_id)
             service_end = self.runner_last_service_end.get(runner_id)
             active_runners.append(
                 ActiveRunnerInfo(
-                    runner_ctx=RunnerContext.from_json(ctx_json),
+                    runner_id=runner_id,
                     creation_time=datetime.fromtimestamp(creation_ts, tz=UTC),
                     last_heartbeat=datetime.fromtimestamp(last_heartbeat, tz=UTC),
                     allow_to_run_atomic_service=allow_to_run_atomic_service,
@@ -672,7 +670,6 @@ class MemOrchestrator(BaseOrchestrator):
         ]
 
         for runner_id in inactive_runner_ids:
-            self.runner_contexts.pop(runner_id, None)
             self.runner_creation_time.pop(runner_id, None)
             self.runner_last_heartbeat.pop(runner_id, None)
             self.runner_last_service_start.pop(runner_id, None)
@@ -745,7 +742,6 @@ class MemOrchestrator(BaseOrchestrator):
         self.invocations_to_purge.clear()
         self.locks.clear()
 
-        self.runner_contexts.clear()
         self.runner_creation_time.clear()
         self.runner_last_heartbeat.clear()
         self.runner_last_service_start.clear()

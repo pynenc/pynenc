@@ -79,6 +79,10 @@ class ThreadRunner(BaseRunner):
             self.conf.min_parallel_slots, self.conf.min_threads, self.max_threads
         )
 
+    def get_active_child_runner_ids(self) -> list[str]:
+        """ThreadRunner doesn't spawn child processes, so returns empty list."""
+        return []
+
     def _on_start(self) -> None:
         """
         Internal method called when the ThreadRunner starts.

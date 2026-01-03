@@ -48,7 +48,7 @@ def create_active_runner_info(
         )
 
     return atomic_service.ActiveRunnerInfo(
-        runner_ctx=create_runner_context(runner_id),
+        runner_id=runner_id,
         creation_time=datetime.fromtimestamp(current + creation_offset, tz=UTC),
         last_heartbeat=datetime.fromtimestamp(current, tz=UTC),
         last_service_start=last_service_start,
@@ -66,7 +66,7 @@ def test_calculate_runner_position_should_return_correct_index_when_runner_exist
     active_runners = [runner1, runner2, runner3]
 
     position = atomic_service.calculate_runner_position(
-        runner2.runner_ctx, active_runners
+        runner2.runner_id, active_runners
     )
 
     assert position == 1
@@ -79,7 +79,9 @@ def test_calculate_runner_position_should_return_none_when_runner_not_found() ->
     active_runners = [runner1, runner2]
 
     unknown_runner = create_runner_context("unknown-runner")
-    position = atomic_service.calculate_runner_position(unknown_runner, active_runners)
+    position = atomic_service.calculate_runner_position(
+        unknown_runner.runner_id, active_runners
+    )
 
     assert position is None
 
@@ -175,7 +177,7 @@ def test_should_run_atomic_service_should_return_true_when_single_runner() -> No
     active_runners = [runner]
 
     result = atomic_service.can_run_atomic_service(
-        runner_ctx=runner.runner_ctx,
+        runner_id=runner.runner_id,
         active_runners=active_runners,
         current_time=time(),
         service_interval_minutes=5.0,
@@ -191,7 +193,7 @@ def test_should_run_atomic_service_should_return_false_when_no_runners() -> None
     active_runners: list[atomic_service.ActiveRunnerInfo] = []
 
     result = atomic_service.can_run_atomic_service(
-        runner_ctx=runner,
+        runner_id=runner.runner_id,
         active_runners=active_runners,
         current_time=time(),
         service_interval_minutes=5.0,
@@ -217,7 +219,7 @@ def test_should_run_atomic_service_should_distribute_execution_when_multiple_run
 
     # Test at time 0 (runner1's slot)
     result1 = atomic_service.can_run_atomic_service(
-        runner_ctx=runner1.runner_ctx,
+        runner_id=runner1.runner_id,
         active_runners=active_runners,
         current_time=0.0,
         service_interval_minutes=6.0,
@@ -226,7 +228,7 @@ def test_should_run_atomic_service_should_distribute_execution_when_multiple_run
 
     # Test at time 150 (runner2's slot)
     result2 = atomic_service.can_run_atomic_service(
-        runner_ctx=runner2.runner_ctx,
+        runner_id=runner2.runner_id,
         active_runners=active_runners,
         current_time=150.0,
         service_interval_minutes=6.0,
@@ -235,7 +237,7 @@ def test_should_run_atomic_service_should_distribute_execution_when_multiple_run
 
     # Test at time 250 (runner3's slot)
     result3 = atomic_service.can_run_atomic_service(
-        runner_ctx=runner3.runner_ctx,
+        runner_id=runner3.runner_id,
         active_runners=active_runners,
         current_time=250.0,
         service_interval_minutes=6.0,
@@ -244,7 +246,7 @@ def test_should_run_atomic_service_should_distribute_execution_when_multiple_run
 
     # Test runner1 at time 150 (not their slot)
     result1_wrong_time = atomic_service.can_run_atomic_service(
-        runner_ctx=runner1.runner_ctx,
+        runner_id=runner1.runner_id,
         active_runners=active_runners,
         current_time=150.0,
         service_interval_minutes=6.0,
@@ -309,22 +311,26 @@ def test_sqlite_orchestrator_can_run_atomic_service_filter(
 
     ctx_true = create_runner_context("runner-true")
     ctx_false = create_runner_context("runner-false")
-    orchestrator.register_runner_heartbeat(ctx_true, can_run_atomic_service=True)
-    orchestrator.register_runner_heartbeat(ctx_false, can_run_atomic_service=False)
+    orchestrator.register_runner_heartbeats(
+        [ctx_true.runner_id], can_run_atomic_service=True
+    )
+    orchestrator.register_runner_heartbeats(
+        [ctx_false.runner_id], can_run_atomic_service=False
+    )
 
     # Only runner with can_run_atomic_service=True
     runners_true = orchestrator.get_active_runners(can_run_atomic_service=True)
     assert len(runners_true) == 1
-    assert runners_true[0].runner_ctx == ctx_true
+    assert runners_true[0].runner_id == ctx_true.runner_id
 
     # Only runner with can_run_atomic_service=False
     runners_false = orchestrator.get_active_runners(can_run_atomic_service=False)
     assert len(runners_false) == 1
-    assert runners_false[0].runner_ctx == ctx_false
+    assert runners_false[0].runner_id == ctx_false.runner_id
 
     # All runners
     runners_all = orchestrator.get_active_runners(can_run_atomic_service=None)
-    ids_all = {r.runner_ctx.runner_id for r in runners_all}
+    ids_all = {r.runner_id for r in runners_all}
     assert {ctx_true.runner_id, ctx_false.runner_id} == ids_all
 
 
@@ -343,9 +349,9 @@ def test_should_run_atomic_service_should_respect_time_slots_with_multiple_runne
             runner1 = create_runner_context("runner-1")
             runner2 = create_runner_context("runner-2")
 
-            app_instance.orchestrator.register_runner_heartbeat(runner1)
+            app_instance.orchestrator.register_runner_heartbeats([runner1.runner_id])
             sleep(0.01)
-            app_instance.orchestrator.register_runner_heartbeat(runner2)
+            app_instance.orchestrator.register_runner_heartbeats([runner2.runner_id])
 
             # At time=0, runner1 should be scheduled, runner2 should not
             should_run_1 = app_instance.orchestrator.should_run_atomic_service(runner1)
@@ -371,11 +377,11 @@ def test_should_run_atomic_service_should_handle_runner_cycling(
         runner2 = create_runner_context("runner-2")
         runner3 = create_runner_context("runner-3")
 
-        app_instance.orchestrator.register_runner_heartbeat(runner1)
+        app_instance.orchestrator.register_runner_heartbeats([runner1.runner_id])
         sleep(0.01)
-        app_instance.orchestrator.register_runner_heartbeat(runner2)
+        app_instance.orchestrator.register_runner_heartbeats([runner2.runner_id])
         sleep(0.01)
-        app_instance.orchestrator.register_runner_heartbeat(runner3)
+        app_instance.orchestrator.register_runner_heartbeats([runner3.runner_id])
 
         # Test at different points in the cycle
         # 60min interval / 3 runners = 20min slots each
@@ -408,7 +414,7 @@ def test_record_atomic_service_execution_should_update_timestamps(
 ) -> None:
     """Test that atomic service execution timestamps are recorded."""
     runner_ctx = create_runner_context("test-runner")
-    app_instance.orchestrator.register_runner_heartbeat(runner_ctx)
+    app_instance.orchestrator.register_runner_heartbeats([runner_ctx.runner_id])
 
     start_time = datetime.now(UTC)
     sleep(0.01)
