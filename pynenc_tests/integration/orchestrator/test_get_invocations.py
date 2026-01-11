@@ -153,13 +153,13 @@ def test_set_invocation_pending_status(test_vars_gi: Vars) -> None:
     if not isinstance(app.orchestrator, MemOrchestrator):
         pytest.skip("Only for MemOrchestrator")
     app.conf.max_pending_seconds = 10
-    owner_id = "test_owner"
+    runner_id = "test_owner"
     app.orchestrator._atomic_status_transition(
-        test_vars_gi.inv1.invocation_id, InvocationStatus.PENDING, owner_id
+        test_vars_gi.inv1.invocation_id, InvocationStatus.PENDING, runner_id
     )
     with pytest.raises(InvocationStatusError):
         app.orchestrator._atomic_status_transition(
-            test_vars_gi.inv1.invocation_id, InvocationStatus.PENDING, owner_id
+            test_vars_gi.inv1.invocation_id, InvocationStatus.PENDING, runner_id
         )
 
 
@@ -174,9 +174,9 @@ def test_set_invocation_pending_status_atomicity(test_vars_gi: Vars) -> None:
 
     # Define a function to run in a separate thread
     def run_set_invocation_pending_status(app: "Pynenc") -> None:
-        owner_id = uuid4().hex
+        runner_id = uuid4().hex
         app.orchestrator._atomic_status_transition(
-            test_vars_gi.inv1.invocation_id, InvocationStatus.PENDING, owner_id
+            test_vars_gi.inv1.invocation_id, InvocationStatus.PENDING, runner_id
         )
 
     # Run set_invocation_pending_status concurrently in two threads

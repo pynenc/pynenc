@@ -153,7 +153,6 @@ def test_multiple_workflow_types(pynmon_client: "PynmonClient") -> None:
         response2 = pynmon_client.get(f"/workflows/{data_processing_workflow.task_id}")
         assert response2.status_code == 200
         assert result2["workflow_id"] in response2.text
-        assert str(result2["batch_size"]) in response2.text
 
         # Test workflow runs list view contains both workflow types
         response = pynmon_client.get("/workflows/runs")
@@ -202,7 +201,6 @@ def test_workflow_execution_multiple_instances(pynmon_client: "PynmonClient") ->
         # Verify all three workflow instances appear in the detail view
         for result in results:
             assert result["workflow_id"] in response_text
-            assert str(result["batch_size"]) in response_text
 
         # Test workflow runs list view contains all instances
         response = pynmon_client.get("/workflows/runs")

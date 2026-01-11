@@ -218,7 +218,7 @@ def test_validate_ownership_should_enforce_ownership_requirement() -> None:
 
     try:
         current = InvocationStatusRecord(
-            status=InvocationStatus.RUNNING, owner_id="runner-1"
+            status=InvocationStatus.RUNNING, runner_id="runner-1"
         )
 
         with pytest.raises(InvocationStatusOwnershipError, match="requires ownership"):
@@ -249,7 +249,7 @@ def test_validate_ownership_should_allow_same_owner() -> None:
 
     try:
         current = InvocationStatusRecord(
-            status=InvocationStatus.RUNNING, owner_id="runner-1"
+            status=InvocationStatus.RUNNING, runner_id="runner-1"
         )
         validate_ownership(current, InvocationStatus.SUCCESS, "runner-1")
     finally:
@@ -278,7 +278,7 @@ def test_validate_ownership_should_require_runner_for_acquisition() -> None:
 
     try:
         current = InvocationStatusRecord(
-            status=InvocationStatus.REGISTERED, owner_id=None
+            status=InvocationStatus.REGISTERED, runner_id=None
         )
 
         with pytest.raises(
@@ -311,7 +311,7 @@ def test_compute_new_owner_should_release_ownership() -> None:
 
     try:
         current = InvocationStatusRecord(
-            status=InvocationStatus.RUNNING, owner_id="runner-1"
+            status=InvocationStatus.RUNNING, runner_id="runner-1"
         )
         new_owner = compute_new_owner(current, InvocationStatus.SUCCESS, "runner-1")
         assert new_owner is None
@@ -340,7 +340,7 @@ def test_compute_new_owner_should_acquire_ownership() -> None:
 
     try:
         current = InvocationStatusRecord(
-            status=InvocationStatus.REGISTERED, owner_id=None
+            status=InvocationStatus.REGISTERED, runner_id=None
         )
         new_owner = compute_new_owner(current, InvocationStatus.PENDING, "runner-1")
         assert new_owner == "runner-1"
@@ -370,7 +370,7 @@ def test_compute_new_owner_should_maintain_ownership() -> None:
 
     try:
         current = InvocationStatusRecord(
-            status=InvocationStatus.RUNNING, owner_id="runner-1"
+            status=InvocationStatus.RUNNING, runner_id="runner-1"
         )
         new_owner = compute_new_owner(current, InvocationStatus.PAUSED, "runner-1")
         assert new_owner == "runner-1"
@@ -407,13 +407,13 @@ def test_transition_should_create_new_record() -> None:
     try:
         new_record = status_record_transition(None, InvocationStatus.REGISTERED, None)
         assert new_record.status == InvocationStatus.REGISTERED
-        assert new_record.owner_id is None
+        assert new_record.runner_id is None
 
         next_record = status_record_transition(
             new_record, InvocationStatus.PENDING, "runner-1"
         )
         assert next_record.status == InvocationStatus.PENDING
-        assert next_record.owner_id == "runner-1"
+        assert next_record.runner_id == "runner-1"
     finally:
         status_module._CONFIG = original_config
 
@@ -484,7 +484,7 @@ def test_transition_should_reject_ownership_violation() -> None:
 
     try:
         current = InvocationStatusRecord(
-            status=InvocationStatus.PENDING, owner_id="runner-1"
+            status=InvocationStatus.PENDING, runner_id="runner-1"
         )
 
         with pytest.raises(InvocationStatusOwnershipError):
@@ -525,7 +525,7 @@ def test_invocation_status_record_default_values() -> None:
     """InvocationStatusRecord should use sensible defaults."""
     record = InvocationStatusRecord(status=InvocationStatus.REGISTERED)
     assert record.status == InvocationStatus.REGISTERED
-    assert record.owner_id is None
+    assert record.runner_id is None
     assert isinstance(record.timestamp, datetime)
     assert record.timestamp.tzinfo == UTC
 

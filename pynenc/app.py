@@ -10,6 +10,7 @@ from pynenc.arg_cache.base_arg_cache import BaseArgCache
 from pynenc.broker.base_broker import BaseBroker
 from pynenc.conf.config_pynenc import ConfigPynenc
 from pynenc.conf.config_task import ConcurrencyControlType
+from pynenc.core_tasks import core_tasks_registry
 from pynenc.orchestrator.base_orchestrator import BaseOrchestrator
 from pynenc.plugin_loader import load_all_plugins
 from pynenc.runner.base_runner import BaseRunner
@@ -17,6 +18,7 @@ from pynenc.serializer.base_serializer import BaseSerializer
 from pynenc.state_backend.base_state_backend import BaseStateBackend
 from pynenc.task import Task
 from pynenc.trigger.base_trigger import BaseTrigger
+from pynenc.trigger.trigger_builder import on_cron
 from pynenc.util.log import create_logger
 from pynenc.util.subclasses import get_subclass
 
@@ -75,6 +77,7 @@ class Pynenc:
         self._tasks: dict[str, Task] = {}
         self.logger.info(f"Initialized Pynenc app with id {self.app_id}")
         load_all_plugins()
+        self.register_core_tasks()
 
     @classmethod
     def from_info(cls, app_info: AppInfo) -> "Pynenc":
@@ -93,6 +96,15 @@ class Pynenc:
             config_values=app_info.config_values,
             config_filepath=app_info.config_filepath,
         )
+
+    def register_core_tasks(self) -> None:
+        """Register all core tasks defined in the core_tasks_registry."""
+        for task_def in core_tasks_registry.definitions:
+            options = task_def.options.copy()
+            if task_def.config_cron:
+                cron_val = getattr(self.conf, task_def.config_cron)
+                options["triggers"] = [on_cron(cron_val)]
+            self.task(task_def.func, **options)
 
     @property
     def app_id(self) -> str:

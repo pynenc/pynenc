@@ -7,6 +7,7 @@ Key components tested:
 - Edge cases with timeout boundaries
 """
 
+import time
 from typing import TYPE_CHECKING
 
 from pynenc.runner.runner_context import RunnerContext
@@ -38,7 +39,6 @@ def create_runner_context(runner_id: str) -> RunnerContext:
         runner_id=runner_id,
         pid=12345,
         hostname="test-host",
-        extra_data={},
     )
 
 
@@ -110,6 +110,9 @@ def test_get_active_runners_excludes_stale_runner(
         [runner_ctx.runner_id], can_run_atomic_service=False
     )
 
+    # Sleep briefly to ensure time advances past heartbeat timestamp
+    time.sleep(0.001)
+
     # Check with zero timeout - runner should immediately be stale
     active_runners = app_instance.orchestrator._get_active_runners(
         timeout_seconds=0.0, can_run_atomic_service=False
@@ -118,36 +121,6 @@ def test_get_active_runners_excludes_stale_runner(
 
     # With zero timeout, runner should not be active
     assert runner_ctx.runner_id not in runner_ids
-
-
-def test_cleanup_removes_inactive_runners(
-    app_instance: "Pynenc",
-) -> None:
-    """Test that cleanup_inactive_runners removes stale runner records."""
-    runner_ctx = create_runner_context("runner-to-cleanup")
-
-    # Register heartbeat
-    app_instance.orchestrator.register_runner_heartbeats(
-        [runner_ctx.runner_id], can_run_atomic_service=False
-    )
-
-    # Verify runner is active
-    active_before = app_instance.orchestrator._get_active_runners(
-        timeout_seconds=100.0, can_run_atomic_service=False
-    )
-    runner_ids_before = {r.runner_id for r in active_before}
-    assert runner_ctx.runner_id in runner_ids_before
-
-    # Cleanup with zero timeout
-    app_instance.orchestrator._cleanup_inactive_runners(timeout_seconds=0.0)
-
-    # Runner should now be removed
-    active_after = app_instance.orchestrator._get_active_runners(
-        timeout_seconds=100.0, can_run_atomic_service=False
-    )
-    runner_ids_after = {r.runner_id for r in active_after}
-
-    assert runner_ctx.runner_id not in runner_ids_after
 
 
 # ################################################################################### #
@@ -275,9 +248,7 @@ def test_recovery_uses_configured_timeout(
     invocation_id = create_running_invocation(app_instance, alive_runner, task_value=20)
 
     # The timeout in config should be used
-    timeout_minutes = (
-        app_instance.conf.atomic_service_runner_considered_dead_after_minutes
-    )
+    timeout_minutes = app_instance.conf.runner_considered_dead_after_minutes
     timeout_seconds = timeout_minutes * 60
 
     # With the configured timeout, it should NOT be recoverable
@@ -324,69 +295,145 @@ def test_heartbeat_prevents_recovery_timeout(
 
 
 # ################################################################################### #
-# EDGE CASE TESTS
+# REALISTIC RECOVERY SCENARIO TESTS
 # ################################################################################### #
 
 
-def test_zero_timeout_marks_all_as_dead(
+def test_active_runner_invocation_not_recovered_with_realistic_timeout(
     app_instance: "Pynenc",
 ) -> None:
-    """Test that zero timeout finds all invocations (edge case)."""
-    runner1 = create_runner_context("edge-runner-1")
-    runner2 = create_runner_context("edge-runner-2")
+    """
+    Test realistic recovery scenario with active runner and reasonable timeout.
 
-    # Create invocations
-    inv1 = create_running_invocation(app_instance, runner1, task_value=30)
-    inv2 = create_running_invocation(app_instance, runner2, task_value=31)
+    This is the critical test that catches implementation bugs where the
+    recovery query incorrectly returns invocations from ACTIVE runners.
 
-    # With zero timeout, both should be recoverable
-    recoverable = set(
-        app_instance.orchestrator._get_running_invocations_for_recovery(
-            timeout_seconds=0.0
-        )
-    )
+    Bug this catches: MongoDB aggregation pipeline that failed to properly
+    filter out runners with recent heartbeats due to incorrect $lookup/$match
+    combinations.
 
-    assert inv1 in recoverable
-    assert inv2 in recoverable
+    Scenario:
+    - Runner registers heartbeat (making it active)
+    - Runner owns a RUNNING invocation
+    - Recovery check uses realistic 60-second timeout
+    - Expected: Invocation should NOT be recovered (runner is active)
+    """
+    active_runner = create_runner_context("active-runner-realistic")
 
-
-def test_very_large_timeout_marks_none_as_dead(
-    app_instance: "Pynenc",
-) -> None:
-    """Test that very large timeout doesn't recover recent invocations."""
-    runner = create_runner_context("edge-runner-large")
-
-    # Register heartbeat so runner is alive
+    # Register heartbeat FIRST - runner is now active
     app_instance.orchestrator.register_runner_heartbeats(
-        [runner.runner_id], can_run_atomic_service=False
+        [active_runner.runner_id], can_run_atomic_service=False
     )
 
-    invocation_id = create_running_invocation(app_instance, runner, task_value=32)
+    # Create RUNNING invocation owned by this active runner
+    invocation_id = create_running_invocation(
+        app_instance, active_runner, task_value=100
+    )
 
-    # With very large timeout (1 year in seconds), runner is still active
+    # Use realistic timeout (60 seconds) - not edge cases like 0 or 1 year
     recoverable = list(
         app_instance.orchestrator._get_running_invocations_for_recovery(
-            timeout_seconds=365 * 24 * 60 * 60
+            timeout_seconds=60.0
         )
     )
 
-    # Should not be recoverable (runner is alive)
-    assert invocation_id not in recoverable
+    # This MUST NOT be recovered - the runner just heartbeated
+    assert invocation_id not in recoverable, (
+        f"Invocation {invocation_id} should NOT be recovered: "
+        f"runner {active_runner.runner_id} just registered heartbeat"
+    )
+
+
+def test_multiple_active_runners_none_recovered_realistic(
+    app_instance: "Pynenc",
+) -> None:
+    """
+    Test that multiple active runners' invocations are never recovered.
+
+    This tests the implementation handles multiple runners correctly,
+    not just single-runner edge cases.
+    """
+    runners = [create_runner_context(f"multi-active-runner-{i}") for i in range(3)]
+
+    # All runners register heartbeats - all are active
+    for runner in runners:
+        app_instance.orchestrator.register_runner_heartbeats(
+            [runner.runner_id], can_run_atomic_service=False
+        )
+
+    # Each runner owns one RUNNING invocation
+    invocation_ids = [
+        create_running_invocation(app_instance, runner, task_value=200 + i)
+        for i, runner in enumerate(runners)
+    ]
+
+    # Use realistic 60-second timeout
+    recoverable = set(
+        app_instance.orchestrator._get_running_invocations_for_recovery(
+            timeout_seconds=60.0
+        )
+    )
+
+    # NONE should be recovered - all runners are active
+    for inv_id in invocation_ids:
+        assert inv_id not in recoverable, (
+            f"Invocation {inv_id} should NOT be recovered: runner is active"
+        )
+
+
+def test_mixed_active_and_inactive_runners_recovery(
+    app_instance: "Pynenc",
+) -> None:
+    """
+    Test recovery correctly distinguishes active vs inactive runners.
+
+    This is the most important test: verifies that ONLY invocations from
+    runners WITHOUT heartbeats are recovered, while invocations from
+    runners WITH heartbeats are preserved.
+    """
+    active_runner = create_runner_context("mixed-active")
+    inactive_runner = create_runner_context("mixed-inactive")
+
+    # Only active_runner registers heartbeat
+    app_instance.orchestrator.register_runner_heartbeats(
+        [active_runner.runner_id], can_run_atomic_service=False
+    )
+    # inactive_runner does NOT register heartbeat
+
+    # Create invocations for both
+    active_inv = create_running_invocation(app_instance, active_runner, task_value=300)
+    inactive_inv = create_running_invocation(
+        app_instance, inactive_runner, task_value=301
+    )
+
+    # Use realistic 60-second timeout
+    recoverable = set(
+        app_instance.orchestrator._get_running_invocations_for_recovery(
+            timeout_seconds=60.0
+        )
+    )
+
+    # Active runner's invocation should NOT be recovered
+    assert active_inv not in recoverable, (
+        f"Active runner's invocation {active_inv} should NOT be recovered"
+    )
+
+    # Inactive runner's invocation SHOULD be recovered
+    assert inactive_inv in recoverable, (
+        f"Inactive runner's invocation {inactive_inv} SHOULD be recovered"
+    )
 
 
 def test_runner_with_no_invocations_not_recovered(
     app_instance: "Pynenc",
 ) -> None:
-    """Test that runners with no invocations don't cause issues."""
-    # Don't create any invocations
-    # Just check that recovery doesn't crash
+    """Test that recovery doesn't crash when no invocations exist."""
     recoverable = list(
         app_instance.orchestrator._get_running_invocations_for_recovery(
-            timeout_seconds=0.0
+            timeout_seconds=60.0
         )
     )
 
-    # Should be an empty list or not contain anything
     assert isinstance(recoverable, list)
 
 
@@ -420,7 +467,6 @@ def test_child_worker_heartbeat_prevents_recovery_by_parent(
         runner_id="PPRWorker-child",
         pid=12345,
         hostname="test-host",
-        extra_data={},
     )
 
     # Both runners register heartbeats

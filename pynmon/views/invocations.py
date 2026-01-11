@@ -259,7 +259,7 @@ def _build_svg_timeline(
     invocations_seen: set[str] = set()
     history_count = 0
 
-    # Use the new efficient iterator
+    runner_contexts: dict[str, RunnerContext] = {}
     for batch in app.state_backend.iter_history_in_timerange(
         start_time=start_datetime,
         end_time=end_datetime,
@@ -267,16 +267,25 @@ def _build_svg_timeline(
     ):
         # Filter batch by limit
         filtered_batch = []
+        required_runner_context_ids: set[str] = set()
         for history in batch:
             if history.invocation_id not in invocations_seen:
                 if len(invocations_seen) >= limit:
                     break
                 invocations_seen.add(history.invocation_id)
             filtered_batch.append(history)
+            if history.runner_context_id not in runner_contexts:
+                required_runner_context_ids.add(history.runner_context_id)
             history_count += 1
 
+        if required_runner_context_ids:
+            for new_ctx in app.state_backend.get_runner_contexts(
+                list(required_runner_context_ids)
+            ):
+                runner_contexts[new_ctx.runner_id] = new_ctx
+
         if filtered_batch:
-            builder.add_history_batch(filtered_batch)
+            builder.add_history_batch(filtered_batch, runner_contexts)
 
         # Stop if we've hit the limit
         if len(invocations_seen) >= limit:
@@ -406,27 +415,39 @@ def _get_formatted_invocation_history(
     try:
         logger.info(f"Retrieving history for invocation {invocation_id}")
         history_start = time.time()
-        max_history_time = 3  # Maximum time to spend retrieving history (3 seconds)
 
-        # Get history with a timeout
+        # Get history
         history = app.state_backend.get_history(invocation.invocation_id)
+
+        # Collect all unique runner context IDs
+        runner_context_ids = list({entry.runner_context_id for entry in history})
+
+        # Batch-load all runner contexts
+        runner_contexts_list = app.state_backend.get_runner_contexts(runner_context_ids)
+        runner_contexts = {ctx.runner_id: ctx for ctx in runner_contexts_list if ctx}
+
+        # Log any missing contexts
+        missing_ids = set(runner_context_ids) - set(runner_contexts.keys())
+        if missing_ids:
+            logger.warning(
+                f"Missing runner contexts for invocation {invocation_id}: "
+                f"{', '.join(missing_ids)}"
+            )
 
         # Convert history items to a more template-friendly format
         formatted_history = []
         for entry in history:
-            if time.time() - history_start > max_history_time:
-                logger.warning("History retrieval timeout reached")
-                break
-
-            # Extract full context info from runner_context
-            context_info = _format_owner_context(entry.runner_context)
+            # Get runner context, may be None if not found
+            runner_context = runner_contexts.get(entry.runner_context_id)
+            context_info = _format_owner_context(
+                runner_context, entry.runner_context_id
+            )
 
             formatted_history.append(
                 {
                     "timestamp": entry.timestamp.isoformat(),
                     "status": entry.status_record.status.name,
-                    "status_owner_id": entry.status_record.owner_id,
-                    "running_context": entry.runner_context,
+                    "status_runner_id": entry.status_record.runner_id,
                     "runner_context_summary": context_info["summary"],
                     "runner_cls": context_info["runner_cls"],
                     "runner_id": context_info["runner_id"],
@@ -459,8 +480,22 @@ def _get_formatted_invocation_history(
         return []
 
 
-def _format_owner_context(owner_context: "RunnerContext") -> dict[str, str | None]:
-    """Format owner context into display-friendly dict using RunnerContextInfo."""
+def _format_owner_context(
+    owner_context: "RunnerContext | None", runner_context_id: str | None = None
+) -> dict[str, str | None]:
+    """Format owner context into display-friendly dict using RunnerContextInfo.
+
+    Handles None contexts gracefully, logging a warning if context is missing.
+
+    :param owner_context: The runner context to format, or None if not found
+    :param runner_context_id: The ID that was attempted (for logging), or None
+    :return: Formatted context dictionary with N/A values if context is missing
+    """
+    if owner_context is None and runner_context_id:
+        logger.warning(
+            f"Runner context not found for ID: {runner_context_id}. "
+            f"Displaying N/A values."
+        )
     return RunnerContextInfo.from_context(owner_context).to_dict()
 
 
@@ -609,13 +644,16 @@ async def invocation_history(request: Request, invocation_id: str) -> JSONRespon
                 timestamp = timestamp.replace(tzinfo=UTC)
 
             # Get full context info from runner_context
-            context_info = _format_owner_context(entry.runner_context)
+            runner_context = app.state_backend.get_runner_context(
+                entry.runner_context_id
+            )
+            context_info = _format_owner_context(runner_context)
 
             formatted_history.append(
                 {
                     "timestamp": timestamp.isoformat(),
                     "status": entry.status_record.status.value,
-                    "status_owner_id": entry.status_record.owner_id,
+                    "status_runner_id": entry.status_record.runner_id,
                     "runner_context_summary": context_info["summary"],
                     "runner_cls": context_info["runner_cls"],
                     "runner_id": context_info["runner_id"],

@@ -52,6 +52,7 @@ class SQLiteConnection:
                     time.sleep(backoff)
                     backoff *= 2
                 else:
+                    logger.error("SQLite operation failed: %s", e)
                     raise
         raise RuntimeError("Max retries exceeded for database operation")
 

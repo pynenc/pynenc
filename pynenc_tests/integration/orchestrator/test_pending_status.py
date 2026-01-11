@@ -36,11 +36,8 @@ def test_pending_status_expiration(
     # Wait for pending to expire
     sleep(app.conf.max_pending_seconds * 2)
 
-    # Run recovery service to recover expired PENDING invocations
-    app.orchestrator.invocation_recovery_service(runner_ctx)
-
-    # Should be REROUTED after recovery service
+    # The invocation should now be listed for recovery
     assert (
-        app.orchestrator.get_invocation_status(dummy_invocation_io.invocation_id)
-        == InvocationStatus.REROUTED
+        dummy_invocation_io.invocation_id
+        in app.orchestrator.get_pending_invocations_for_recovery()
     )

@@ -40,7 +40,6 @@ class RunnerContext:
     :param int pid: Process ID (auto-captured).
     :param str hostname: Hostname (auto-captured).
     :param int thread_id: Thread ID (auto-captured).
-    :param dict[str, str | int | float | bool] extra_data: Extensible data dictionary.
     """
 
     runner_cls: str
@@ -51,7 +50,6 @@ class RunnerContext:
     thread_id: int = field(
         default_factory=lambda: threading.current_thread().ident or 0
     )
-    extra_data: dict[str, str | int | float | bool] = field(default_factory=dict)
 
     @classmethod
     def from_runner(
@@ -64,7 +62,6 @@ class RunnerContext:
 
         :param BaseRunner runner: The runner instance to extract context from.
         :param RunnerContext | None parent_ctx: Optional parent context.
-        :param dict[str, str | int | float | bool] | None extra_data: Optional data.
         :return: A new RunnerContext instance populated with runner data.
         """
         return cls(
@@ -72,18 +69,6 @@ class RunnerContext:
             runner_id=runner.runner_id,
             parent_ctx=parent_ctx,
         )
-
-    @property
-    def owner_id(self) -> str:
-        """
-        Get the owner identifier for this context.
-
-        If there's a parent context, the owner_id includes the parent's owner_id
-        to create a hierarchical identifier.
-        """
-        if self.parent_ctx:
-            return f"{self.parent_ctx.owner_id}{{{self.runner_id}}}"
-        return self.runner_id
 
     @property
     def root_runner_id(self) -> str:
@@ -117,7 +102,6 @@ class RunnerContext:
 
         :param str runner_cls: Class name for the child context.
         :param str runner_id: Identifier for the child context.
-        :param dict[str, str | int | float | bool] | None extra_data: Optional data.
         :return: A new RunnerContext with this context as parent.
         """
         return RunnerContext(

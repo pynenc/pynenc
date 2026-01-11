@@ -20,6 +20,7 @@ from pathlib import Path
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from pynenc.app import AppInfo, Pynenc
@@ -35,6 +36,10 @@ logger.setLevel(logging.INFO)
 
 # Initialize FastAPI app
 app = FastAPI(title="Pynenc Monitor")
+
+# Set up static files
+static_dir = Path(__file__).parent / "static"
+app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 # Set up Jinja2 templates
 templates_dir = Path(__file__).parent / "templates"

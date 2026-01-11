@@ -27,7 +27,6 @@ def create_runner_context(runner_id: str) -> RunnerContext:
         runner_id=runner_id,
         pid=12345,
         hostname="test-host",
-        extra_data={},
     )
 
 

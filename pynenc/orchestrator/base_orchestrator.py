@@ -127,13 +127,13 @@ class BaseOrchestrator(ABC):
     def _register_new_invocations(
         self,
         invocations: list["DistributedInvocation[Params, Result]"],
-        owner_id: str | None = None,
+        runner_id: str | None = None,
     ) -> InvocationStatusRecord:
         """
         Register new invocations with status Register if they don't exist yet.
 
         :param list[DistributedInvocation[Params, Result]] invocations: The invocations to be registered.
-        :param str | None owner_id: The owner ID for ownership validation
+        :param str | None runner_id: The owner ID for ownership validation
         :return: The status record of the registered invocation.
         """
 
@@ -227,7 +227,7 @@ class BaseOrchestrator(ABC):
 
     @abstractmethod
     def _atomic_status_transition(
-        self, invocation_id: str, status: InvocationStatus, owner_id: str | None = None
+        self, invocation_id: str, status: InvocationStatus, runner_id: str | None = None
     ) -> InvocationStatusRecord:
         """
         Atomically validates and transitions invocation status.
@@ -242,7 +242,7 @@ class BaseOrchestrator(ABC):
 
         :param str invocation_id: The ID of the invocation to update
         :param InvocationStatus status: The target status
-        :param str | None owner_id: The owner ID for ownership validation
+        :param str | None runner_id: The owner ID for ownership validation
         :return: The new status record after successful transition
         :rtype: InvocationStatusRecord
         :raises InvocationStatusTransitionError: If transition is not allowed
@@ -251,11 +251,11 @@ class BaseOrchestrator(ABC):
         """
         # Example implementation pattern (varies by backend):
         #
-        # def _atomic_status_transition(self, invocation_id, status, owner_id):
+        # def _atomic_status_transition(self, invocation_id, status, runner_id):
         #     # PostgreSQL with transaction:
         #     with transaction:
         #         current = get_invocation_status_record(invocation_id)
-        #         new_record = status_record_transition(current, status, owner_id)
+        #         new_record = status_record_transition(current, status, runner_id)
         #         UPDATE ... WHERE invocation_id = ? AND status = current.status
         #         if not updated: raise race condition
         #         return new_record
@@ -270,7 +270,7 @@ class BaseOrchestrator(ABC):
         #
         #     # MongoDB findAndModify:
         #     current = find_one(invocation_id)
-        #     new_record = status_record_transition(current, status, owner_id)
+        #     new_record = status_record_transition(current, status, runner_id)
         #     result = find_and_modify(
         #         query={id: invocation_id, status: current.status},
         #         update={status: new_record}
@@ -509,7 +509,7 @@ class BaseOrchestrator(ABC):
         :raises InvocationStatusRaceConditionError: If a race condition is detected during status update
         """
         new_status_record = self._atomic_status_transition(
-            invocation_id, status, runner_ctx.owner_id
+            invocation_id, status, runner_ctx.runner_id
         )
         if status.is_final():
             self.release_waiters(invocation_id)
@@ -812,20 +812,20 @@ class BaseOrchestrator(ABC):
         Registers a new invocation in the state backend and the orchestrator.
 
         :param DistributedInvocation[Params, Result] invocation: The invocation to register.
-        :param str | None owner_id: The owner ID for ownership validation
+        :param str | None runner_id: The owner ID for ownership validation
         """
         runner_ctx = context.get_or_create_runner_context(self.app.app_id)
-        owner_id = runner_ctx.runner_id if runner_ctx else None
+        runner_id = runner_ctx.runner_id
         self.app.state_backend.upsert_invocations(invocations)
         # This should add the status registered to the backend
-        status_record = self._register_new_invocations(invocations, owner_id)
+        status_record = self._register_new_invocations(invocations, runner_id)
         inv_ids = [invocation.invocation_id for invocation in invocations]
         self.app.state_backend.add_histories(invocations, status_record, runner_ctx)
         self.app.trigger.report_tasks_status(inv_ids, status_record.status)
         self.app.broker.route_invocations(inv_ids)
 
     def _route_new_call_invocation(
-        self, call: "Call[Params, Result]", owner_id: str | None = None
+        self, call: "Call[Params, Result]", runner_id: str | None = None
     ) -> "DistributedInvocation[Params, Result]":
         """
         Routes a new call invocation within the distributed task system.
@@ -987,7 +987,7 @@ class BaseOrchestrator(ABC):
         This is used for atomic service scheduling to determine which runners are eligible
         to participate in time slot distribution.
 
-        :param float timeout_seconds: Heartbeat timeout in seconds (typically from atomic_service_runner_considered_dead_after_minutes config)
+        :param float timeout_seconds: Heartbeat timeout in seconds (typically from runner_considered_dead_after_minutes config)
         :param bool | None can_run_atomic_service: If specified, filters runners based on their eligibility to run atomic services
         :return: List of active runners ordered by creation time (oldest first)
         :rtype: list["ActiveRunnerInfo"]
@@ -1007,35 +1007,8 @@ class BaseOrchestrator(ABC):
         :return: List of active runners ordered by creation time (oldest first)
         :rtype: list["ActiveRunnerInfo"]
         """
-        timeout_seconds = (
-            self.app.conf.atomic_service_runner_considered_dead_after_minutes * 60
-        )
+        timeout_seconds = self.app.conf.runner_considered_dead_after_minutes * 60
         return self._get_active_runners(timeout_seconds, can_run_atomic_service)
-
-    @abstractmethod
-    def _cleanup_inactive_runners(self, timeout_seconds: float) -> None:
-        """
-        Remove runners that haven't sent a heartbeat within the timeout period.
-
-        This is part of invocation recovery: runners inactive for longer than timeout_seconds
-        are considered dead, and their RUNNING invocations will be recovered.
-
-        :param float timeout_seconds: Heartbeat timeout in seconds (typically from atomic_service_runner_considered_dead_after_minutes config)
-        """
-
-    def cleanup_inactive_runners(self) -> None:
-        """
-        Remove runners that haven't sent a heartbeat within the timeout period.
-
-        This is part of invocation recovery: runners inactive for longer than timeout_seconds
-        are considered dead, and their RUNNING invocations will be recovered.
-
-        :param float timeout_seconds: Heartbeat timeout in seconds (typically from atomic_service_runner_considered_dead_after_minutes config)
-        """
-        timeout_seconds = (
-            self.app.conf.atomic_service_runner_considered_dead_after_minutes * 60
-        )
-        self._cleanup_inactive_runners(timeout_seconds)
 
     @abstractmethod
     def get_pending_invocations_for_recovery(self) -> Iterator[str]:
@@ -1074,9 +1047,7 @@ class BaseOrchestrator(ABC):
         :return: Iterator of invocation IDs that need recovery.
         :rtype: Iterator[str]
         """
-        timeout_seconds = (
-            self.app.conf.atomic_service_runner_considered_dead_after_minutes * 60
-        )
+        timeout_seconds = self.app.conf.runner_considered_dead_after_minutes * 60
         return self._get_running_invocations_for_recovery(timeout_seconds)
 
     def should_run_atomic_service(self, runner_ctx: "RunnerContext") -> bool:
@@ -1096,7 +1067,6 @@ class BaseOrchestrator(ABC):
         self.register_runner_heartbeats(
             [runner_ctx.runner_id], can_run_atomic_service=True
         )
-        self.cleanup_inactive_runners()
         active_runners = self.get_active_runners(can_run_atomic_service=True)
 
         return can_run_atomic_service(
@@ -1121,37 +1091,3 @@ class BaseOrchestrator(ABC):
         :param datetime start_time: When execution started (UTC timezone-aware)
         :param datetime end_time: When execution ended (UTC timezone-aware)
         """
-
-    def invocation_recovery_service(self, runner_ctx: "RunnerContext") -> None:
-        """
-        Recover invocations stuck in PENDING or RUNNING status.
-
-        Recovers two types of stuck invocations:
-        1. PENDING invocations that exceeded the allowed pending time
-        2. RUNNING invocations owned by runners that haven't sent a heartbeat
-
-        :param RunnerContext runner_ctx: The context of the runner executing this service.
-        """
-        invocations_to_reroute: set[str] = set()
-
-        # Recover PENDING invocations that exceeded timeout
-        for invocation_id in self.get_pending_invocations_for_recovery():
-            invocations_to_reroute.add(invocation_id)
-            self.app.logger.info(
-                f"Recovering timed-out pending invocation {invocation_id}"
-            )
-            self.set_invocation_status(
-                invocation_id, InvocationStatus.PENDING_RECOVERY, runner_ctx
-            )
-
-        # Recover RUNNING invocations owned by inactive runners
-        for invocation_id in self.get_running_invocations_for_recovery():
-            invocations_to_reroute.add(invocation_id)
-            self.app.logger.info(
-                f"Recovering running invocation {invocation_id} from inactive runner"
-            )
-            self.set_invocation_status(
-                invocation_id, InvocationStatus.RUNNING_RECOVERY, runner_ctx
-            )
-
-        self.reroute_invocations(invocations_to_reroute, runner_ctx)

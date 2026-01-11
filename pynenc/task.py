@@ -12,6 +12,7 @@ from pynenc import context
 from pynenc.arguments import Arguments
 from pynenc.call import Call, PreSerializedCall
 from pynenc.conf.config_task import ConcurrencyControlType, ConfigTask
+from pynenc.core_tasks import CoreTaskFunction
 from pynenc.exceptions import InvalidTaskOptionsError, RetryError
 from pynenc.invocation.base_invocation import BaseInvocation, BaseInvocationGroup
 from pynenc.invocation.conc_invocation import (
@@ -21,7 +22,6 @@ from pynenc.invocation.conc_invocation import (
 from pynenc.invocation.dist_invocation import DistributedInvocationGroup
 from pynenc.types import Func, Params, Result
 from pynenc.workflow.context import WorkflowContext
-from pynenc.util.log import set_logging_context
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
@@ -218,6 +218,9 @@ class Task(Generic[Params, Result]):
         # Check if the function is a Task (from @task) or a plain function (from @direct_task)
         if isinstance(function, Task):
             return task_id, function.func, options
+        # Check if the function is a CoreTaskFunction (from core_tasks_registry)
+        if isinstance(function, CoreTaskFunction):
+            return task_id, function.func, options
         # For direct_task, return the function itself
         return task_id, function.__inner_function__, options  # type: ignore
 
@@ -360,8 +363,6 @@ class Task(Generic[Params, Result]):
         print(list(invocation_group.results))  # [len("huge_string") + i for i in range(3)]
         ```
         """
-        # Set logging context for this task operation
-        set_logging_context(task_id=self.task_id)
         self.app.logger.info(f"parallelizing {self.task_id}")
 
         # Convert param_iter to a list to allow multiple iterations and length checking

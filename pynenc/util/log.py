@@ -11,7 +11,6 @@ Key components:
 """
 
 import logging
-from contextvars import ContextVar
 from typing import TYPE_CHECKING, Literal
 
 from pynenc import context
@@ -23,13 +22,8 @@ if TYPE_CHECKING:
     from pynenc.conf.config_pynenc import ConfigPynenc
     from pynenc.runner.runner_context import RunnerContext
 
-# Truncation length for IDs (7 chars like Git short SHA)
-_TRUNCATE_LENGTH = 7
-
-# Context variables for logging-specific data
-# These are set directly by invocation.run(), not duplicated from context.py
-_task_id: ContextVar[str | None] = ContextVar("task_id", default=None)
-_invocation_id: ContextVar[str | None] = ContextVar("invocation_id", default=None)
+# Truncation length for IDs
+_TRUNCATE_LENGTH = 8
 
 
 # Define ANSI color codes
@@ -77,10 +71,10 @@ class PynencContextFilter(logging.Filter):
         """
         # Read execution context from context.py (single source of truth)
         record.runner_ctx = context.get_current_runner_context(self.app_id)
+        if invocation := context.get_dist_invocation_context(self.app_id):
+            record.invocation_id = invocation.invocation_id
+            record.task_id = invocation.task.task_id
 
-        # Read logging-specific context (task/invocation set during run)
-        record.task_id = _task_id.get()
-        record.invocation_id = _invocation_id.get()
         # Read truncate_log_ids dynamically from config (allows runtime changes)
         record.truncate_log_ids = self.conf.truncate_log_ids
         return True
@@ -267,52 +261,3 @@ def create_logger(app: "Pynenc", use_colors: bool = True) -> logging.Logger:
     logger.propagate = False
 
     return logger
-
-
-def set_logging_context(
-    task_id: str | None = None,
-    invocation_id: str | None = None,
-) -> None:
-    """
-    Set the task and invocation context for logging.
-
-    These are logging-specific values set during invocation.run(),
-    not duplicated from context.py.
-
-    :param str | None task_id: The task ID to set in context
-    :param str | None invocation_id: The invocation ID to set in context
-    """
-    if task_id is not None:
-        _task_id.set(task_id)
-    if invocation_id is not None:
-        _invocation_id.set(invocation_id)
-
-
-def clear_logging_context() -> None:
-    """Clear logging-specific context variables (task_id and invocation_id)."""
-    _task_id.set(None)
-    _invocation_id.set(None)
-
-
-def get_logging_context(app_id: str) -> dict[str, str | None]:
-    """
-    Get the current logging context.
-
-    Reads from context.py for execution context (single source of truth).
-
-    :param str app_id: The application identifier.
-    :return: Dictionary with all context values
-    """
-    # Import here to avoid circular imports
-    from pynenc import context
-
-    runner_ctx = context.get_current_runner_context(app_id)
-    return {
-        "runner_cls": runner_ctx.runner_cls,
-        "runner_id": runner_ctx.runner_id,
-        "parent_runner_id": runner_ctx.parent_ctx.runner_id
-        if runner_ctx.parent_ctx
-        else None,
-        "task_id": _task_id.get(),
-        "invocation_id": _invocation_id.get(),
-    }

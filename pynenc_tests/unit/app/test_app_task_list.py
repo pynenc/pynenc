@@ -20,7 +20,7 @@ def test_task_registry() -> None:
     """Test that tasks are properly registered in the app's task registry."""
 
     # Check that tasks are in the registry
-    assert len(app.tasks) == 2
+    assert len(app.tasks) >= 2  # consider core tasks
     assert task1.task_id in app.tasks
     assert task2.task_id in app.tasks
 

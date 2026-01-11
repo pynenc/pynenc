@@ -56,17 +56,19 @@ def test_invocation_history(pynmon_client: "PynmonClient") -> None:
         history = app.state_backend.get_history(invocation_id)
         assert history
         assert len(history) > 3  # Registered, pending, running, success
-        assert any(h.runner_context for h in history)
-
         assert "Status timeline".upper() in content.upper()
         for history_item in history:
             assert history_item.status_record.status.value.upper() in content.upper()
             assert history_item.timestamp.isoformat() in content
-            if history_item.runner_context:
-                # owner_context may be RunnerContext, etc.
-                # Check owner_id is in content
-                assert history_item.runner_context.owner_id in content
-
+            runner_context = app.state_backend.get_runner_context(
+                history_item.runner_context_id
+            )
+            assert runner_context is not None, "Runner context should not be None"
+            # owner_context may be RunnerContext, etc.
+            # Check runner_id is in content
+            assert runner_context.runner_id in content
+            assert runner_context.hostname in content
+            assert str(runner_context.pid) in content
     finally:
         app.runner.stop_runner_loop()
         runner_thread.join(timeout=1)
@@ -98,10 +100,8 @@ def test_runner_timeline(pynmon_client: "PynmonClient") -> None:
         assert history_json
         # Get runner context from backend history
         backend_history = app.state_backend.get_history(invocation_id)
-        owner_ids = [
-            h.runner_context.owner_id for h in backend_history if h.runner_context
-        ]
-        assert any(owner_ids), "No owner IDs found in backend history"
+        runner_ids = [h.runner_context_id for h in backend_history]
+        assert any(runner_ids), "No owner IDs found in backend history"
         # Check that runner IDs are in the API response
     finally:
         app.runner.stop_runner_loop()

@@ -68,7 +68,6 @@ def test_store_history_status(
         runner_id="test-runner",
         pid=12345,
         hostname="test-host",
-        extra_data={},
     )
     app.state_backend.add_histories(
         [invocation],

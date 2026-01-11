@@ -109,12 +109,12 @@ def test_running_concurrency(app_fixture: "Pynenc") -> None:
 def test_basic_running_concurrency_check(app_fixture: "Pynenc") -> None:
     """Basic concurency control check"""
     invocation1 = sleep_with_running_concurrency(0.5)
-    owner_id = "test_owner"
+    runner_id = "test_owner"
     app_fixture.orchestrator._atomic_status_transition(
-        invocation1.invocation_id, InvocationStatus.PENDING, owner_id
+        invocation1.invocation_id, InvocationStatus.PENDING, runner_id
     )
     app_fixture.orchestrator._atomic_status_transition(
-        invocation1.invocation_id, InvocationStatus.RUNNING, owner_id
+        invocation1.invocation_id, InvocationStatus.RUNNING, runner_id
     )
     invocation2: DistributedInvocation = sleep_with_running_concurrency(0.1)  # type: ignore
     assert (

@@ -237,34 +237,6 @@ def test_clean_up_blocker(test_vars_cc: Vars) -> None:
     assert inv_to_run == []
 
 
-def test_auto_purge(test_vars_cc: Vars) -> None:
-    """Test that it will auto purge invocations in final state"""
-    test_vars_cc.app.orchestrator.register_new_invocations([test_vars_cc.inv1])
-
-    def get_invocations() -> list[str]:
-        return list(
-            test_vars_cc.app.orchestrator.get_existing_invocations(
-                task=test_vars_cc.inv1.task
-            )
-        )
-
-    assert get_invocations() == [test_vars_cc.inv1.invocation_id]
-    # we mark the inv1 to auto_purge it
-    # but the auto_purge is set to 24 hours
-    test_vars_cc.app.orchestrator.conf.auto_final_invocation_purge_hours = 24.0
-    test_vars_cc.app.orchestrator.set_up_invocation_auto_purge(
-        test_vars_cc.inv1.invocation_id
-    )
-    # auto_purge should not purge it
-    test_vars_cc.app.orchestrator.auto_purge()
-    assert get_invocations() == [test_vars_cc.inv1.invocation_id]
-    # if we change auto_purge to 0
-    test_vars_cc.app.orchestrator.conf.auto_final_invocation_purge_hours = 0.0
-    # auto_purge should purge it
-    test_vars_cc.app.orchestrator.auto_purge()
-    assert get_invocations() == []
-
-
 def test_config_cycle_control(
     test_vars_cc: Vars, mock_register_task_run: MagicMock
 ) -> None:

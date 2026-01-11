@@ -90,19 +90,19 @@ class InvocationStatusRecord:
     Immutable record combining status with ownership information.
 
     :ivar InvocationStatus status: The current invocation status
-    :ivar str | None owner_id: Runner ID that owns this invocation (None if no owner)
+    :ivar str | None runner_id: Runner ID that owns this invocation (None if no owner)
     :ivar datetime timestamp: When this status was set
     """
 
     status: InvocationStatus
-    owner_id: str | None = None
+    runner_id: str | None = None
     timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def to_json(self) -> dict:
         """Serialize the status record to a JSON-compatible dictionary."""
         return {
             "status": self.status.value,
-            "owner_id": self.owner_id,
+            "runner_id": self.runner_id,
             "timestamp": self.timestamp.isoformat(),
         }
 
@@ -114,7 +114,7 @@ class InvocationStatusRecord:
             timestamp = timestamp.replace(tzinfo=UTC)
         return cls(
             status=InvocationStatus(json_dict["status"]),
-            owner_id=json_dict.get("owner_id"),
+            runner_id=json_dict.get("runner_id"),
             timestamp=timestamp,
         )
 
@@ -386,8 +386,8 @@ def validate_ownership(
     msg: str | None = None
     attempted_owner: str | None = runner_id
 
-    if current_def.requires_ownership and runner_id != current_record.owner_id:
-        msg = f"Status requires ownership by '{current_record.owner_id}'"
+    if current_def.requires_ownership and runner_id != current_record.runner_id:
+        msg = f"Status requires ownership by '{current_record.runner_id}'"
     elif new_def.acquires_ownership and not runner_id:
         msg = f"Status {new_status} requires a runner_id to acquire ownership"
         attempted_owner = None
@@ -396,7 +396,7 @@ def validate_ownership(
         raise InvocationStatusOwnershipError(
             from_status=current_record.status,
             to_status=new_status,
-            current_owner=current_record.owner_id,
+            current_owner=current_record.runner_id,
             attempted_owner=attempted_owner,
             reason=msg,
         )
@@ -413,7 +413,7 @@ def compute_new_owner(
         return None
     if new_def.acquires_ownership:
         return runner_id
-    return current_record.owner_id if current_record else None
+    return current_record.runner_id if current_record else None
 
 
 def status_record_transition(
@@ -436,4 +436,4 @@ def status_record_transition(
     validate_ownership(current_record, new_status, runner_id)
     new_owner = compute_new_owner(current_record, new_status, runner_id)
 
-    return InvocationStatusRecord(status=new_status, owner_id=new_owner)
+    return InvocationStatusRecord(status=new_status, runner_id=new_owner)

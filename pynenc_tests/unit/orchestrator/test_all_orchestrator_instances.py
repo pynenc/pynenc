@@ -52,35 +52,35 @@ def test_cannot_change_final_status(app_instance: "Pynenc") -> None:
     inv: DistributedInvocation = dummy_task()  # type: ignore
     app_instance.orchestrator._register_new_invocations([inv])
     invocation_id = inv.invocation_id
-    owner_id = "some_unique_owner_id"
+    runner_id = "some_unique_runner_id"
 
     # We should follow a valid status transition path to reach a final status
     app_instance.orchestrator._atomic_status_transition(
-        invocation_id, InvocationStatus.PENDING, owner_id
+        invocation_id, InvocationStatus.PENDING, runner_id
     )
     app_instance.orchestrator._atomic_status_transition(
-        invocation_id, InvocationStatus.RUNNING, owner_id
+        invocation_id, InvocationStatus.RUNNING, runner_id
     )
 
     # Attempting to change ownership by another owner should raise InvocationStatusOwnershipError
     with pytest.raises(InvocationStatusOwnershipError) as exc_info:
         app_instance.orchestrator._atomic_status_transition(
-            invocation_id, InvocationStatus.SUCCESS, "some_other_owner_id"
+            invocation_id, InvocationStatus.SUCCESS, "some_other_runner_id"
         )
         assert exc_info.value.from_status == InvocationStatus.RUNNING
         assert exc_info.value.to_status == InvocationStatus.SUCCESS
-        assert exc_info.value.current_owner == owner_id
-        assert exc_info.value.attempted_owner == "some_other_owner_id"
+        assert exc_info.value.current_owner == runner_id
+        assert exc_info.value.attempted_owner == "some_other_runner_id"
 
     app_instance.orchestrator._atomic_status_transition(
-        invocation_id, InvocationStatus.SUCCESS, owner_id
+        invocation_id, InvocationStatus.SUCCESS, runner_id
     )
 
     # It's not possible to transition from a final status to any other status
     for status in InvocationStatus:
         with pytest.raises(InvocationStatusTransitionError) as exc_info:
             app_instance.orchestrator._atomic_status_transition(
-                invocation_id, status, owner_id
+                invocation_id, status, runner_id
             )
             assert exc_info.value.from_status == InvocationStatus.SUCCESS
             assert exc_info.value.to_status == status
@@ -184,18 +184,18 @@ def test_get_invocation_ids_paginated_filters_by_status(
     app_instance.orchestrator._register_new_invocations([inv1, inv2, inv3])
 
     # Transition one to PENDING and one to SUCCESS
-    owner_id = "test_owner"
+    runner_id = "test_owner"
     app_instance.orchestrator._atomic_status_transition(
-        inv1.invocation_id, InvocationStatus.PENDING, owner_id
+        inv1.invocation_id, InvocationStatus.PENDING, runner_id
     )
     app_instance.orchestrator._atomic_status_transition(
-        inv2.invocation_id, InvocationStatus.PENDING, owner_id
+        inv2.invocation_id, InvocationStatus.PENDING, runner_id
     )
     app_instance.orchestrator._atomic_status_transition(
-        inv2.invocation_id, InvocationStatus.RUNNING, owner_id
+        inv2.invocation_id, InvocationStatus.RUNNING, runner_id
     )
     app_instance.orchestrator._atomic_status_transition(
-        inv2.invocation_id, InvocationStatus.SUCCESS, owner_id
+        inv2.invocation_id, InvocationStatus.SUCCESS, runner_id
     )
 
     # Filter by REGISTERED status (should only include inv3)
@@ -268,15 +268,15 @@ def test_count_invocations_filters_by_status(app_instance: "Pynenc") -> None:
     app_instance.orchestrator._register_new_invocations([inv1, inv2])
 
     # Transition inv1 to SUCCESS
-    owner_id = "test_owner"
+    runner_id = "test_owner"
     app_instance.orchestrator._atomic_status_transition(
-        inv1.invocation_id, InvocationStatus.PENDING, owner_id
+        inv1.invocation_id, InvocationStatus.PENDING, runner_id
     )
     app_instance.orchestrator._atomic_status_transition(
-        inv1.invocation_id, InvocationStatus.RUNNING, owner_id
+        inv1.invocation_id, InvocationStatus.RUNNING, runner_id
     )
     app_instance.orchestrator._atomic_status_transition(
-        inv1.invocation_id, InvocationStatus.SUCCESS, owner_id
+        inv1.invocation_id, InvocationStatus.SUCCESS, runner_id
     )
 
     # Count by status
@@ -295,3 +295,31 @@ def test_count_invocations_filters_by_status(app_instance: "Pynenc") -> None:
         statuses=[InvocationStatus.SUCCESS, InvocationStatus.FAILED]
     )
     assert all_final == 1
+
+
+def test_auto_purge(app_instance: "Pynenc") -> None:
+    """Test that it will auto purge invocations in final state"""
+    app = app_instance
+    # Ensure the module-level task is bound to the test app instance
+    dummy_task.app = app
+    inv: DistributedInvocation = dummy_task()  # type: ignore
+    app.orchestrator.register_new_invocations([inv])
+
+    def get_invocation_id() -> str | None:
+        invs = list(app.orchestrator.get_existing_invocations(task=inv.task))
+        assert len(invs) <= 1
+        return invs[0] if invs else None
+
+    assert get_invocation_id() == inv.invocation_id
+    # we mark the inv1 to auto_purge it
+    # but the auto_purge is set to 24 hours
+    app.orchestrator.conf.auto_final_invocation_purge_hours = 24.0
+    app.orchestrator.set_up_invocation_auto_purge(inv.invocation_id)
+    # auto_purge should not purge it
+    app.orchestrator.auto_purge()
+    assert get_invocation_id() == inv.invocation_id
+    # if we change auto_purge to 0
+    app.orchestrator.conf.auto_final_invocation_purge_hours = 0.0
+    # auto_purge should purge it
+    app.orchestrator.auto_purge()
+    assert get_invocation_id() is None

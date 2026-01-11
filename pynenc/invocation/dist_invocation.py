@@ -16,7 +16,6 @@ from pynenc.invocation.base_invocation import (
 from pynenc.invocation.status import InvocationStatus
 from pynenc.types import Params, Result
 from pynenc.util.asyncio_helper import run_task_sync
-from pynenc.util.log import set_logging_context
 from pynenc.workflow.exceptions import WorkflowPauseError
 from pynenc.workflow.identity import WorkflowIdentity
 
@@ -192,8 +191,6 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         self._stored_in_backend = state_data["stored_in_backend"]
         self._num_retries = state_data["num_retries"]
         self._result = state_data["result"]
-        # Initialize logger if needed
-        self.init_logger()
 
     def swap_context(self) -> DistributedInvocation | None:
         """
@@ -259,18 +256,15 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         # runner_args are passed from/to the runner (e.g. used to sync subprocesses)
         # Always set runner_args in thread-local storage so nested invocations can access them
         context.set_runner_args(runner_args)
+        # Set the current app so core tasks can access it
+        context.set_current_app(self.app)
         # Set the runner context for this thread so any sub-invocations
         # registered from within this task use the correct runner context
         # (log.py reads directly from context.py, so this is the single source of truth)
         context.set_runner_context(self.app.app_id, runner_ctx)
-        # Set logging-specific context (task_id and invocation_id)
-        set_logging_context(
-            task_id=self.task.task_id,
-            invocation_id=self.invocation_id,
-        )
+        previous_invocation_context = self.swap_context()
         try:
             self.task.logger.info("Invocation STARTED")
-            previous_invocation_context = self.swap_context()
             if not self.app.orchestrator.is_authorize_to_run_by_concurrency_control(
                 self
             ):

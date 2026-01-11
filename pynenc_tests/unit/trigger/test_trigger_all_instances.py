@@ -148,11 +148,10 @@ def test_check_time_based_triggers(trigger: "BaseTrigger") -> None:
 
             # Verify a valid condition was recorded
             valid_conditions = trigger.get_valid_conditions()
-            assert len(valid_conditions) == 1
-            assert (
-                cron_condition.condition_id
-                == list(valid_conditions.values())[0].condition.condition_id
-            )
+            assert len(valid_conditions) >= 1  # Consider core tasks
+            assert cron_condition.condition_id in [
+                vc.condition.condition_id for vc in valid_conditions.values()
+            ]
 
 
 def test_emit_event(trigger: "BaseTrigger") -> None:
@@ -214,15 +213,15 @@ def test_register_task_triggers(trigger: "BaseTrigger") -> None:
 
     # Verify condition was registered
     conditions = trigger._get_all_conditions()
-    assert len(conditions) == 1
+    assert len(conditions) >= 1
     assert any(isinstance(c, CronCondition) for c in conditions)
 
     # Verify trigger was registered using public API (works for both MemTrigger and SQLiteTrigger)
     all_triggers = []
     for cond in conditions:
         all_triggers.extend(trigger.get_triggers_for_condition(cond.condition_id))
-    assert len(all_triggers) == 1
-    assert all_triggers[0].task_id == task.task_id
+    assert len(all_triggers) == len(conditions)
+    assert task.task_id in [trigger.task_id for trigger in all_triggers]
 
 
 def test_register_task_triggers_should_register_triggers_for_task(
@@ -239,15 +238,15 @@ def test_register_task_triggers_should_register_triggers_for_task(
 
     # Assert: fetch all conditions using public API
     all_conditions = trigger._get_all_conditions()
-    assert len(all_conditions) == 1
+    assert len(all_conditions) >= 1
     assert any(isinstance(c, CronCondition) for c in all_conditions)
 
     # Assert: fetch all triggers using get_triggers_for_condition
     all_triggers = []
     for cond in all_conditions:
         all_triggers.extend(trigger.get_triggers_for_condition(cond.condition_id))
-    assert len(all_triggers) == 1
-    assert all_triggers[0].task_id == task.task_id
+    assert len(all_triggers) == len(all_conditions)
+    assert any(trigger.task_id == task.task_id for trigger in all_triggers)
 
 
 def test_distributed_cron_execution(trigger: "BaseTrigger") -> None:
@@ -269,13 +268,13 @@ def test_distributed_cron_execution(trigger: "BaseTrigger") -> None:
         "is_satisfied_by",
         side_effect=lambda ctx: ctx.last_execution is None,
     ):
-        assert trigger._should_trigger_cron_condition(cron_condition, time1) is True
+        assert trigger._should_trigger_cron_condition(cron_condition, time1) is not None
 
         # The cron last execution should now be stored
         assert trigger.get_last_cron_execution(condition_id) == time1
 
         # Second runner checks at 12:00:30 (same minute)
-        assert trigger._should_trigger_cron_condition(cron_condition, time2) is False
+        assert trigger._should_trigger_cron_condition(cron_condition, time2) is None
 
         # Third runner checks at 12:01 (next minute)
         # Create a new mock that returns True if last_execution is time1 and current time is time3
@@ -285,7 +284,10 @@ def test_distributed_cron_execution(trigger: "BaseTrigger") -> None:
             side_effect=lambda ctx: ctx.last_execution == time1
             and ctx.timestamp == time3,
         ):
-            assert trigger._should_trigger_cron_condition(cron_condition, time3) is True
+            assert (
+                trigger._should_trigger_cron_condition(cron_condition, time3)
+                is not None
+            )
 
 
 def test_cron_should_trigger_after_time() -> None:

@@ -51,7 +51,6 @@ def test_add_history_non_blocking(
         runner_id="test-runner",
         pid=12345,
         hostname="test-host",
-        extra_data={},
     )
     mock_base_app.state_backend.add_histories(
         [dummy_invocation],

@@ -1,3 +1,4 @@
+from datetime import datetime, UTC
 import threading
 import time
 from typing import TYPE_CHECKING
@@ -7,6 +8,7 @@ import pytest
 from pynenc import Task
 from pynenc.arg_cache import DisabledArgCache
 from pynenc.arguments import ArgumentPrintMode
+from pynenc.runner import ThreadRunner
 from pynenc_tests.util import create_test_logger
 
 if TYPE_CHECKING:
@@ -77,10 +79,17 @@ def test_arg_cache_effect_on_task_start(task_process_large_shared_arg: Task) -> 
     Disables arg_cache, runs twice, then re-enables and runs twice, comparing elapsed times.
     :param app: Pynenc app instance
     """
-
     app = task_process_large_shared_arg.app
     if isinstance(app.arg_cache, DisabledArgCache):
         pytest.skip("Skipping test due to disabled arg_cache")
+
+    # skipt for MemClasses as the cache do not make a big impact in ThreadRunner
+    if (
+        "Mem" in app.orchestrator.__class__.__name__
+        and "Mem" in app.broker.__class__.__name__
+        and isinstance(app.runner, ThreadRunner)
+    ):
+        pytest.skip("Skipping test for ThreadRunner as arg_cache impact is minimal")
 
     large_data = "x" * 10_000_000  # 10 MB of data
     backup_arg_cache = app.arg_cache
@@ -92,20 +101,28 @@ def test_arg_cache_effect_on_task_start(task_process_large_shared_arg: Task) -> 
 
     # Run twice with cache disabled
     t0 = time.perf_counter()
-    start1 = task_process_large_shared_arg(large_data).result
+    ini_utc_1 = datetime.now(UTC)
+    inv1 = task_process_large_shared_arg(large_data)
+    start1 = inv1.result
     elapsed1 = start1 - t0
     t1 = time.perf_counter()
-    start2 = task_process_large_shared_arg(large_data).result
+    ini_utc_2 = datetime.now(UTC)
+    inv2 = task_process_large_shared_arg(large_data)
+    start2 = inv2.result
     elapsed2 = start2 - t1
 
     app.arg_cache = backup_arg_cache
 
     # Run twice with cache enabled
     t2 = time.perf_counter()
-    start3 = task_process_large_shared_arg(large_data).result
+    ini_utc_3 = datetime.now(UTC)
+    inv3 = task_process_large_shared_arg(large_data)
+    start3 = inv3.result
     elapsed3 = start3 - t2
     t3 = time.perf_counter()
-    start4 = task_process_large_shared_arg(large_data).result
+    ini_utc_4 = datetime.now(UTC)
+    inv4 = task_process_large_shared_arg(large_data)
+    start4 = inv4.result
     elapsed4 = start4 - t3
 
     # Cleanup
@@ -119,6 +136,19 @@ def test_arg_cache_effect_on_task_start(task_process_large_shared_arg: Task) -> 
     # Already improve as the arguments are not serialized multiple times in the broker and orchestrator
     logger.info(f"With cache,  first run: elapsed={elapsed3:.3f} seconds")
     logger.info(f"With cache, second run: elapsed={elapsed4:.3f} seconds")
+
+    invs = {
+        "inv1": (ini_utc_1, inv1),
+        "inv2": (ini_utc_2, inv2),
+        "inv3": (ini_utc_3, inv3),
+        "inv4": (ini_utc_4, inv4),
+    }
+    for inv_name, (ini, inv) in invs.items():
+        logger.info(f"Invocation {inv_name} at {ini.isoformat()} history:")
+        for history in app.state_backend.get_history(inv.invocation_id):
+            logger.info(
+                f"  - {history.status_record.status} at {history.timestamp.isoformat()}"
+            )
 
     # The second run with cache should be faster than the first run without cache
     assert elapsed4 < elapsed1, "Arg cache did not speed up task start time"

@@ -152,9 +152,6 @@ class ThreadRunner(BaseRunner):
         Executes one iteration of the ThreadRunner loop.
         Handles the execution and monitoring of task invocations in separate threads.
         """
-        self.logger.debug(
-            f"Starting runner loop iteration with {self.available_threads=}"
-        )
         invocations = self.app.orchestrator.get_invocations_to_run(
             self.available_threads, self.runner_context
         )

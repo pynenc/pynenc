@@ -359,7 +359,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
                     task_id TEXT NOT NULL,
                     call_id TEXT NOT NULL,
                     status TEXT NOT NULL,
-                    status_owner_id TEXT,
+                    status_runner_id TEXT,
                     status_timestamp REAL NOT NULL,
                     retry_count INTEGER NOT NULL DEFAULT 0,
                     auto_purge_timestamp REAL
@@ -433,17 +433,17 @@ class SQLiteOrchestrator(BaseOrchestrator):
     def _register_new_invocations(
         self,
         invocations: list["DistributedInvocation[Params, Result]"],
-        owner_id: str | None = None,
+        runner_id: str | None = None,
     ) -> InvocationStatusRecord:
         """Register new invocations with status Register if they don't exist yet."""
         # TRY TO INSERT, IF CONFLICT, DO NOTHING
-        status_record = InvocationStatusRecord(InvocationStatus.REGISTERED, owner_id)
+        status_record = InvocationStatusRecord(InvocationStatus.REGISTERED, runner_id)
         with sqlite_conn(self.sqlite_db_path) as conn:
             for invocation in invocations:
                 conn.execute(
                     f"""
                     INSERT INTO {Tables.INVOCATIONS} (
-                    invocation_id, task_id, call_id, status, status_owner_id, status_timestamp
+                    invocation_id, task_id, call_id, status, status_runner_id, status_timestamp
                 ) VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT(invocation_id) DO NOTHING
                 """,
@@ -452,7 +452,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
                         invocation.task.task_id,
                         invocation.call_id,
                         status_record.status.value,
-                        status_record.owner_id,
+                        status_record.runner_id,
                         status_record.timestamp.timestamp(),
                     ),
                 )
@@ -624,12 +624,12 @@ class SQLiteOrchestrator(BaseOrchestrator):
             return cursor.fetchone() is not None
 
     def _atomic_status_transition(
-        self, invocation_id: str, status: InvocationStatus, owner_id: str | None = None
+        self, invocation_id: str, status: InvocationStatus, runner_id: str | None = None
     ) -> InvocationStatusRecord:
         """Set the status of an invocation by ID."""
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
-                f"SELECT status, status_owner_id, status_timestamp FROM {Tables.INVOCATIONS} WHERE invocation_id = ?",
+                f"SELECT status, status_runner_id, status_timestamp FROM {Tables.INVOCATIONS} WHERE invocation_id = ?",
                 (invocation_id,),
             )
             row = cursor.fetchone()
@@ -638,17 +638,17 @@ class SQLiteOrchestrator(BaseOrchestrator):
             prev_status_record = InvocationStatusRecord(
                 InvocationStatus(row[0]), row[1], row[2]
             )
-            new_record = status_record_transition(prev_status_record, status, owner_id)
+            new_record = status_record_transition(prev_status_record, status, runner_id)
 
             conn.execute(
                 f"""UPDATE {Tables.INVOCATIONS}
                         SET status = ?,
-                            status_owner_id = ?,
+                            status_runner_id = ?,
                             status_timestamp = ?
                         WHERE invocation_id = ?""",
                 (
                     new_record.status.value,
-                    new_record.owner_id,
+                    new_record.runner_id,
                     new_record.timestamp.timestamp(),
                     invocation_id,
                 ),
@@ -715,7 +715,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
         """
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
-                f"""SELECT status, status_timestamp, status_owner_id
+                f"""SELECT status, status_timestamp, status_runner_id
                     FROM {Tables.INVOCATIONS}
                     WHERE invocation_id = ?""",
                 (invocation_id,),
@@ -724,10 +724,10 @@ class SQLiteOrchestrator(BaseOrchestrator):
             cursor.close()
             if not row:
                 raise KeyError(f"Invocation ID {invocation_id} not found")
-            status_str, status_timestamp, status_owner_id = row
+            status_str, status_timestamp, status_runner_id = row
             status = InvocationStatus(status_str)
             timestamp = datetime.fromtimestamp(status_timestamp, tz=UTC)
-            return InvocationStatusRecord(status, status_owner_id, timestamp)
+            return InvocationStatusRecord(status, status_runner_id, timestamp)
 
     def increment_invocation_retries(self, invocation_id: str) -> None:
         """
@@ -858,18 +858,6 @@ class SQLiteOrchestrator(BaseOrchestrator):
 
             return active_runners
 
-    def _cleanup_inactive_runners(self, timeout_seconds: float) -> None:
-        """Remove runners that haven't sent a heartbeat within the timeout period."""
-        current_time = time()
-        cutoff_time = current_time - timeout_seconds
-
-        with sqlite_conn(self.sqlite_db_path) as conn:
-            conn.execute(
-                f"DELETE FROM {Tables.RUNNER_HEARTBEATS} WHERE last_heartbeat < ?",
-                (cutoff_time,),
-            )
-            conn.commit()
-
     def record_atomic_service_execution(
         self, runner_id: str, start_time: datetime, end_time: datetime
     ) -> None:
@@ -920,9 +908,9 @@ class SQLiteOrchestrator(BaseOrchestrator):
                 f"""
                 SELECT i.invocation_id
                 FROM {Tables.INVOCATIONS} i
-                LEFT JOIN {Tables.RUNNER_HEARTBEATS} r ON i.status_owner_id = r.runner_id
+                LEFT JOIN {Tables.RUNNER_HEARTBEATS} r ON i.status_runner_id = r.runner_id
                 WHERE i.status = ?
-                  AND i.status_owner_id IS NOT NULL
+                  AND i.status_runner_id IS NOT NULL
                   AND (r.runner_id IS NULL OR r.last_heartbeat < ?)
                 """,
                 (InvocationStatus.RUNNING.value, cutoff_time),

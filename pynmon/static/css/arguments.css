@@ -1,0 +1,30 @@
+/* ===== ARGUMENT FORMATTING STYLES ===== */
+
+.arguments-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.argument-item {
+  border-bottom: 1px solid #eee;
+  padding-bottom: 8px;
+}
+
+.argument-item:last-child {
+  border-bottom: none;
+}
+
+.argument-header {
+  padding: 4px 0;
+}
+
+.argument-key {
+  color: #007bff;
+}
+
+.argument-value,
+.argument-simple-value {
+  font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+  font-size: 0.875em;
+}

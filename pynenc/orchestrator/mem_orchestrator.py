@@ -310,10 +310,10 @@ class MemOrchestrator(BaseOrchestrator):
     def _register_new_invocations(
         self,
         invocations: list["DistributedInvocation[Params, Result]"],
-        owner_id: str | None = None,
+        runner_id: str | None = None,
     ) -> InvocationStatusRecord:
         """Registers new invocations and sets them to REGISTERED status."""
-        status_record = InvocationStatusRecord(InvocationStatus.REGISTERED, owner_id)
+        status_record = InvocationStatusRecord(InvocationStatus.REGISTERED, runner_id)
         for invocation in invocations:
             self._interanl_atomic_status_transition(
                 invocation.invocation_id, None, status_record
@@ -541,11 +541,11 @@ class MemOrchestrator(BaseOrchestrator):
         self.invocation_retries.pop(invocation_id, None)
 
     def _atomic_status_transition(
-        self, invocation_id: str, status: InvocationStatus, owner_id: str | None = None
+        self, invocation_id: str, status: InvocationStatus, runner_id: str | None = None
     ) -> InvocationStatusRecord:
         """Sets the status record of a specific invocation."""
         prev_status_record = self.invocation_status_record.get(invocation_id)
-        new_record = status_record_transition(prev_status_record, status, owner_id)
+        new_record = status_record_transition(prev_status_record, status, runner_id)
         return self._interanl_atomic_status_transition(
             invocation_id, prev_status_record, new_record
         )
@@ -657,23 +657,6 @@ class MemOrchestrator(BaseOrchestrator):
 
         return active_runners
 
-    def _cleanup_inactive_runners(self, timeout_seconds: float) -> None:
-        """Remove runners that haven't sent a heartbeat within the timeout period."""
-        current_time = time()
-        cutoff_time = current_time - timeout_seconds
-
-        inactive_runner_ids = [
-            runner_id
-            for runner_id, last_heartbeat in self.runner_last_heartbeat.items()
-            if last_heartbeat < cutoff_time
-        ]
-
-        for runner_id in inactive_runner_ids:
-            self.runner_creation_time.pop(runner_id, None)
-            self.runner_last_heartbeat.pop(runner_id, None)
-            self.runner_last_service_start.pop(runner_id, None)
-            self.runner_last_service_end.pop(runner_id, None)
-
     def record_atomic_service_execution(
         self, runner_id: str, start_time: datetime, end_time: datetime
     ) -> None:
@@ -720,8 +703,8 @@ class MemOrchestrator(BaseOrchestrator):
             status_record = self.invocation_status_record.get(invocation_id)
             if (
                 status_record
-                and status_record.owner_id
-                and status_record.owner_id not in active_runner_ids
+                and status_record.runner_id
+                and status_record.runner_id not in active_runner_ids
             ):
                 yield invocation_id
 

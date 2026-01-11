@@ -40,6 +40,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Enhanced with execution time validation and history-aware scheduling to detect configuration issues
   - New invocation status `RUNNING_RECOVERY` for recovering RUNNING invocations owned by inactive runners
 
+- **Pynenc Core Task**
+
+  - Adding the `pynenc/core_tasks.py` module with pynenc core functionalities
+  - Task for recover pending invocations that exceed `ConfigPynenc.max_pending_seconds`
+  - Task to recover invocations from dead runners (exceed `ConfigPynenc.runner_considered_dead_after_minutes`)
+
 - **Plugin Test Infrastructure**:
 
   - Added `all_tests.py` pattern for centralized test exports to plugins
@@ -204,16 +210,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - **DisabledTrigger**: Fixed `AttributeError` when registering conditions or triggers while triggering is disabled. Overrode `register_condition` and `register_task_triggers` with no-op implementations that issue a warning.
 
+- **Triggering cron**: Fixed a bug on the Cron Trigger validation and execution that prevented some valid cron triggers to run.
+
 ### Migration Guide
 
 - **For Redis Users**: Install the Redis plugin to maintain existing functionality:
+
   ```bash
   pip install pynenc-redis
   ```
+
 - **For MongoDB Users**: Install the new MongoDB plugin:
+
   ```bash
   pip install pynenc-mongodb
   ```
+
 - **Code Changes**: No changes required to existing code once appropriate plugins are installed
 
 ### Technical

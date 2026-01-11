@@ -310,8 +310,8 @@ class InvocationStatusRaceConditionError(InvocationStatusError):
 
         super().__init__(
             f"Race condition detected for invocation {invocation_id}: "
-            f"expected {expected_status_record.status} (owner: {expected_status_record.owner_id}), "
-            f"but found {actual_status_record.status} (owner: {actual_status_record.owner_id})"
+            f"expected {expected_status_record.status} (owner: {expected_status_record.runner_id}), "
+            f"but found {actual_status_record.status} (owner: {actual_status_record.runner_id})"
         )
 
     def __str__(self) -> str:

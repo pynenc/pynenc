@@ -99,15 +99,15 @@ def test_remove_invocation(invocations: tuple, app_instance: "Pynenc") -> None:
     assert invocation1.call_id in set(graph.get_callees(invocation0.call_id))
 
     # Let's mark invocation1 as final and try the clean up again
-    owner_id = "test_owner"
+    runner_id = "test_owner"
     app_instance.orchestrator._atomic_status_transition(
-        invocation1.invocation_id, InvocationStatus.PENDING, owner_id
+        invocation1.invocation_id, InvocationStatus.PENDING, runner_id
     )
     app_instance.orchestrator._atomic_status_transition(
-        invocation1.invocation_id, InvocationStatus.RUNNING, owner_id
+        invocation1.invocation_id, InvocationStatus.RUNNING, runner_id
     )
     app_instance.orchestrator._atomic_status_transition(
-        invocation1.invocation_id, InvocationStatus.SUCCESS, owner_id
+        invocation1.invocation_id, InvocationStatus.SUCCESS, runner_id
     )
     graph.clean_up_invocation_cycles(invocation1.invocation_id)
     assert invocation1.call_id not in set(graph.get_callees(invocation0.call_id))

@@ -20,7 +20,7 @@ def test_pending_to_pending_recovery_should_bypass_ownership() -> None:
     # Arrange: Create a PENDING status record owned by runner-1
     current_record = InvocationStatusRecord(
         status=InvocationStatus.PENDING,
-        owner_id="runner-1",
+        runner_id="runner-1",
         timestamp=datetime.now(UTC),
     )
 
@@ -33,7 +33,7 @@ def test_pending_to_pending_recovery_should_bypass_ownership() -> None:
 
     # Assert: Transition should succeed
     assert new_record.status == InvocationStatus.PENDING_RECOVERY
-    assert new_record.owner_id is None  # Ownership released
+    assert new_record.runner_id is None  # Ownership released
 
 
 def test_pending_to_pending_recovery_should_release_ownership() -> None:
@@ -41,7 +41,7 @@ def test_pending_to_pending_recovery_should_release_ownership() -> None:
     # Arrange
     current_record = InvocationStatusRecord(
         status=InvocationStatus.PENDING,
-        owner_id="runner-1",
+        runner_id="runner-1",
         timestamp=datetime.now(UTC),
     )
 
@@ -53,7 +53,7 @@ def test_pending_to_pending_recovery_should_release_ownership() -> None:
     )
 
     # Assert: Ownership should be released
-    assert new_record.owner_id is None
+    assert new_record.runner_id is None
 
 
 def test_pending_recovery_to_rerouted_should_succeed() -> None:
@@ -61,7 +61,7 @@ def test_pending_recovery_to_rerouted_should_succeed() -> None:
     # Arrange
     current_record = InvocationStatusRecord(
         status=InvocationStatus.PENDING_RECOVERY,
-        owner_id=None,
+        runner_id=None,
         timestamp=datetime.now(UTC),
     )
 
@@ -74,7 +74,7 @@ def test_pending_recovery_to_rerouted_should_succeed() -> None:
 
     # Assert
     assert new_record.status == InvocationStatus.REROUTED
-    assert new_record.owner_id is None  # REROUTED also releases ownership
+    assert new_record.runner_id is None  # REROUTED also releases ownership
 
 
 def test_running_to_pending_recovery_should_fail() -> None:
@@ -82,7 +82,7 @@ def test_running_to_pending_recovery_should_fail() -> None:
     # Arrange
     current_record = InvocationStatusRecord(
         status=InvocationStatus.RUNNING,
-        owner_id="runner-1",
+        runner_id="runner-1",
         timestamp=datetime.now(UTC),
     )
 
@@ -100,7 +100,7 @@ def test_pending_to_running_should_still_require_ownership() -> None:
     # Arrange
     current_record = InvocationStatusRecord(
         status=InvocationStatus.PENDING,
-        owner_id="runner-1",
+        runner_id="runner-1",
         timestamp=datetime.now(UTC),
     )
 
@@ -118,7 +118,7 @@ def test_pending_to_running_should_succeed_with_correct_owner() -> None:
     # Arrange
     current_record = InvocationStatusRecord(
         status=InvocationStatus.PENDING,
-        owner_id="runner-1",
+        runner_id="runner-1",
         timestamp=datetime.now(UTC),
     )
 
@@ -131,4 +131,4 @@ def test_pending_to_running_should_succeed_with_correct_owner() -> None:
 
     # Assert
     assert new_record.status == InvocationStatus.RUNNING
-    assert new_record.owner_id == "runner-1"  # Ownership maintained
+    assert new_record.runner_id == "runner-1"  # Ownership maintained

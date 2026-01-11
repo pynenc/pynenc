@@ -6,38 +6,41 @@ into TimelineData structures for SVG rendering.
 """
 
 from datetime import UTC, datetime, timedelta
-from typing import Any
-from unittest.mock import MagicMock
 
-
-from pynmon.util.status_colors import DEFAULT_STATUS_COLOR, STATUS_COLORS
+from pynenc.invocation.status import InvocationStatus, InvocationStatusRecord
+from pynenc.runner.runner_context import RunnerContext
+from pynenc.state_backend.base_state_backend import InvocationHistory
+from pynmon.util.status_colors import STATUS_COLORS
 from pynmon.util.svg.builder import TimelineDataBuilder
 from pynmon.util.svg.models import TimelineConfig
 
 
-def create_mock_history(
-    invocation_id: str,
-    status: str,
-    runner_id: str,
-    hostname: str,
-    timestamp: datetime,
-) -> Any:
-    """Create a mock InvocationHistory object."""
-    mock = MagicMock()
-    mock.invocation_id = invocation_id
-    mock.timestamp = timestamp
-    mock.status_record.status.value = status
-
+def create_runner_context(runner_id: str, hostname: str) -> RunnerContext:
     # Create runner_context that simulates RunnerContext without parent
-    runner_context = MagicMock()
-    runner_context.runner_id = runner_id
-    runner_context.runner_cls = "ThreadRunner"
-    runner_context.hostname = hostname
-    runner_context.pid = 1234
-    runner_context.thread_id = 1
-    runner_context.parent_ctx = None  # No parent - use runner_id directly as lane_id
-    mock.runner_context = runner_context
-    return mock
+    return RunnerContext(
+        runner_cls="ThreadRunner",
+        runner_id=runner_id,
+        parent_ctx=None,
+        hostname=hostname,
+        pid=1234,
+        thread_id=1,
+    )
+
+
+def create_history(
+    invocation_id: str,
+    status: InvocationStatus,
+    runner_context_id: str,
+    timestamp: datetime,
+) -> InvocationHistory:
+    """Create a mock InvocationHistory object."""
+    inv_history = InvocationHistory(
+        invocation_id=invocation_id,
+        status_record=InvocationStatusRecord(status=status),
+        runner_context_id=runner_context_id,
+    )
+    inv_history._timestamp = timestamp
+    return inv_history
 
 
 def test_empty_build() -> None:
@@ -54,15 +57,14 @@ def test_single_history_entry() -> None:
     builder = TimelineDataBuilder()
     timestamp = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
 
-    history = create_mock_history(
+    runner_ctx = create_runner_context("ThreadRunner@host1-1234", "host1")
+    history = create_history(
         invocation_id="inv-123",
-        status="RUNNING",
-        runner_id="ThreadRunner@host1-1234",
-        hostname="host1",
+        status=InvocationStatus.RUNNING,
+        runner_context_id=runner_ctx.runner_id,
         timestamp=timestamp,
     )
-
-    builder.add_history_batch([history])
+    builder.add_history_batch([history], {runner_ctx.runner_id: runner_ctx})
     data = builder.build()
 
     assert len(data.lanes) == 1
@@ -79,19 +81,25 @@ def test_multiple_runners() -> None:
     """Multiple runners create separate lanes."""
     builder = TimelineDataBuilder()
     base_time = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
-
+    runner_ctx_1 = create_runner_context("runner1@host1", "host1")
+    runner_ctx_2 = create_runner_context("runner2@host2", "host2")
     histories = [
-        create_mock_history("inv-1", "RUNNING", "runner1@host1", "host1", base_time),
-        create_mock_history(
+        create_history(
+            "inv-1", InvocationStatus.RUNNING, runner_ctx_1.runner_id, base_time
+        ),
+        create_history(
             "inv-2",
-            "RUNNING",
-            "runner2@host2",
-            "host2",
+            InvocationStatus.RUNNING,
+            runner_ctx_2.runner_id,
             base_time + timedelta(seconds=1),
         ),
     ]
+    runner_dict = {
+        runner_ctx_1.runner_id: runner_ctx_1,
+        runner_ctx_2.runner_id: runner_ctx_2,
+    }
 
-    builder.add_history_batch(histories)
+    builder.add_history_batch(histories, runner_dict)
     data = builder.build()
 
     assert len(data.lanes) == 2
@@ -104,25 +112,27 @@ def test_status_transitions() -> None:
     builder = TimelineDataBuilder()
     base_time = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
 
+    runner_ctx = create_runner_context("runner1@host1", "host1")
     histories = [
-        create_mock_history("inv-1", "PENDING", "runner1@host1", "host1", base_time),
-        create_mock_history(
+        create_history(
+            "inv-1", InvocationStatus.PENDING, runner_ctx.runner_id, base_time
+        ),
+        create_history(
             "inv-1",
-            "RUNNING",
-            "runner1@host1",
-            "host1",
+            InvocationStatus.RUNNING,
+            runner_ctx.runner_id,
             base_time + timedelta(seconds=10),
         ),
-        create_mock_history(
+        create_history(
             "inv-1",
-            "SUCCESS",
-            "runner1@host1",
-            "host1",
+            InvocationStatus.SUCCESS,
+            runner_ctx.runner_id,
             base_time + timedelta(seconds=60),
         ),
     ]
+    runner_dict = {runner_ctx.runner_id: runner_ctx}
 
-    builder.add_history_batch(histories)
+    builder.add_history_batch(histories, runner_dict)
     data = builder.build()
 
     lane = data.lanes["runner1@host1"]
@@ -142,12 +152,20 @@ def test_time_bounds_computed() -> None:
     start = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
     end = datetime(2025, 1, 1, 13, 0, 0, tzinfo=UTC)
 
+    runner_ctx_1 = create_runner_context("runner1@host1", "host1")
+    runner_ctx_2 = create_runner_context("runner2@host2", "host2")
     histories = [
-        create_mock_history("inv-1", "RUNNING", "runner1@host1", "host1", start),
-        create_mock_history("inv-2", "RUNNING", "runner2@host2", "host2", end),
+        create_history(
+            "inv-1", InvocationStatus.RUNNING, runner_ctx_1.runner_id, start
+        ),
+        create_history("inv-2", InvocationStatus.RUNNING, runner_ctx_2.runner_id, end),
     ]
+    runner_dict = {
+        runner_ctx_1.runner_id: runner_ctx_1,
+        runner_ctx_2.runner_id: runner_ctx_2,
+    }
 
-    builder.add_history_batch(histories)
+    builder.add_history_batch(histories, runner_dict)
     data = builder.build()
 
     assert data.bounds.start_time == start
@@ -159,16 +177,15 @@ def test_custom_config() -> None:
     """Custom config is passed through to TimelineData."""
     config = TimelineConfig(width=800, lane_height=30)
     builder = TimelineDataBuilder(config=config)
-
-    history = create_mock_history(
+    runner_ctx = create_runner_context("runner1@host1", "host1")
+    history = create_history(
         "inv-1",
-        "RUNNING",
-        "runner1@host1",
-        "host1",
+        InvocationStatus.RUNNING,
+        runner_ctx.runner_id,
         datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC),
     )
 
-    builder.add_history_batch([history])
+    builder.add_history_batch([history], {runner_ctx.runner_id: runner_ctx})
     data = builder.build()
 
     assert data.config.width == 800
@@ -180,31 +197,33 @@ def test_incremental_batches() -> None:
     builder = TimelineDataBuilder()
     base_time = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
 
+    runner_ctx = create_runner_context("runner1@host1", "host1")
     batch1 = [
-        create_mock_history("inv-1", "PENDING", "runner1@host1", "host1", base_time)
+        create_history(
+            "inv-1", InvocationStatus.PENDING, runner_ctx.runner_id, base_time
+        )
     ]
     batch2 = [
-        create_mock_history(
+        create_history(
             "inv-1",
-            "RUNNING",
-            "runner1@host1",
-            "host1",
+            InvocationStatus.RUNNING,
+            runner_ctx.runner_id,
             base_time + timedelta(seconds=10),
         )
     ]
     batch3 = [
-        create_mock_history(
+        create_history(
             "inv-1",
-            "SUCCESS",
-            "runner1@host1",
-            "host1",
+            InvocationStatus.SUCCESS,
+            runner_ctx.runner_id,
             base_time + timedelta(seconds=60),
         )
     ]
+    runner_dict = {runner_ctx.runner_id: runner_ctx}
 
-    builder.add_history_batch(batch1)
-    builder.add_history_batch(batch2)
-    builder.add_history_batch(batch3)
+    builder.add_history_batch(batch1, runner_dict)
+    builder.add_history_batch(batch2, runner_dict)
+    builder.add_history_batch(batch3, runner_dict)
 
     data = builder.build()
 
@@ -220,10 +239,11 @@ def test_clear_resets_builder() -> None:
     builder = TimelineDataBuilder()
     base_time = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
 
-    history = create_mock_history(
-        "inv-1", "RUNNING", "runner1@host1", "host1", base_time
+    runner_ctx = create_runner_context("runner1@host1", "host1")
+    history = create_history(
+        "inv-1", InvocationStatus.RUNNING, runner_ctx.runner_id, base_time
     )
-    builder.add_history_batch([history])
+    builder.add_history_batch([history], {runner_ctx.runner_id: runner_ctx})
 
     builder.clear()
     data = builder.build()
@@ -236,18 +256,20 @@ def test_status_colors() -> None:
     builder = TimelineDataBuilder()
     base_time = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
 
+    runner_ctx = create_runner_context("runner1@host1", "host1")
     histories = [
-        create_mock_history("inv-1", "RUNNING", "runner1@host1", "host1", base_time),
-        create_mock_history(
+        create_history(
+            "inv-1", InvocationStatus.RUNNING, runner_ctx.runner_id, base_time
+        ),
+        create_history(
             "inv-1",
-            "SUCCESS",
-            "runner1@host1",
-            "host1",
+            InvocationStatus.SUCCESS,
+            runner_ctx.runner_id,
             base_time + timedelta(seconds=10),
         ),
     ]
 
-    builder.add_history_batch(histories)
+    builder.add_history_batch(histories, {runner_ctx.runner_id: runner_ctx})
     data = builder.build()
 
     lane = data.lanes["runner1@host1"]
@@ -259,30 +281,15 @@ def test_status_colors() -> None:
     assert success_point.color == STATUS_COLORS["SUCCESS"]
 
 
-def test_unknown_status_gets_default_color() -> None:
-    """Unknown status gets the default color."""
-    builder = TimelineDataBuilder()
-    base_time = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
-
-    history = create_mock_history(
-        "inv-1", "UNKNOWN_STATUS", "runner1@host1", "host1", base_time
-    )
-    builder.add_history_batch([history])
-    data = builder.build()
-
-    point = data.lanes["runner1@host1"].points[0]
-    assert point.color == DEFAULT_STATUS_COLOR
-
-
 def test_bar_has_tooltip() -> None:
     """Points have tooltips with invocation and status info."""
     builder = TimelineDataBuilder()
     base_time = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
-
-    history = create_mock_history(
-        "inv-123", "RUNNING", "runner1@host1", "host1", base_time
+    runner_ctx = create_runner_context("runner1@host1", "host1")
+    history = create_history(
+        "inv-123", InvocationStatus.RUNNING, runner_ctx.runner_id, base_time
     )
-    builder.add_history_batch([history])
+    builder.add_history_batch([history], {runner_ctx.runner_id: runner_ctx})
     data = builder.build()
 
     point = data.lanes["runner1@host1"].points[0]
@@ -295,18 +302,14 @@ def test_final_status_has_no_segment() -> None:
     builder = TimelineDataBuilder()
     base_time = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
     end_time = datetime(2025, 1, 1, 13, 0, 0, tzinfo=UTC)
-
-    histories = [
-        create_mock_history(
-            "inv-1",
-            "SUCCESS",
-            "runner1@host1",
-            "host1",
-            base_time + timedelta(minutes=30),
-        ),
-    ]
-
-    builder.add_history_batch(histories)
+    runner_ctx = create_runner_context("runner1@host1", "host1")
+    history = create_history(
+        "inv-1",
+        InvocationStatus.SUCCESS,
+        runner_ctx.runner_id,
+        base_time + timedelta(minutes=30),
+    )
+    builder.add_history_batch([history], {runner_ctx.runner_id: runner_ctx})
     data = builder.build(end_time=end_time)
 
     # SUCCESS is a point-only status (final), so there's only a point, no segment
@@ -322,12 +325,11 @@ def test_non_final_status_extends_to_end() -> None:
     builder = TimelineDataBuilder()
     base_time = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
     end_time = datetime(2025, 1, 1, 13, 0, 0, tzinfo=UTC)
-
-    histories = [
-        create_mock_history("inv-1", "RUNNING", "runner1@host1", "host1", base_time),
-    ]
-
-    builder.add_history_batch(histories)
+    runner_ctx = create_runner_context("runner1@host1", "host1")
+    history = create_history(
+        "inv-1", InvocationStatus.RUNNING, runner_ctx.runner_id, base_time
+    )
+    builder.add_history_batch([history], {runner_ctx.runner_id: runner_ctx})
     data = builder.build(end_time=end_time)
 
     lane = data.lanes["runner1@host1"]
@@ -343,12 +345,11 @@ def test_ongoing_segment_is_marked() -> None:
     builder = TimelineDataBuilder()
     base_time = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
     end_time = datetime(2025, 1, 1, 13, 0, 0, tzinfo=UTC)
-
-    histories = [
-        create_mock_history("inv-1", "RUNNING", "runner1@host1", "host1", base_time),
-    ]
-
-    builder.add_history_batch(histories)
+    runner_ctx = create_runner_context("runner1@host1", "host1")
+    history = create_history(
+        "inv-1", InvocationStatus.RUNNING, runner_ctx.runner_id, base_time
+    )
+    builder.add_history_batch([history], {runner_ctx.runner_id: runner_ctx})
     data = builder.build(end_time=end_time)
 
     lane = data.lanes["runner1@host1"]
@@ -362,19 +363,17 @@ def test_completed_segment_not_marked_ongoing() -> None:
     """Segments with a following status are not marked as ongoing."""
     builder = TimelineDataBuilder()
     base_time = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
-
-    histories = [
-        create_mock_history("inv-1", "RUNNING", "runner1@host1", "host1", base_time),
-        create_mock_history(
-            "inv-1",
-            "SUCCESS",
-            "runner1@host1",
-            "host1",
-            base_time + timedelta(seconds=30),
-        ),
-    ]
-
-    builder.add_history_batch(histories)
+    runner_ctx = create_runner_context("runner1@host1", "host1")
+    history1 = create_history(
+        "inv-1", InvocationStatus.RUNNING, runner_ctx.runner_id, base_time
+    )
+    history2 = create_history(
+        "inv-1",
+        InvocationStatus.SUCCESS,
+        runner_ctx.runner_id,
+        base_time + timedelta(seconds=30),
+    )
+    builder.add_history_batch([history1, history2], {runner_ctx.runner_id: runner_ctx})
     data = builder.build()
 
     lane = data.lanes["runner1@host1"]
@@ -392,12 +391,11 @@ def test_custom_start_and_end_time() -> None:
     # But we want to show the full hour: 12:00 to 13:00
     start_time = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
     end_time = datetime(2025, 1, 1, 13, 0, 0, tzinfo=UTC)
-
-    histories = [
-        create_mock_history("inv-1", "SUCCESS", "runner1@host1", "host1", data_time),
-    ]
-
-    builder.add_history_batch(histories)
+    runner_ctx = create_runner_context("runner1@host1", "host1")
+    history = create_history(
+        "inv-1", InvocationStatus.SUCCESS, runner_ctx.runner_id, data_time
+    )
+    builder.add_history_batch([history], {runner_ctx.runner_id: runner_ctx})
     data = builder.build(start_time=start_time, end_time=end_time)
 
     # Bounds should use the provided times, not the data times

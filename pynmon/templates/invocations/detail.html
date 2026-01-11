@@ -223,15 +223,22 @@ status_badge %} {% block content %}
                               style="font-size: 10px"
                               >{{ entry.runner_cls or 'Unknown' }}</span
                             >
-                            <code
-                              style="
-                                font-size: 10px;
-                                background: #e9ecef;
-                                padding: 1px 4px;
-                                border-radius: 2px;
-                              "
-                              >{{ entry.runner_id }}</code
+                            <a
+                              href="/runners/{{ entry.runner_id }}"
+                              class="text-decoration-none"
+                              title="View runner details"
                             >
+                              <code
+                                style="
+                                  font-size: 10px;
+                                  background: #e9ecef;
+                                  padding: 1px 4px;
+                                  border-radius: 2px;
+                                  color: #0d6efd;
+                                "
+                                >{{ entry.runner_id }}</code
+                              >
+                            </a>
                           </div>
                           <div
                             style="
@@ -269,15 +276,22 @@ status_badge %} {% block content %}
                               style="font-size: 10px"
                               >{{ entry.parent_runner_cls or 'Unknown' }}</span
                             >
-                            <code
-                              style="
-                                font-size: 10px;
-                                background: #e9ecef;
-                                padding: 1px 4px;
-                                border-radius: 2px;
-                              "
-                              >{{ entry.parent_runner_id }}</code
+                            <a
+                              href="/runners/{{ entry.parent_runner_id }}"
+                              class="text-decoration-none"
+                              title="View parent runner details"
                             >
+                              <code
+                                style="
+                                  font-size: 10px;
+                                  background: #e9ecef;
+                                  padding: 1px 4px;
+                                  border-radius: 2px;
+                                  color: #0d6efd;
+                                "
+                                >{{ entry.parent_runner_id }}</code
+                              >
+                            </a>
                             <div
                               style="
                                 color: #6c757d;
@@ -327,69 +341,6 @@ status_badge %} {% block content %}
     </div>
   </div>
 
-  <style>
-    /* Timeline styling */
-    .timeline {
-      position: relative;
-      padding-left: 40px;
-      margin-bottom: 20px;
-    }
-
-    .timeline:before {
-      content: "";
-      position: absolute;
-      left: 15px;
-      top: 0;
-      height: 100%;
-      width: 2px;
-      background: #e9ecef;
-    }
-
-    .timeline-item {
-      position: relative;
-      margin-bottom: 20px;
-    }
-
-    .timeline-marker {
-      position: absolute;
-      left: -35px;
-      width: 15px;
-      height: 15px;
-      border-radius: 50%;
-      top: 0;
-    }
-
-    .timeline-content {
-      padding-bottom: 10px;
-    }
-
-    .timeline-title {
-      margin-top: 0;
-      font-size: 16px;
-    }
-
-    .timeline-date {
-      color: #6c757d;
-      font-size: 14px;
-      margin-bottom: 0.5rem;
-    }
-
-    .result-container {
-      max-height: 300px;
-      overflow-y: auto;
-      border: 1px solid #e9ecef;
-      border-radius: 4px;
-      background-color: #f8f9fa;
-    }
-
-    .result-content {
-      margin: 0;
-      padding: 10px;
-      white-space: pre-wrap;
-      word-break: break-word;
-      font-size: 0.875rem;
-    }
-  </style>
   {% endblock %} {% block extra_js %}
   <script>
     // View in timeline functionality

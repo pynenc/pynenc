@@ -49,9 +49,6 @@ class ConfigPynenc(ConfigPynencBase):
         The runner class to use.
     :cvar bool dev_mode_force_sync_tasks:
         If True, forces tasks to run synchronously, useful for development.
-    :cvar float max_pending_seconds:
-        Maximum time in seconds a task can remain in PENDING state before it expires.
-        See :class:`~pynenc.invocation.status.InvocationStatus` for more details.
     :cvar str logging_level:
         The logging level of the application ('info', 'warning', 'error', etc.).
     :cvar bool print_arguments:
@@ -81,7 +78,16 @@ class ConfigPynenc(ConfigPynencBase):
         This is the polling interval - each runner checks every N minutes to see if it's within
         its assigned time slot. Should be significantly less than atomic_service_interval_minutes
         to ensure runners don't miss their execution window. Default 0.5 minutes (30 seconds).
-    :cvar float atomic_service_runner_considered_dead_after_minutes:
+
+    :cvar str recover_pending_invocations_cron:
+        Cron expression defining how often to run the recover_pending_invocations core task.
+    :cvar float max_pending_seconds:
+        Maximum time in seconds a task can remain in PENDING state before it expires.
+        See :class:`~pynenc.invocation.status.InvocationStatus` for more details.
+
+    :cvar str recover_running_invocations_cron:
+        Cron expression defining how often to run the recover_running_invocations core task.
+    :cvar float runner_considered_dead_after_minutes:
         Timeout period for considering a runner inactive/dead based on heartbeat silence.
 
         This value determines the heartbeat timeout that is used for two purposes:
@@ -103,15 +109,27 @@ class ConfigPynenc(ConfigPynencBase):
     serializer_cls = ConfigField("JsonPickleSerializer")
     arg_cache_cls = ConfigField("DisabledArgCache")
     runner_cls = ConfigField("DummyRunner")
+
+    # Development Mode
     dev_mode_force_sync_tasks = ConfigField(False)
-    max_pending_seconds = ConfigField(5.0)
+
+    # Logging Configuration
     logging_level = ConfigField("info")
     print_arguments = ConfigField(True)
     truncate_arguments_length = ConfigField(32)
     argument_print_mode = ConfigField(ArgumentPrintMode.TRUNCATED)
     cached_status_time = ConfigField(0.1)
     truncate_log_ids = ConfigField(True)
+
+    # Atomic Global Services Configuration
     atomic_service_interval_minutes = ConfigField(5.0)
     atomic_service_spread_margin_minutes = ConfigField(1.0)
     atomic_service_check_interval_minutes = ConfigField(0.5)
-    atomic_service_runner_considered_dead_after_minutes = ConfigField(10.0)
+
+    # Pending Invocation Recovery Service
+    recover_pending_invocations_cron = ConfigField("*/5 * * * *")  # Every 5 minutes
+    max_pending_seconds = ConfigField(5.0)
+
+    # Running Invocation Recovery Service
+    recover_running_invocations_cron = ConfigField("*/15 * * * *")  # Every 15 minutes
+    runner_considered_dead_after_minutes = ConfigField(10.0)

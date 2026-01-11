@@ -9,6 +9,7 @@ from collections import defaultdict
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, NamedTuple
 
+from pynenc.runner.runner_context import RunnerContext
 from pynmon.util.colors import ColorScheme
 from pynmon.util.status_colors import is_segment_status
 from pynmon.util.svg.elements import (
@@ -28,6 +29,7 @@ from pynmon.util.svg.runner_info import RunnerInfo
 
 if TYPE_CHECKING:
     from pynenc.state_backend.base_state_backend import InvocationHistory
+    from pynenc.runner.runner_context import RunnerContext
 
 
 class HistoryEntry(NamedTuple):
@@ -82,21 +84,29 @@ class TimelineDataBuilder:
         # Track child runners per parent: parent_runner_id -> set of child runner_ids
         self._child_runners_by_parent: dict[str, set[str]] = defaultdict(set)
 
-    def add_history_batch(self, batch: list["InvocationHistory"]) -> None:
+    def add_history_batch(
+        self,
+        batch: list["InvocationHistory"],
+        runner_contexts: dict[str, "RunnerContext"],
+    ) -> None:
         """
         Add a batch of InvocationHistory entries to the builder.
 
         :param list[InvocationHistory] batch: Batch of history entries
+        :param dict[str, RunnerContext] runner_contexts: Mapping of runner_context_id to RunnerContext
         """
         for history in batch:
             try:
-                self._add_history_entry(history)
+                runner_context = runner_contexts[history.runner_context_id]
+                self._add_history_entry(history, runner_context)
             except (AttributeError, TypeError, ValueError):
                 continue
 
-    def _add_history_entry(self, history: "InvocationHistory") -> None:
+    def _add_history_entry(
+        self, history: "InvocationHistory", runner_context: "RunnerContext"
+    ) -> None:
         """Process a single history entry."""
-        runner_info = RunnerInfo.from_context(history.runner_context)
+        runner_info = RunnerInfo.from_context(runner_context)
         if not self._is_valid_entry(history, runner_info):
             return
 

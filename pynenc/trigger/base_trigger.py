@@ -478,7 +478,7 @@ class BaseTrigger(ABC):
 
     def _should_trigger_cron_condition(
         self, condition: CronCondition, current_time: datetime
-    ) -> bool:
+    ) -> CronContext | None:
         """
         Determine if a cron condition should be triggered based on its schedule and last execution.
 
@@ -488,9 +488,10 @@ class BaseTrigger(ABC):
 
         :param CronCondition condition: The cron condition to check
         :param datetime current_time: Current time to check against (UTC timezone-aware)
-        :return: True if the condition should be triggered, False otherwise
+        :return: CronContext if the condition is valid and should be triggered, None otherwise
         """
         condition_id = condition.condition_id
+        context = CronContext(timestamp=current_time)
 
         # Check local cache first for efficiency
         cached_last_execution = self._last_cron_execution_cache.get(condition_id)
@@ -503,7 +504,7 @@ class BaseTrigger(ABC):
             # If the condition isn't satisfied with the cached last execution,
             # no need to check persistent storage
             if not condition.is_satisfied_by(context):
-                return False
+                return None
 
         # If we're here, either no cached time or it's time to check again
         # Get the definitive last execution time from storage
@@ -518,7 +519,7 @@ class BaseTrigger(ABC):
                 timestamp=current_time, last_execution=storage_last_execution
             )
             if not condition.is_satisfied_by(context):
-                return False
+                return None
 
         # Try to atomically update the last execution time
         success = self.store_last_cron_execution(
@@ -528,7 +529,7 @@ class BaseTrigger(ABC):
         if success:
             # Update local cache
             self._last_cron_execution_cache[condition_id] = current_time
-            return True
+            return context
         else:
             # Another process beat us to it
             self.app.logger.info(
@@ -538,7 +539,7 @@ class BaseTrigger(ABC):
             fresh_last_execution = self.get_last_cron_execution(condition_id)
             if fresh_last_execution:
                 self._last_cron_execution_cache[condition_id] = fresh_last_execution
-            return False
+            return None
 
     def check_time_based_triggers(self, current_time: datetime | None = None) -> None:
         """
@@ -549,23 +550,15 @@ class BaseTrigger(ABC):
 
         :param current_time: Current time to check against, defaults to now
         """
-        # Create time context
         now = current_time or datetime.now(UTC)
-        context = CronContext(timestamp=now)
-
-        time_conditions = [
-            c for c in self._get_all_conditions() if isinstance(c, CronCondition)
-        ]
-
-        # Evaluate each condition
-        for condition in time_conditions:
-            if isinstance(condition, CronCondition):
-                if not self._should_trigger_cron_condition(condition, now):
-                    continue
-
-            if self.validate_and_record_condition(condition, context):
-                self.app.logger.debug(
-                    f"Recorded valid time condition: {condition.condition_id}"
+        for condition in self._get_all_conditions():
+            if not isinstance(condition, CronCondition):
+                continue
+            if triggering_context := self._should_trigger_cron_condition(
+                condition, now
+            ):
+                self.record_valid_conditions(
+                    [ValidCondition(condition, triggering_context)]
                 )
 
     @abstractmethod
@@ -592,9 +585,6 @@ class BaseTrigger(ABC):
         1. Check time-based triggers
         2. Process valid conditions
         3. Execute triggered tasks
-
-        It uses atomic claiming to ensure each valid condition only triggers
-        a task exactly once across all workers.
         """
         self.check_time_based_triggers()
         # Check for validated conditions

@@ -1,6 +1,4 @@
-{% extends "base.html" %}
-
-{% block content %}
+{% extends "base.html" %} {% block content %}
 <div class="container-fluid mt-4">
   <div class="row">
     <div class="col-md-2">
@@ -113,80 +111,6 @@
     </div>
   </div>
 </div>
-
-<style>
-  .timeline-svg-container {
-    min-height: 200px;
-    background-color: #ffffff;
-    border-radius: 4px;
-  }
-
-  .timeline-svg-container svg {
-    display: block;
-    min-width: 100%;
-  }
-
-  /* Style for clickable bars */
-  .timeline-svg-container svg rect[data-invocation-id] {
-    cursor: pointer;
-    transition: opacity 0.2s ease;
-  }
-
-  .timeline-svg-container svg rect[data-invocation-id]:hover {
-    opacity: 1 !important;
-    stroke: #212529;
-    stroke-width: 2px;
-  }
-
-  /* Style for clickable status points */
-  .timeline-svg-container svg circle[data-invocation-id] {
-    cursor: pointer;
-    transition: r 0.2s ease, stroke-width 0.2s ease;
-  }
-
-  .timeline-svg-container svg circle[data-invocation-id]:hover {
-    stroke-width: 3px !important;
-  }
-
-  /* Highlight all elements of the same invocation on hover */
-  .timeline-svg-container svg rect.invocation-highlight {
-    opacity: 1 !important;
-    stroke: #212529;
-    stroke-width: 2px;
-  }
-
-  .timeline-svg-container svg circle.invocation-highlight {
-    stroke-width: 3px !important;
-    stroke: #212529 !important;
-  }
-
-  .timeline-svg-container svg line.invocation-highlight {
-    opacity: 1 !important;
-    stroke-width: 3px !important;
-  }
-
-  /* Clickable invocation links in details panel */
-  .invocation-link {
-    color: #0d6efd;
-    text-decoration: underline;
-  }
-
-  .invocation-link:hover {
-    color: #0a58ca;
-    background-color: #e7f1ff;
-    border-radius: 2px;
-  }
-
-  .filter-form .form-label {
-    font-size: 12px;
-    margin-bottom: 4px;
-  }
-
-  .filter-form .form-select,
-  .filter-form .form-control {
-    font-size: 13px;
-  }
-</style>
 
 <script>
   // Store current invocation data for zoom functionality
@@ -424,7 +348,9 @@
             if (h.runner_cls) {
               runnerHtml += `<div style="margin-bottom: 4px;">`;
               runnerHtml += `<span class="badge bg-primary" style="font-size: 9px;">${h.runner_cls}</span> `;
-              runnerHtml += `<code style="font-size: 9px; background: #e9ecef; padding: 1px 3px; border-radius: 2px;">${h.runner_id || 'N/A'}</code>`;
+              runnerHtml += `<a href="/runners/${h.runner_id || ''}" class="text-decoration-none" title="View runner details">`;
+              runnerHtml += `<code style="font-size: 9px; background: #e9ecef; padding: 1px 3px; border-radius: 2px; color: #0d6efd;">${h.runner_id || 'N/A'}</code>`;
+              runnerHtml += `</a>`;
               runnerHtml += `</div>`;
               runnerHtml += `<div style="font-size: 9px; color: #6c757d; margin-left: 4px;">`;
               if (h.hostname) runnerHtml += `host: <strong>${h.hostname}</strong> `;
@@ -437,7 +363,9 @@
                 runnerHtml += `<div style="margin-top: 4px; padding-top: 4px; border-top: 1px dashed #dee2e6;">`;
                 runnerHtml += `<span style="font-size: 9px; color: #6c757d;">↳ Parent:</span> `;
                 runnerHtml += `<span class="badge bg-secondary" style="font-size: 9px;">${h.parent_runner_cls || 'Unknown'}</span> `;
-                runnerHtml += `<code style="font-size: 9px; background: #e9ecef; padding: 1px 3px; border-radius: 2px;">${h.parent_runner_id}</code>`;
+                runnerHtml += `<a href="/runners/${h.parent_runner_id || ''}" class="text-decoration-none" title="View parent runner details">`;
+                runnerHtml += `<code style="font-size: 9px; background: #e9ecef; padding: 1px 3px; border-radius: 2px; color: #0d6efd;">${h.parent_runner_id}</code>`;
+                runnerHtml += `</a>`;
                 runnerHtml += `<div style="font-size: 9px; color: #6c757d; margin-left: 12px;">`;
                 if (h.parent_hostname) runnerHtml += `host: <strong>${h.parent_hostname}</strong> `;
                 if (h.parent_pid) runnerHtml += `pid: <strong>${h.parent_pid}</strong> `;

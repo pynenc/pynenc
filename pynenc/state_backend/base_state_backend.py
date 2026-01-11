@@ -11,12 +11,12 @@ from typing import TYPE_CHECKING, Any, Generic, Optional
 from pynenc.conf.config_state_backend import ConfigStateBackend
 from pynenc.exceptions import InvocationNotFoundError, PynencError
 from pynenc.invocation.status import InvocationStatus, InvocationStatusRecord
-from pynenc.runner.runner_context import RunnerContext
 from pynenc.types import Params, Result
 
 if TYPE_CHECKING:
     from pynenc.app import AppInfo, Pynenc
     from pynenc.invocation.dist_invocation import DistributedInvocation
+    from pynenc.runner.runner_context import RunnerContext
     from pynenc.workflow import WorkflowIdentity
 
 
@@ -37,7 +37,7 @@ class InvocationHistory:
     invocation_id: str
     _timestamp: datetime = field(init=False, default_factory=lambda: datetime.now(UTC))
     status_record: InvocationStatusRecord
-    runner_context: "RunnerContext"
+    runner_context_id: str
     registered_by_inv_id: str | None = None
 
     @property
@@ -56,7 +56,7 @@ class InvocationHistory:
                 "invocation_id": self.invocation_id,
                 "_timestamp": self._timestamp.isoformat(),
                 "status_record": self.status_record.to_json(),
-                "runner_context": self.runner_context.to_json(),
+                "runner_context_id": self.runner_context_id,
                 "registered_by_inv_id": self.registered_by_inv_id,
             }
         )
@@ -70,11 +70,10 @@ class InvocationHistory:
         :return: An instance of InvocationHistory.
         """
         hist_dict = json.loads(json_str)
-        runner_ctx = RunnerContext.from_json(hist_dict["runner_context"])
         history = cls(
             invocation_id=hist_dict["invocation_id"],
             status_record=InvocationStatusRecord.from_json(hist_dict["status_record"]),
-            runner_context=runner_ctx,
+            runner_context_id=hist_dict["runner_context_id"],
             registered_by_inv_id=hist_dict.get("registered_by_inv_id"),
         )
 
@@ -97,6 +96,7 @@ class BaseStateBackend(ABC, Generic[Params, Result]):
     def __init__(self, app: "Pynenc") -> None:
         self.app = app
         self.invocation_threads: dict[str, list[threading.Thread]] = defaultdict(list)
+        self._runner_context_cache: dict[str, RunnerContext] = {}
 
     @cached_property
     def conf(self) -> ConfigStateBackend:
@@ -264,6 +264,7 @@ class BaseStateBackend(ABC, Generic[Params, Result]):
         :param InvocationStatusRecord status_record: The status record of the invocation.
         :param RunnerContext owner_context: The owner context of the execution.
         """
+        self.store_runner_context(runner_context)
         for invocation in invocations:
             registered_by_inv_id = (
                 invocation.parent_invocation_id
@@ -273,7 +274,7 @@ class BaseStateBackend(ABC, Generic[Params, Result]):
             invocation_history = InvocationHistory(
                 invocation_id=invocation.invocation_id,
                 status_record=status_record,
-                runner_context=runner_context,
+                runner_context_id=runner_context.runner_id,
                 registered_by_inv_id=registered_by_inv_id,
             )
             thread = threading.Thread(
@@ -296,10 +297,11 @@ class BaseStateBackend(ABC, Generic[Params, Result]):
         :param InvocationStatusRecord status_record: The status record.
         :param RunnerContext runner_context: The runner context.
         """
+        self.store_runner_context(runner_context)
         invocation_history = InvocationHistory(
             invocation_id=invocation_id,
             status_record=status_record,
-            runner_context=runner_context,
+            runner_context_id=runner_context.runner_id,
         )
         thread = threading.Thread(
             target=self._add_histories, args=([invocation_id], invocation_history)
@@ -315,7 +317,6 @@ class BaseStateBackend(ABC, Generic[Params, Result]):
 
         :return: A list of invocation history records.
         """
-        # todo fork open threads
         return self._get_history(invocation_id)
 
     def set_result(self, invocation_id: str, result: Result) -> None:
@@ -496,3 +497,102 @@ class BaseStateBackend(ABC, Generic[Params, Result]):
         :param int batch_size: Number of history entries per batch
         :return: Iterator yielding batches of InvocationHistory
         """
+
+    @abstractmethod
+    def _store_runner_context(self, runner_context: "RunnerContext") -> None:
+        """
+        Backend-specific implementation to store a runner context.
+
+        :param RunnerContext runner_context: The context to store
+        """
+
+    def store_runner_context(self, runner_context: "RunnerContext") -> None:
+        """
+        Store a runner context.
+
+        Updates the local cache and delegates to backend implementation.
+
+        :param RunnerContext runner_context: The context to store
+        """
+        if runner_context.runner_id not in self._runner_context_cache:
+            self._store_runner_context(runner_context)
+        self._runner_context_cache[runner_context.runner_id] = runner_context
+        if runner_context.parent_ctx:
+            self.store_runner_context(runner_context.parent_ctx)
+
+    @abstractmethod
+    def _get_runner_context(self, runner_id: str) -> "RunnerContext | None":
+        """
+        Backend-specific implementation to retrieve a single runner context.
+
+        :param str runner_id: The runner's unique identifier
+        :return: The stored RunnerContext or None if not found
+        """
+
+    @abstractmethod
+    def _get_runner_contexts(self, runner_ids: list[str]) -> list["RunnerContext"]:
+        """
+        Backend-specific implementation to retrieve multiple runner contexts.
+
+        Only called for IDs not found in local cache.
+
+        :param list[str] runner_ids: List of runner unique identifiers
+        :return: list["RunnerContext"] of the stored RunnerContexts
+        """
+
+    def get_runner_context(self, runner_id: str) -> "RunnerContext | None":
+        """
+        Retrieve a runner context by runner_id.
+
+        Checks local cache first, then backend if not found.
+
+        :param str runner_id: The runner's unique identifier
+        :return: The stored RunnerContext or None if not found
+        """
+        if runner_id in self._runner_context_cache:
+            return self._runner_context_cache[runner_id]
+
+        # Try to fetch from backend
+        contexts = self._get_runner_contexts([runner_id])
+        if contexts:
+            ctx = contexts[0]
+            self._runner_context_cache[runner_id] = ctx
+            return ctx
+        return None
+
+    def get_runner_contexts(self, runner_ids: list[str]) -> list["RunnerContext"]:
+        """
+        Retrieve multiple runner contexts by their IDs.
+
+        Uses local cache for known contexts, fetches missing ones from backend,
+        and updates cache with newly fetched contexts.
+
+        :param list[str] runner_ids: List of runner unique identifiers
+        :return: list["RunnerContext"] of the stored RunnerContexts
+        """
+        if not runner_ids:
+            return []
+
+        # Check cache first
+        cached_contexts = []
+        missing_ids = []
+
+        for runner_id in runner_ids:
+            if runner_id in self._runner_context_cache:
+                cached_contexts.append(self._runner_context_cache[runner_id])
+            else:
+                missing_ids.append(runner_id)
+
+        # If all found in cache, return immediately
+        if not missing_ids:
+            return cached_contexts
+
+        # Fetch missing ones from backend
+        fetched_contexts = self._get_runner_contexts(missing_ids)
+
+        # Update cache with fetched contexts
+        for ctx in fetched_contexts:
+            self._runner_context_cache[ctx.runner_id] = ctx
+
+        # Return all found contexts
+        return cached_contexts + fetched_contexts

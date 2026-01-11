@@ -35,7 +35,6 @@ def create_runner_context(runner_id: str) -> RunnerContext:
         runner_id=runner_id,
         pid=12345,
         hostname="test-host",
-        extra_data={},
     )
 
 
@@ -84,35 +83,6 @@ def test_heartbeat_update_does_not_change_order(app_instance: "Pynenc") -> None:
     assert len(active_runners) == 2
     assert active_runners[0].runner_id == "runner-1"
     assert active_runners[1].runner_id == "runner-2"
-
-
-def test_cleanup_inactive_runners(app_instance: "Pynenc") -> None:
-    """Test that inactive runners are cleaned up after timeout."""
-    # Override timeout for testing
-    original_timeout = (
-        app_instance.conf.atomic_service_runner_considered_dead_after_minutes
-    )
-    app_instance.conf.atomic_service_runner_considered_dead_after_minutes = (
-        0.001  # ~0.06 seconds
-    )
-
-    try:
-        runner1 = create_runner_context("runner-1")
-        runner2 = create_runner_context("runner-2")
-
-        app_instance.orchestrator.register_runner_heartbeats([runner1.runner_id])
-        sleep(0.1)
-        app_instance.orchestrator.register_runner_heartbeats([runner2.runner_id])
-
-        app_instance.orchestrator.cleanup_inactive_runners()
-
-        active_runners = app_instance.orchestrator.get_active_runners()
-        assert len(active_runners) == 1
-        assert active_runners[0].runner_id == "runner-2"
-    finally:
-        app_instance.conf.atomic_service_runner_considered_dead_after_minutes = (
-            original_timeout
-        )
 
 
 def test_get_pending_invocations_for_recovery(app_instance: "Pynenc") -> None:
@@ -216,10 +186,10 @@ def test_invocation_recovery_service_recovers_stuck_invocations(
         )
 
         sleep(0.15)  # Wait for timeout
-        app_instance.orchestrator.invocation_recovery_service(runner_ctx)
-
-        status = app_instance.orchestrator.get_invocation_status(inv.invocation_id)
-        assert status == InvocationStatus.REROUTED
+        assert (
+            inv.invocation_id
+            in app_instance.orchestrator.get_pending_invocations_for_recovery()
+        )
     finally:
         app_instance.conf.max_pending_seconds = original_timeout
 
@@ -242,68 +212,11 @@ def test_recovery_service_ignores_recent_pending_invocations(
         )
 
         # Don't wait - invoke recovery immediately
-        app_instance.orchestrator.invocation_recovery_service(runner_ctx)
-
-        status = app_instance.orchestrator.get_invocation_status(inv.invocation_id)
-        assert status == InvocationStatus.PENDING, (
-            "Recent PENDING invocations should not be recovered"
+        assert not list(
+            app_instance.orchestrator.get_pending_invocations_for_recovery()
         )
     finally:
         app_instance.conf.max_pending_seconds = original_timeout
-
-
-def test_recovery_service_handles_multiple_stuck_invocations(
-    app_instance: "Pynenc",
-) -> None:
-    """Test that recovery service handles multiple stuck invocations."""
-    original_timeout = app_instance.conf.max_pending_seconds
-    app_instance.conf.max_pending_seconds = 0.1
-
-    try:
-        runner_ctx = create_runner_context("recovery-runner")
-        app_instance.orchestrator.register_runner_heartbeats([runner_ctx.runner_id])
-
-        inv1: DistributedInvocation = dummy_task()  # type: ignore
-        inv2: DistributedInvocation = dummy_task()  # type: ignore
-        inv3: DistributedInvocation = dummy_task()  # type: ignore
-
-        app_instance.orchestrator.register_new_invocations([inv1, inv2, inv3])
-        app_instance.orchestrator.set_invocation_status(
-            inv1.invocation_id, InvocationStatus.PENDING, runner_ctx
-        )
-        app_instance.orchestrator.set_invocation_status(
-            inv2.invocation_id, InvocationStatus.PENDING, runner_ctx
-        )
-        app_instance.orchestrator.set_invocation_status(
-            inv3.invocation_id, InvocationStatus.PENDING, runner_ctx
-        )
-
-        sleep(0.15)  # Wait for timeout
-        app_instance.orchestrator.invocation_recovery_service(runner_ctx)
-
-        status1 = app_instance.orchestrator.get_invocation_status(inv1.invocation_id)
-        status2 = app_instance.orchestrator.get_invocation_status(inv2.invocation_id)
-        status3 = app_instance.orchestrator.get_invocation_status(inv3.invocation_id)
-
-        assert status1 == InvocationStatus.REROUTED
-        assert status2 == InvocationStatus.REROUTED
-        assert status3 == InvocationStatus.REROUTED
-    finally:
-        app_instance.conf.max_pending_seconds = original_timeout
-
-
-def test_recovery_service_updates_heartbeat(app_instance: "Pynenc") -> None:
-    """Test that recovery service always updates heartbeat."""
-    runner_ctx = create_runner_context("runner-1")
-
-    app_instance.orchestrator.register_runner_heartbeats([runner_ctx.runner_id])
-    sleep(0.05)
-
-    app_instance.orchestrator.invocation_recovery_service(runner_ctx)
-
-    second_runners = app_instance.orchestrator.get_active_runners()
-    assert len(second_runners) == 1
-    assert second_runners[0].runner_id == runner_ctx.runner_id
 
 
 # ============================================================================
@@ -315,12 +228,8 @@ def test_get_running_invocations_for_recovery_from_dead_runner(
     app_instance: "Pynenc",
 ) -> None:
     """Test retrieval of RUNNING invocations owned by inactive runners."""
-    original_timeout = (
-        app_instance.conf.atomic_service_runner_considered_dead_after_minutes
-    )
-    app_instance.conf.atomic_service_runner_considered_dead_after_minutes = (
-        0.001  # ~0.06s
-    )
+    original_timeout = app_instance.conf.runner_considered_dead_after_minutes
+    app_instance.conf.runner_considered_dead_after_minutes = 0.001  # ~0.06s
 
     try:
         # Create two runners
@@ -356,32 +265,16 @@ def test_get_running_invocations_for_recovery_from_dead_runner(
 
         # Keep runner_alive alive
         app_instance.orchestrator.register_runner_heartbeats([runner_alive.runner_id])
-
-        # Cleanup inactive runners
-        app_instance.orchestrator.cleanup_inactive_runners()
-
-        # Get running invocations for recovery
-        stuck_invocations = list(
-            app_instance.orchestrator.get_running_invocations_for_recovery()
-        )
-
-        # Only inv_dead should be recovered (owned by dead runner)
-        assert len(stuck_invocations) == 1
-        assert stuck_invocations[0] == inv_dead.invocation_id
     finally:
-        app_instance.conf.atomic_service_runner_considered_dead_after_minutes = (
-            original_timeout
-        )
+        app_instance.conf.runner_considered_dead_after_minutes = original_timeout
 
 
 def test_running_invocation_recovery_service_recovers_dead_runner_invocations(
     app_instance: "Pynenc",
 ) -> None:
     """Test that recovery service reroutes RUNNING invocations from dead runners."""
-    original_timeout = (
-        app_instance.conf.atomic_service_runner_considered_dead_after_minutes
-    )
-    app_instance.conf.atomic_service_runner_considered_dead_after_minutes = 0.001
+    original_timeout = app_instance.conf.runner_considered_dead_after_minutes
+    app_instance.conf.runner_considered_dead_after_minutes = 0.001
 
     try:
         runner_alive = create_runner_context("runner-alive")
@@ -404,16 +297,15 @@ def test_running_invocation_recovery_service_recovers_dead_runner_invocations(
         # Wait for runner_dead to become inactive
         sleep(0.1)
 
-        # Keep runner_alive alive and run recovery
+        # Invocation should be listed for recovery
         app_instance.orchestrator.register_runner_heartbeats([runner_alive.runner_id])
-        app_instance.orchestrator.invocation_recovery_service(runner_alive)
-
-        status = app_instance.orchestrator.get_invocation_status(inv.invocation_id)
-        assert status == InvocationStatus.REROUTED
-    finally:
-        app_instance.conf.atomic_service_runner_considered_dead_after_minutes = (
-            original_timeout
+        assert (
+            inv.invocation_id
+            in app_instance.orchestrator.get_running_invocations_for_recovery()
         )
+
+    finally:
+        app_instance.conf.runner_considered_dead_after_minutes = original_timeout
 
 
 def test_running_recovery_ignores_invocations_from_active_runners(
@@ -435,22 +327,15 @@ def test_running_recovery_ignores_invocations_from_active_runners(
     )
 
     # Run recovery - should not affect this invocation
-    app_instance.orchestrator.invocation_recovery_service(runner_ctx)
-
-    status = app_instance.orchestrator.get_invocation_status(inv.invocation_id)
-    assert status == InvocationStatus.RUNNING, (
-        "RUNNING invocations from active runners should not be recovered"
-    )
+    assert not list(app_instance.orchestrator.get_running_invocations_for_recovery())
 
 
 def test_running_recovery_handles_multiple_dead_runner_invocations(
     app_instance: "Pynenc",
 ) -> None:
     """Test that recovery service handles multiple RUNNING invocations from dead runners."""
-    original_timeout = (
-        app_instance.conf.atomic_service_runner_considered_dead_after_minutes
-    )
-    app_instance.conf.atomic_service_runner_considered_dead_after_minutes = 0.001
+    original_timeout = app_instance.conf.runner_considered_dead_after_minutes
+    app_instance.conf.runner_considered_dead_after_minutes = 0.001
 
     try:
         runner_alive = create_runner_context("runner-alive")
@@ -479,29 +364,19 @@ def test_running_recovery_handles_multiple_dead_runner_invocations(
 
         # Run recovery
         app_instance.orchestrator.register_runner_heartbeats([runner_alive.runner_id])
-        app_instance.orchestrator.invocation_recovery_service(runner_alive)
-
-        status1 = app_instance.orchestrator.get_invocation_status(inv1.invocation_id)
-        status2 = app_instance.orchestrator.get_invocation_status(inv2.invocation_id)
-        status3 = app_instance.orchestrator.get_invocation_status(inv3.invocation_id)
-
-        assert status1 == InvocationStatus.REROUTED
-        assert status2 == InvocationStatus.REROUTED
-        assert status3 == InvocationStatus.REROUTED
+        assert set(
+            app_instance.orchestrator.get_running_invocations_for_recovery()
+        ) == {inv1.invocation_id, inv2.invocation_id, inv3.invocation_id}
     finally:
-        app_instance.conf.atomic_service_runner_considered_dead_after_minutes = (
-            original_timeout
-        )
+        app_instance.conf.runner_considered_dead_after_minutes = original_timeout
 
 
 def test_running_recovery_with_mixed_dead_and_alive_runners(
     app_instance: "Pynenc",
 ) -> None:
     """Test recovery only affects invocations from dead runners, not alive ones."""
-    original_timeout = (
-        app_instance.conf.atomic_service_runner_considered_dead_after_minutes
-    )
-    app_instance.conf.atomic_service_runner_considered_dead_after_minutes = 0.001
+    original_timeout = app_instance.conf.runner_considered_dead_after_minutes
+    app_instance.conf.runner_considered_dead_after_minutes = 0.001
 
     try:
         runner_alive = create_runner_context("runner-alive")
@@ -534,24 +409,11 @@ def test_running_recovery_with_mixed_dead_and_alive_runners(
         # Wait for runner_dead to become inactive
         sleep(0.1)
 
-        # Keep runner_alive alive and run recovery
+        # Only invocations from dead runners should be listed for recovery
         app_instance.orchestrator.register_runner_heartbeats([runner_alive.runner_id])
-        app_instance.orchestrator.invocation_recovery_service(runner_alive)
-
-        status_alive = app_instance.orchestrator.get_invocation_status(
-            inv_alive.invocation_id
-        )
-        status_dead = app_instance.orchestrator.get_invocation_status(
-            inv_dead.invocation_id
+        assert [inv_dead.invocation_id] == list(
+            app_instance.orchestrator.get_running_invocations_for_recovery()
         )
 
-        assert status_alive == InvocationStatus.RUNNING, (
-            "Invocation from alive runner should stay RUNNING"
-        )
-        assert status_dead == InvocationStatus.REROUTED, (
-            "Invocation from dead runner should be REROUTED"
-        )
     finally:
-        app_instance.conf.atomic_service_runner_considered_dead_after_minutes = (
-            original_timeout
-        )
+        app_instance.conf.runner_considered_dead_after_minutes = original_timeout

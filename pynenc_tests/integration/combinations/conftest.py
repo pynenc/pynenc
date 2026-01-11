@@ -14,6 +14,7 @@ from pynenc.runner import *  # noqa: F403, F401
 from pynenc.serializer import *  # noqa: F403, F401
 from pynenc.serializer.base_serializer import BaseSerializer
 from pynenc.state_backend import MemStateBackend, SQLiteStateBackend
+from pynenc.trigger import MemTrigger, SQLiteTrigger
 from pynenc.util.subclasses import get_all_subclasses
 from pynenc_tests import util
 from pynenc_tests.integration.combinations import tasks, tasks_async
@@ -33,6 +34,7 @@ class AppComponents:
     broker: type
     orchestrator: type
     state_backend: type
+    trigger: type
     serializer: type
     runner: type
 
@@ -51,8 +53,14 @@ class AppComponents:
 
 
 # Define component class tuples for cleaner code
-MEM_CLASSES = (MemArgCache, MemBroker, MemOrchestrator, MemStateBackend)
-SQLITE_CLASSES = (SQLiteArgCache, SQLiteBroker, SQLiteOrchestrator, SQLiteStateBackend)
+MEM_CLASSES = (MemArgCache, MemBroker, MemOrchestrator, MemStateBackend, MemTrigger)
+SQLITE_CLASSES = (
+    SQLiteArgCache,
+    SQLiteBroker,
+    SQLiteOrchestrator,
+    SQLiteStateBackend,
+    SQLiteTrigger,
+)
 
 
 def build_test_combinations() -> list[AppComponents]:
@@ -115,6 +123,7 @@ def app_combination_instance(
     monkeypatch.setenv("PYNENC__BROKER_CLS", components.broker.__name__)
     monkeypatch.setenv("PYNENC__SERIALIZER_CLS", components.serializer.__name__)
     monkeypatch.setenv("PYNENC__STATE_BACKEND_CLS", components.state_backend.__name__)
+    monkeypatch.setenv("PYNENC__TRIGGER_CLS", components.trigger.__name__)
     monkeypatch.setenv("PYNENC__RUNNER_CLS", components.runner.__name__)
     monkeypatch.setenv("PYNENC__LOGGING_LEVEL", "debug")
     monkeypatch.setenv("PYNENC__ORCHESTRATOR__CYCLE_CONTROL", "True")

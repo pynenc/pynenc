@@ -41,34 +41,28 @@ def test_history_records_are_stored_and_ordered(app_instance: "Pynenc") -> None:
     and are returned in timestamp order.
     """
     backend = app_instance.state_backend
-    runner_ctx = RunnerContext(
-        runner_cls="TestRunner",
-        runner_id="test-runner",
-        pid=12345,
-        hostname="test-host",
-        extra_data={},
-    )
+    runner_ctx_id = "test-runner-id"
 
     # Use the actual InvocationHistory class and set timestamps explicitly
     # This keeps the test simple and ensures type compatibility.
     hist1 = InvocationHistory(
         invocation_id="inv-1",
         status_record=InvocationStatusRecord(status=InvocationStatus.REGISTERED),
-        runner_context=runner_ctx,
+        runner_context_id=runner_ctx_id,
     )
     hist1._timestamp = datetime.fromtimestamp(1.0)
 
     hist2 = InvocationHistory(
         invocation_id="inv-1",
         status_record=InvocationStatusRecord(status=InvocationStatus.RUNNING),
-        runner_context=runner_ctx,
+        runner_context_id=runner_ctx_id,
     )
     hist2._timestamp = datetime.fromtimestamp(2.0)
 
     hist3 = InvocationHistory(
         invocation_id="inv-1",
         status_record=InvocationStatusRecord(status=InvocationStatus.FAILED),
-        runner_context=runner_ctx,
+        runner_context_id=runner_ctx_id,
     )
     hist3._timestamp = datetime.fromtimestamp(3.0)
 
@@ -118,30 +112,24 @@ def test_add_and_get_ordered_histories(app_instance: "Pynenc") -> None:
     """
     backend = app_instance.state_backend
     invocation_id = "inv-xyz"
-    runner_ctx = RunnerContext(
-        runner_cls="TestRunner",
-        runner_id="test-runner",
-        pid=12345,
-        hostname="test-host",
-        extra_data={},
-    )
+    runner_context_id = "test-runner-id"
 
     hist1 = InvocationHistory(
         invocation_id=invocation_id,
         status_record=InvocationStatusRecord(status=InvocationStatus.REGISTERED),
-        runner_context=runner_ctx,
+        runner_context_id=runner_context_id,
     )
     sleep(0.01)
     hist2 = InvocationHistory(
         invocation_id=invocation_id,
         status_record=InvocationStatusRecord(status=InvocationStatus.RUNNING),
-        runner_context=runner_ctx,
+        runner_context_id=runner_context_id,
     )
     sleep(0.01)
     hist3 = InvocationHistory(
         invocation_id=invocation_id,
         status_record=InvocationStatusRecord(status=InvocationStatus.FAILED),
-        runner_context=runner_ctx,
+        runner_context_id=runner_context_id,
     )
 
     backend._add_histories([invocation_id], hist1)
@@ -334,13 +322,7 @@ def test_iter_history_in_timerange_returns_entries_within_range(
     whose timestamps fall within the specified time range.
     """
     backend = app_instance.state_backend
-    runner_ctx = RunnerContext(
-        runner_cls="TestRunner",
-        runner_id="test-runner",
-        pid=12345,
-        hostname="test-host",
-        extra_data={},
-    )
+    runner_context_id = "test-runner-id"
 
     # Create a base time and define the query range
     base_time = datetime(2025, 1, 15, 12, 0, 0, tzinfo=UTC)
@@ -351,28 +333,28 @@ def test_iter_history_in_timerange_returns_entries_within_range(
     hist_before = InvocationHistory(
         invocation_id="inv-before",
         status_record=InvocationStatusRecord(status=InvocationStatus.RUNNING),
-        runner_context=runner_ctx,
+        runner_context_id=runner_context_id,
     )
     hist_before._timestamp = base_time - timedelta(minutes=30)
 
     hist_within_1 = InvocationHistory(
         invocation_id="inv-within-1",
         status_record=InvocationStatusRecord(status=InvocationStatus.RUNNING),
-        runner_context=runner_ctx,
+        runner_context_id=runner_context_id,
     )
     hist_within_1._timestamp = base_time + timedelta(minutes=10)
 
     hist_within_2 = InvocationHistory(
         invocation_id="inv-within-2",
         status_record=InvocationStatusRecord(status=InvocationStatus.SUCCESS),
-        runner_context=runner_ctx,
+        runner_context_id=runner_context_id,
     )
     hist_within_2._timestamp = base_time + timedelta(minutes=30)
 
     hist_after = InvocationHistory(
         invocation_id="inv-after",
         status_record=InvocationStatusRecord(status=InvocationStatus.SUCCESS),
-        runner_context=runner_ctx,
+        runner_context_id=runner_context_id,
     )
     hist_after._timestamp = base_time + timedelta(hours=2)
 
@@ -405,13 +387,7 @@ def test_iter_history_in_timerange_returns_all_statuses_for_invocation(
     (e.g., RUNNING -> SUCCESS) and both should be returned.
     """
     backend = app_instance.state_backend
-    runner_ctx = RunnerContext(
-        runner_cls="TestRunner",
-        runner_id="test-runner",
-        pid=12345,
-        hostname="test-host",
-        extra_data={},
-    )
+    runner_context_id = "test-runner-id"
 
     base_time = datetime(2025, 1, 15, 12, 0, 0, tzinfo=UTC)
     query_start = base_time
@@ -421,14 +397,14 @@ def test_iter_history_in_timerange_returns_all_statuses_for_invocation(
     hist_running = InvocationHistory(
         invocation_id="inv-complete",
         status_record=InvocationStatusRecord(status=InvocationStatus.RUNNING),
-        runner_context=runner_ctx,
+        runner_context_id=runner_context_id,
     )
     hist_running._timestamp = base_time + timedelta(minutes=10)
 
     hist_success = InvocationHistory(
         invocation_id="inv-complete",
         status_record=InvocationStatusRecord(status=InvocationStatus.SUCCESS),
-        runner_context=runner_ctx,
+        runner_context_id=runner_context_id,
     )
     hist_success._timestamp = base_time + timedelta(minutes=20)
 
@@ -457,13 +433,7 @@ def test_iter_history_in_timerange_ongoing_invocation_within_range(
     should be visible if they started within the queried range.
     """
     backend = app_instance.state_backend
-    runner_ctx = RunnerContext(
-        runner_cls="TestRunner",
-        runner_id="test-runner",
-        pid=12345,
-        hostname="test-host",
-        extra_data={},
-    )
+    runner_context_id = "test-runner-id"
 
     base_time = datetime(2025, 1, 15, 12, 0, 0, tzinfo=UTC)
     query_start = base_time
@@ -473,7 +443,7 @@ def test_iter_history_in_timerange_ongoing_invocation_within_range(
     hist_running = InvocationHistory(
         invocation_id="inv-ongoing",
         status_record=InvocationStatusRecord(status=InvocationStatus.RUNNING),
-        runner_context=runner_ctx,
+        runner_context_id=runner_context_id,
     )
     hist_running._timestamp = base_time + timedelta(minutes=15)
 
@@ -497,13 +467,7 @@ def test_iter_history_in_timerange_entries_ordered_by_timestamp(
     Test that iter_history_in_timerange returns entries ordered by timestamp.
     """
     backend = app_instance.state_backend
-    runner_ctx = RunnerContext(
-        runner_cls="TestRunner",
-        runner_id="test-runner",
-        pid=12345,
-        hostname="test-host",
-        extra_data={},
-    )
+    runner_context_id = "test-runner-id"
 
     base_time = datetime(2025, 1, 15, 12, 0, 0, tzinfo=UTC)
     query_start = base_time
@@ -521,7 +485,7 @@ def test_iter_history_in_timerange_entries_ordered_by_timestamp(
         hist = InvocationHistory(
             invocation_id=f"inv-{i}",
             status_record=InvocationStatusRecord(status=InvocationStatus.SUCCESS),
-            runner_context=runner_ctx,
+            runner_context_id=runner_context_id,
         )
         hist._timestamp = ts
         backend._add_histories([f"inv-{i}"], hist)
@@ -542,14 +506,7 @@ def test_iter_invocations_in_timerange(app_instance: "Pynenc") -> None:
     for invocations that have history entries within the time range.
     """
     backend = app_instance.state_backend
-    runner_ctx = RunnerContext(
-        runner_cls="TestRunner",
-        runner_id="test-runner",
-        pid=12345,
-        hostname="test-host",
-        extra_data={},
-    )
-
+    runner_context_id = "test-runner-id"
     base_time = datetime(2025, 1, 15, 12, 0, 0, tzinfo=UTC)
     query_start = base_time
     query_end = base_time + timedelta(hours=1)
@@ -558,14 +515,14 @@ def test_iter_invocations_in_timerange(app_instance: "Pynenc") -> None:
     hist1 = InvocationHistory(
         invocation_id="inv-multi",
         status_record=InvocationStatusRecord(status=InvocationStatus.RUNNING),
-        runner_context=runner_ctx,
+        runner_context_id=runner_context_id,
     )
     hist1._timestamp = base_time + timedelta(minutes=10)
 
     hist2 = InvocationHistory(
         invocation_id="inv-multi",
         status_record=InvocationStatusRecord(status=InvocationStatus.SUCCESS),
-        runner_context=runner_ctx,
+        runner_context_id=runner_context_id,
     )
     hist2._timestamp = base_time + timedelta(minutes=20)
 
@@ -573,7 +530,7 @@ def test_iter_invocations_in_timerange(app_instance: "Pynenc") -> None:
     hist3 = InvocationHistory(
         invocation_id="inv-single",
         status_record=InvocationStatusRecord(status=InvocationStatus.RUNNING),
-        runner_context=runner_ctx,
+        runner_context_id=runner_context_id,
     )
     hist3._timestamp = base_time + timedelta(minutes=30)
 
@@ -581,7 +538,7 @@ def test_iter_invocations_in_timerange(app_instance: "Pynenc") -> None:
     hist4 = InvocationHistory(
         invocation_id="inv-outside",
         status_record=InvocationStatusRecord(status=InvocationStatus.SUCCESS),
-        runner_context=runner_ctx,
+        runner_context_id=runner_context_id,
     )
     hist4._timestamp = base_time + timedelta(hours=2)
 
@@ -598,3 +555,17 @@ def test_iter_invocations_in_timerange(app_instance: "Pynenc") -> None:
     # Should return distinct IDs for invocations within range
     assert set(all_ids) == {"inv-multi", "inv-single"}
     assert "inv-outside" not in all_ids
+
+
+def test_store_and_get_runner_context(app_instance: "Pynenc") -> None:
+    """
+    Test storing and retrieving a runner context.
+    """
+    backend = app_instance.state_backend
+    runner_id = "test-runner-ctx"
+    ctx = RunnerContext(runner_cls="TestRunner", runner_id=runner_id)
+    # We get None if we did not save it
+    assert backend.get_runner_context(runner_id) is None
+    backend.store_runner_context(ctx)
+    # We get back the same context we stored
+    assert ctx == backend.get_runner_context(runner_id)

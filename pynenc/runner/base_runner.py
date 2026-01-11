@@ -150,7 +150,6 @@ class BaseRunner(ABC):
                 stacklevel=2,
             )
         self.running = True
-        self.app.logger.info("Starting runner...")
         self._on_start()
 
     @abstractmethod
@@ -291,7 +290,6 @@ class BaseRunner(ABC):
                 f"Runner {self.runner_id} executing atomic global services"
             )
             self.app.trigger.trigger_loop_iteration()
-            self.app.orchestrator.invocation_recovery_service(self.runner_context)
         except PynencError as e:
             self.app.logger.error(
                 f"Error during atomic service execution: {e}", exc_info=True
@@ -316,16 +314,22 @@ class BaseRunner(ABC):
         registered from within running tasks will use this runner's context
         instead of falling back to ExternalRunner.
         """
+        # Set this runner as the current runner in the context FIRST
+        # This ensures all logs during startup show the correct runner context
+        context.set_current_runner(self.app.app_id, self)
         # Calls for initial setup on Runner implementations
         self.on_start()
-        # Set it after on_start to ensure we get latest runner_id
-        # Set this runner as the current runner in the context
-        # This ensures tasks that register new invocations use this runner's context
-        context.set_current_runner(self.app.app_id, self)
         try:
             while self.running:
-                self._check_atomic_services()
+                # We must know which worker are alive and running invocations
+                # Otherwise, the running invocation recovery service may
+                # incorrectly assume that invocations owned by dead workers
+                # need to be recovered, when in fact their workers are still alive.
                 self._report_child_runner_heartbeats()
+                # Atomic services runs in different runners at different times
+                # We use to minimize conflicts with triggering and recovery services
+                self._check_atomic_services()
+                # Main runner loop iteration
                 self.runner_loop_iteration()
                 time.sleep(self.conf.runner_loop_sleep_time_sec)
         except KeyboardInterrupt:
@@ -431,8 +435,17 @@ class ExternalRunner(DummyRunner):
         app: "Pynenc",
         runner_cache: dict | None = None,
     ) -> None:
-        runner_context = RunnerContext(
-            runner_cls=self.__class__.__name__,
+        runner_context = self.get_default_external_runner_context()
+        super().__init__(app, runner_cache, runner_context)
+
+    @classmethod
+    def get_default_external_runner_context(cls) -> RunnerContext:
+        """
+        Create a RunnerContext for the current external process.
+
+        :return: RunnerContext with hostname-pid as runner_id
+        """
+        return RunnerContext(
+            runner_cls=cls.__name__,
             runner_id=f"ExternalRunner@{socket.gethostname()}-{os.getpid()}",
         )
-        super().__init__(app, runner_cache, runner_context)

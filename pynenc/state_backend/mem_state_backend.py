@@ -10,6 +10,7 @@ from pynenc.types import Params, Result
 if TYPE_CHECKING:
     from pynenc.app import AppInfo, Pynenc
     from pynenc.invocation.dist_invocation import DistributedInvocation
+    from pynenc.runner.runner_context import RunnerContext
     from pynenc.state_backend.base_state_backend import InvocationHistory
     from pynenc.workflow import WorkflowIdentity
 
@@ -32,6 +33,7 @@ class MemStateBackend(BaseStateBackend[Params, Result]):
 
     def __init__(self, app: "Pynenc") -> None:
         self._cache: dict[str, DistributedInvocation] = {}
+        self._runner_contexts: dict[str, RunnerContext] = {}
         self._history: dict[str, list] = defaultdict(list)
         self._results: dict[str, Any] = {}
         self._exceptions: dict[str, Exception] = {}
@@ -272,3 +274,34 @@ class MemStateBackend(BaseStateBackend[Params, Result]):
         for i in range(0, len(matching_entries), batch_size):
             batch = [entry for _, entry in matching_entries[i : i + batch_size]]
             yield batch
+
+    def _store_runner_context(self, runner_context: "RunnerContext") -> None:
+        """
+        Store a runner context.
+
+        :param str runner_id: The runner's unique identifier
+        :param RunnerContext runner_context: The context to store
+        """
+        self._runner_contexts[runner_context.runner_id] = runner_context
+
+    def _get_runner_context(self, runner_id: str) -> "RunnerContext | None":
+        """
+        Retrieve a runner context by runner_id.
+
+        :param str runner_id: The runner's unique identifier
+        :return: The stored RunnerContext or None if not found
+        """
+        return self._runner_contexts.get(runner_id)
+
+    def _get_runner_contexts(self, runner_ids: list[str]) -> list["RunnerContext"]:
+        """
+        Retrieve multiple runner contexts by their IDs.
+
+        :param list[str] runner_ids: List of runner unique identifiers
+        :return: list["RunnerContext"] of the stored RunnerContexts
+        """
+        return [
+            self._runner_contexts[runner_id]
+            for runner_id in runner_ids
+            if runner_id in self._runner_contexts
+        ]

@@ -10,15 +10,11 @@ Key components:
 - Automatic logging context integration
 """
 
-import os
-import socket
 import threading
 from typing import TYPE_CHECKING, Any, Optional
 
 from pynenc.runner.runner_context import RunnerContext
-from pynenc.util.log import (
-    clear_logging_context,
-)
+from pynenc.runner.base_runner import ExternalRunner
 
 # Create a thread-local data storage
 thread_local = threading.local()
@@ -27,6 +23,7 @@ if TYPE_CHECKING:
     from pynenc.invocation.conc_invocation import ConcurrentInvocation
     from pynenc.invocation.dist_invocation import DistributedInvocation
     from pynenc.runner.base_runner import BaseRunner
+    from pynenc.app import Pynenc
 
 # Sync invocation context (module-level, doesn't cross threads)
 # - It is a dictionary with the format {app_id: invocation}
@@ -50,6 +47,11 @@ def _get_dist_inv_context_storage() -> dict[str, Optional["DistributedInvocation
     if not hasattr(thread_local, "dist_inv_context"):
         thread_local.dist_inv_context = {}
     return thread_local.dist_inv_context
+
+
+def _get_app_storage() -> Optional["Pynenc"]:
+    """Get thread-local app storage."""
+    return getattr(thread_local, "current_app", None)
 
 
 # =============================================================================
@@ -105,15 +107,11 @@ def get_or_create_runner_context(app_id: str) -> RunnerContext:
 
     # No context set - we're in an external process
     # Create an ExternalRunner context with hostname-pid for stable identification
-    return RunnerContext(
-        runner_cls="ExternalRunner",
-        runner_id=f"ExternalRunner@{socket.gethostname()}-{os.getpid()}",
-    )
+    return ExternalRunner.get_default_external_runner_context()
 
 
 # Alias for backward compatibility
 get_current_runner_context = get_or_create_runner_context
-
 
 # =============================================================================
 # Distributed Invocation Context
@@ -144,6 +142,29 @@ def swap_dist_invocation_context(
     previous_invocation = storage.get(app_id)
     storage[app_id] = invocation
     return previous_invocation
+
+
+# =============================================================================
+# App Context Management
+# =============================================================================
+
+
+def get_current_app() -> Optional["Pynenc"]:
+    """
+    Get the current app from thread-local storage.
+
+    :return: The current app instance, or None if not set.
+    """
+    return _get_app_storage()
+
+
+def set_current_app(app: "Pynenc") -> None:
+    """
+    Set the current app in thread-local storage.
+
+    :param Pynenc app: The app instance to set.
+    """
+    thread_local.current_app = app
 
 
 # =============================================================================
@@ -229,6 +250,3 @@ def clear_current_runner(app_id: str) -> None:
 
     # Clear runner context
     clear_runner_context(app_id)
-
-    # Clear logging context
-    clear_logging_context()

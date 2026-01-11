@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, Optional
 from pynenc.app_info import AppInfo
 from pynenc.conf.config_state_backend import ConfigStateBackendSQLite
 from pynenc.invocation.dist_invocation import DistributedInvocation
+from pynenc.runner.runner_context import RunnerContext
 from pynenc.state_backend.base_state_backend import BaseStateBackend, InvocationHistory
 from pynenc.types import Params, Result
 from pynenc.util.sqlite_utils import create_sqlite_connection as sqlite_conn
@@ -31,6 +32,7 @@ class Tables:
     RESULTS = "state_backend_results"
     EXCEPTIONS = "state_backend_exceptions"
     INVOCATIONS = "state_backend_invocations"
+    RUNNER_CONTEXTS = "state_backend_runner_contexts"
     HISTORY = "state_backend_history"
     WORKFLOWS = "state_backend_workflows"
     APP_INFO = "state_backend_app_info"
@@ -62,6 +64,18 @@ def init_tables(sqlite_db_path: str) -> None:
             CREATE TABLE IF NOT EXISTS {Tables.INVOCATIONS} (
                 invocation_id TEXT PRIMARY KEY,
                 invocation_json TEXT NOT NULL
+            )
+        """
+        )
+        conn.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {Tables.RUNNER_CONTEXTS} (
+                runner_id TEXT PRIMARY KEY,
+                runner_cls TEXT NOT NULL,
+                parent_ctx_id TEXT,
+                pid INTEGER NOT NULL,
+                hostname TEXT NOT NULL,
+                thread_id INTEGER NOT NULL
             )
         """
         )
@@ -139,7 +153,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
         self.sqlite_db_path = get_sqlite_sqlite_db_path(self.conf.sqlite_db_path)
 
         # Initialize database tables
-        self.app.logger.warning(
+        self.app.logger.debug(
             f"Using SQLite database at {self.sqlite_db_path} for state backend."
         )
         init_tables(self.sqlite_db_path)
@@ -466,6 +480,88 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
 
             yield batch
             offset += batch_size
+
+    def _store_runner_context(self, runner_context: "RunnerContext") -> None:
+        """
+        Store a runner context.
+
+        :param str runner_id: The runner's unique identifier
+        :param RunnerContext runner_context: The context to store
+        """
+        with sqlite_conn(self.sqlite_db_path) as conn:
+            parent_ctx_id = None
+            if runner_context.parent_ctx:
+                parent_ctx_id = runner_context.parent_ctx.runner_id
+            conn.execute(
+                f"""REPLACE INTO {Tables.RUNNER_CONTEXTS}
+                (runner_id, runner_cls, parent_ctx_id, pid, hostname, thread_id)
+                VALUES (?, ?, ?, ?, ?, ?)""",
+                (
+                    runner_context.runner_id,
+                    runner_context.runner_cls,
+                    parent_ctx_id,
+                    runner_context.pid,
+                    runner_context.hostname,
+                    runner_context.thread_id,
+                ),
+            )
+            conn.commit()
+
+    def _parse_runner_context_row(self, row: tuple) -> "RunnerContext":
+        runner_id, runner_cls, parent_ctx_id, pid, hostname, thread_id = row
+        parent_ctx = None
+        if parent_ctx_id:
+            parent_ctx = self.get_runner_context(parent_ctx_id)
+            if not parent_ctx:
+                raise KeyError(f"Parent RunnerContext {parent_ctx_id} not found")
+        return RunnerContext(
+            runner_cls=runner_cls,
+            runner_id=runner_id,
+            parent_ctx=parent_ctx,
+            pid=pid,
+            hostname=hostname,
+            thread_id=thread_id,
+        )
+
+    def _get_runner_context(self, runner_id: str) -> "RunnerContext | None":
+        """
+        Retrieve a runner context by runner_id from SQLite.
+
+        :param str runner_id: The runner's unique identifier
+        :return: The stored RunnerContext or None if not found
+        """
+        with sqlite_conn(self.sqlite_db_path) as conn:
+            cur = conn.execute(
+                f"""SELECT runner_cls, parent_ctx_id, pid, hostname, thread_id
+                FROM {Tables.RUNNER_CONTEXTS}
+                WHERE runner_id = ?""",
+                (runner_id,),
+            )
+            row = cur.fetchone()
+            cur.close()
+            if row:
+                return self._parse_runner_context_row((runner_id, *row))
+            return None
+
+    def _get_runner_contexts(self, runner_ids: list[str]) -> list["RunnerContext"]:
+        """
+        Retrieve multiple runner contexts by their IDs.
+
+        :param list[str] runner_ids: List of runner unique identifiers
+        :return: list["RunnerContext"] of the stored RunnerContexts
+        """
+        contexts = []
+        with sqlite_conn(self.sqlite_db_path) as conn:
+            cur = conn.execute(
+                f"""SELECT runner_id, runner_cls, parent_ctx_id, pid, hostname, thread_id
+                FROM {Tables.RUNNER_CONTEXTS}
+                WHERE runner_id IN ({",".join(["?"] * len(runner_ids))})""",
+                tuple(runner_ids),
+            )
+            for row in cur.fetchall():
+                contexts.append(self._parse_runner_context_row(row))
+            cur.close()
+        return contexts
 
     def purge(self) -> None:
         """Clear all state backend data"""

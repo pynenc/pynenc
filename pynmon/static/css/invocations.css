@@ -1,0 +1,140 @@
+/* ===== INVOCATIONS VIEW STYLES ===== */
+
+/* Timeline styling */
+.timeline {
+  position: relative;
+  padding-left: 40px;
+  margin-bottom: 20px;
+}
+
+.timeline:before {
+  content: "";
+  position: absolute;
+  left: 15px;
+  top: 0;
+  height: 100%;
+  width: 2px;
+  background: #e9ecef;
+}
+
+.timeline-item {
+  position: relative;
+  margin-bottom: 20px;
+}
+
+.timeline-marker {
+  position: absolute;
+  left: -35px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  top: 0;
+}
+
+.timeline-content {
+  padding-bottom: 10px;
+}
+
+.timeline-title {
+  margin-top: 0;
+  font-size: 16px;
+}
+
+.timeline-date {
+  color: #6c757d;
+  font-size: 14px;
+  margin-bottom: 0.5rem;
+}
+
+.result-container {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid #e9ecef;
+  border-radius: 4px;
+  background-color: #f8f9fa;
+}
+
+.result-content {
+  margin: 0;
+  padding: 0.5rem;
+  font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+/* Timeline Runner Info */
+.timeline-runner-info {
+  background: #f8f9fa;
+  border-left: 3px solid #17a2b8;
+  padding: 0.5rem;
+  margin-top: 0.5rem;
+  font-size: 11px;
+  border-radius: 2px;
+}
+
+/* SVG Timeline Visualization */
+.timeline-svg-container {
+  min-height: 200px;
+  background-color: #ffffff;
+  border-radius: 4px;
+}
+
+.timeline-svg-container svg {
+  display: block;
+  min-width: 100%;
+}
+
+/* Style for clickable bars */
+.timeline-svg-container svg rect[data-invocation-id] {
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.timeline-svg-container svg rect[data-invocation-id]:hover {
+  opacity: 1 !important;
+  stroke: #212529;
+  stroke-width: 2px;
+}
+
+/* Style for clickable status points */
+.timeline-svg-container svg circle[data-invocation-id] {
+  cursor: pointer;
+  transition: r 0.2s ease, stroke-width 0.2s ease;
+}
+
+.timeline-svg-container svg circle[data-invocation-id]:hover {
+  stroke-width: 3px !important;
+}
+
+/* Highlight all elements of the same invocation on hover */
+.timeline-svg-container svg rect.invocation-highlight {
+  opacity: 1 !important;
+  stroke: #212529;
+  stroke-width: 2px;
+}
+
+.timeline-svg-container svg circle.invocation-highlight {
+  stroke-width: 3px !important;
+  stroke: #212529 !important;
+}
+
+.timeline-svg-container svg text.invocation-highlight {
+  font-weight: bold;
+}
+
+/* Modal styling for invocation details */
+.timeline-modal-content {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.timeline-modal-header {
+  background: #f8f9fa;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.timeline-modal-body {
+  max-height: 600px;
+  overflow-y: auto;
+}

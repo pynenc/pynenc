@@ -51,7 +51,6 @@ def persistent_process_main(
     :param str parent_runner_ctx_json: JSON serialized parent runner context.
     :param str child_runner_id: Pre-generated runner_id for this child worker.
     """
-    app.logger.info(f"Persistent process worker started with PID {os.getpid()}")
     app.runner._runner_cache = runner_cache
     parent_runner_ctx = RunnerContext.from_json(parent_runner_ctx_json)
     # Use pre-generated runner_id so parent can track this child
@@ -60,6 +59,9 @@ def persistent_process_main(
     )
     runner_id = runner_ctx.runner_id
     context.set_runner_context(app.app_id, runner_ctx)
+
+    # Log after context is set so it shows the correct runner info
+    app.logger.info(f"Persistent process worker started with PID {os.getpid()}")
 
     def handle_terminate(signum: int, frame: Any) -> None:
         app.logger.info(f"Process {runner_id} received SIGTERM, setting stop event")
@@ -149,9 +151,7 @@ class PersistentProcessRunner(BaseRunner):
         self.num_processes = max(
             self.conf.min_parallel_slots, self.conf.num_processes or os.cpu_count() or 1
         )
-        self.logger.info(
-            f"Starting PersistentProcessRunner with {self.num_processes} processes"
-        )
+        self.logger.info(f"Creating {self.num_processes} processes")
         warn_missing_main_guard()
         self.child_runner_ids = {}  # Track runner_id -> Process for health reporting
         self._process_id_counter: int = 0
