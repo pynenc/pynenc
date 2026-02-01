@@ -267,3 +267,27 @@ def test_single_run(task_sum: Task) -> None:
     ), f"Invocation ran more than once: {history}"
     app.runner.stop_runner_loop()
     thread.join()
+
+
+def test_very_large_invocation_storage(task_process_large_shared_arg: Task) -> None:
+    """Submit a very large argument to the orchestrator/state-backend to detect size-limit issues."""
+    app = task_process_large_shared_arg.app
+
+    def run_in_thread() -> None:
+        app.runner.run()
+
+    thread = threading.Thread(target=run_in_thread, daemon=True)
+    thread.start()
+
+    # Very large value (~20MB) to exercise backend/document size limits
+    very_large_value = "x" * 20_000_000
+
+    # Create invocation (will store invocation in state backend during routing)
+    invocation = task_process_large_shared_arg(very_large_value)
+
+    # Ensure the invocation completes and returns a start timestamp (float)
+    result = invocation.result
+    assert isinstance(result, float)
+
+    app.runner.stop_runner_loop()
+    thread.join()

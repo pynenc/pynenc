@@ -7,7 +7,7 @@ true cross-process caching for testing process runners.
 
 import sqlite3
 from functools import cached_property
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from pynenc.arg_cache.base_arg_cache import BaseArgCache
 from pynenc.conf.config_arg_cache import ConfigArgCacheSQLite
@@ -71,39 +71,6 @@ class SQLiteArgCache(BaseArgCache):
             config_filepath=self.app.config_filepath,
         )
 
-    def store(self, cache_key: str, value: Any) -> None:
-        """Store a value in the cache."""
-        import pickle
-
-        with sqlite3.connect(self.sqlite_db_path) as conn:
-            conn.execute(
-                f"INSERT OR REPLACE INTO {Tables.CACHE} (cache_key, cached_data, created_at) VALUES (?, ?, julianday('now'))",
-                (cache_key, pickle.dumps(value)),
-            )
-            conn.commit()
-
-    def retrieve(self, cache_key: str) -> Any:
-        """Retrieve a value from the cache."""
-        import pickle
-
-        with sqlite3.connect(self.sqlite_db_path) as conn:
-            cursor = conn.execute(
-                f"SELECT cached_data FROM {Tables.CACHE} WHERE cache_key = ?",
-                (cache_key,),
-            )
-            row = cursor.fetchone()
-            if row:
-                return pickle.loads(row[0])
-            raise KeyError(f"Cache key {cache_key} not found")
-
-    def exists(self, cache_key: str) -> bool:
-        """Check if a cache key exists."""
-        with sqlite3.connect(self.sqlite_db_path) as conn:
-            cursor = conn.execute(
-                f"SELECT 1 FROM {Tables.CACHE} WHERE cache_key = ?", (cache_key,)
-            )
-            return cursor.fetchone() is not None
-
     def _store(self, key: str, value: str) -> None:
         """
         Store a key value pair in the cache.
@@ -113,7 +80,7 @@ class SQLiteArgCache(BaseArgCache):
         """
         with sqlite3.connect(self.sqlite_db_path) as conn:
             conn.execute(
-                "INSERT OR REPLACE INTO arg_cache (cache_key, cached_data) VALUES (?, ?)",
+                f"INSERT OR REPLACE INTO {Tables.CACHE} (cache_key, cached_data) VALUES (?, ?)",
                 (key, value.encode("utf-8")),
             )
             conn.commit()
@@ -128,7 +95,7 @@ class SQLiteArgCache(BaseArgCache):
         """
         with sqlite3.connect(self.sqlite_db_path) as conn:
             cursor = conn.execute(
-                "SELECT cached_data FROM arg_cache WHERE cache_key = ?", (key,)
+                f"SELECT cached_data FROM {Tables.CACHE} WHERE cache_key = ?", (key,)
             )
             row = cursor.fetchone()
             if row:
@@ -137,5 +104,5 @@ class SQLiteArgCache(BaseArgCache):
 
     def _purge(self) -> None:
         """Clear all cached data."""
-        delete_tables_with_prefix(self.sqlite_db_path, "arg")
+        delete_tables_with_prefix(self.sqlite_db_path, "arg_")
         self._init_tables()
