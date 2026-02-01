@@ -92,3 +92,62 @@ def test_disable_cache_flag(app_instance: "Pynenc") -> None:
     result = app_instance.arg_cache.serialize(test_value, disable_cache=True)
     assert not app_instance.arg_cache.is_cache_key(result)
     assert result == app_instance.serializer.serialize(test_value)
+
+
+def test_max_size_to_cache(app_instance: "Pynenc") -> None:
+    """Test that values above max_size_to_cache are not cached."""
+    # Set a max size limit
+    original_max_size = app_instance.arg_cache.conf.max_size_to_cache
+    app_instance.arg_cache.conf.max_size_to_cache = 5000
+
+    try:
+        # Value within limits should be cached
+        medium_value = "x" * (app_instance.arg_cache.conf.min_size_to_cache + 100)
+        medium_result = app_instance.arg_cache.serialize(medium_value)
+        assert app_instance.arg_cache.is_cache_key(medium_result)
+
+        # Value above max should not be cached
+        large_value = "x" * 10000
+        large_result = app_instance.arg_cache.serialize(large_value)
+        assert not app_instance.arg_cache.is_cache_key(large_result)
+        assert large_result == app_instance.serializer.serialize(large_value)
+    finally:
+        # Restore original value
+        app_instance.arg_cache.conf.max_size_to_cache = original_max_size
+
+
+def test_very_large_argument_handling(app_instance: "Pynenc") -> None:
+    """
+    Test that very large arguments are handled properly by the backend.
+
+    This test uses a value large enough (~20MB serialized) to exceed common
+    backend size limits (e.g., document size limits in NoSQL databases,
+    VARCHAR limits in RDBMS implementations).
+
+    If max_size_to_cache is configured, large arguments exceeding that limit
+    should NOT be cached and should be returned as serialized values directly.
+
+    If max_size_to_cache is 0 (no limit), the implementation will attempt to
+    cache the value, which may FAIL if the backend has size constraints that
+    haven't been configured properly. This forces implementations with size
+    limits to set an appropriate max_size_to_cache value.
+    """
+    # Create a value large enough to exceed common backend limits
+    # 20 million characters (~20MB) exceeds most default limits
+    very_large_value = "x" * 20_000_000
+
+    # This should not crash - either it gets cached (if limit allows) or
+    # returns serialized value directly (if exceeds max_size_to_cache)
+    result = app_instance.arg_cache.serialize(very_large_value)
+
+    # Verify the value is usable regardless of whether it was cached
+    if app_instance.arg_cache.is_cache_key(result):
+        # If it was cached, we should be able to retrieve it
+        retrieved = app_instance.arg_cache.deserialize(result)
+        assert retrieved == very_large_value
+    else:
+        # If not cached, result should be the serialized value
+        assert result == app_instance.serializer.serialize(very_large_value)
+        # And we should be able to deserialize it directly
+        deserialized = app_instance.serializer.deserialize(result)
+        assert deserialized == very_large_value

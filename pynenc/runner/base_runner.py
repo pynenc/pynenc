@@ -341,6 +341,15 @@ class BaseRunner(ABC):
             self.on_stop()
             context.clear_current_runner(self.app.app_id)
 
+    def _register_new_child_runner_context(self, child_context: RunnerContext) -> None:
+        """
+        Register a new child runner context and ensures that we have an initial heartbeat.
+
+        :param RunnerContext child_context: The context of the child runner to register
+        """
+        self.app.state_backend.store_runner_context(child_context)
+        self.app.orchestrator.register_runner_heartbeats([child_context.runner_id])
+
     def _report_child_runner_heartbeats(self) -> None:
         """
         Report heartbeats for active child runners to the orchestrator.

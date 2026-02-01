@@ -278,7 +278,7 @@ class ProcessRunner(BaseRunner):
                 break
             invocation = invocations[0]
             invocation.app.runner = self
-
+            self._register_new_child_runner_context(reserved_ctx)
             process = Process(
                 target=run_invocation,
                 args=(self.app, invocation, reserved_ctx, self.runner_args),
@@ -296,8 +296,9 @@ class ProcessRunner(BaseRunner):
                     reserved_ctx.runner_id
                 )
             else:
+                # The recovery service should pick this up
                 self.logger.error(
-                    f"Failed to start process for invocation {invocation.invocation_id}, rerouting it"
+                    f"Failed to start process for invocation {invocation.invocation_id}"
                 )
         self.handle_waiting_invocations()
 

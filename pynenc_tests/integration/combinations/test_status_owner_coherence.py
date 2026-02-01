@@ -40,6 +40,13 @@ def test_status_owner_match_a_runner_id(task_sum: Task) -> None:
             assert (
                 history_record.runner_context_id in active_runner_ids
                 or history_record.runner_context_id == external_runner_ctx.runner_id
+            ), (
+                f"Invocation {inv.invocation_id} has history with runner_context_id "
+                f"{history_record.runner_context_id} which is not in active runners. "
+                f"This means a child runner started executing before being properly registered. "
+                f"Ensure BaseRunner._register_new_child_runner_context() is called before "
+                f"any invocations are executed in new runner instances (check persistent_process_main, "
+                f"multi_thread_runner, process_runner initialization)."
             )
 
     app.runner.stop_runner_loop()

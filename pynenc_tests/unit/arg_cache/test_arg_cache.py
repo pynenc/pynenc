@@ -183,3 +183,45 @@ def test_cache_key_in_complex_structure(mock_base_app: "MockPynenc") -> None:
     # Deserialize the keys in the complex structure
     assert arg_cache.deserialize(result["cached_key1"]) == large_data1
     assert arg_cache.deserialize(result["nested"]["cached_key2"]) == large_data2
+
+
+def test_max_size_to_cache_enforcement(mock_base_app: "MockPynenc") -> None:
+    """Test that max_size_to_cache prevents caching when exceeded."""
+    arg_cache = MockArgCache(app=mock_base_app)
+
+    # Set a max size limit
+    arg_cache.conf.max_size_to_cache = 5000
+
+    # Value within limits should be cached
+    medium_value = "x" * (arg_cache.conf.min_size_to_cache + 100)
+    medium_result = arg_cache.serialize(medium_value)
+    assert arg_cache.is_cache_key(medium_result)
+    assert arg_cache._store.call_count == 1
+
+    # Reset mock
+    arg_cache._store.reset_mock()
+
+    # Value above max should not be cached
+    large_value = "x" * 10000
+    large_result = arg_cache.serialize(large_value)
+    assert not arg_cache.is_cache_key(large_result)
+    assert large_result == mock_base_app.serializer.serialize(large_value)
+    # _store should not be called
+    arg_cache._store.assert_not_called()
+
+
+def test_max_size_disabled_allows_large_values(mock_base_app: "MockPynenc") -> None:
+    """Test that max_size_to_cache=0 disables the size limit."""
+    arg_cache = MockArgCache(app=mock_base_app)
+
+    # Ensure max_size is disabled (0)
+    arg_cache.conf.max_size_to_cache = 0
+
+    # Very large value should still attempt to be cached when limit is disabled
+    very_large_value = "x" * 1_000_000
+    result = arg_cache.serialize(very_large_value)
+
+    # Should be cached (returns cache key)
+    assert arg_cache.is_cache_key(result)
+    # _store should be called since there's no size limit
+    assert arg_cache._store.call_count == 1

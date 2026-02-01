@@ -206,6 +206,17 @@ class BaseArgCache(ABC):
         if len(serialized) < self.conf.min_size_to_cache:
             return serialized
 
+        # Check if too large to cache (if max_size_to_cache is set)
+        if (
+            self.conf.max_size_to_cache > 0
+            and len(serialized) > self.conf.max_size_to_cache
+        ):
+            self.app.logger.warning(
+                f"Argument size ({len(serialized)} chars) exceeds max_size_to_cache "
+                f"({self.conf.max_size_to_cache} chars). Returning serialized value directly."
+            )
+            return serialized
+
         # Try fingerprint cache
         if key := self._check_fingerprint(serialized, obj_id, obj):
             return key

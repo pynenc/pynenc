@@ -51,7 +51,7 @@ def thread_runner_process_main(
     runner_ctx = parent_ctx.new_child_context(
         ThreadRunner.__name__, runner_id=child_runner_id
     )
-    app.state_backend.store_runner_context(runner_ctx)
+    app.runner._register_new_child_runner_context(runner_ctx)
     runner = ThreadRunner(app, runner_cache, runner_context=runner_ctx)
     # Replace the MultiThreadRunner with ThreadRunner in this process
     context.set_runner_context(app.app_id, runner_ctx)

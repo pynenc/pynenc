@@ -212,6 +212,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - **Triggering cron**: Fixed a bug on the Cron Trigger validation and execution that prevented some valid cron triggers to run.
 
+- **ArgCache size handling**: Added `max_size_to_cache` configuration and enforcement in `BaseArgCache` to avoid storing oversized arguments in backends (default `0` = no limit). Tests were added to validate behavior and prevent backend document-size errors.
+
 ### Migration Guide
 
 - **For Redis Users**: Install the Redis plugin to maintain existing functionality:

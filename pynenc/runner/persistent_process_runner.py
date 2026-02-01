@@ -57,6 +57,7 @@ def persistent_process_main(
     runner_ctx = parent_runner_ctx.new_child_context(
         "PPRWorker", runner_id=child_runner_id
     )
+    app.runner._register_new_child_runner_context(runner_ctx)
     runner_id = runner_ctx.runner_id
     context.set_runner_context(app.app_id, runner_ctx)
 
