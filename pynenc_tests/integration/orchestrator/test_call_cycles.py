@@ -109,10 +109,10 @@ def test_causes_cycles(test_vars_cc: Vars, mock_register_task_run: MagicMock) ->
 
     expected_error = (
         "A cycle was detected: Cycle detected:\n"
-        "- Call(task=pynenc_tests.integration.orchestrator.orchestrator_tasks.dummy_mirror, arguments={arg:c})\n"
-        "- Call(task=pynenc_tests.integration.orchestrator.orchestrator_tasks.dummy_mirror, arguments={arg:a})\n"
-        "- Call(task=pynenc_tests.integration.orchestrator.orchestrator_tasks.dummy_mirror, arguments={arg:b})\n"
-        "- back to Call(task=pynenc_tests.integration.orchestrator.orchestrator_tasks.dummy_mirror, arguments={arg:c})"
+        "- #task_id#pynenc_tests.integration.orchestrator.orchestrator_tasks.dummy_mirror#args_id#a1b3d17a592a77a1824c436c0d8cf5fc0b04a90a69b3dff350c43cbdb1153dc3\n"
+        "- #task_id#pynenc_tests.integration.orchestrator.orchestrator_tasks.dummy_mirror#args_id#e8f374a8a8f3204c48d8f277831f4cafce467372deffd004da9886478ffbf0fa\n"
+        "- #task_id#pynenc_tests.integration.orchestrator.orchestrator_tasks.dummy_mirror#args_id#941481bba337929f023fa5ce7946bf8c19f8a4600443c30f6f93e7da1b94689f\n"
+        "- back to #task_id#pynenc_tests.integration.orchestrator.orchestrator_tasks.dummy_mirror#args_id#a1b3d17a592a77a1824c436c0d8cf5fc0b04a90a69b3dff350c43cbdb1153dc3"
     )
 
     assert str(exc_info.value) == expected_error

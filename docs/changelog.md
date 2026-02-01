@@ -188,8 +188,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
     instead of the broker using an instance of an invocation to get data relevant for queueing and priorizing.
 
 - **Logging**:
+
   - Introduced `contextvars`-based logging context that automatically injects `runner_id`, `task_id`, and `invocation_id` into log messages without requiring explicit logger adapters
   - Unified context display showing `[runner:id task:id inv:id]` prefix when context is available
+
+- **Cycle detection**: Simplified cycle handling — `CycleDetectedError.from_cycle` now accepts a list of call ids and orchestrators return call-id lists (reduces coupling with `Call` objects).
 
 ### Fixed
 

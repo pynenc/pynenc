@@ -233,19 +233,15 @@ class CycleDetectedError(PynencError):
         super().__init__(message)
 
     @classmethod
-    def from_cycle(cls, cycle: list["Call"]) -> "CycleDetectedError":
-        call_ids = [call.call_id for call in cycle]
-        message = f"A cycle was detected: {cls._format_cycle(cycle)}"
+    def from_cycle(cls, call_ids: list[str]) -> "CycleDetectedError":
+        message = f"A cycle was detected: {cls._format_cycle(call_ids)}"
         return cls(call_ids, message)
 
     @staticmethod
-    def _format_cycle(cycle: list["Call"]) -> str:
-        calls_repr = [str(call) for call in cycle]
-
-        calls_repr.append(f"back to {calls_repr[0]}")  # Closing the cycle
-
+    def _format_cycle(call_ids: list[str]) -> str:
+        calls_repr = [str(cid) for cid in call_ids]
+        calls_repr.append(f"back to {calls_repr[0]}")
         formatted_cycle = "\n".join(f"- {call}" for call in calls_repr)
-
         return f"Cycle detected:\n{formatted_cycle}"
 
     def _to_json_dict(self) -> dict[str, Any]:

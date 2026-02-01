@@ -22,7 +22,6 @@ from pynenc.types import Params, Result
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
-    from pynenc.call import Call
     from pynenc.invocation.dist_invocation import DistributedInvocation
     from pynenc.task import Task
 
@@ -38,7 +37,6 @@ class MemCycleControl(BaseCycleControl):
 
     def __init__(self, app: "Pynenc") -> None:
         self.app = app
-        self.calls: dict[str, Call] = {}
         self.edges: dict[str, set[str]] = defaultdict(set)
         self._lock = threading.RLock()
 
@@ -56,11 +54,9 @@ class MemCycleControl(BaseCycleControl):
         """
         with self._lock:
             if caller.call_id == callee.call_id:
-                raise CycleDetectedError.from_cycle([caller.call])
+                raise CycleDetectedError.from_cycle([caller.call_id])
             if cycle := self.find_cycle_caused_by_new_invocation(caller, callee):
                 raise CycleDetectedError.from_cycle(cycle)
-            self.calls[caller.call_id] = caller.call
-            self.calls[callee.call_id] = callee.call
             self.edges[caller.call_id].add(callee.call_id)
 
     def get_callees(self, caller_call_id: str) -> Iterator[str]:
@@ -89,14 +85,14 @@ class MemCycleControl(BaseCycleControl):
 
     def find_cycle_caused_by_new_invocation(
         self, caller: "DistributedInvocation", callee: "DistributedInvocation"
-    ) -> list["Call"]:
+    ) -> list[str]:
         """
         Determines if adding a new edge from the caller to the callee would create a cycle in the graph.
 
         :param DistributedInvocation caller: The invocation making the call.
         :param DistributedInvocation callee: The invocation being called.
-        :return: A list of Calls that would form a cycle after adding the new invocation, else an empty list.
-        :rtype: list[Call]
+        :return: A list of call ids that would form a cycle after adding the new invocation, else an empty list.
+        :rtype: list[str]
         """
         # Temporarily add the edge to check if it would cause a cycle
         self.edges[caller.call_id].add(callee.call_id)
@@ -119,15 +115,15 @@ class MemCycleControl(BaseCycleControl):
         current_call_id: str,
         visited: set[str],
         path: list[str],
-    ) -> list["Call"]:
+    ) -> list[str]:
         """
         Utility function for cycle detection in the graph.
 
         :param str current_call_id: The current call ID being checked for cycles.
         :param set[str] visited: Set of already visited call IDs.
         :param list[str] path: Current path of call IDs being traversed.
-        :return: A list of Calls that form a cycle, if one is detected.
-        :rtype: list[Call]
+        :return: A list of call ids that form a cycle, if one is detected.
+        :rtype: list[str]
         """
         visited.add(current_call_id)
         path.append(current_call_id)
@@ -139,7 +135,8 @@ class MemCycleControl(BaseCycleControl):
                     return cycle
             elif neighbour_call_id in path:
                 cycle_start_index = path.index(neighbour_call_id)
-                return [self.calls[_id] for _id in path[cycle_start_index:]]
+                # Return list of call ids (not Call objects)
+                return path[cycle_start_index:]
 
         path.pop()
         return []

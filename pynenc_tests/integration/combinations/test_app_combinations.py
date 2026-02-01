@@ -179,9 +179,9 @@ def test_cycle_detection(task_cycle: Task) -> None:
 
         expected_error = (
             "A cycle was detected: Cycle detected:\n"
-            "- Call(task=pynenc_tests.integration.combinations.tasks.cycle_end, arguments=<no_args>)\n"
-            "- Call(task=pynenc_tests.integration.combinations.tasks.cycle_start, arguments=<no_args>)\n"
-            "- back to Call(task=pynenc_tests.integration.combinations.tasks.cycle_end, arguments=<no_args>)"
+            "- #task_id#pynenc_tests.integration.combinations.tasks.cycle_end#args_id#no_args\n"
+            "- #task_id#pynenc_tests.integration.combinations.tasks.cycle_start#args_id#no_args\n"
+            "- back to #task_id#pynenc_tests.integration.combinations.tasks.cycle_end#args_id#no_args"
         )
 
         assert str(exc_info.value) == expected_error
@@ -241,8 +241,8 @@ def test_avoid_direct_self_cycles(task_direct_cycle: Task) -> None:
 
     expected_error = (
         "A cycle was detected: Cycle detected:\n"
-        "- Call(task=pynenc_tests.integration.combinations.tasks.direct_cycle, arguments=<no_args>)\n"
-        "- back to Call(task=pynenc_tests.integration.combinations.tasks.direct_cycle, arguments=<no_args>)"
+        "- #task_id#pynenc_tests.integration.combinations.tasks.direct_cycle#args_id#no_args\n"
+        "- back to #task_id#pynenc_tests.integration.combinations.tasks.direct_cycle#args_id#no_args"
     )
     assert str(exc_info.value) == expected_error
     app.runner.stop_runner_loop()

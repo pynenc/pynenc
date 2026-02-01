@@ -63,8 +63,7 @@ class SQLiteCycleControl(BaseCycleControl):
             conn.execute(
                 f"""
                 CREATE TABLE IF NOT EXISTS {Tables.CYCLE_CALLS} (
-                    call_id TEXT PRIMARY KEY,
-                    call_json TEXT NOT NULL
+                    call_id TEXT PRIMARY KEY
                 )
             """
             )
@@ -99,7 +98,7 @@ class SQLiteCycleControl(BaseCycleControl):
 
         # Check for direct self-cycle first
         if caller.call_id == callee.call_id:
-            raise CycleDetectedError.from_cycle([caller.call])
+            raise CycleDetectedError.from_cycle([caller.call_id])
 
         caller_id = caller.call_id
         callee_id = callee.call_id
@@ -107,37 +106,18 @@ class SQLiteCycleControl(BaseCycleControl):
         with sqlite_conn(self.sqlite_db_path) as conn:
             # Add calls to tracking
             conn.execute(
-                f"INSERT OR REPLACE INTO {Tables.CYCLE_CALLS} (call_id, call_json) VALUES (?, ?)",
-                (caller_id, caller.call.to_json()),
+                f"INSERT OR REPLACE INTO {Tables.CYCLE_CALLS} (call_id) VALUES (?)",
+                (caller_id,),
             )
             conn.execute(
-                f"INSERT OR REPLACE INTO {Tables.CYCLE_CALLS} (call_id, call_json) VALUES (?, ?)",
-                (callee_id, callee.call.to_json()),
+                f"INSERT OR REPLACE INTO {Tables.CYCLE_CALLS} (call_id) VALUES (?)",
+                (callee_id,),
             )
 
             # Check for cycle before adding edge
             cycle = self._find_cycle_with_new_edge(conn, caller_id, callee_id)
             if cycle:
-                # Convert call_ids back to Call objects for error message
-                from pynenc.call import Call
-
-                call_objects = []
-                for call_id in cycle:
-                    cursor = conn.execute(
-                        f"SELECT call_json FROM {Tables.CYCLE_CALLS} WHERE call_id = ?",
-                        (call_id,),
-                    )
-                    row = cursor.fetchone()
-                    cursor.close()
-                    if row:
-                        try:
-                            call_obj = Call.from_json(self.app, row[0])
-                            call_objects.append(call_obj)
-                        except Exception:
-                            pass
-
-                if call_objects:
-                    raise CycleDetectedError.from_cycle(call_objects)
+                raise CycleDetectedError.from_cycle(cycle)
 
             # If no cycle, add the edge permanently
             conn.execute(
