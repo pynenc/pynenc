@@ -173,15 +173,6 @@ class BaseOrchestrator(ABC):
         """
 
     @abstractmethod
-    def get_invocation_call_id(self, invocation_id: "InvocationId") -> "CallId":
-        """
-        Retrieves the call ID associated with a specific invocation ID.
-
-        :param InvocationId invocation_id: The invocation ID to look up.
-        :return: The call ID associated with the invocation
-        """
-
-    @abstractmethod
     def _atomic_status_transition(
         self,
         invocation_id: "InvocationId",

@@ -365,10 +365,6 @@ class MemOrchestrator(BaseOrchestrator):
         """Retrieves all invocation IDs associated with a specific call ID."""
         yield from self.call_id_to_inv_id.get(call_id, set())
 
-    def get_invocation_call_id(self, invocation_id: "InvocationId") -> "CallId":
-        """Retrieves the call ID associated with a specific invocation ID."""
-        return self.inv_id_to_call_id[invocation_id]
-
     def set_up_invocation_auto_purge(self, invocation_id: "InvocationId") -> None:
         """
         Sets up an invocation for automatic purging after a specified time.

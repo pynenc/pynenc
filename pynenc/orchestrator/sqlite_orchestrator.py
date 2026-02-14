@@ -408,15 +408,6 @@ class SQLiteOrchestrator(BaseOrchestrator):
             for (invocation_id,) in cursor_rows:
                 yield InvocationId(invocation_id)
 
-    def get_invocation_call_id(self, invocation_id: "InvocationId") -> "CallId":
-        """Retrieves the call ID associated with a specific invocation ID."""
-        with sqlite_conn(self.sqlite_db_path) as conn:
-            cursor = conn.execute(
-                f"SELECT call_id_key FROM {Tables.INVOCATIONS} WHERE invocation_id = ?",
-                (invocation_id,),
-            )
-            return CallId.from_key(cursor.fetchone()[0])
-
     def _atomic_status_transition(
         self,
         invocation_id: "InvocationId",
