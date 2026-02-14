@@ -9,6 +9,7 @@ from pynenc.invocation import DistributedInvocation
 
 if TYPE_CHECKING:
     from pynenc import Pynenc
+    from pynenc.identifiers.invocation_id import InvocationId
     from pynenc.task import Task
 
 
@@ -19,20 +20,20 @@ class Vars:
     inv1: DistributedInvocation
     inv2: DistributedInvocation
     inv3: DistributedInvocation
-    expected_ids: set[str]
+    expected_ids: set["InvocationId"]
 
 
 @pytest.fixture
 def test_vars_bc(task_concat_io: "Task") -> Vars:
     """Set up test invocations for blocking control tests."""
-    inv1: DistributedInvocation = DistributedInvocation(
-        Call(task_concat_io, Arguments({"arg0": "a", "arg1": "a"})), None
+    inv1: DistributedInvocation = DistributedInvocation.isolated(
+        Call(task_concat_io, Arguments({"arg0": "a", "arg1": "a"}))
     )
-    inv2: DistributedInvocation = DistributedInvocation(
-        Call(task_concat_io, Arguments({"arg0": "a", "arg1": "b"})), None
+    inv2: DistributedInvocation = DistributedInvocation.isolated(
+        Call(task_concat_io, Arguments({"arg0": "a", "arg1": "b"}))
     )
-    inv3: DistributedInvocation = DistributedInvocation(
-        Call(task_concat_io, Arguments({"arg0": "b", "arg1": "b"})), None
+    inv3: DistributedInvocation = DistributedInvocation.isolated(
+        Call(task_concat_io, Arguments({"arg0": "b", "arg1": "b"}))
     )
     app = task_concat_io.app
     # Set initial statuses

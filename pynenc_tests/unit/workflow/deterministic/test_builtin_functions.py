@@ -7,7 +7,7 @@ and UUID generation capabilities that ensure reproducible workflow execution.
 
 import datetime
 
-from pynenc.workflow.deterministic import DeterministicExecutor
+from pynenc.workflow.workflow_deterministic import DeterministicExecutor
 
 
 def test_base_time_establishment(deterministic_executor: DeterministicExecutor) -> None:

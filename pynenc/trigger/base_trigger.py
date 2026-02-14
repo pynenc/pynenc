@@ -31,18 +31,19 @@ from pynenc.trigger.conditions import (
     StatusContext,
     ValidCondition,
 )
+from pynenc.trigger.trigger_definitions import TriggerDefinition
 from pynenc.trigger.trigger_context import TriggerContext
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
-    from pynenc.invocation.base_invocation import BaseInvocation
+    from pynenc.invocation.base_invocation import BaseInvocation, InvocationId
     from pynenc.invocation.dist_invocation import DistributedInvocation
     from pynenc.invocation.status import InvocationStatus
-    from pynenc.task import Task
+    from pynenc.models.trigger_definition_dto import TriggerDefinitionDTO
+    from pynenc.task import Task, TaskId
     from pynenc.trigger.conditions import ConditionContext, TriggerCondition
     from pynenc.trigger.trigger_builder import TriggerBuilder
-    from pynenc.trigger.trigger_definitions import TriggerDefinition
-    from pynenc.trigger.types import ConditionId, TaskId
+    from pynenc.trigger.types import ConditionId
 
 
 class BaseTrigger(ABC):
@@ -150,7 +151,7 @@ class BaseTrigger(ABC):
         pass
 
     @abstractmethod
-    def register_trigger(self, trigger: "TriggerDefinition") -> None:
+    def register_trigger(self, trigger: "TriggerDefinitionDTO") -> None:
         """
         Register a trigger definition.
 
@@ -160,8 +161,19 @@ class BaseTrigger(ABC):
         """
         pass
 
-    @abstractmethod
     def get_trigger(self, trigger_id: str) -> "TriggerDefinition | None":
+        """
+        Get a trigger definition by ID.
+
+        :param trigger_id: ID of the trigger to retrieve
+        :return: The trigger definition if found, None otherwise
+        """
+        if trigger_dto := self._get_trigger(trigger_id):
+            return TriggerDefinition.from_dto(trigger_dto, self.app)
+        return None
+
+    @abstractmethod
+    def _get_trigger(self, trigger_id: str) -> "TriggerDefinitionDTO | None":
         """
         Get a trigger definition by ID.
 
@@ -173,7 +185,7 @@ class BaseTrigger(ABC):
     @abstractmethod
     def get_triggers_for_condition(
         self, condition_id: str
-    ) -> list["TriggerDefinition"]:
+    ) -> list["TriggerDefinitionDTO"]:
         """
         Get all triggers that depend on a specific condition.
 
@@ -184,7 +196,7 @@ class BaseTrigger(ABC):
 
     @abstractmethod
     def get_conditions_sourced_from_task(
-        self, task_id: str, context_type: type["ConditionContext"] | None = None
+        self, task_id: "TaskId", context_type: type["ConditionContext"] | None = None
     ) -> list["TriggerCondition"]:
         """
         Get all conditions that are sourced from a specific task.
@@ -271,7 +283,7 @@ class BaseTrigger(ABC):
         """
 
     @abstractmethod
-    def clean_task_trigger_definitions(self, task_id: str) -> None:
+    def clean_task_trigger_definitions(self, task_id: "TaskId") -> None:
         """
         Remove all trigger definitions for a specific task.
 
@@ -306,11 +318,11 @@ class BaseTrigger(ABC):
             for condition in builder.conditions:
                 self.register_condition(condition)
             trigger_def = builder.build(task.task_id)
-            self.register_trigger(trigger_def)
+            self.register_trigger(trigger_def.to_dto(self.app))
 
     def report_tasks_status(
         self,
-        invocation_ids: list[str],
+        invocation_ids: list["InvocationId"],
         status: Optional["InvocationStatus"] = None,
     ) -> None:
         """
@@ -328,7 +340,7 @@ class BaseTrigger(ABC):
             invocation = self.app.state_backend.get_invocation(invocation_id)
             context = StatusContext.from_invocation(invocation, status)
             conditions = self.get_conditions_sourced_from_task(
-                context.task_id, StatusContext
+                context.call_id.task_id, StatusContext
             )
             for condition in conditions:
                 condition_context_pairs.append((condition, context))
@@ -351,10 +363,10 @@ class BaseTrigger(ABC):
         """
         # Create the result context
         context = ResultContext(
-            task_id=invocation.task.task_id,
             call_id=invocation.call.call_id,
             invocation_id=invocation.invocation_id,
             arguments=invocation.call.arguments,
+            disable_cache_args=invocation.call.task.conf.disable_cache_args,
             # get status directly from orchestrator to avoid caching
             status=self.app.orchestrator.get_invocation_status(
                 invocation.invocation_id
@@ -364,7 +376,7 @@ class BaseTrigger(ABC):
 
         # Get conditions affected by this task
         conditions = self.get_conditions_sourced_from_task(
-            invocation.task.task_id, ResultContext
+            context.call_id.task_id, ResultContext
         )
 
         # Evaluate each condition with the context
@@ -386,10 +398,10 @@ class BaseTrigger(ABC):
         """
         # Create the exception context
         context = ExceptionContext(
-            task_id=invocation.task.task_id,
             call_id=invocation.call.call_id,
             invocation_id=invocation.invocation_id,
             arguments=invocation.call.arguments,
+            disable_cache_args=invocation.call.task.conf.disable_cache_args,
             status=invocation.status,
             exception_type=type(exception).__name__,
             exception_message=str(exception),
@@ -397,7 +409,7 @@ class BaseTrigger(ABC):
 
         # Get conditions affected by this task
         conditions = self.get_conditions_sourced_from_task(
-            invocation.task.task_id, ExceptionContext
+            invocation.call.task.task_id, ExceptionContext
         )
 
         # Evaluate each condition with the context
@@ -596,10 +608,11 @@ class BaseTrigger(ABC):
         affected_triggers: dict[str, tuple[TriggerDefinition, TriggerContext]] = {}
         condition_to_pending_triggers: dict[str, set[str]] = defaultdict(set)
         for valid_condition in valid_conditions.values():
-            triggers = self.get_triggers_for_condition(
+            trigger_dtos = self.get_triggers_for_condition(
                 valid_condition.condition.condition_id
             )
-            for trigger in triggers:
+            for trigger_dto in trigger_dtos:
+                trigger = TriggerDefinition.from_dto(trigger_dto, self.app)
                 if trigger.trigger_id not in affected_triggers:
                     affected_triggers[trigger.trigger_id] = (trigger, TriggerContext())
                 affected_triggers[trigger.trigger_id][1].add_valid_condition(
@@ -634,7 +647,7 @@ class BaseTrigger(ABC):
         self.clear_valid_conditions(conditions_to_clean)
 
     def execute_task(
-        self, task_id: str, arguments: dict[str, Any] | None = None
+        self, task_id: "TaskId", arguments: dict[str, Any] | None = None
     ) -> "BaseInvocation":
         """
         Execute a task with the given arguments.

@@ -47,15 +47,6 @@
         <h6 class="section-title">Configuration</h6>
         <div class="metric-grid">
           <div class="metric-item">
-            <span class="metric-label">Cycle Control</span>
-            <span
-              class="badge {% if orchestrator_info.cycle_control_enabled %}bg-success{% else %}bg-secondary{% endif %}"
-            >
-              {{ 'Enabled' if orchestrator_info.cycle_control_enabled else
-              'Disabled' }}
-            </span>
-          </div>
-          <div class="metric-item">
             <span class="metric-label">Blocking Control</span>
             <span
               class="badge {% if orchestrator_info.blocking_control_enabled %}bg-success{% else %}bg-secondary{% endif %}"

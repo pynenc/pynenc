@@ -19,51 +19,12 @@ from pynenc.orchestrator.atomic_service import can_run_atomic_service
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
-    from pynenc.call import Call, PreSerializedCall
+    from pynenc.call import Call, PreSerializedCall, CallId
+    from pynenc.identifiers.invocation_id import InvocationId
     from pynenc.orchestrator.atomic_service import ActiveRunnerInfo
     from pynenc.runner.runner_context import RunnerContext
-    from pynenc.task import Task
+    from pynenc.task import Task, TaskId
     from pynenc.types import Params, Result
-
-
-class BaseCycleControl(ABC):
-    """
-    A component of the orchestrator to implement cycle control functionalities.
-
-    This abstract base class defines the interface for cycle control in a distributed task system.
-    It is intended to prevent the formation of call cycles between tasks.
-    """
-
-    @abstractmethod
-    def add_call_and_check_cycles(
-        self, caller: "DistributedInvocation", callee: "DistributedInvocation"
-    ) -> None:
-        """
-        Adds a new call relationship between invocations and checks for potential cycles.
-
-        :param DistributedInvocation[Params, Result] caller: The invocation calling another task.
-        :param DistributedInvocation[Params, Result] callee: The invocation being called.
-        :raises CycleDetectedError: If adding the call creates a cycle.
-        """
-        # TODO async store of call dependencies in state backend
-
-    @abstractmethod
-    def get_callees(self, caller_call_id: str) -> Iterator[str]:
-        """
-        Returns an iterator of direct callee call_ids for the given caller_call_id.
-
-        :param str caller_call_id: The call_id of the caller invocation.
-        :return: Iterator of callee call_ids.
-        :rtype: Iterator[str]
-        """
-
-    @abstractmethod
-    def clean_up_invocation_cycles(self, invocation_id: str) -> None:
-        """
-        Cleans up any cycle-related data when an invocation is finished.
-
-        :param str invocation_id: The ID of the invocation that has finished.
-        """
 
 
 class BaseBlockingControl(ABC):
@@ -74,32 +35,36 @@ class BaseBlockingControl(ABC):
     """
 
     @abstractmethod
-    def release_waiters(self, waited_invocation_id: str) -> None:
+    def release_waiters(self, waited_invocation_id: "InvocationId") -> None:
         """
         Releases any invocations that are waiting on the specified invocation.
 
-        :param str waited_invocation_id: The ID of the invocation that has finished and can release its waiters.
+        :param InvocationId waited_invocation_id: The ID of the invocation that has finished and can release its waiters.
         """
 
     @abstractmethod
     def waiting_for_results(
-        self, caller_invocation_id: str, result_invocation_ids: list[str]
+        self,
+        caller_invocation_id: "InvocationId",
+        result_invocation_ids: list["InvocationId"],
     ) -> None:
         """
         Notifies the system that an invocation is waiting for the results of other invocations.
 
-        :param str caller_invocation_id: The ID of the invocation that is waiting.
-        :param list[str] result_invocation_ids: The IDs of the invocations being waited on.
+        :param InvocationId caller_invocation_id: The ID of the invocation that is waiting.
+        :param list[InvocationId] result_invocation_ids: The IDs of the invocations being waited on.
         """
 
     @abstractmethod
-    def get_blocking_invocations(self, max_num_invocations: int) -> Iterator[str]:
+    def get_blocking_invocations(
+        self, max_num_invocations: int
+    ) -> Iterator["InvocationId"]:
         """
         Retrieves invocation IDs that are blocking others but are not blocked themselves.
 
         :param int max_num_invocations: The maximum number of blocking invocation IDs to retrieve.
         :return: An iterator over unblocked, blocking invocation IDs, **ordered by age (oldest first)**.
-        :rtype: Iterator[str]
+        :rtype: Iterator[InvocationId]
         """
 
 
@@ -108,7 +73,7 @@ class BaseOrchestrator(ABC):
     Abstract base class defining the orchestrator's interface in a distributed task system.
 
     The orchestrator is responsible for managing task invocations, including tracking their status,
-    handling retries, and implementing cycle and blocking controls.
+    handling retries, and implementing blocking control.
 
     :param Pynenc app: The Pynenc application instance.
     """
@@ -143,7 +108,7 @@ class BaseOrchestrator(ABC):
         task: "Task[Params, Result]",
         key_serialized_arguments: dict[str, str] | None = None,
         statuses: "list[InvocationStatus] | None" = None,
-    ) -> Iterator[str]:
+    ) -> Iterator["InvocationId"]:
         """
         Retrieves existing invocation IDs based on task, arguments, and status.
 
@@ -151,33 +116,33 @@ class BaseOrchestrator(ABC):
         :param dict[str, str] | None key_serialized_arguments: Serialized arguments to filter invocations.
         :param Optional[list[InvocationStatus]] statuses: The statuses to filter invocations.
         :return: An iterator over the matching invocation IDs.
-        :rtype: Iterator[str]
+        :rtype: Iterator[InvocationId]
         """
 
     @abstractmethod
-    def get_task_invocation_ids(self, task_id: str) -> Iterator[str]:
+    def get_task_invocation_ids(self, task_id: "TaskId") -> Iterator["InvocationId"]:
         """
         Retrieves all invocation IDs associated with a specific task ID.
 
-        :param str task_id: The task ID to filter invocations.
+        :param TaskId task_id: The task ID to filter invocations.
         :return: List of invocation IDs for the specified task.
         """
 
     @abstractmethod
     def get_invocation_ids_paginated(
         self,
-        task_id: str | None = None,
+        task_id: Optional["TaskId"] = None,
         statuses: "list[InvocationStatus] | None" = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> list[str]:
+    ) -> list["InvocationId"]:
         """
         Retrieves invocation IDs with pagination support.
 
         This method provides efficient pagination for large datasets by using
         LIMIT/OFFSET semantics. Results are ordered by registration time (newest first).
 
-        :param str | None task_id: Optional task ID to filter by.
+        :param Optional[TaskId] task_id: Optional task ID to filter by.
         :param list[InvocationStatus] | None statuses: Optional statuses to filter by.
         :param int limit: Maximum number of results to return.
         :param int offset: Number of results to skip.
@@ -187,7 +152,7 @@ class BaseOrchestrator(ABC):
     @abstractmethod
     def count_invocations(
         self,
-        task_id: str | None = None,
+        task_id: Optional["TaskId"] = None,
         statuses: "list[InvocationStatus] | None" = None,
     ) -> int:
         """
@@ -199,35 +164,29 @@ class BaseOrchestrator(ABC):
         """
 
     @abstractmethod
-    def get_call_invocation_ids(self, call_id: str) -> Iterator[str]:
+    def get_call_invocation_ids(self, call_id: "CallId") -> Iterator["InvocationId"]:
         """
         Retrieves all invocation IDs associated with a specific call ID.
 
-        :param str call_id: The call ID to filter invocations.
+        :param CallId call_id: The call ID to filter invocations.
         :return: List of invocation IDs for the specified call.
         """
 
     @abstractmethod
-    def get_invocation_call_id(self, invocation_id: str) -> str:
+    def get_invocation_call_id(self, invocation_id: "InvocationId") -> "CallId":
         """
         Retrieves the call ID associated with a specific invocation ID.
 
-        :param str invocation_id: The invocation ID to look up.
+        :param InvocationId invocation_id: The invocation ID to look up.
         :return: The call ID associated with the invocation
         """
 
     @abstractmethod
-    def any_non_final_invocations(self, call_id: str) -> bool:
-        """
-        Checks if there are any non-final invocations for a specific call ID.
-
-        :param str call_id: The call ID to check for non-final invocations.
-        :return: True if there are non-final invocations, False otherwise.
-        """
-
-    @abstractmethod
     def _atomic_status_transition(
-        self, invocation_id: str, status: InvocationStatus, runner_id: str | None = None
+        self,
+        invocation_id: "InvocationId",
+        status: InvocationStatus,
+        runner_id: str | None = None,
     ) -> InvocationStatusRecord:
         """
         Atomically validates and transitions invocation status.
@@ -240,7 +199,7 @@ class BaseOrchestrator(ABC):
 
         All validation and state changes happen within a single atomic operation.
 
-        :param str invocation_id: The ID of the invocation to update
+        :param InvocationId invocation_id: The ID of the invocation to update
         :param InvocationStatus status: The target status
         :param str | None runner_id: The owner ID for ownership validation
         :return: The new status record after successful transition
@@ -290,14 +249,14 @@ class BaseOrchestrator(ABC):
         """
 
     @abstractmethod
-    def set_up_invocation_auto_purge(self, invocation_id: str) -> None:
+    def set_up_invocation_auto_purge(self, invocation_id: "InvocationId") -> None:
         """
         Sets up automatic purging for an invocation after a defined period.
         ```{note}
             Set auto purge period with `app.conf.orchestrator_auto_final_invocation_purge_hours`
         ```
 
-        :param DistributedInvocation[Params, Result] invocation: The invocation to set up for auto purge.
+        :param InvocationId invocation_id: The invocation to set up for auto purge.
         """
 
     @abstractmethod
@@ -309,7 +268,9 @@ class BaseOrchestrator(ABC):
         ```
         """
 
-    def get_invocation_status(self, invocation_id: str) -> "InvocationStatus":
+    def get_invocation_status(
+        self, invocation_id: "InvocationId"
+    ) -> "InvocationStatus":
         """
         Retrieves the status of a specific invocation id.
 
@@ -317,7 +278,7 @@ class BaseOrchestrator(ABC):
             This method should be cached specially final status that cannot change.
             For filtering by status, use `filter_by_status` instead.
 
-        :param str invocation_id: The id of the invocation whose status is to be retrieved.
+        :param InvocationId invocation_id: The id of the invocation whose status is to be retrieved.
         :return: The current status of the invocation.
         :rtype: InvocationStatus
         :raises KeyError: If the invocation ID does not exist.
@@ -327,60 +288,64 @@ class BaseOrchestrator(ABC):
 
     @abstractmethod
     def get_invocation_status_record(
-        self, invocation_id: str
+        self, invocation_id: "InvocationId"
     ) -> "InvocationStatusRecord":
         """
         Retrieves the status record of a specific invocation id.
 
-        :param str invocation_id: The id of the invocation whose status is to be retrieved.
+        :param InvocationId invocation_id: The id of the invocation whose status is to be retrieved.
         :return: The current status record of the invocation.
         :rtype: InvocationStatusRecord
         :raises KeyError: If the invocation ID does not exist.
         """
 
     @abstractmethod
-    def increment_invocation_retries(self, invocation_id: str) -> None:
+    def increment_invocation_retries(self, invocation_id: "InvocationId") -> None:
         """
         Increments the retry count of a specific invocation.
 
-        :param str invocation_id: The id of the invocation for which to increment retries.
+        :param InvocationId invocation_id: The id of the invocation for which to increment retries.
         """
 
     @abstractmethod
-    def get_invocation_retries(self, invocation_id: str) -> int:
+    def get_invocation_retries(self, invocation_id: "InvocationId") -> int:
         """
         Retrieves the number of retries for a specific invocation.
 
-        :param str invocation_id: The id of the invocation whose retry count is to be retrieved.
+        :param InvocationId invocation_id: The id of the invocation whose retry count is to be retrieved.
         :return: The number of retries for the invocation.
         :rtype: int
         """
 
     @abstractmethod
     def filter_by_status(
-        self, invocation_ids: list[str], status_filter: frozenset["InvocationStatus"]
-    ) -> list[str]:
+        self,
+        invocation_ids: list["InvocationId"],
+        status_filter: frozenset["InvocationStatus"],
+    ) -> list["InvocationId"]:
         """
         Filters a list of invocation ids by their status in an optimized way.
 
         This method allows efficient batch filtering of invocations by status,
         reducing the number of individual status checks needed.
 
-        :param list[str] invocations: The invocation ids to filter
+        :param list[InvocationId] invocations: The invocation ids to filter
         :param list[InvocationStatus] | None status_filter: The statuses to filter by.
             If None, defaults to final statuses.
         :return: List of invocation ids matching the status filter
-        :rtype: list[str]
+        :rtype: list[InvocationId]
         """
         pass
 
-    def filter_final(self, invocation_ids: list[str]) -> list[str]:
+    def filter_final(
+        self, invocation_ids: list["InvocationId"]
+    ) -> list["InvocationId"]:
         """
         Returns invocation ids that have reached a final status.
 
-        :param list[str] invocations: The invocation ids to check
+        :param list[InvocationId] invocations: The invocation ids to check
         :return: List of invocation ids that have reached a final status
-        :rtype: list[str]
+        :rtype: list[InvocationId]
         """
         return self.filter_by_status(
             invocation_ids, InvocationStatus.get_final_statuses()
@@ -396,44 +361,6 @@ class BaseOrchestrator(ABC):
         """
 
     #############################################
-    # cycle sub functionalities
-    @property
-    @abstractmethod
-    def cycle_control(self) -> BaseCycleControl:
-        """
-        Property to access the cycle control component of the orchestrator.
-
-        :return: The cycle control component.
-        :rtype: BaseCycleControl
-        """
-
-    def add_call_and_check_cycles(
-        self,
-        caller_invocation: "DistributedInvocation[Params, Result]",
-        callee_invocation: "DistributedInvocation[Params, Result]",
-    ) -> None:
-        """
-        Adds a call relationship between two invocations and checks for potential cycles.
-
-        :param DistributedInvocation[Params, Result] caller_invocation: The calling invocation.
-        :param DistributedInvocation[Params, Result] callee_invocation: The called invocation.
-        """
-        if self.conf.cycle_control:
-            self.cycle_control.add_call_and_check_cycles(
-                caller_invocation, callee_invocation
-            )
-        # TODO async store of call dependencies in state backend
-
-    def clean_up_invocation_cycles(self, invocation_id: str) -> None:
-        """
-        Cleans up data related to invocation cycles when an invocation finishes.
-
-        :param str invocation_id: The ID of the invocation that has finished.
-        """
-        if self.conf.cycle_control:
-            self.cycle_control.clean_up_invocation_cycles(invocation_id)
-
-    #############################################
     # blocking sub functionalities
     @property
     @abstractmethod
@@ -445,23 +372,25 @@ class BaseOrchestrator(ABC):
         :rtype: BaseBlockingControl
         """
 
-    def release_waiters(self, waited_id: str) -> None:
+    def release_waiters(self, waited_id: "InvocationId") -> None:
         """
         Releases other invocations that are waiting on the completion of the specified invocation.
 
-        :param str waited_id: The ID of the invocation that has completed.
+        :param InvocationId waited_id: The ID of the invocation that has completed.
         """
         if self.app.orchestrator.conf.blocking_control:
             self.blocking_control.release_waiters(waited_id)
 
     def waiting_for_results(
-        self, caller_invocation_id: str | None, result_invocation_ids: list[str]
+        self,
+        caller_invocation_id: "InvocationId | None",
+        result_invocation_ids: list["InvocationId"],
     ) -> None:
         """
         Notifies the system that an invocation is waiting for the results of other invocations.
 
-        :param str | None caller_invocation_id: The ID of the waiting invocation.
-        :param list[str] result_invocation_ids: The IDs of the invocations being waited on.
+        :param InvocationId | None caller_invocation_id: The ID of the waiting invocation.
+        :param list[InvocationId] result_invocation_ids: The IDs of the invocations being waited on.
         """
         if not result_invocation_ids:
             self.app.logger.warning(
@@ -473,13 +402,15 @@ class BaseOrchestrator(ABC):
                 caller_invocation_id, result_invocation_ids
             )
 
-    def get_blocking_invocations(self, max_num_invocation_ids: int) -> Iterator[str]:
+    def get_blocking_invocations(
+        self, max_num_invocation_ids: int
+    ) -> Iterator["InvocationId"]:
         """
         Retrieves invocation IDs that are blocking others but are not blocked themselves.
 
         :param int max_num_invocation_ids: The maximum number of blocking invocation IDs to retrieve.
         :return: An iterator over unblocked, blocking invocation IDs.
-        :rtype: Iterator[str]
+        :rtype: Iterator[InvocationId]
 
         ```{note}
             The order of the returned invocation IDs is **oldest first**.
@@ -494,14 +425,14 @@ class BaseOrchestrator(ABC):
 
     def set_invocation_status(
         self,
-        invocation_id: str,
+        invocation_id: "InvocationId",
         status: "InvocationStatus",
         runner_ctx: "RunnerContext",
     ) -> None:
         """
         Sets the status of a specific invocation.
 
-        :param DistributedInvocation[Params, Result] invocation: The invocation to update.
+        :param InvocationId invocation_id: The ID of the invocation to update.
         :param InvocationStatus status: The new status to set for the invocation.
 
         :raises InvocationStatusTransitionError: If transition is not allowed
@@ -513,29 +444,9 @@ class BaseOrchestrator(ABC):
         )
         if status.is_final():
             self.release_waiters(invocation_id)
-            self.clean_up_invocation_cycles(invocation_id)
             self.set_up_invocation_auto_purge(invocation_id)
         self.app.state_backend.add_history(invocation_id, new_status_record, runner_ctx)
         self.app.trigger.report_tasks_status([invocation_id], status)
-
-    def set_invocation_run(
-        self,
-        caller: Optional["DistributedInvocation[Params, Result]"],
-        callee: "DistributedInvocation[Params, Result]",
-        runner_ctx: "RunnerContext",
-    ) -> None:
-        """
-        Marks an invocation as running and checks for call cycles if a caller is specified.
-
-        :param Optional[DistributedInvocation[Params, Result]] caller: The calling invocation, if any.
-        :param DistributedInvocation[Params, Result] callee: The invocation that is being marked as running.
-        """
-        if caller:
-            self.add_call_and_check_cycles(caller, callee)
-        self.set_invocation_status(
-            callee.invocation_id, InvocationStatus.RUNNING, runner_ctx
-        )
-        callee.wf.register_task_run(caller)
 
     def set_invocation_result(
         self,
@@ -578,19 +489,21 @@ class BaseOrchestrator(ABC):
 
     def set_invocation_retry(
         self,
-        invocation_id: str,
+        invocation_id: "InvocationId",
         exception: Exception,
         runner_ctx: "RunnerContext",
     ) -> None:
         """
         Sets an invocation for retry in case of a retriable exception.
 
-        :param DistributedInvocation invocation: The invocation to be retried.
+        :param InvocationId invocation_id: The ID of the invocation to be retried.
         :param Exception exception: The exception that triggered the retry.
         """
         # TODO! on previous fail, this should still change status
         # eg. on case of interruption from a kubernetes pod (SIGTERM, SIGKILL)
         #     it should try to finish all the calls in this function
+
+        # TODO store Retry exception on Retry status
         self.app.orchestrator.set_invocation_status(
             invocation_id, InvocationStatus.RETRY, runner_ctx
         )
@@ -671,16 +584,16 @@ class BaseOrchestrator(ABC):
     def get_blocking_invocations_to_run(
         self,
         max_num_invocations: int,
-        blocking_invocation_ids: set[str],
+        blocking_invocation_ids: set["InvocationId"],
         runner_ctx: "RunnerContext",
-    ) -> Iterator[str]:
+    ) -> Iterator["InvocationId"]:
         """
         Retrieves invocation IDs that are blocking others but are not themselves blocked, up to a maximum number.
 
         :param int max_num_invocations: The maximum number of blocking invocations to retrieve.
-        :param set[str] blocking_invocation_ids: A set of invocation IDs that are already identified as blocking.
+        :param set["InvocationId"] blocking_invocation_ids: A set of invocation IDs that are already identified as blocking.
         :return: An iterator over the blocking invocation IDs.
-        :rtype: Iterator[str]
+        :rtype: Iterator["InvocationId"]
         """
         for blocking_invocation_id in self.get_blocking_invocations(
             max_num_invocations
@@ -705,18 +618,18 @@ class BaseOrchestrator(ABC):
     def get_additional_invocations_to_run(
         self,
         missing_invocations: int,
-        blocking_invocation_ids: set[str],
-        invocations_to_reroute: set[str],
+        blocking_invocation_ids: set["InvocationId"],
+        invocations_to_reroute: set["InvocationId"],
         runner_ctx: "RunnerContext",
     ) -> Iterator["DistributedInvocation"]:
         """
         Retrieves additional invocations to run, considering those not blocked or already identified as blocking.
 
         :param int missing_invocations: The number of additional invocations needed.
-        :param set[str] blocking_invocation_ids: IDs of invocations already identified as blocking.
-        :param set[DistributedInvocation] invocations_to_reroute: A set to collect invocations that need rerouting.
+        :param set["InvocationId"] blocking_invocation_ids: IDs of invocations already identified as blocking.
+        :param set["InvocationId"] invocations_to_reroute: A set to collect invocations that need rerouting.
         :return: An iterator over the additional invocations to run.
-        :rtype: Iterator[DistributedInvocation]
+        :rtype: Iterator["DistributedInvocation"]
         """
         while missing_invocations > 0:
             if invocation_id := self.app.broker.retrieve_invocation():
@@ -761,13 +674,13 @@ class BaseOrchestrator(ABC):
 
     def reroute_invocations(
         self,
-        invocations_to_reroute: set[str],
+        invocations_to_reroute: set["InvocationId"],
         runner_ctx: "RunnerContext",
     ) -> None:
         """
         Reroutes the specified invocations , typically when they are not authorized to run.
 
-        :param set[str] invocations_to_reroute: The invocations to be rerouted.
+        :param set["InvocationId"] invocations_to_reroute: The invocations to be rerouted.
         """
         for invocation_id in invocations_to_reroute:
             self.set_invocation_status(
@@ -783,9 +696,9 @@ class BaseOrchestrator(ABC):
 
         :param int max_num_invocations: The maximum number of invocations to retrieve.
         :return: An iterator over invocations that are ready to run.
-        :rtype: Iterator[DistributedInvocation]
+        :rtype: Iterator["DistributedInvocation"]
         """
-        blocking_invocation_ids: set[str] = set()
+        blocking_invocation_ids: set[InvocationId] = set()
         # Get blocking invocations as IDs but still need to yield actual invocations
         for blocking_invocation_id in self.get_blocking_invocations_to_run(
             max_num_invocations, blocking_invocation_ids, runner_ctx
@@ -795,7 +708,7 @@ class BaseOrchestrator(ABC):
             ):
                 yield invocation
 
-        invocations_to_reroute: set[str] = set()
+        invocations_to_reroute: set[InvocationId] = set()
         missing_invocations = max_num_invocations - len(blocking_invocation_ids)
         yield from self.get_additional_invocations_to_run(
             missing_invocations,
@@ -838,7 +751,7 @@ class BaseOrchestrator(ABC):
         :rtype: DistributedInvocation[Params, Result]
         """
         parent_invocation = context.get_dist_invocation_context(self.app.app_id)
-        new_invocation = DistributedInvocation(call, parent_invocation)
+        new_invocation = DistributedInvocation.from_parent(call, parent_invocation)
         self.app.logger.info(f"routing {new_invocation=}")
         self.register_new_invocations([new_invocation])
         if (
@@ -859,6 +772,7 @@ class BaseOrchestrator(ABC):
 
         ```{important}
             Note the different behavior depending on the task's registration_concurrency option.
+            A task is Registered when it is created but not yet Running, preventing over-queueing:
             - If ConcurrencyControlType.DISABLED,
                 It always creates a new invocation.
             - If ConcurrencyControlType.TASK,
@@ -894,6 +808,8 @@ class BaseOrchestrator(ABC):
         invocation_id = next(
             self.get_existing_invocations(
                 task=call.task,
+                # we filter here by TASK, all Arguments, or defined keys based in the config
+                # TODO Make it explicit
                 key_serialized_arguments=call.serialized_args_for_concurrency_check,
                 statuses=[InvocationStatus.REGISTERED],
             ),
@@ -908,18 +824,22 @@ class BaseOrchestrator(ABC):
 
         invocation = self.app.state_backend.get_invocation(invocation_id)
         if not invocation:
+            call.task.logger.warning(
+                f"Invocation {invocation_id} not found in state backend for call {call}, routing new invocation"
+            )
             return self._route_new_call_invocation(call)
 
-        if invocation.serialized_arguments == call.serialized_arguments:
+        if invocation.call.call_id == call.call_id:
             call.task.logger.debug(
                 f"Reusing invocation {invocation.invocation_id} for call {call}"
             )
-            return ReusedInvocation.from_existing(invocation)
+            return ReusedInvocation(invocation)
         if call.task.conf.on_diff_non_key_args_raise:
             raise InvocationConcurrencyWithDifferentArgumentsError.from_call_mismatch(
                 existing_invocation=invocation, new_call=call
             )
-        return ReusedInvocation.from_existing(invocation, call.arguments)
+        # TODO: review this code, we are reusing an invocation with different non-key arguments, should we still reuse it?
+        return ReusedInvocation(invocation, call.arguments)
 
     def route_calls(
         self, calls: list["PreSerializedCall[Params, Result]"]
@@ -949,8 +869,7 @@ class BaseOrchestrator(ABC):
 
         parent_invocation = context.get_dist_invocation_context(self.app.app_id)
         invocations: list[DistributedInvocation[Params, Result]] = [
-            DistributedInvocation(call, parent_invocation=parent_invocation)  # type: ignore
-            for call in calls
+            DistributedInvocation.from_parent(call, parent_invocation) for call in calls
         ]
         self.register_new_invocations(invocations)
         return invocations
@@ -1011,18 +930,18 @@ class BaseOrchestrator(ABC):
         return self._get_active_runners(timeout_seconds, can_run_atomic_service)
 
     @abstractmethod
-    def get_pending_invocations_for_recovery(self) -> Iterator[str]:
+    def get_pending_invocations_for_recovery(self) -> Iterator["InvocationId"]:
         """
         Retrieve invocation IDs stuck in PENDING status beyond the allowed time.
 
         :return: Iterator of invocation IDs that need recovery.
-        :rtype: Iterator[str]
+        :rtype: Iterator["InvocationId"]
         """
 
     @abstractmethod
     def _get_running_invocations_for_recovery(
         self, timeout_seconds: float
-    ) -> Iterator[str]:
+    ) -> Iterator["InvocationId"]:
         """
         Retrieve invocation IDs in RUNNING status owned by inactive runners.
 
@@ -1032,10 +951,10 @@ class BaseOrchestrator(ABC):
 
         :param float timeout_seconds: Heartbeat timeout in seconds
         :return: Iterator of invocation IDs that need recovery.
-        :rtype: Iterator[str]
+        :rtype: Iterator["InvocationId"]
         """
 
-    def get_running_invocations_for_recovery(self) -> Iterator[str]:
+    def get_running_invocations_for_recovery(self) -> Iterator["InvocationId"]:
         """
         Retrieve invocation IDs in RUNNING status owned by inactive runners.
 
@@ -1045,7 +964,7 @@ class BaseOrchestrator(ABC):
 
         :param float timeout_seconds: Heartbeat timeout in seconds
         :return: Iterator of invocation IDs that need recovery.
-        :rtype: Iterator[str]
+        :rtype: Iterator["InvocationId"]
         """
         timeout_seconds = self.app.conf.runner_considered_dead_after_minutes * 60
         return self._get_running_invocations_for_recovery(timeout_seconds)

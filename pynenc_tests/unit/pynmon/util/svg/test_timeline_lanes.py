@@ -6,6 +6,7 @@ Tests lane management, bar handling, and timeline data aggregation.
 
 from datetime import UTC, datetime, timedelta
 
+
 from pynmon.util.svg.builder import RunnerInfo
 from pynmon.util.svg.models import (
     InvocationBar,
@@ -47,7 +48,6 @@ def test_lane_add_bar() -> None:
     start = datetime(2025, 1, 1, 0, 0, 0, tzinfo=UTC)
     bar = InvocationBar(
         invocation_id="inv-1",
-        task_id="task",
         start_time=start,
         end_time=start + timedelta(minutes=5),
         status="RUNNING",

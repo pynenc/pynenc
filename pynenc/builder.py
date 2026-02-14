@@ -16,7 +16,7 @@ import warnings
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-from pynenc.arg_cache.mem_arg_cache import MemArgCache
+from pynenc.client_data_store.mem_client_data_store import MemClientDataStore
 from pynenc.conf.config_pynenc import ArgumentPrintMode
 from pynenc.conf.config_task import ConcurrencyControlType
 from pynenc.serializer import JsonPickleSerializer, JsonSerializer, PickleSerializer
@@ -65,7 +65,7 @@ class PynencBuilder:
         PynencBuilder()
         .app_id("my_application")
         .memory()  # Built-in memory backend
-        .mem_arg_cache(min_size_to_cache=1024)
+        .mem_client_data_store(min_size_to_cache=1024)
         .build()
     )
     ```
@@ -246,7 +246,7 @@ class PynencBuilder:
                 "orchestrator_cls": "MemOrchestrator",
                 "broker_cls": "MemBroker",
                 "state_backend_cls": "MemStateBackend",
-                "arg_cache_cls": MemArgCache.__name__,
+                "client_data_cls": MemClientDataStore.__name__,
                 "trigger_cls": MemTrigger.__name__,
             }
         )
@@ -272,7 +272,7 @@ class PynencBuilder:
                 "orchestrator_cls": "SQLiteOrchestrator",
                 "broker_cls": "SQLiteBroker",
                 "state_backend_cls": "SQLiteStateBackend",
-                "arg_cache_cls": "SQLiteArgCache",
+                "client_data_cls": "SQLiteClientDataStore",
                 "trigger_cls": "SQLiteTrigger",
             }
         )
@@ -282,16 +282,16 @@ class PynencBuilder:
             self._config["sqlite_db_path"] = sqlite_db_path
         return self
 
-    def mem_arg_cache(
+    def mem_client_data_store(
         self,
         min_size_to_cache: int = 1024,
         local_cache_size: int = 1024,
     ) -> "PynencBuilder":
-        """
-        Configure memory-based argument caching.
+        """Configure memory-based client data store.
 
         This sets up in-memory argument caching for development and testing purposes.
         Arguments larger than the specified threshold will be cached locally.
+        Also configures the ClientDataStore with the same settings.
 
         :param int min_size_to_cache: Minimum string length required to cache an argument
         :param int local_cache_size: Maximum number of items to cache locally
@@ -299,7 +299,7 @@ class PynencBuilder:
         """
         self._config.update(
             {
-                "arg_cache_cls": MemArgCache.__name__,
+                "client_data_cls": MemClientDataStore.__name__,
                 "min_size_to_cache": min_size_to_cache,
                 "local_cache_size": local_cache_size,
             }
@@ -307,16 +307,15 @@ class PynencBuilder:
         self._using_memory_components = True
         return self
 
-    def disable_arg_cache(self) -> "PynencBuilder":
-        """
-        Disable argument caching completely.
+    def disable_client_data_store(self) -> "PynencBuilder":
+        """Disable client data store completely.
 
-        This turns off all argument caching functionality, which may be useful
+        This turns off all client data store functionality, which may be useful
         for debugging or when caching is not desired.
 
         :return: The builder instance for method chaining
         """
-        self._config["arg_cache_cls"] = "DisabledArgCache"
+        self._config["disable_client_data_store"] = True
         return self
 
     def mem_trigger(
@@ -499,21 +498,18 @@ class PynencBuilder:
 
     def task_control(
         self,
-        cycle_control: bool = False,
         blocking_control: bool = False,
         queue_timeout_sec: float = 0.1,
     ) -> "PynencBuilder":
         """
         Configure task control parameters.
 
-        :param bool cycle_control: Whether to enable cycle control for task dependencies
         :param bool blocking_control: Whether to enable blocking control for concurrent tasks
         :param float queue_timeout_sec: Timeout for queue operations in seconds
         :return: The builder instance for method chaining
         """
         self._config.update(
             {
-                "cycle_control": cycle_control,
                 "blocking_control": blocking_control,
                 "queue_timeout_sec": queue_timeout_sec,
             }

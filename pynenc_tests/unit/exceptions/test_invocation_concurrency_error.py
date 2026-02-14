@@ -18,9 +18,9 @@ def test_format_difference() -> None:
     error_message = InvocationConcurrencyWithDifferentArgumentsError.format_difference(
         existing_call=invocation1.call, new_call=invocation2.call
     )
-    assert "Original: {'x': 1, 'y': 2}" in error_message
-    assert "Updated: {'x': 3, 'y': 4}" in error_message
-    assert "Changes:" in error_message
+    assert "Arguments differ" in error_message
+    assert "x: 1 -> 3" in error_message
+    assert "y: 2 -> 4" in error_message
 
 
 def test_from_call_mismatch() -> None:
@@ -54,9 +54,9 @@ def test_to_json_and_from_json() -> None:
         error_dict
     )
     assert error_dict == {
-        "task_id": invocation1.task.task_id,
+        "task_id_key": invocation1.task.task_id.key,
         "existing_invocation_id": invocation1.invocation_id,
-        "new_call_id": invocation2.call.call_id,
+        "new_call_id_key": invocation2.call.call_id.key,
         "diff": error.diff,
         "message": None,
     }
@@ -108,9 +108,10 @@ def test_format_difference_with_removed_keys() -> None:
     diff = InvocationConcurrencyWithDifferentArgumentsError.format_difference(
         existing_call, new_call
     )
-    assert "x: 1" in diff
-    assert "y: Removed" in diff
-    assert "z: Removed" in diff
+    assert "x: 1 -> 2" in diff
+    assert "Removed:" in diff
+    assert "y: 2" in diff
+    assert "z: 3" in diff
     assert "Added" not in diff
 
 
@@ -126,7 +127,8 @@ def test_format_difference_with_added_keys() -> None:
     diff = InvocationConcurrencyWithDifferentArgumentsError.format_difference(
         existing_call, new_call
     )
-    assert "x:" not in diff
-    assert "y: Added" in diff
-    assert "z: Added" in diff
+    assert "Changed:" not in diff
+    assert "Added:" in diff
+    assert "y: 2" in diff
+    assert "z: 3" in diff
     assert "Removed" not in diff

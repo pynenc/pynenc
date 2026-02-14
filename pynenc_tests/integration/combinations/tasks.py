@@ -18,16 +18,6 @@ def sum_task(x: int, y: int) -> int:
 
 
 @mock_app.task
-def cycle_start() -> None:
-    _ = cycle_end().result
-
-
-@mock_app.task
-def cycle_end() -> None:
-    _ = cycle_start().result
-
-
-@mock_app.task
 def raise_exception() -> Any:
     raise ValueError("test")
 
@@ -40,12 +30,6 @@ def get_text() -> str:
 @mock_app.task
 def get_upper() -> str:
     return get_text().result.upper()
-
-
-@mock_app.task
-def direct_cycle() -> str:
-    invocation = direct_cycle()
-    return invocation.result.upper()
 
 
 @mock_app.task(max_retries=2)

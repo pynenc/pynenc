@@ -19,8 +19,8 @@ def task1() -> None: ...
 
 
 def test_get_blocking_invocations(app_instance: "Pynenc") -> None:
-    invocation0: DistributedInvocation = DistributedInvocation(Call(task0), None)
-    invocation1: DistributedInvocation = DistributedInvocation(Call(task1), None)
+    invocation0: DistributedInvocation = DistributedInvocation.isolated(Call(task0))
+    invocation1: DistributedInvocation = DistributedInvocation.isolated(Call(task1))
 
     graph = app_instance.orchestrator.blocking_control  # type: ignore
 

@@ -11,6 +11,7 @@ from pynenc.util.multiprocessing_utils import warn_missing_main_guard
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
     from pynenc.invocation import DistributedInvocation
+    from pynenc.identifiers.invocation_id import InvocationId
     from pynenc.runner.runner_context import RunnerContext
 
 
@@ -32,8 +33,8 @@ class ClassifiedInvocations(NamedTuple):
     :param non_final: List of invocation IDs that are still in progress
     """
 
-    final: list[str]
-    non_final: list[str]
+    final: list["InvocationId"]
+    non_final: list["InvocationId"]
 
 
 class ChildProcessInfo(NamedTuple):
@@ -45,7 +46,7 @@ class ChildProcessInfo(NamedTuple):
     """
 
     process: Process
-    invocation_id: str
+    invocation_id: "InvocationId"
 
 
 class ProcessRunner(BaseRunner):
@@ -57,19 +58,13 @@ class ProcessRunner(BaseRunner):
     """
 
     wait_invocation: dict[
-        str, set[str]
+        "InvocationId", set["InvocationId"]
     ]  # Maps invocation_id to set of waiting invocation_ids
     child_runner_ids: dict[str, ChildProcessInfo]  # Maps runner_id to process info
-    inv_id_to_runner_id: dict[str, str]  # Maps invocation_id to runner_id
+    inv_id_to_runner_id: dict["InvocationId", str]  # Maps invocation_id to runner_id
     manager: Manager  # type: ignore
-    runner_cache: dict
 
     max_processes: int
-
-    @property
-    def cache(self) -> dict:
-        """Returns the cache for the ProcessRunner instance."""
-        return self.runner_cache
 
     @staticmethod
     def mem_compatible() -> bool:
@@ -206,7 +201,9 @@ class ProcessRunner(BaseRunner):
         ]
         return ClassifiedInvocations(final_invocation_ids, non_final_invocation_ids)
 
-    def _get_process_for_invocation(self, invocation_id: str) -> Process | None:
+    def _get_process_for_invocation(
+        self, invocation_id: "InvocationId"
+    ) -> Process | None:
         """Get the Process object for a given invocation_id."""
         if runner_id := self.inv_id_to_runner_id.get(invocation_id):
             if info := self.child_runner_ids.get(runner_id):
@@ -228,7 +225,7 @@ class ProcessRunner(BaseRunner):
                             f"{waiting_invocation_id=} waiting for {invocation_id=}, pausing process {waiting_process.pid}"
                         )
         # Get the invocations that are waiting in finalized ones
-        to_resume_invocation_ids: set[str] = set()
+        to_resume_invocation_ids: set[InvocationId] = set()
         for invocation_id in classified.final:
             if waiting_invocation_ids := self.wait_invocation.get(invocation_id, set()):
                 to_resume_invocation_ids.update(waiting_invocation_ids)
@@ -277,7 +274,6 @@ class ProcessRunner(BaseRunner):
             if not invocations:
                 break
             invocation = invocations[0]
-            invocation.app.runner = self
             self._register_new_child_runner_context(reserved_ctx)
             process = Process(
                 target=run_invocation,
@@ -304,16 +300,16 @@ class ProcessRunner(BaseRunner):
 
     def _waiting_for_results(
         self,
-        running_invocation_id: str,
-        result_invocation_ids: list[str],
+        running_invocation_id: "InvocationId",
+        result_invocation_ids: list["InvocationId"],
         runner_args: dict[str, Any] | None = None,
     ) -> None:
         """
         Handles invocations that are waiting for results from other invocations.
         Pauses the running process and registers it to wait for the results of specified invocations.
 
-        :param str running_invocation_id: The ID of the invocation that is waiting for results.
-        :param list[str] result_invocation_ids: A list of IDs of invocations whose results are being awaited.
+        :param InvocationId running_invocation_id: The ID of the invocation that is waiting for results.
+        :param list[InvocationId] result_invocation_ids: A list of IDs of invocations whose results are being awaited.
         :param dict[str, Any] | None runner_args: Additional arguments required for the ProcessRunner.
         """
         if not result_invocation_ids:

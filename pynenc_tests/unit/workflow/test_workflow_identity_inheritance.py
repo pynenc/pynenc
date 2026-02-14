@@ -37,9 +37,9 @@ def test_standalone_task_creates_workflow(runner: None) -> None:
 
     # Verify workflow was created
     assert inv.workflow is not None
-    assert inv.workflow.workflow_task_id == standalone_task.task_id
-    assert inv.workflow.workflow_invocation_id == inv.invocation_id
-    assert inv.workflow.parent_workflow is None
+    assert inv.workflow.workflow_type == standalone_task.task_id
+    assert inv.workflow.workflow_id == inv.invocation_id
+    assert inv.workflow.parent_workflow_id is None
 
 
 def test_workflow_inheritance_in_chain(runner: None) -> None:
@@ -66,5 +66,5 @@ def test_workflow_inheritance_in_chain(runner: None) -> None:
     assert chain_2_inv.workflow == chain_3_inv.workflow
 
     # Verify workflow identity matches the first task (chain_1)
-    assert chain_1_inv.workflow.workflow_task_id == workflow_chain_1.task_id
-    assert chain_1_inv.workflow.workflow_invocation_id == chain_1_inv.invocation_id
+    assert chain_1_inv.workflow.workflow_type == workflow_chain_1.task_id
+    assert chain_1_inv.workflow.workflow_id == chain_1_inv.invocation_id

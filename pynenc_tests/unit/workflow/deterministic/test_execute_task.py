@@ -7,7 +7,7 @@ verifying that it returns the same DistributedInvocation for identical calls.
 
 from typing import TYPE_CHECKING
 
-from pynenc.workflow.deterministic import DeterministicExecutor
+from pynenc.workflow.workflow_deterministic import DeterministicExecutor
 
 if TYPE_CHECKING:
     from pynenc.task import Task
@@ -34,7 +34,7 @@ def test_execute_task_same_args_same_invocation_id(
 
     # Should return same invocation_id (cached)
     assert result1.invocation_id == result2.invocation_id
-    assert result1.call_id == result2.call_id
+    assert result1.call.call_id == result2.call.call_id
 
 
 def test_execute_task_different_args_different_invocation_ids(
@@ -54,7 +54,7 @@ def test_execute_task_different_args_different_invocation_ids(
     assert len(invocation_ids) == 3
 
     # All should have different call_ids
-    call_ids = {result1.call_id, result2.call_id, result3.call_id}
+    call_ids = {result1.call.call_id, result2.call.call_id, result3.call.call_id}
     assert len(call_ids) == 3
 
 
@@ -75,7 +75,7 @@ def test_execute_task_deterministic_replay(
 
     # Should return same invocation_id
     assert result1.invocation_id == result2.invocation_id
-    assert result1.call_id == result2.call_id
+    assert result1.call.call_id == result2.call.call_id
 
 
 def test_execute_task_stores_invocation_id_only(
@@ -90,7 +90,7 @@ def test_execute_task_stores_invocation_id_only(
 
     # Create expected storage key
     arguments = Arguments.from_call(app_with_task.func, 42, 58)
-    call: Call = Call(task=app_with_task, _arguments=arguments)
+    call: Call = Call(task=app_with_task, arguments=arguments)
     expected_key = f"task_invocation:{call.call_id}"
 
     # Verify only the invocation_id is stored

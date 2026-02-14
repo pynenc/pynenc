@@ -2,6 +2,7 @@ import signal
 from collections.abc import Generator
 from multiprocessing.managers import DictProxy, SyncManager
 from unittest.mock import ANY, Mock, patch
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -15,6 +16,10 @@ from pynenc.invocation import (
 from pynenc.runner.process_runner import ProcessRunner
 from pynenc.runner.runner_context import RunnerContext
 from pynenc_tests.conftest import MockPynenc
+
+
+if TYPE_CHECKING:
+    from pynenc.identifiers.invocation_id import InvocationId
 
 
 def add(x: int, y: int) -> int:
@@ -57,10 +62,12 @@ def test_on_start(runner: ProcessRunner) -> None:
     assert isinstance(runner.wait_invocation, DictProxy)
 
 
-def test_on_stop(mock_process: Mock, runner: ProcessRunner) -> None:
+def test_on_stop(
+    mock_process: Mock, runner: ProcessRunner, inv_id: "InvocationId"
+) -> None:
     runner._on_start()
     mock_invocation = Mock(spec=DistributedInvocation)
-    mock_invocation.invocation_id = "test-inv-id"
+    mock_invocation.invocation_id = inv_id
     runner_id = "test-runner-id"
     # Use the new tracking structure
     from pynenc.runner.process_runner import ChildProcessInfo

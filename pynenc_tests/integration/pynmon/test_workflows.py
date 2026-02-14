@@ -94,10 +94,11 @@ def test_workflow_discovery_basic(pynmon_client: "PynmonClient") -> None:
         response = pynmon_client.get("/workflows/")
         assert response.status_code == 200
         response_text = response.text
-        assert simple_workflow_task.task_id in response_text
+        assert simple_workflow_task.task_id.module in response_text
+        assert simple_workflow_task.task_id.func_name in response_text
 
         # Test workflow detail view
-        response = pynmon_client.get(f"/workflows/{simple_workflow_task.task_id}")
+        response = pynmon_client.get(f"/workflows/{simple_workflow_task.task_id.key}")
         assert response.status_code == 200
         response_text = response.text
         assert result["workflow_id"] in response_text
@@ -142,15 +143,19 @@ def test_multiple_workflow_types(pynmon_client: "PynmonClient") -> None:
         response = pynmon_client.get("/workflows/")
         assert response.status_code == 200
         response_text = response.text
-        assert simple_workflow_task.task_id in response_text
-        assert data_processing_workflow.task_id in response_text
+        assert simple_workflow_task.task_id.module in response_text
+        assert simple_workflow_task.task_id.func_name in response_text
+        assert data_processing_workflow.task_id.module in response_text
+        assert data_processing_workflow.task_id.func_name in response_text
 
         # Test individual workflow detail views
-        response1 = pynmon_client.get(f"/workflows/{simple_workflow_task.task_id}")
+        response1 = pynmon_client.get(f"/workflows/{simple_workflow_task.task_id.key}")
         assert response1.status_code == 200
         assert result1["workflow_id"] in response1.text
 
-        response2 = pynmon_client.get(f"/workflows/{data_processing_workflow.task_id}")
+        response2 = pynmon_client.get(
+            f"/workflows/{data_processing_workflow.task_id.key}"
+        )
         assert response2.status_code == 200
         assert result2["workflow_id"] in response2.text
 
@@ -194,7 +199,9 @@ def test_workflow_execution_multiple_instances(pynmon_client: "PynmonClient") ->
         time.sleep(0.3)
 
         # Test that all instances are tracked via pynmon workflow views
-        response = pynmon_client.get(f"/workflows/{data_processing_workflow.task_id}")
+        response = pynmon_client.get(
+            f"/workflows/{data_processing_workflow.task_id.key}"
+        )
         assert response.status_code == 200
         response_text = response.text
 
@@ -264,7 +271,7 @@ def test_workflow_detail_view_error_reproduction(pynmon_client: "PynmonClient") 
         print(f"Workflow ID from result: {workflow_id}")
 
         # This is where the 500 error occurs - let's capture it
-        response = pynmon_client.get(f"/workflows/{simple_workflow_task.task_id}")
+        response = pynmon_client.get(f"/workflows/{simple_workflow_task.task_id.key}")
         print(f"Workflow detail response status: {response.status_code}")
 
         if response.status_code != 200:

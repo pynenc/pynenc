@@ -29,7 +29,6 @@ from pynmon.util.svg.runner_info import RunnerInfo
 
 if TYPE_CHECKING:
     from pynenc.state_backend.base_state_backend import InvocationHistory
-    from pynenc.runner.runner_context import RunnerContext
 
 
 class HistoryEntry(NamedTuple):
@@ -38,7 +37,6 @@ class HistoryEntry(NamedTuple):
     timestamp: datetime
     status: str
     runner_info: RunnerInfo
-    task_id: str
     registered_by_inv_id: str | None
 
 
@@ -148,7 +146,6 @@ class TimelineDataBuilder:
         self, history: "InvocationHistory", runner_info: RunnerInfo
     ) -> None:
         """Store history entry for later processing."""
-        task_id = f"task:{history.invocation_id.split('-')[0]}"
         registered_by = getattr(history, "registered_by_inv_id", None)
 
         self._history_by_invocation[history.invocation_id].append(
@@ -156,7 +153,6 @@ class TimelineDataBuilder:
                 timestamp=history.timestamp,
                 status=history.status_record.status.value,
                 runner_info=runner_info,
-                task_id=task_id,
                 registered_by_inv_id=registered_by,
             )
         )
@@ -442,7 +438,6 @@ class TimelineDataBuilder:
         """Add a status point to the appropriate lane."""
         point = create_status_point(
             invocation_id=inv_id,
-            task_id=entry.task_id,
             timestamp=entry.timestamp,
             status=entry.status.upper(),
             runner_info=entry.runner_info,
@@ -468,7 +463,6 @@ class TimelineDataBuilder:
         segment = create_status_segment(
             SegmentParams(
                 invocation_id=inv_id,
-                task_id=prev_entry.task_id,
                 start_time=prev_entry.timestamp,
                 end_time=current_entry.timestamp,
                 status=prev_status,
@@ -525,7 +519,6 @@ class TimelineDataBuilder:
         segment = create_status_segment(
             SegmentParams(
                 invocation_id=inv_id,
-                task_id=last_entry.task_id,
                 start_time=last_entry.timestamp,
                 end_time=end_time,
                 status=status,

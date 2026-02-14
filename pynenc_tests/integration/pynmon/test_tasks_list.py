@@ -49,5 +49,7 @@ def test_tasks_list(pynmon_client: TestClient) -> None:
     # Check that the tasks page title is present
     assert "Tasks Monitor" in content or "Tasks" in content
 
-    assert hello_task.task_id in content
-    assert add_task.task_id in content
+    assert hello_task.task_id.module in content
+    assert hello_task.task_id.func_name in content
+    assert add_task.task_id.module in content
+    assert add_task.task_id.func_name in content

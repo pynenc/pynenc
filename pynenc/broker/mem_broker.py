@@ -5,6 +5,7 @@ from pynenc.broker.base_broker import BaseBroker
 
 if TYPE_CHECKING:
     from ..app import Pynenc
+    from pynenc.identifiers.invocation_id import InvocationId
 
 
 class MemBroker(BaseBroker):
@@ -27,21 +28,21 @@ class MemBroker(BaseBroker):
         self._queue: deque = deque()
         super().__init__(app)
 
-    def route_invocation(self, invocation_id: str) -> None:
+    def route_invocation(self, invocation_id: "InvocationId") -> None:
         """
         Route an invocation id by adding it to the in-memory queue.
 
         This method appends the invocation ID to the deque, effectively queuing it for processing.
 
-        :param str invocation_id: The ID of the invocation to be queued.
+        :param InvocationId invocation_id: The ID of the invocation to be queued.
         """
         self._queue.append(invocation_id)
 
-    def route_invocations(self, invocation_ids: list[str]) -> None:
+    def route_invocations(self, invocation_ids: list["InvocationId"]) -> None:
         """
         Routes multiple invocation IDs at once.
 
-        :param list[str] invocation_ids: The invocation IDs to be routed.
+        :param list[InvocationId] invocation_ids: The invocation IDs to be routed.
         """
         for invocation_id in invocation_ids:
             self.route_invocation(invocation_id)
@@ -49,15 +50,15 @@ class MemBroker(BaseBroker):
         if invocation_ids:
             self.app.logger.debug(f"Batch routed {len(invocation_ids)} invocations")
 
-    def retrieve_invocation(self) -> str | None:
+    def retrieve_invocation(self) -> "InvocationId | None":
         """
         Retrieve the next invocation id from the queue.
 
         This method pops the next item from the deque and returns the invocation ID.
         If the queue is empty, it returns None.
 
-        :return:
-            The next invocation id from the queue, or None if the queue is empty.
+        :return: The next invocation id from the queue, or None if the queue is empty.
+        :rtype: InvocationId | None
         """
         if self._queue:
             return self._queue.popleft()

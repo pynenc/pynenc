@@ -40,7 +40,7 @@
 
 ---
 
-Pynenc addresses the complex challenges of task management in distributed environments, offering a robust solution for developers looking to efficiently orchestrate asynchronous tasks across multiple systems. By combining intuitive configuration with advanced features like automatic task prioritization and cycle detection, Pynenc empowers developers to build scalable and reliable distributed applications with ease.
+Pynenc addresses the complex challenges of task management in distributed environments, offering a robust solution for developers looking to efficiently orchestrate asynchronous tasks across multiple systems. By combining intuitive configuration with advanced features like automatic task prioritization, Pynenc empowers developers to build scalable and reliable distributed applications with ease.
 
 ## 🆕 What's New in v0.1.0
 
@@ -129,8 +129,6 @@ See the [Changelog](https://docs.pynenc.org/changelog.html) for the complete lis
 - **Automatic Task Prioritization**: Pynenc prioritizes tasks by simply counting the number of dependencies each task has. The task with the most dependencies is selected first.
 
 - **Automatic Task Pausing**: Pynenc pauses tasks that are waiting for other tasks to complete. So those with higher priority (has more dependent task waiting for them) can run instead, instead of blocking a runner and preventing deadlocks.
-
-- **Cycle Detection**: Automatically detects cyclical dependencies among tasks and raises exceptions to prevent endless loops in task execution.
 
 - **Direct Task Execution**: Use `@app.direct_task` for tasks that return results directly instead of invocations.
 

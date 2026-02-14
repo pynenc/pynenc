@@ -15,10 +15,10 @@ def test_base_invocation_instantiation() -> None:
 def test_base_invocation_properties() -> None:
     invocation: ConcurrentInvocation = ConcurrentInvocation(call=mock_call)
     assert invocation.app == mock_call.app
-    assert invocation.call_id == mock_call.call_id
+    assert invocation.call.call_id == mock_call.call_id
     assert invocation.task == mock_call.task
     assert invocation.arguments == mock_call.arguments
-    assert invocation.serialized_arguments == mock_call.serialized_arguments
+    assert invocation.call.serialized_arguments == mock_call.serialized_arguments
 
 
 def test_invocation_id_is_unique() -> None:

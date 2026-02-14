@@ -27,14 +27,16 @@ def test_distributed_invocation_instantiation() -> None:
     invocation = add(1, 2)
     assert isinstance(invocation, DistributedInvocation)
     assert isinstance(invocation.call, Call)
-    assert invocation.parent_invocation is None
+    assert invocation.parent_invocation_id is None
 
 
-def test_distributed_invocation_to_and_fromjson() -> None:
+def test_distributed_invocation_to_and_from_dto() -> None:
     # Patch orchestrator to return a real value for get_call_invocation_ids
     app.orchestrator.get_call_invocation_ids.return_value = []
-    invocation = add(1, 2)
-    assert invocation == DistributedInvocation.from_json(app, invocation.to_json())
+    invocation: DistributedInvocation = add(1, 2)  # type: ignore
+    assert invocation == DistributedInvocation.from_dto(
+        invocation.to_dto(), invocation.call
+    )
 
 
 def test_get_final_result_exception_not_final() -> None:
@@ -133,15 +135,30 @@ async def test_distributed_async_result_wait_loop(
     assert result == 3
 
 
-def test_distributed_invocation_getstate() -> None:
-    """Test that __getstate__ correctly serializes the distributed invocation."""
-    invocation = add(1, 2)  # Create a sample invocation
+def test_distributed_invocation_get_and_set_state() -> None:
+    """
+    Test that __getstate__ and __setstate__ correctly serialize and deserialize
+    the distributed invocation.
+    """
+    # Arrange: Create a sample invocation
+    invocation: DistributedInvocation = add(1, 2)  # type: ignore
 
-    # Expected state should contain all instance attributes
-    expected_identity = {
-        "invocation_id": invocation.invocation_id,
-        "call": invocation.call,
-        "parent_invocation": None,
-    }
+    # Act: Serialize the invocation state
+    serialized_state = invocation.__getstate__()
 
-    assert invocation.__getstate__()["identity"] == expected_identity  # type: ignore
+    # Act: Deserialize the state into a new DistributedInvocation
+    deserialized_invocation = DistributedInvocation.__new__(DistributedInvocation)
+    deserialized_invocation.__setstate__(serialized_state)
+
+    # Assert: Verify that the deserialized object matches the original
+    assert deserialized_invocation.invocation_id == invocation.invocation_id
+    assert deserialized_invocation.call == invocation.call
+    assert (
+        deserialized_invocation.parent_invocation_id == invocation.parent_invocation_id
+    )
+    assert deserialized_invocation.workflow == invocation.workflow
+    assert deserialized_invocation._cached_status == invocation._cached_status
+    assert deserialized_invocation._cached_status_time == invocation._cached_status_time
+    assert deserialized_invocation._stored_in_backend == invocation._stored_in_backend
+    assert deserialized_invocation._num_retries == invocation._num_retries
+    assert deserialized_invocation._result == invocation._result

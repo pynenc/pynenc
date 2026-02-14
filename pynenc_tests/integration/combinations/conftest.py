@@ -7,8 +7,8 @@ import pytest
 from _pytest.monkeypatch import MonkeyPatch
 
 from pynenc import Pynenc
-from pynenc.arg_cache import MemArgCache, SQLiteArgCache
 from pynenc.broker import MemBroker, SQLiteBroker
+from pynenc.client_data_store import MemClientDataStore, SQLiteClientDataStore
 from pynenc.orchestrator import MemOrchestrator, SQLiteOrchestrator
 from pynenc.runner import *  # noqa: F403, F401
 from pynenc.serializer import *  # noqa: F403, F401
@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 # Replace namedtuple with a typed frozen dataclass that exposes combination_id
 @dataclass(frozen=True)
 class AppComponents:
-    arg_cache: type
+    client_data_store: type
     broker: type
     orchestrator: type
     state_backend: type
@@ -53,9 +53,15 @@ class AppComponents:
 
 
 # Define component class tuples for cleaner code
-MEM_CLASSES = (MemArgCache, MemBroker, MemOrchestrator, MemStateBackend, MemTrigger)
+MEM_CLASSES = (
+    MemClientDataStore,
+    MemBroker,
+    MemOrchestrator,
+    MemStateBackend,
+    MemTrigger,
+)
 SQLITE_CLASSES = (
-    SQLiteArgCache,
+    SQLiteClientDataStore,
     SQLiteBroker,
     SQLiteOrchestrator,
     SQLiteStateBackend,
@@ -118,7 +124,9 @@ def app_combination_instance(
     components: AppComponents = request.param
     test_module, test_name = util.get_module_name(request)
     monkeypatch.setenv("PYNENC__APP_ID", f"{test_module}.{test_name}")
-    monkeypatch.setenv("PYNENC__ARG_CACHE_CLS", components.arg_cache.__name__)
+    monkeypatch.setenv(
+        "PYNENC__CLIENT_DATA_STORE_CLS", components.client_data_store.__name__
+    )
     monkeypatch.setenv("PYNENC__ORCHESTRATOR_CLS", components.orchestrator.__name__)
     monkeypatch.setenv("PYNENC__BROKER_CLS", components.broker.__name__)
     monkeypatch.setenv("PYNENC__SERIALIZER_CLS", components.serializer.__name__)
@@ -126,14 +134,13 @@ def app_combination_instance(
     monkeypatch.setenv("PYNENC__TRIGGER_CLS", components.trigger.__name__)
     monkeypatch.setenv("PYNENC__RUNNER_CLS", components.runner.__name__)
     monkeypatch.setenv("PYNENC__LOGGING_LEVEL", "debug")
-    monkeypatch.setenv("PYNENC__ORCHESTRATOR__CYCLE_CONTROL", "True")
     monkeypatch.setenv("PYNENC__PRINT_ARGUMENTS", "False")
 
     # Set shared SQLite database path for SQLite components
     if any(
         cls.__name__.startswith("SQLite")
         for cls in [
-            components.arg_cache,
+            components.client_data_store,
             components.broker,
             components.orchestrator,
             components.state_backend,
@@ -185,12 +192,6 @@ def replace_tasks_app(app: Pynenc) -> None:
 
 
 @pytest.fixture(scope="function")
-def task_cycle(app: Pynenc) -> "Task":
-    replace_tasks_app(app)
-    return tasks.cycle_start
-
-
-@pytest.fixture(scope="function")
 def task_raise_exception(app: Pynenc) -> "Task":
     replace_tasks_app(app)
     return tasks.raise_exception
@@ -212,12 +213,6 @@ def task_get_text(app: Pynenc) -> "Task":
 def task_get_upper(app: Pynenc) -> "Task":
     replace_tasks_app(app)
     return tasks.get_upper
-
-
-@pytest.fixture(scope="function")
-def task_direct_cycle(app: Pynenc) -> "Task":
-    replace_tasks_app(app)
-    return tasks.direct_cycle
 
 
 @pytest.fixture(scope="function")

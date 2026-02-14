@@ -4,6 +4,7 @@ Tests for edge cases in SVG rendering.
 
 from datetime import UTC, datetime, timedelta
 
+
 from pynmon.util.svg import (
     InvocationBar,
     RunnerLane,
@@ -31,7 +32,6 @@ def test_render_with_special_characters_in_tooltip(config: TimelineConfig) -> No
 
     bar = InvocationBar(
         invocation_id="inv-001",
-        task_id="task:test",
         start_time=start,
         end_time=start + timedelta(seconds=30),
         status="RUNNING",
@@ -87,7 +87,6 @@ def test_render_zero_duration_bar(config: TimelineConfig) -> None:
 
     bar = InvocationBar(
         invocation_id="inv-001",
-        task_id="task:test",
         start_time=start + timedelta(seconds=30),
         end_time=start + timedelta(seconds=30),
         status="SUCCESS",

@@ -13,6 +13,7 @@ from urllib.parse import quote
 from pynenc.builder import PynencBuilder
 
 if TYPE_CHECKING:
+    from pynenc.identifiers.call_id import CallId
     from pynenc_tests.integration.pynmon.conftest import PynmonClient
 
 # Debug configuration - Set to 1 to keep server alive for browser debugging
@@ -64,13 +65,15 @@ def test_call_detail_with_query_parameter(pynmon_client: "PynmonClient") -> None
         time.sleep(0.2)  # Ensure state is persisted
 
         # Test call detail via query parameter
-        response = pynmon_client.get(f"/calls/?call_id={quote(call_id)}")
+        response = pynmon_client.get(
+            f"/calls/?call_id_key={quote(call_id.key, safe='')}"
+        )
 
         assert response.status_code == 200
         content = response.text
 
         # Should show call details
-        assert call_id in content
+        assert str(call_id) in content
         assert "hello_task" in content
         assert "Integration Test" in content
 
@@ -110,13 +113,13 @@ def test_call_detail_with_path_parameter(pynmon_client: "PynmonClient") -> None:
         time.sleep(0.2)  # Ensure state is persisted
 
         # Test call detail via path parameter
-        response = pynmon_client.get(f"/calls/{quote(call_id, safe='')}")
+        response = pynmon_client.get(f"/calls/{quote(call_id.key, safe='')}")
 
         assert response.status_code == 200
         content = response.text
 
         # Should show call details
-        assert call_id in content
+        assert str(call_id) in content
         assert "add_task" in content
 
         # Should show arguments
@@ -124,7 +127,7 @@ def test_call_detail_with_path_parameter(pynmon_client: "PynmonClient") -> None:
         assert "58" in content
 
         # Should show task information
-        assert add_task.task_id in content
+        assert str(add_task.task_id) in content
 
     finally:
         app.runner.stop_runner_loop()
@@ -156,13 +159,15 @@ def test_call_detail_displays_arguments_correctly(
         time.sleep(0.2)  # Ensure state is persisted
 
         # Test call detail
-        response = pynmon_client.get(f"/calls/{quote(call_id, safe='')}")
+        response = pynmon_client.get(f"/calls/{quote(call_id.key, safe='')}")
 
         assert response.status_code == 200
         content = response.text
 
         # Should show call details
-        assert call_id in content
+        assert call_id.task_id.module in content
+        assert call_id.task_id.func_name in content
+        assert call_id.args_id in content
         assert "multiply_task" in content
 
         # Should show arguments section
@@ -200,14 +205,14 @@ def test_call_detail_shows_task_information(pynmon_client: "PynmonClient") -> No
         time.sleep(0.2)  # Ensure state is persisted
 
         # Test call detail
-        response = pynmon_client.get(f"/calls/{quote(call_id, safe='')}")
+        response = pynmon_client.get(f"/calls/{quote(call_id.key, safe='')}")
 
         assert response.status_code == 200
         content = response.text
 
         # Should show task details
         task_id = hello_task.task_id
-        assert task_id in content
+        assert str(task_id) in content
 
         # Should show module information
         assert "Module:" in content
@@ -244,7 +249,7 @@ def test_call_detail_shows_invocations(pynmon_client: "PynmonClient") -> None:
         time.sleep(0.2)  # Ensure state is persisted
 
         # Test call detail
-        response = pynmon_client.get(f"/calls/{quote(call_id, safe='')}")
+        response = pynmon_client.get(f"/calls/{quote(call_id.key, safe='')}")
 
         assert response.status_code == 200
         content = response.text
@@ -252,7 +257,9 @@ def test_call_detail_shows_invocations(pynmon_client: "PynmonClient") -> None:
         # Should show invocations section (if the template includes it)
         # Note: This depends on the actual template structure
         # At minimum, the page should render successfully with the call information
-        assert call_id in content
+        assert call_id.task_id.module in content
+        assert call_id.task_id.func_name in content
+        assert call_id.args_id in content
         assert "add_task" in content
 
         # The invocation ID might be displayed in some form
@@ -288,7 +295,7 @@ def test_call_detail_empty_call_id_parameter(pynmon_client: "PynmonClient") -> N
     :param pynmon_client: HTTP client for the actual pynmon server
     """
     # Test with empty call_id query parameter
-    response = pynmon_client.get("/calls/?call_id=")
+    response = pynmon_client.get("/calls/?call_id_key=")
 
     assert response.status_code == 400
     content = response.text
@@ -297,22 +304,41 @@ def test_call_detail_empty_call_id_parameter(pynmon_client: "PynmonClient") -> N
     assert "Missing Call ID" in content or "No call_id was provided" in content
 
 
-def test_call_detail_nonexistent_call_id(pynmon_client: "PynmonClient") -> None:
+def test_call_detail_nonexistent_call_id(
+    pynmon_client: "PynmonClient", call_id: "CallId"
+) -> None:
     """
     Test call detail page behavior with non-existent call ID.
 
     :param pynmon_client: HTTP client for the actual pynmon server
     """
     # Test with non-existent call ID
-    fake_call_id = "nonexistent-call-id-12345"
-    response = pynmon_client.get(f"/calls/{fake_call_id}")
+    response = pynmon_client.get(f"/calls/{call_id.key}")
 
     assert response.status_code == 404
     content = response.text
 
     # Should show not found error
     assert "Call Not Found" in content
-    assert fake_call_id in content
+    assert call_id.key in content
+
+
+def test_call_detail_wrong_call_id_format(pynmon_client: "PynmonClient") -> None:
+    """
+    Test call detail page behavior with non-existent call ID.
+
+    :param pynmon_client: HTTP client for the actual pynmon server
+    """
+    # Test with non-existent call ID
+    wrong_key_format = "invalid-call-id-format"
+    response = pynmon_client.get(f"/calls/{wrong_key_format}")
+
+    assert response.status_code == 400
+    content = response.text
+
+    # Should show not found error
+    assert "Invalid Call ID Format" in content
+    assert wrong_key_format in content
 
 
 def test_call_detail_with_multiple_executions(pynmon_client: "PynmonClient") -> None:
@@ -356,13 +382,15 @@ def test_call_detail_with_multiple_executions(pynmon_client: "PynmonClient") -> 
             (call_id2, "Second"),
             (call_id3, "Third"),
         ]:
-            response = pynmon_client.get(f"/calls/{quote(call_id, safe='')}")
+            response = pynmon_client.get(f"/calls/{quote(call_id.key, safe='')}")
 
             assert response.status_code == 200
             content = response.text
 
             # Should show the correct call details
-            assert call_id in content
+            assert call_id.task_id.module in content
+            assert call_id.task_id.func_name in content
+            assert call_id.args_id in content
             assert expected_name in content
             assert "hello_task" in content
 
@@ -394,7 +422,7 @@ def test_call_detail_navigation_links(pynmon_client: "PynmonClient") -> None:
         time.sleep(0.2)  # Ensure state is persisted
 
         # Test call detail
-        response = pynmon_client.get(f"/calls/{quote(call_id, safe='')}")
+        response = pynmon_client.get(f"/calls/{quote(call_id.key, safe='')}")
 
         assert response.status_code == 200
         content = response.text

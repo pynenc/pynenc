@@ -28,8 +28,8 @@ def format_task_extra_info(task: "Task") -> dict[str, str | list[str]]:
     :return: Dictionary with module, func_qualname, and retry_for info
     """
     return {
-        "module": task.func.__module__,
-        "func_qualname": task.func.__qualname__,
+        "module": task.task_id.module,
+        "func_qualname": task.task_id.func_name,
         "retry_for": [e.__name__ for e in task.conf.retry_for],
     }
 

@@ -20,7 +20,6 @@ from pynmon.util.svg.tooltips import format_segment_tooltip, format_status_point
 
 def create_status_point(
     invocation_id: str,
-    task_id: str,
     timestamp: datetime,
     status: str,
     runner_info: RunnerInfo,
@@ -32,7 +31,6 @@ def create_status_point(
     tooltip = format_status_point_tooltip(invocation_id, status, timestamp, runner_info)
     return StatusPoint(
         invocation_id=invocation_id,
-        task_id=task_id,
         timestamp=timestamp,
         status=status,
         color=color,
@@ -47,7 +45,6 @@ class SegmentParams:
     """Parameters for creating a status segment."""
 
     invocation_id: str
-    task_id: str
     start_time: datetime
     end_time: datetime
     status: str
@@ -68,7 +65,6 @@ def create_status_segment(params: SegmentParams) -> StatusSegment:
     )
     return StatusSegment(
         invocation_id=params.invocation_id,
-        task_id=params.task_id,
         start_time=params.start_time,
         end_time=params.end_time,
         status=params.status,

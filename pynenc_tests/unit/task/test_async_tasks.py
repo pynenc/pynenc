@@ -1,5 +1,5 @@
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -62,8 +62,9 @@ async def test_async_results_final() -> None:
 async def test_async_results_pending_exception(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test that async_results raises an exception if the waiting function fails."""
     # Create two invocations: one with a dummy Arguments and one from the task decorator.
-    invocation0: DistributedInvocation = DistributedInvocation(
-        Call(add, Arguments()), parent_invocation=MagicMock()
+    parent_inv: DistributedInvocation = add(1, 2)  # type: ignore
+    invocation0: DistributedInvocation = DistributedInvocation.from_parent(
+        Call(add, Arguments()), parent_invocation=parent_inv
     )
     invocation1: DistributedInvocation = add(3, 4)  # type: ignore
     group: DistributedInvocationGroup = DistributedInvocationGroup(

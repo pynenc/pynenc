@@ -34,7 +34,7 @@ def dummy_task() -> "Task":
 
 @pytest.fixture
 def dummy_invocation(dummy_task: "Task") -> "DistributedInvocation":
-    return DistributedInvocation(Call(dummy_task), None)
+    return DistributedInvocation.isolated(Call(dummy_task))
 
 
 def test_add_history_non_blocking(

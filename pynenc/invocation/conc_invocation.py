@@ -2,19 +2,17 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncGenerator, Iterator
-from functools import cached_property
 from typing import TYPE_CHECKING
 
 from pynenc import context
-from pynenc.exceptions import PynencError
 from pynenc.invocation.base_invocation import BaseInvocation, BaseInvocationGroup
 from pynenc.invocation.status import InvocationStatus
 from pynenc.types import Params, Result
 from pynenc.util.asyncio_helper import run_task_sync
 
 if TYPE_CHECKING:
-    from ..app import Pynenc
-    from ..call import Call
+    from pynenc.call import Call
+    from pynenc.workflow.workflow_identity import WorkflowIdentity
 
 
 class ConcurrentInvocation(BaseInvocation[Params, Result]):
@@ -34,6 +32,20 @@ class ConcurrentInvocation(BaseInvocation[Params, Result]):
         super().__init__(call)
         self._num_retries = 0
         self._status = InvocationStatus.REGISTERED
+        self._cached_result: Result
+        self._is_result_cached = False
+
+    def _cache_and_return_result(self, result: Result) -> Result:
+        """Cache the result and return it."""
+        self._cached_result = result
+        self._is_result_cached = True
+        return result
+
+    @property
+    def workflow(self) -> WorkflowIdentity:
+        raise NotImplementedError(
+            "ConcurrentInvocation does not support workflow identity"
+        )
 
     @property
     def status(self) -> InvocationStatus:
@@ -45,7 +57,7 @@ class ConcurrentInvocation(BaseInvocation[Params, Result]):
         """
         return self._status
 
-    @cached_property
+    @property
     def result(self) -> Result:
         """
         Execute the task call and return its result.
@@ -57,6 +69,8 @@ class ConcurrentInvocation(BaseInvocation[Params, Result]):
         :rtype: Result
         :raises Exception: Raised if the task execution results in an unhandled exception.
         """
+        if self._is_result_cached:
+            return self._cached_result
         previous_invocation_context = context.sync_inv_context.get(self.app.app_id)
         try:
             self.task.logger.info(f"Sync Invocation {self.invocation_id} started")
@@ -65,7 +79,8 @@ class ConcurrentInvocation(BaseInvocation[Params, Result]):
             result = run_task_sync(self.task.func, **self.arguments.kwargs)
             self._status = InvocationStatus.SUCCESS
             self.task.logger.info(f"Sync Invocation {self.invocation_id} finished")
-            return result
+            # Cache the result to avoid re-execution on subsequent calls
+            return self._cache_and_return_result(result)
         except self.task.retriable_exceptions as exc:
             if self._num_retries >= self.task.conf.max_retries:
                 self.task.logger.exception("Max retries reached")
@@ -94,14 +109,6 @@ class ConcurrentInvocation(BaseInvocation[Params, Result]):
         :rtype: int
         """
         return self._num_retries
-
-    def to_json(self) -> str:
-        raise PynencError("ConcurrentInvocation cannot be serialized")
-
-    @classmethod
-    def from_json(cls, app: Pynenc, serialized: str) -> ConcurrentInvocation:
-        del app, serialized
-        raise PynencError("ConcurrentInvocation cannot be deserialized")
 
 
 class ConcurrentInvocationGroup(

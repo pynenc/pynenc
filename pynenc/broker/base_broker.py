@@ -6,6 +6,7 @@ from pynenc.conf.config_broker import ConfigBroker
 
 if TYPE_CHECKING:
     from ..app import Pynenc
+    from pynenc.identifiers.invocation_id import InvocationId
 
 
 class BaseBroker(ABC):
@@ -57,7 +58,7 @@ class BaseBroker(ABC):
         )
 
     @abstractmethod
-    def route_invocation(self, invocation_id: str) -> None:
+    def route_invocation(self, invocation_id: "InvocationId") -> None:
         """
         Abstract method for routing a given invocation id.
 
@@ -65,11 +66,11 @@ class BaseBroker(ABC):
         invocation id within the broker system. Implementations might involve
         sending the invocation to a queue or handling it internally.
 
-        :param str invocation_id: The invocation id to be routed.
+        :param InvocationId invocation_id: The invocation id to be routed.
         """
 
     @abstractmethod
-    def route_invocations(self, invocation_ids: list[str]) -> None:
+    def route_invocations(self, invocation_ids: list["InvocationId"]) -> None:
         """
         Routes multiple invocations at once.
 
@@ -79,11 +80,11 @@ class BaseBroker(ABC):
         Default implementation sequentially routes each invocation. Subclasses can
         override this with more efficient batch processing implementations.
 
-        :param list[str] invocation_ids: The invocation ids to be routed.
+        :param list["InvocationId"] invocation_ids: The invocation ids to be routed.
         """
 
     @abstractmethod
-    def retrieve_invocation(self) -> str | None:
+    def retrieve_invocation(self) -> "InvocationId | None":
         """
         Method to retrieve a distributed invocation id.
 

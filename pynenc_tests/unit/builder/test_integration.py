@@ -1,7 +1,7 @@
 from pynenc import Pynenc
-from pynenc.arg_cache import MemArgCache
 from pynenc.broker import MemBroker
 from pynenc.builder import PynencBuilder
+from pynenc.client_data_store import MemClientDataStore
 from pynenc.conf.config_pynenc import ArgumentPrintMode
 from pynenc.orchestrator import MemOrchestrator
 from pynenc.runner import ThreadRunner
@@ -18,7 +18,6 @@ def test_method_chaining_should_work_correctly() -> None:
         .thread_runner(min_threads=2, max_threads=8)
         .logging_level("info")
         .runner_tuning(runner_loop_sleep_time_sec=0.01)
-        .task_control(cycle_control=True)
         .show_argument_keys()
         .max_pending_seconds(60)
         .build()
@@ -32,7 +31,6 @@ def test_method_chaining_should_work_correctly() -> None:
     assert app.runner.conf.max_threads == 8
     assert app.conf.logging_level == "info"
     assert app.runner.conf.runner_loop_sleep_time_sec == 0.01
-    assert app.orchestrator.conf.cycle_control is True
     assert app.conf.argument_print_mode == ArgumentPrintMode.KEYS
     assert app.conf.max_pending_seconds == 60
 
@@ -50,7 +48,6 @@ def test_complete_app_example_should_work() -> None:
             runner_loop_sleep_time_sec=0.01,
             invocation_wait_results_sleep_time_sec=0.01,
         )
-        .task_control(cycle_control=True)
         .show_truncated_arguments(truncate_length=33)
         .max_pending_seconds(120)
         .custom_config(app_id="example.app")
@@ -64,11 +61,10 @@ def test_complete_app_example_should_work() -> None:
     assert isinstance(app.broker, MemBroker)
     assert isinstance(app.orchestrator, MemOrchestrator)
     assert isinstance(app.state_backend, MemStateBackend)
-    assert isinstance(app.arg_cache, MemArgCache)
+    assert isinstance(app.client_data_store, MemClientDataStore)
     assert isinstance(app.serializer, PickleSerializer)
     assert app.conf.argument_print_mode == ArgumentPrintMode.TRUNCATED
     assert app.conf.truncate_arguments_length == 33
     assert app.conf.max_pending_seconds == 120
     assert app.conf.logging_level == "info"
     assert app.runner.conf.runner_loop_sleep_time_sec == 0.01
-    assert app.orchestrator.conf.cycle_control is True

@@ -79,7 +79,8 @@ def test_task_runner_logs_truncated(app: "Pynenc") -> None:
 
     # Check that in-task logs contains task id
     assert in_task_log is not None, "Task log message not found"
-    assert invocation.task.task_id in in_task_log
+    assert invocation.task.task_id.module in in_task_log
+    assert invocation.task.task_id.func_name in in_task_log
     # Invocation ID should be truncated (first 7 chars, like Git short SHA)
     assert invocation.invocation_id[:7] in in_task_log
 
@@ -121,7 +122,8 @@ def test_task_runner_logs_full_ids(app_no_truncate: "Pynenc") -> None:
 
     # Check that in-task logs contains task and FULL invocation ids
     assert in_task_log is not None, "Task log message not found"
-    assert invocation.task.task_id in in_task_log
+    assert invocation.task.task_id.module in in_task_log
+    assert invocation.task.task_id.func_name in in_task_log
     assert invocation.invocation_id in in_task_log
 
     # Check that logs in the runner contains the FULL runner id

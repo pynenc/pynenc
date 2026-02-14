@@ -24,11 +24,11 @@
                     </tr>
                     <tr>
                       <th>Module:</th>
-                      <td>{{ task_extra.module }}</td>
+                      <td>{{ task.task_id.module }}</td>
                     </tr>
                     <tr>
                       <th>Function:</th>
-                      <td>{{ task_extra.func_qualname }}</td>
+                      <td>{{ task.task_id.func_name }}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -62,7 +62,10 @@
                     </tr>
                     <tr>
                       <th>Retry For Exceptions:</th>
-                      <td>{{ task_extra.retry_for|join(', ') }}</td>
+                      <td>
+                        {{ task.conf.retry_for|map(attribute='__name__')|join(',
+                        ') }}
+                      </td>
                     </tr>
                     <tr>
                       <th>Auto Parallel Batch Size:</th>
@@ -108,10 +111,10 @@
                         <td>
                           {% if call and call.call_id %}
                           <a
-                            href="/calls/?call_id={{ call.call_id|urlencode }}"
+                            href="/calls/?call_id_key={{ call.call_id.key|urlencode }}"
                           >
                             <code style="font-size: 11px; word-break: break-all"
-                              >{{ call.call_id }}</code
+                              >{{ call.call_id.key }}</code
                             >
                           </a>
                           {% else %}

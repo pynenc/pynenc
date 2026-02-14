@@ -1,8 +1,8 @@
 import pytest
 
-from pynenc.arg_cache import DisabledArgCache, MemArgCache
 from pynenc.broker import MemBroker
 from pynenc.builder import PynencBuilder
+from pynenc.client_data_store import MemClientDataStore
 from pynenc.orchestrator import MemOrchestrator
 from pynenc.state_backend import MemStateBackend
 from pynenc.trigger import DisabledTrigger, MemTrigger
@@ -16,45 +16,44 @@ def test_memory_components_should_configure_correctly() -> None:
     assert app.conf.orchestrator_cls == "MemOrchestrator"
     assert app.conf.broker_cls == "MemBroker"
     assert app.conf.state_backend_cls == "MemStateBackend"
-    assert app.conf.arg_cache_cls == "MemArgCache"
+    assert app.conf.client_data_store_cls == "MemClientDataStore"
 
     # Instantiate components and check their types
     assert isinstance(app.orchestrator, MemOrchestrator)
     assert isinstance(app.broker, MemBroker)
     assert isinstance(app.state_backend, MemStateBackend)
-    assert isinstance(app.arg_cache, MemArgCache)
+    assert isinstance(app.client_data_store, MemClientDataStore)
 
 
-def test_mem_arg_cache_should_configure_with_default_values() -> None:
+def test_mem_client_data_should_configure_with_default_values() -> None:
     """Test memory arg cache with default config values."""
-    app = PynencBuilder().mem_arg_cache().build()
+    app = PynencBuilder().mem_client_data_store().build()
 
-    assert app.conf.arg_cache_cls == "MemArgCache"
-    assert isinstance(app.arg_cache, MemArgCache)
-    assert app.arg_cache.conf.min_size_to_cache == 1024  # Default value
-    assert app.arg_cache.conf.local_cache_size == 1024  # Default value
+    assert app.conf.client_data_store_cls == "MemClientDataStore"
+    assert isinstance(app.client_data_store, MemClientDataStore)
+    assert app.client_data_store.conf.min_size_to_cache == 1024  # Default value
+    assert app.client_data_store.conf.local_cache_size == 1024  # Default value
 
 
-def test_mem_arg_cache_should_accept_custom_values() -> None:
+def test_mem_client_data_should_accept_custom_values() -> None:
     """Test memory arg cache with custom min_size_to_cache and local_cache_size."""
     app = (
         PynencBuilder()
-        .mem_arg_cache(min_size_to_cache=512, local_cache_size=2000)
+        .mem_client_data_store(min_size_to_cache=512, local_cache_size=2000)
         .build()
     )
 
-    assert app.conf.arg_cache_cls == "MemArgCache"
-    assert isinstance(app.arg_cache, MemArgCache)
-    assert app.arg_cache.conf.min_size_to_cache == 512  # Custom value
-    assert app.arg_cache.conf.local_cache_size == 2000  # Custom value
+    assert app.conf.client_data_store_cls == "MemClientDataStore"
+    assert isinstance(app.client_data_store, MemClientDataStore)
+    assert app.client_data_store.conf.min_size_to_cache == 512  # Custom value
+    assert app.client_data_store.conf.local_cache_size == 2000  # Custom value
 
 
-def test_disable_arg_cache_should_disable_caching() -> None:
-    """Test that disable_arg_cache correctly disables argument caching."""
-    app = PynencBuilder().disable_arg_cache().build()
+def test_disable_client_data_should_disable_caching() -> None:
+    """Test that disable_client_data_store correctly disables argument caching."""
+    app = PynencBuilder().disable_client_data_store().build()
 
-    assert app.conf.arg_cache_cls == "DisabledArgCache"
-    assert isinstance(app.arg_cache, DisabledArgCache)
+    assert app.client_data_store.conf.disable_client_data_store is True
 
 
 def test_mem_trigger_should_configure_with_default_values() -> None:

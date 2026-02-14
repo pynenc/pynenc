@@ -69,8 +69,8 @@ def test_invocations_list_shows_invocations(app: "Pynenc") -> None:
     call1: Call = Call(add_task, Arguments({"x": 5, "y": 3}))
     call2: Call = Call(multiply_task, Arguments({"a": 4, "b": 7}))
 
-    invocation1: DistributedInvocation = DistributedInvocation(call1)
-    invocation2: DistributedInvocation = DistributedInvocation(call2)
+    invocation1: DistributedInvocation = DistributedInvocation.isolated(call1)
+    invocation2: DistributedInvocation = DistributedInvocation.isolated(call2)
 
     # Store invocations in the orchestrator so they can be retrieved
     app.orchestrator.register_new_invocations([invocation1, invocation2])
@@ -116,9 +116,9 @@ def test_invocations_list_with_status_filter(app: "Pynenc") -> None:
     call2: Call = Call(add_task, Arguments({"x": 2, "y": 2}))
     call3: Call = Call(add_task, Arguments({"x": 3, "y": 3}))
 
-    invocation1: DistributedInvocation = DistributedInvocation(call1)
-    invocation2: DistributedInvocation = DistributedInvocation(call2)
-    invocation3: DistributedInvocation = DistributedInvocation(call3)
+    invocation1: DistributedInvocation = DistributedInvocation.isolated(call1)
+    invocation2: DistributedInvocation = DistributedInvocation.isolated(call2)
+    invocation3: DistributedInvocation = DistributedInvocation.isolated(call3)
 
     # register invocations in the orchestrator
     app.orchestrator.register_new_invocations([invocation1, invocation2, invocation3])
@@ -205,8 +205,8 @@ def test_invocations_list_with_task_filter(app: "Pynenc") -> None:
     call1: Call = Call(add_task, Arguments({"x": 1, "y": 1}))
     call2: Call = Call(multiply_task, Arguments({"a": 2, "b": 2}))
 
-    invocation1: DistributedInvocation = DistributedInvocation(call1)
-    invocation2: DistributedInvocation = DistributedInvocation(call2)
+    invocation1: DistributedInvocation = DistributedInvocation.isolated(call1)
+    invocation2: DistributedInvocation = DistributedInvocation.isolated(call2)
 
     # register invocations in the orchestrator
     app.orchestrator.register_new_invocations([invocation1, invocation2])
@@ -220,7 +220,7 @@ def test_invocations_list_with_task_filter(app: "Pynenc") -> None:
 
         # Filter by add_task - should only show invocation1
         task_id = add_task.task_id
-        response = client.get(f"/invocations/?task_id={task_id}")
+        response = client.get(f"/invocations/?task_id_key={task_id.key}")
 
         assert response.status_code == 200
         content = response.text
@@ -240,20 +240,21 @@ def test_invocations_list_with_task_filter(app: "Pynenc") -> None:
             f"Expected links for 1 unique invocation, found {len(unique_invocation_ids)}"
         )
 
-        # Verify the task ID appears in the content (as a link to the task)
-        assert task_id in content, (
-            f"Task ID {task_id} should appear in the filtered results"
+        # Verify the task ID key appears in the content (as a link to the task)
+        assert task_id.key in content, (
+            f"Task ID key {task_id.key} should appear in the filtered results"
         )
 
-        # Verify the task name appears in the content
-        assert task_id in content
+        # Verify the task module and function name appears in the content
+        assert task_id.module in content
+        assert task_id.func_name in content
 
 
 def test_invocation_detail_shows_invocation_info(app: "Pynenc") -> None:
     """Test that invocation detail displays complete invocation information."""
     # Create an invocation for testing
     call: Call = Call(add_task, Arguments({"x": 10, "y": 20}))
-    invocation: DistributedInvocation = DistributedInvocation(call)
+    invocation: DistributedInvocation = DistributedInvocation.isolated(call)
 
     # register invocations in the orchestrator
     app.orchestrator.register_new_invocations([invocation])
@@ -274,11 +275,10 @@ def test_invocation_detail_shows_invocation_info(app: "Pynenc") -> None:
         assert "add_task" in content
         assert str(invocation.status.name) in content
 
-        # Should show call information - the template shows call_id split by '#' and truncated
-        call_id_short = (
-            call.call_id.split("#")[-1][:8] if "#" in call.call_id else call.call_id[:8]
-        )
-        assert call_id_short in content
+        # Should show call information
+        assert call.call_id.task_id.module in content
+        assert call.call_id.task_id.func_name in content
+        assert call.call_id.args_id in content
 
         # Should show arguments
         assert "10" in content  # x argument
@@ -329,9 +329,9 @@ def test_orchestrator_status_filtering_logic(app: "Pynenc") -> None:
     call2: Call = Call(add_task, Arguments({"x": 2, "y": 2}))
     call3: Call = Call(add_task, Arguments({"x": 3, "y": 3}))
 
-    invocation1: DistributedInvocation = DistributedInvocation(call1)
-    invocation2: DistributedInvocation = DistributedInvocation(call2)
-    invocation3: DistributedInvocation = DistributedInvocation(call3)
+    invocation1: DistributedInvocation = DistributedInvocation.isolated(call1)
+    invocation2: DistributedInvocation = DistributedInvocation.isolated(call2)
+    invocation3: DistributedInvocation = DistributedInvocation.isolated(call3)
 
     # register invocations in the orchestrator
     app.orchestrator.register_new_invocations([invocation1, invocation2, invocation3])
@@ -388,7 +388,7 @@ def test_invocation_api_endpoint(app: "Pynenc") -> None:
     """Test that invocation API endpoint returns JSON data."""
     # Create an invocation for testing
     call: Call = Call(multiply_task, Arguments({"a": 3, "b": 4}))
-    invocation: DistributedInvocation = DistributedInvocation(call)
+    invocation: DistributedInvocation = DistributedInvocation.isolated(call)
 
     # register invocations in the orchestrator
     app.orchestrator.register_new_invocations([invocation])
@@ -414,7 +414,7 @@ def test_invocation_history_endpoint(app: "Pynenc") -> None:
     """Test that invocation history endpoint returns JSON data."""
     # Create an invocation for testing
     call: Call = Call(add_task, Arguments({"x": 1, "y": 2}))
-    invocation: DistributedInvocation = DistributedInvocation(call)
+    invocation: DistributedInvocation = DistributedInvocation.isolated(call)
 
     # register invocations in the orchestrator
     app.orchestrator.register_new_invocations([invocation])

@@ -5,7 +5,7 @@ This module tests complete workflow replay scenarios, partial replay with new ge
 and counter consistency across replay operations.
 """
 
-from pynenc.workflow.deterministic import DeterministicExecutor
+from pynenc.workflow.workflow_deterministic import DeterministicExecutor
 
 
 def test_complete_workflow_replay(

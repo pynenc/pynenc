@@ -49,4 +49,4 @@ def task_key_arg_io(app_instance: "Pynenc") -> "Task":
 
 @pytest.fixture
 def dummy_invocation_io(task_dummy_io: "Task") -> "DistributedInvocation":
-    return DistributedInvocation(Call(task_dummy_io), None)
+    return DistributedInvocation.isolated(Call(task_dummy_io))

@@ -2,13 +2,16 @@ import importlib
 import json
 import os
 from enum import StrEnum, auto
-from typing import Any, TypeVar
+from typing import Any, TypeVar, TYPE_CHECKING
 
 from cistell import ConfigField
 
 from pynenc.conf.config_base import ConfigPynencBase
 from pynenc.conf.constants import ENV_PREFIX, ENV_SEPARATOR
 from pynenc.exceptions import RetryError
+
+if TYPE_CHECKING:
+    from pynenc.identifiers.task_id import TaskId
 
 
 class ConcurrencyControlType(StrEnum):
@@ -213,7 +216,7 @@ class ConfigTask(ConfigPynencBase):
 
     def __init__(
         self,
-        task_id: str,
+        task_id: "TaskId",
         config_values: dict[str, Any] | None = None,
         config_filepath: str | None = None,
         task_options: dict[str, Any] | None = None,
@@ -242,11 +245,13 @@ class ConfigTask(ConfigPynencBase):
         super().init_config_value_key_from_mapping(
             source, config_id, key, mapping, conf_mapping
         )
-        task_key = f"{source}##{config_id}##{self.task_id}##{key}"
+        task_key = f"{source}##{config_id}##{self.task_id.config_key}##{key}"
         # task_id specific mapping always within task config level
-        if task_key not in self._mapped_keys and self.task_id in conf_mapping:
-            if key in conf_mapping[self.task_id]:
-                setattr(self, key, conf_mapping[self.task_id][key])
+        # Config files use dot notation: "module_name.task_name"
+        task_config_key = self.task_id.config_key
+        if task_key not in self._mapped_keys and task_config_key in conf_mapping:
+            if key in conf_mapping[task_config_key]:
+                setattr(self, key, conf_mapping[task_config_key][key])
                 self._mapped_keys.add(task_key)
 
     def init_config_value_from_env_vars(
@@ -254,8 +259,14 @@ class ConfigTask(ConfigPynencBase):
     ) -> None:
         super().init_config_value_from_env_vars(config_cls)
         # specific env vars for task options
+        # Env vars use "#" between module and func: MODULE#FUNC__SETTING
         config_key = f"{ENV_PREFIX}{ENV_SEPARATOR}{self.__class__.__name__.upper()}{ENV_SEPARATOR}"
-        task_key = config_key + self.task_id.upper().replace(".", "#")
+        task_key = (
+            config_key
+            + self.task_id.module.upper()
+            + "#"
+            + self.task_id.func_name.upper()
+        )
         for key in self.config_cls_to_fields.get(config_cls.__name__, []):
             env_key = f"{task_key}{ENV_SEPARATOR}{key.upper()}"
             if env_key in os.environ:

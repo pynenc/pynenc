@@ -9,7 +9,7 @@ import yaml
 from pynenc import Pynenc
 from pynenc.conf.config_task import ConcurrencyControlType, ConfigTask
 from pynenc.exceptions import InvalidTaskOptionsError
-from pynenc.task import Task
+from pynenc.task import Task, TaskId
 
 app = Pynenc()
 
@@ -112,6 +112,8 @@ def test_task_config_from_file() -> None:
     """
     Test that the task config was set with the options from the file
     """
+    random_task_id = TaskId("module_name", "random_task")
+    one_task_id = TaskId("module_name", "task_name")
     fd, filepath = tempfile.mkstemp(suffix=".yaml")
     content = yaml.dump(
         {
@@ -126,14 +128,12 @@ def test_task_config_from_file() -> None:
     )
     with os.fdopen(fd, "w") as tmp:
         tmp.write(content)
-    all_tasks_config = ConfigTask(
-        task_id="module_name.random_task", config_filepath=filepath
-    )
+
+    all_tasks_config = ConfigTask(task_id=random_task_id, config_filepath=filepath)
     assert all_tasks_config.parallel_batch_size == 4
     assert all_tasks_config.max_retries == 10
-    one_task_config = ConfigTask(
-        task_id="module_name.task_name", config_filepath=filepath
-    )
+
+    one_task_config = ConfigTask(task_id=one_task_id, config_filepath=filepath)
     assert one_task_config.parallel_batch_size == 4
     assert one_task_config.max_retries == 5
 
@@ -147,7 +147,7 @@ def test_exception_on_wrong_options() -> None:
 
     assert (
         str(exc_info.value)
-        == "InvalidTaskOptionsError(builtins.print): Invalid options: ['non_existing_option']"
+        == "InvalidTaskOptionsError(builtins:print): Invalid options: ['non_existing_option']"
     )
 
 

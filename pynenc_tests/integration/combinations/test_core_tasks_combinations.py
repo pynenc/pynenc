@@ -57,8 +57,8 @@ def test_recover_pending_invocations(
         )
 
         # Create a stuck invocation in PENDING state with a dead runner
-        stuck_invocation: DistributedInvocation = DistributedInvocation(
-            Call(task_sum, task_sum.args(1, 2)), None
+        stuck_invocation: DistributedInvocation = DistributedInvocation.isolated(
+            Call(task_sum, task_sum.args(1, 2))
         )
         app.orchestrator.register_new_invocations([stuck_invocation])
         app.orchestrator.set_invocation_status(
@@ -107,8 +107,8 @@ def test_recover_running_invocations(
             app.runner.run()
 
         # Create a stuck invocation in RUNNING state with a dead runner
-        stuck_invocation: DistributedInvocation = DistributedInvocation(
-            Call(task_sum, task_sum.args(1, 2)), None
+        stuck_invocation: DistributedInvocation = DistributedInvocation.isolated(
+            Call(task_sum, task_sum.args(1, 2))
         )
         app.orchestrator.register_new_invocations([stuck_invocation])
         app.orchestrator.set_invocation_status(

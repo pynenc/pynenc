@@ -4,9 +4,8 @@ from collections import OrderedDict, defaultdict, deque
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from time import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
-from pynenc.exceptions import CycleDetectedError
 from pynenc.invocation.status import (
     InvocationStatus,
     InvocationStatusRecord,
@@ -14,7 +13,6 @@ from pynenc.invocation.status import (
 )
 from pynenc.orchestrator.base_orchestrator import (
     BaseBlockingControl,
-    BaseCycleControl,
     BaseOrchestrator,
 )
 from pynenc.orchestrator.atomic_service import ActiveRunnerInfo
@@ -22,124 +20,10 @@ from pynenc.types import Params, Result
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
+    from pynenc.identifiers.call_id import CallId
+    from pynenc.identifiers.invocation_id import InvocationId
     from pynenc.invocation.dist_invocation import DistributedInvocation
-    from pynenc.task import Task
-
-
-class MemCycleControl(BaseCycleControl):
-    """
-    An implementation of cycle control using a directed acyclic graph (DAG) to represent call dependencies.
-
-    This class manages dependencies between task invocations to prevent call cycles, which could lead to deadlocks or infinite loops.
-
-    :param Pynenc app: The Pynenc application instance.
-    """
-
-    def __init__(self, app: "Pynenc") -> None:
-        self.app = app
-        self.edges: dict[str, set[str]] = defaultdict(set)
-        self._lock = threading.RLock()
-
-    def add_call_and_check_cycles(
-        self, caller: "DistributedInvocation", callee: "DistributedInvocation"
-    ) -> None:
-        """
-        Adds a new invocation to the graph, representing a dependency where the caller is dependent on the callee.
-
-        Raises a CycleDetectedError if adding the invocation would cause a cycle in the call graph.
-
-        :param DistributedInvocation caller: The invocation making the call.
-        :param DistributedInvocation callee: The invocation being called.
-        :raises CycleDetectedError: If adding the invocation causes a cycle.
-        """
-        with self._lock:
-            if caller.call_id == callee.call_id:
-                raise CycleDetectedError.from_cycle([caller.call_id])
-            if cycle := self.find_cycle_caused_by_new_invocation(caller, callee):
-                raise CycleDetectedError.from_cycle(cycle)
-            self.edges[caller.call_id].add(callee.call_id)
-
-    def get_callees(self, caller_call_id: str) -> Iterator[str]:
-        """
-        Returns an iterator of direct callee call_ids for the given caller_call_id.
-
-        :param str caller_call_id: The call_id of the caller invocation.
-        :return: Iterator of callee call_ids.
-        :rtype: Iterator[str]
-        """
-        yield from self.edges.get(caller_call_id, set())
-
-    def clean_up_invocation_cycles(self, invocation_id: str) -> None:
-        """
-        Removes an invocation from the graph, along with any edges to or from the invocation.
-
-        :param str invocation_id: The ID of the invocation to be removed from the graph.
-        """
-        with self._lock:
-            call_id = self.app.orchestrator.get_invocation_call_id(invocation_id)
-            if not self.app.orchestrator.any_non_final_invocations(call_id):
-                if call_id in self.edges:
-                    del self.edges[call_id]
-                for edges in self.edges.values():
-                    edges.discard(call_id)
-
-    def find_cycle_caused_by_new_invocation(
-        self, caller: "DistributedInvocation", callee: "DistributedInvocation"
-    ) -> list[str]:
-        """
-        Determines if adding a new edge from the caller to the callee would create a cycle in the graph.
-
-        :param DistributedInvocation caller: The invocation making the call.
-        :param DistributedInvocation callee: The invocation being called.
-        :return: A list of call ids that would form a cycle after adding the new invocation, else an empty list.
-        :rtype: list[str]
-        """
-        # Temporarily add the edge to check if it would cause a cycle
-        self.edges[caller.call_id].add(callee.call_id)
-
-        # Set for tracking visited nodes
-        visited: set[str] = set()
-
-        # List for tracking the nodes on the path from caller to callee
-        path: list[str] = []
-
-        cycle = self._is_cyclic_util(caller.call_id, visited, path)
-
-        # Remove the temporarily added edge (use discard to avoid KeyError in concurrent scenarios)
-        self.edges[caller.call_id].discard(callee.call_id)
-
-        return cycle
-
-    def _is_cyclic_util(
-        self,
-        current_call_id: str,
-        visited: set[str],
-        path: list[str],
-    ) -> list[str]:
-        """
-        Utility function for cycle detection in the graph.
-
-        :param str current_call_id: The current call ID being checked for cycles.
-        :param set[str] visited: Set of already visited call IDs.
-        :param list[str] path: Current path of call IDs being traversed.
-        :return: A list of call ids that form a cycle, if one is detected.
-        :rtype: list[str]
-        """
-        visited.add(current_call_id)
-        path.append(current_call_id)
-
-        for neighbour_call_id in self.edges.get(current_call_id, []):
-            if neighbour_call_id not in visited:
-                cycle = self._is_cyclic_util(neighbour_call_id, visited, path)
-                if cycle:
-                    return cycle
-            elif neighbour_call_id in path:
-                cycle_start_index = path.index(neighbour_call_id)
-                # Return list of call ids (not Call objects)
-                return path[cycle_start_index:]
-
-        path.pop()
-        return []
+    from pynenc.task import Task, TaskId
 
 
 class MemBlockingControl(BaseBlockingControl):
@@ -153,17 +37,19 @@ class MemBlockingControl(BaseBlockingControl):
 
     def __init__(self, app: "Pynenc") -> None:
         self.app = app
-        self.waiting_for: dict[str, set[str]] = defaultdict(set)
-        self.waited_by: dict[str, set[str]] = OrderedDict()
+        self.waiting_for: dict[InvocationId, set[InvocationId]] = defaultdict(set)
+        self.waited_by: dict[InvocationId, set[InvocationId]] = OrderedDict()
 
     def waiting_for_results(
-        self, caller_invocation_id: str, result_invocation_ids: list[str]
+        self,
+        caller_invocation_id: "InvocationId",
+        result_invocation_ids: list["InvocationId"],
     ) -> None:
         """
         Notifies the system that an invocation is waiting for the results of other invocations.
 
-        :param str caller_invocation_id: The ID of the invocation that is waiting.
-        :param list[str] result_invocation_ids: The IDs of the invocations being waited on.
+        :param InvocationId caller_invocation_id: The ID of the invocation that is waiting.
+        :param list[InvocationId] result_invocation_ids: The IDs of the invocations being waited on.
         """
         waiter_id = caller_invocation_id
         for waited_id in result_invocation_ids:
@@ -172,11 +58,11 @@ class MemBlockingControl(BaseBlockingControl):
                 self.waited_by[waited_id] = set()
             self.waited_by[waited_id].add(waiter_id)
 
-    def release_waiters(self, waited_invocation_id: str) -> None:
+    def release_waiters(self, waited_invocation_id: "InvocationId") -> None:
         """
         Removes an invocation from the graph, along with any dependencies related to it.
 
-        :param str waited_invocation_id: The ID of the invocation that has finished and will no longer block other invocations.
+        :param InvocationId waited_invocation_id: The ID of the invocation that has finished and will no longer block other invocations.
         """
         for waiter_id in self.waited_by.get(waited_invocation_id, []):
             self.waiting_for[waiter_id].discard(waited_invocation_id)
@@ -185,13 +71,15 @@ class MemBlockingControl(BaseBlockingControl):
         self.waited_by.pop(waited_invocation_id, None)
         self.waiting_for.pop(waited_invocation_id, None)
 
-    def get_blocking_invocations(self, max_num_invocations: int) -> Iterator[str]:
+    def get_blocking_invocations(
+        self, max_num_invocations: int
+    ) -> Iterator["InvocationId"]:
         """
         Retrieves invocations that are blocking others but are not themselves waiting for any results.
 
         :param int max_num_invocations: The maximum number of blocking invocations to retrieve.
         :return: An iterator over invocations that are blocking others (older firsts).
-        :rtype: Iterator[DistributedInvocation[Params, Result]]
+        :rtype: Iterator["InvocationId"]
         """
         # Create a snapshot of the keys to avoid mutation during iteration
         for inv_id in list(self.waited_by.keys()):
@@ -257,7 +145,7 @@ class MemOrchestrator(BaseOrchestrator):
     managing task invocations and their lifecycle.
 
     This class provides an in-memory solution for orchestrating task invocations,
-    including cycle and blocking controls, as well as caching of invocation statuses and retries.
+    including blocking controls, as well as caching of invocation statuses and retries.
 
     ```{warning}
         This orchestrator is not intended for production use.
@@ -269,16 +157,16 @@ class MemOrchestrator(BaseOrchestrator):
 
     def __init__(self, app: "Pynenc") -> None:
         self.app = app
-        self.task_id_to_inv_id: dict[str, set[str]] = defaultdict(set)
-        self.call_id_to_inv_id: dict[str, set[str]] = defaultdict(set)
-        self.inv_id_to_call_id: dict[str, str] = {}
-        self.invocation_args: dict[str, set[ArgPair]] = defaultdict(set)
-        self.args_index: dict[ArgPair, set[str]] = defaultdict(set)
-        self.status_index: dict[InvocationStatus, set[str]] = defaultdict(set)
-        self.invocation_status_record: dict[str, InvocationStatusRecord] = {}
-        self.invocation_retries: dict[str, int] = {}
-        self.invocations_to_purge: deque[tuple[float, str]] = deque()
-        self.locks: dict[str, threading.Lock] = {}
+        self.task_id_to_inv_id: dict[TaskId, set[InvocationId]] = defaultdict(set)
+        self.call_id_to_inv_id: dict[CallId, set[InvocationId]] = defaultdict(set)
+        self.inv_id_to_call_id: dict[InvocationId, CallId] = {}
+        self.invocation_args: dict[InvocationId, set[ArgPair]] = defaultdict(set)
+        self.args_index: dict[ArgPair, set[InvocationId]] = defaultdict(set)
+        self.status_index: dict[InvocationStatus, set[InvocationId]] = defaultdict(set)
+        self.invocation_status_record: dict[InvocationId, InvocationStatusRecord] = {}
+        self.invocation_retries: dict[InvocationId, int] = {}
+        self.invocations_to_purge: deque[tuple[float, InvocationId]] = deque()
+        self.locks: dict[InvocationId, threading.Lock] = {}
 
         # Runner heartbeat tracking
         self.runner_creation_time: dict[str, float] = {}
@@ -287,16 +175,9 @@ class MemOrchestrator(BaseOrchestrator):
         self.runner_last_service_end: dict[str, datetime] = {}
         self.runner_atomic_service_eligible: dict[str, bool] = {}
 
-        self._cycle_control: MemCycleControl | None = None
         self._blocking_control: MemBlockingControl | None = None
 
         super().__init__(app)
-
-    @property
-    def cycle_control(self) -> "MemCycleControl":
-        if not self._cycle_control:
-            self._cycle_control = MemCycleControl(self.app)
-        return self._cycle_control
 
     @property
     def blocking_control(self) -> "MemBlockingControl":
@@ -315,15 +196,19 @@ class MemOrchestrator(BaseOrchestrator):
             self._interanl_atomic_status_transition(
                 invocation.invocation_id, None, status_record
             )
-            self.task_id_to_inv_id[invocation.task.task_id].add(
+            self.task_id_to_inv_id[invocation.call.task.task_id].add(
                 invocation.invocation_id
             )
-            self.call_id_to_inv_id[invocation.call_id].add(invocation.invocation_id)
-            self.inv_id_to_call_id[invocation.invocation_id] = invocation.call_id
+            self.call_id_to_inv_id[invocation.call.call_id].add(
+                invocation.invocation_id
+            )
+            self.inv_id_to_call_id[invocation.invocation_id] = invocation.call.call_id
             self.invocation_retries[invocation.invocation_id] = 0
         return status_record
 
-    def filter_by_key_arguments(self, key_arguments: dict[str, str]) -> set[str]:
+    def filter_by_key_arguments(
+        self, key_arguments: dict[str, str]
+    ) -> set["InvocationId"]:
         """
         Filters invocations by key arguments, requiring ALL keys to match.
 
@@ -361,7 +246,9 @@ class MemOrchestrator(BaseOrchestrator):
 
         return result
 
-    def filter_by_statuses(self, statuses: list[InvocationStatus]) -> set[str]:
+    def filter_by_statuses(
+        self, statuses: list[InvocationStatus]
+    ) -> set["InvocationId"]:
         matched_ids = set()
         for status in statuses:
             matched_ids.update(self.status_index[status])
@@ -372,14 +259,14 @@ class MemOrchestrator(BaseOrchestrator):
         task: "Task[Params, Result]",
         key_serialized_arguments: dict[str, str] | None = None,
         statuses: "list[InvocationStatus] | None" = None,
-    ) -> Iterator[str]:
+    ) -> Iterator["InvocationId"]:
         """
         Retrieves invocation ids based on provided key arguments and/or status.
 
         :param dict[str, str] | None key_arguments: The key arguments to filter the invocations.
         :param list[InvocationStatus] | None status: The statuses to filter the invocations.
         :return: An iterator over the filtered invocations.
-        :rtype: Iterator[str]
+        :rtype: Iterator["InvocationId"]
         """
         task_matches = self.task_id_to_inv_id.get(task.task_id, set())
         if key_serialized_arguments and statuses:
@@ -397,27 +284,27 @@ class MemOrchestrator(BaseOrchestrator):
         else:
             yield from task_matches
 
-    def get_task_invocation_ids(self, task_id: str) -> Iterator[str]:
+    def get_task_invocation_ids(self, task_id: "TaskId") -> Iterator["InvocationId"]:
         """
         Retrieves all invocation ids for a given task id.
 
-        :param str task_id: The task id to filter the invocations.
+        :param TaskId task_id: The task id to filter the invocations.
         :return: An iterator over the invocation ids for the specified task.
-        :rtype: Iterator[str]
+        :rtype: Iterator["InvocationId"]
         """
         yield from self.task_id_to_inv_id.get(task_id, set())
 
     def get_invocation_ids_paginated(
         self,
-        task_id: str | None = None,
+        task_id: Optional["TaskId"] = None,
         statuses: list[InvocationStatus] | None = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> list[str]:
+    ) -> list["InvocationId"]:
         """
         Retrieves invocation IDs with pagination support.
 
-        :param str | None task_id: Optional task ID to filter by.
+        :param TaskId | None task_id: Optional task ID to filter by.
         :param list[InvocationStatus] | None statuses: Optional statuses to filter by.
         :param int limit: Maximum number of results to return.
         :param int offset: Number of results to skip.
@@ -451,7 +338,7 @@ class MemOrchestrator(BaseOrchestrator):
 
     def count_invocations(
         self,
-        task_id: str | None = None,
+        task_id: Optional["TaskId"] = None,
         statuses: list[InvocationStatus] | None = None,
     ) -> int:
         """
@@ -474,26 +361,19 @@ class MemOrchestrator(BaseOrchestrator):
 
         return len(candidates)
 
-    def get_call_invocation_ids(self, call_id: str) -> Iterator[str]:
+    def get_call_invocation_ids(self, call_id: "CallId") -> Iterator["InvocationId"]:
         """Retrieves all invocation IDs associated with a specific call ID."""
         yield from self.call_id_to_inv_id.get(call_id, set())
 
-    def get_invocation_call_id(self, invocation_id: str) -> str:
+    def get_invocation_call_id(self, invocation_id: "InvocationId") -> "CallId":
         """Retrieves the call ID associated with a specific invocation ID."""
         return self.inv_id_to_call_id[invocation_id]
 
-    def any_non_final_invocations(self, call_id: str) -> bool:
-        """Checks if there are any non-final invocations for a specific call ID."""
-        for invocation_id in self.call_id_to_inv_id.get(call_id, set()):
-            if not self.invocation_status_record[invocation_id].status.is_final():
-                return True
-        return False
-
-    def set_up_invocation_auto_purge(self, invocation_id: str) -> None:
+    def set_up_invocation_auto_purge(self, invocation_id: "InvocationId") -> None:
         """
         Sets up an invocation for automatic purging after a specified time.
 
-        :param str invocation_id: The ID of the invocation to be set up for auto-purge.
+        :param InvocationId invocation_id: The ID of the invocation to be set up for auto-purge.
         """
         self.invocations_to_purge.append((time(), invocation_id))
 
@@ -508,17 +388,16 @@ class MemOrchestrator(BaseOrchestrator):
             _, elem = self.invocations_to_purge.popleft()
             self.clean_up_invocation(elem)
 
-    def clean_up_invocation(self, invocation_id: str) -> None:
+    def clean_up_invocation(self, invocation_id: "InvocationId") -> None:
         """
         Cleans up an invocation from the cache.
 
-        :param str invocation_id: The ID of the invocation to be cleaned up.
+        :param InvocationId invocation_id: The ID of the invocation to be cleaned up.
         """
-        self.clean_up_invocation_cycles(invocation_id)
         self.release_waiters(invocation_id)
 
         invocation = self.app.state_backend.get_invocation(invocation_id)
-        for key, value in invocation.serialized_arguments.items():
+        for key, value in invocation.call.serialized_arguments.items():
             self.args_index[ArgPair(key, value)].discard(invocation_id)
         self.status_index[self.invocation_status_record[invocation_id].status].discard(
             invocation_id
@@ -526,7 +405,9 @@ class MemOrchestrator(BaseOrchestrator):
         self.task_id_to_inv_id.get(invocation.task.task_id, set()).discard(
             invocation_id
         )
-        self.call_id_to_inv_id.get(invocation.call_id, set()).discard(invocation_id)
+        self.call_id_to_inv_id.get(invocation.call.call_id, set()).discard(
+            invocation_id
+        )
         self.inv_id_to_call_id.pop(invocation_id, None)
         if args := self.invocation_args.pop(invocation_id, None):
             for arg in args:
@@ -538,7 +419,10 @@ class MemOrchestrator(BaseOrchestrator):
         self.invocation_retries.pop(invocation_id, None)
 
     def _atomic_status_transition(
-        self, invocation_id: str, status: InvocationStatus, runner_id: str | None = None
+        self,
+        invocation_id: "InvocationId",
+        status: InvocationStatus,
+        runner_id: str | None = None,
     ) -> InvocationStatusRecord:
         """Sets the status record of a specific invocation."""
         prev_status_record = self.invocation_status_record.get(invocation_id)
@@ -549,7 +433,7 @@ class MemOrchestrator(BaseOrchestrator):
 
     def _interanl_atomic_status_transition(
         self,
-        invocation_id: str,
+        invocation_id: "InvocationId",
         prev_status_record: InvocationStatusRecord | None,
         new_record: InvocationStatusRecord,
     ) -> InvocationStatusRecord:
@@ -564,38 +448,40 @@ class MemOrchestrator(BaseOrchestrator):
         self,
         invocation: "DistributedInvocation[Params, Result]",
     ) -> None:
-        for key, value in invocation.serialized_arguments.items():
+        for key, value in invocation.call.serialized_arguments.items():
             self.args_index[ArgPair(key, value)].add(invocation.invocation_id)
 
     def get_invocation_status_record(
-        self, invocation_id: str
+        self, invocation_id: "InvocationId"
     ) -> InvocationStatusRecord:
         """Retrieves the current status of an invocation"""
         return self.invocation_status_record[invocation_id]
 
-    def increment_invocation_retries(self, invocation_id: str) -> None:
+    def increment_invocation_retries(self, invocation_id: "InvocationId") -> None:
         """
         Increases the retry count for a given invocation.
 
-        :param str invocation_id: The ID of the invocation for which the retry count is to be increased.
+        :param InvocationId invocation_id: The ID of the invocation for which the retry count is to be increased.
         """
         self.invocation_retries[invocation_id] = (
             self.invocation_retries.get(invocation_id, 0) + 1
         )
 
-    def get_invocation_retries(self, invocation_id: str) -> int:
+    def get_invocation_retries(self, invocation_id: "InvocationId") -> int:
         """
         Retrieves the current number of retries for a given invocation.
 
-        :param str invocation_id: The ID of the invocation to get the retry count for.
+        :param InvocationId invocation_id: The ID of the invocation to get the retry count for.
         :return: The number of retries for the invocation.
         :rtype: int
         """
         return self.invocation_retries.get(invocation_id, 0)
 
     def filter_by_status(
-        self, invocation_ids: list[str], status_filter: frozenset["InvocationStatus"]
-    ) -> list[str]:
+        self,
+        invocation_ids: list["InvocationId"],
+        status_filter: frozenset["InvocationStatus"],
+    ) -> list["InvocationId"]:
         if not invocation_ids or status_filter is None:
             return []
         return [
@@ -661,7 +547,7 @@ class MemOrchestrator(BaseOrchestrator):
         self.runner_last_service_start[runner_id] = start_time
         self.runner_last_service_end[runner_id] = end_time
 
-    def get_pending_invocations_for_recovery(self) -> Iterator[str]:
+    def get_pending_invocations_for_recovery(self) -> Iterator["InvocationId"]:
         """Retrieve invocation IDs stuck in PENDING status beyond the allowed time."""
         max_pending_seconds = self.app.conf.max_pending_seconds
         current_time = time()
@@ -679,7 +565,7 @@ class MemOrchestrator(BaseOrchestrator):
 
     def _get_running_invocations_for_recovery(
         self, timeout_seconds: float
-    ) -> Iterator[str]:
+    ) -> Iterator["InvocationId"]:
         """Retrieve RUNNING invocation IDs owned by inactive runners."""
         current_time = time()
         cutoff_time = current_time - timeout_seconds
@@ -706,7 +592,6 @@ class MemOrchestrator(BaseOrchestrator):
                 yield invocation_id
 
     def purge(self) -> None:
-        self._cycle_control = None
         self._blocking_control = None
 
         self.task_id_to_inv_id.clear()

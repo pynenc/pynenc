@@ -153,7 +153,6 @@ def isolated_workflow_test(value: int) -> dict[str, Any]:
 
     return {
         "workflow_id": isolated_workflow_test.wf.identity.workflow_id,
-        "invocation_id": isolated_workflow_test.wf.identity.workflow_invocation_id,
         "stored_value": isolated_workflow_test.wf.get_data("stored_value"),
         "counter": isolated_workflow_test.wf.get_data("counter"),
     }

@@ -3,7 +3,7 @@ from typing import Any
 import pytest
 
 from pynenc import Pynenc
-from pynenc.arg_cache import DisabledArgCache, MemArgCache
+from pynenc.client_data_store import MemClientDataStore
 from pynenc.broker import MemBroker
 from pynenc.builder import PynencBuilder
 from pynenc.conf.config_broker import ConfigBroker
@@ -72,45 +72,44 @@ def test_memory_components_should_configure_correctly() -> None:
     assert app.conf.orchestrator_cls == "MemOrchestrator"
     assert app.conf.broker_cls == "MemBroker"
     assert app.conf.state_backend_cls == "MemStateBackend"
-    assert app.conf.arg_cache_cls == "MemArgCache"
+    assert app.conf.client_data_store_cls == "MemClientDataStore"
 
     # Instantiate components and check their types
     assert isinstance(app.orchestrator, MemOrchestrator)
     assert isinstance(app.broker, MemBroker)
     assert isinstance(app.state_backend, MemStateBackend)
-    assert isinstance(app.arg_cache, MemArgCache)
+    assert isinstance(app.client_data_store, MemClientDataStore)
 
 
-def test_mem_arg_cache_should_configure_with_default_values() -> None:
+def test_mem_client_data_should_configure_with_default_values() -> None:
     """Test memory arg cache with default config values."""
-    app = PynencBuilder().mem_arg_cache().build()
+    app = PynencBuilder().mem_client_data_store().build()
 
-    assert app.conf.arg_cache_cls == "MemArgCache"
-    assert isinstance(app.arg_cache, MemArgCache)
-    assert app.arg_cache.conf.min_size_to_cache == 1024  # Default value
-    assert app.arg_cache.conf.local_cache_size == 1024  # Default value
+    assert app.conf.client_data_store_cls == "MemClientDataStore"
+    assert isinstance(app.client_data_store, MemClientDataStore)
+    assert app.client_data_store.conf.min_size_to_cache == 1024  # Default value
+    assert app.client_data_store.conf.local_cache_size == 1024  # Default value
 
 
-def test_mem_arg_cache_should_accept_custom_values() -> None:
+def test_mem_client_data_should_accept_custom_values() -> None:
     """Test memory arg cache with custom min_size_to_cache and local_cache_size."""
     app = (
         PynencBuilder()
-        .mem_arg_cache(min_size_to_cache=512, local_cache_size=2000)
+        .mem_client_data_store(min_size_to_cache=512, local_cache_size=2000)
         .build()
     )
 
-    assert app.conf.arg_cache_cls == "MemArgCache"
-    assert isinstance(app.arg_cache, MemArgCache)
-    assert app.arg_cache.conf.min_size_to_cache == 512  # Custom value
-    assert app.arg_cache.conf.local_cache_size == 2000  # Custom value
+    assert app.conf.client_data_store_cls == "MemClientDataStore"
+    assert isinstance(app.client_data_store, MemClientDataStore)
+    assert app.client_data_store.conf.min_size_to_cache == 512  # Custom value
+    assert app.client_data_store.conf.local_cache_size == 2000  # Custom value
 
 
-def test_disable_arg_cache_should_disable_caching() -> None:
-    """Test that disable_arg_cache correctly disables argument caching."""
-    app = PynencBuilder().disable_arg_cache().build()
+def test_disable_client_data_should_disable_caching() -> None:
+    """Test that disable_client_data correctly disables argument caching."""
+    app = PynencBuilder().disable_client_data_store().build()
 
-    assert app.conf.arg_cache_cls == "DisabledArgCache"
-    assert isinstance(app.arg_cache, DisabledArgCache)
+    assert app.client_data_store.conf.disable_client_data_store is True
 
 
 def test_mem_trigger_should_configure_with_default_values() -> None:
@@ -273,7 +272,6 @@ def test_task_control_should_configure_correctly() -> None:
     app = (
         PynencBuilder()
         .task_control(
-            cycle_control=True,
             blocking_control=True,
             queue_timeout_sec=0.05,
         )
@@ -281,7 +279,6 @@ def test_task_control_should_configure_correctly() -> None:
     )
 
     assert isinstance(app.orchestrator.conf, ConfigOrchestrator)
-    assert app.orchestrator.conf.cycle_control is True
     assert app.orchestrator.conf.blocking_control is True
     assert isinstance(app.broker.conf, ConfigBroker)
     assert app.broker.conf.queue_timeout_sec == 0.05
@@ -408,7 +405,6 @@ def test_method_chaining_should_work_correctly() -> None:
         .thread_runner(min_threads=2, max_threads=8)
         .logging_level("info")
         .runner_tuning(runner_loop_sleep_time_sec=0.01)
-        .task_control(cycle_control=True)
         .show_argument_keys()
         .max_pending_seconds(60)
         .build()
@@ -422,7 +418,6 @@ def test_method_chaining_should_work_correctly() -> None:
     assert app.runner.conf.max_threads == 8
     assert app.conf.logging_level == "info"
     assert app.runner.conf.runner_loop_sleep_time_sec == 0.01
-    assert app.orchestrator.conf.cycle_control is True
     assert app.conf.argument_print_mode == ArgumentPrintMode.KEYS
     assert app.conf.max_pending_seconds == 60
 
@@ -440,7 +435,6 @@ def test_complete_app_example_should_work() -> None:
             runner_loop_sleep_time_sec=0.01,
             invocation_wait_results_sleep_time_sec=0.01,
         )
-        .task_control(cycle_control=True)
         .show_truncated_arguments(truncate_length=33)
         .max_pending_seconds(120)
         .custom_config(app_id="example.app")
@@ -454,14 +448,13 @@ def test_complete_app_example_should_work() -> None:
     assert isinstance(app.broker, MemBroker)
     assert isinstance(app.orchestrator, MemOrchestrator)
     assert isinstance(app.state_backend, MemStateBackend)
-    assert isinstance(app.arg_cache, MemArgCache)
+    assert isinstance(app.client_data_store, MemClientDataStore)
     assert isinstance(app.serializer, PickleSerializer)
     assert app.conf.argument_print_mode == ArgumentPrintMode.TRUNCATED
     assert app.conf.truncate_arguments_length == 33
     assert app.conf.max_pending_seconds == 120
     assert app.conf.logging_level == "info"
     assert app.runner.conf.runner_loop_sleep_time_sec == 0.01
-    assert app.orchestrator.conf.cycle_control is True
 
 
 def test_unknown_method_should_raise_helpful_error() -> None:

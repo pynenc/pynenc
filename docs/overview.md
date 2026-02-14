@@ -12,8 +12,6 @@ Pynenc integrates a range of functionalities and features to streamline distribu
 
 - **Task Dependency Handling**: With mechanisms for task prioritization and automatic pausing, Pynenc adeptly manages dependencies to prevent bottlenecks and deadlocks.
 
-- **Cycle Detection**: Pynenc identifies and resolve cyclical dependencies, ensuring robust task execution flows.
-
 - **Modularity and Extensibility**: Pynenc's architecture is built for modularity, supporting a variety of components and allowing for seamless adaptation to diverse operational requirements.
 
 ## Invocation Status System

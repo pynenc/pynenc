@@ -86,12 +86,12 @@
                                         </td>
                                         <td>
                                             <a href="/tasks/{{ invocation.task.task_id }}" class="text-decoration-none">
-                                                {{ invocation.task.task_id.split('.')[-1] }}
+                                                {{ invocation.task.task_id.func_name }}
                                             </a>
                                         </td>
                                         <td>
-                                            <a href="/calls/?call_id={{ invocation.call_id|urlencode }}">
-                                                <code class="text-primary">{{ invocation.call_id }}</code>
+                                            <a href="/calls/?call_id_key={{ invocation.call.call_id.key|urlencode }}">
+                                                <code class="text-primary">{{ invocation.call.call_id }}</code>
                                             </a>
                                         </td>
                                         <td>

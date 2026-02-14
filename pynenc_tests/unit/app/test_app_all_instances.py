@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 from pynenc import Pynenc
-from pynenc.exceptions import CycleDetectedError, RetryError
+from pynenc.exceptions import RetryError
 from pynenc.runner import ThreadRunner
 from pynenc_tests.conftest import MockPynenc
 
@@ -34,12 +34,6 @@ def get_upper() -> str:
     return get_text().result.upper()
 
 
-@mock_all.task
-def get_upper_cycle() -> str:
-    invocation = get_upper_cycle()
-    return invocation.result.upper()
-
-
 @mock_all.task(max_retries=1)
 def retry_once() -> int:
     if retry_once.invocation.num_retries == 0:
@@ -56,7 +50,6 @@ def app(request: "FixtureRequest", app_instance: Pynenc) -> Pynenc:
     raise_exception.app = app
     get_text.app = app
     get_upper.app = app
-    get_upper_cycle.app = app
     retry_once.app = app
     app.purge()
     request.addfinalizer(app.purge)
@@ -101,35 +94,6 @@ def test_sub_invocation_dependency(app: Pynenc) -> None:
     thread = threading.Thread(target=run_in_thread, daemon=True)
     thread.start()
     assert get_upper().result == "EXAMPLE"
-    app.runner.stop_runner_loop()
-    thread.join()
-
-
-def test_avoid_cycles(app: Pynenc) -> None:
-    """Test that a cycle in the dependency graph is detected"""
-    app.orchestrator.conf.cycle_control = True
-
-    def run_in_thread() -> None:
-        app.runner.run()
-
-    thread = threading.Thread(target=run_in_thread, daemon=True)
-    thread.start()
-    # the request of invocation should work without problem,
-    # as the cycle wasn't executed yet
-    invocation = get_upper_cycle()
-    with pytest.raises(CycleDetectedError) as exc_info:
-        # however, when retrieving the result, an exception should be raised
-        # because the function is calling itself
-        _ = invocation.result
-
-    expected_error = (
-        "A cycle was detected: Cycle detected:\n"
-        "- #task_id#pynenc_tests.unit.app.test_app_all_instances.get_upper_cycle#args_id#no_args\n"
-        "- back to #task_id#pynenc_tests.unit.app.test_app_all_instances.get_upper_cycle#args_id#no_args"
-    )
-
-    assert str(exc_info.value) == expected_error
-
     app.runner.stop_runner_loop()
     thread.join()
 

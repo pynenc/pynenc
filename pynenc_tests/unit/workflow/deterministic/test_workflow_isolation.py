@@ -5,24 +5,24 @@ This module tests that different workflows maintain isolated deterministic
 sequences and that state backend persistence works correctly.
 """
 
+from typing import TYPE_CHECKING
+
 from pynenc import Pynenc
-from pynenc.workflow.deterministic import DeterministicExecutor
-from pynenc.workflow.identity import WorkflowIdentity
+from pynenc.workflow.workflow_deterministic import DeterministicExecutor
+
+if TYPE_CHECKING:
+    from pynenc.workflow.workflow_identity import WorkflowIdentity
 
 
-def test_workflow_isolation(app: Pynenc) -> None:
+def test_workflow_isolation(
+    app: Pynenc,
+    workflow_identity: "WorkflowIdentity",
+    other_workflow_identity: "WorkflowIdentity",
+) -> None:
     """Test that different workflows have isolated deterministic sequences."""
     # Create two different workflow identities
-    workflow1 = WorkflowIdentity(
-        workflow_task_id="workflow1",
-        workflow_invocation_id="workflow1-invocation-123",
-        parent_workflow=None,
-    )
-    workflow2 = WorkflowIdentity(
-        workflow_task_id="workflow2",
-        workflow_invocation_id="workflow2-invocation-456",
-        parent_workflow=None,
-    )
+    workflow1 = workflow_identity
+    workflow2 = other_workflow_identity
 
     executor1 = DeterministicExecutor(workflow1, app)
     executor2 = DeterministicExecutor(workflow2, app)
@@ -65,7 +65,7 @@ def test_state_backend_persistence(
 
 
 def test_state_backend_basic_operations(
-    app: Pynenc, workflow_identity: WorkflowIdentity
+    app: Pynenc, workflow_identity: "WorkflowIdentity"
 ) -> None:
     """Test that the state backend functions correctly."""
     # Direct test of state backend methods

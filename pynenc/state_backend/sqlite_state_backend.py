@@ -9,20 +9,25 @@ SQLite provides ACID transactions and handles concurrent access automatically.
 from collections.abc import Iterator
 from datetime import datetime
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Optional
+import json
+from typing import TYPE_CHECKING, Any
 
 from pynenc.app_info import AppInfo
 from pynenc.conf.config_state_backend import ConfigStateBackendSQLite
-from pynenc.invocation.dist_invocation import DistributedInvocation
+from pynenc.identifiers.call_id import CallId
+from pynenc.identifiers.invocation_id import InvocationId
+from pynenc.models.call_dto import CallDTO
+from pynenc.invocation.dist_invocation import InvocationDTO
 from pynenc.runner.runner_context import RunnerContext
 from pynenc.state_backend.base_state_backend import BaseStateBackend, InvocationHistory
+from pynenc.identifiers.task_id import TaskId
 from pynenc.types import Params, Result
 from pynenc.util.sqlite_utils import create_sqlite_connection as sqlite_conn
 from pynenc.util.sqlite_utils import (
     delete_tables_with_prefix,
     get_sqlite_sqlite_db_path,
 )
-from pynenc.workflow import WorkflowIdentity
+from pynenc.workflow.workflow_identity import WorkflowIdentity
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
@@ -63,7 +68,15 @@ def init_tables(sqlite_db_path: str) -> None:
             f"""
             CREATE TABLE IF NOT EXISTS {Tables.INVOCATIONS} (
                 invocation_id TEXT PRIMARY KEY,
-                invocation_json TEXT NOT NULL
+                call_id_key TEXT NOT NULL,
+                task_id_key TEXT NOT NULL,
+                arguments_id TEXT NOT NULL,
+                serialized_arguments TEXT NOT NULL,
+                parent_invocation_id TEXT,
+                parent_call_id TEXT,
+                workflow_id TEXT NOT NULL,
+                workflow_type_key TEXT NOT NULL,
+                parent_workflow_id TEXT
             )
         """
         )
@@ -94,13 +107,13 @@ def init_tables(sqlite_db_path: str) -> None:
             f"""
             CREATE TABLE IF NOT EXISTS {Tables.WORKFLOWS} (
                 workflow_id TEXT PRIMARY KEY,
-                workflow_type TEXT NOT NULL,
-                workflow_json TEXT NOT NULL
+                workflow_type_key TEXT NOT NULL,
+                parent_workflow_id TEXT
             )
         """
         )
         conn.execute(
-            f"CREATE INDEX IF NOT EXISTS idx_state_backend_workflows_type ON {Tables.WORKFLOWS}(workflow_type)"
+            f"CREATE INDEX IF NOT EXISTS idx_state_backend_workflows_type ON {Tables.WORKFLOWS}(workflow_type_key)"
         )
         conn.execute(
             f"""
@@ -205,38 +218,96 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
     def store_workflow_run(self, workflow_identity: "WorkflowIdentity") -> None:
         """Store a workflow run for tracking and monitoring."""
         with sqlite_conn(self.sqlite_db_path) as conn:
-            w_id = workflow_identity
             conn.execute(
-                f"INSERT OR REPLACE INTO {Tables.WORKFLOWS} (workflow_id, workflow_type, workflow_json) VALUES (?, ?, ?)",
-                (w_id.workflow_id, w_id.workflow_type, w_id.to_json()),
+                f"INSERT OR REPLACE INTO {Tables.WORKFLOWS} (workflow_id, workflow_type_key, parent_workflow_id) VALUES (?, ?, ?)",
+                (
+                    workflow_identity.workflow_id,
+                    workflow_identity.workflow_type.key,
+                    workflow_identity.parent_workflow_id or "",
+                ),
             )
             conn.commit()
 
-    def upsert_invocations(self, invocations: list["DistributedInvocation"]) -> None:
-        """Updates or inserts multiple invocations."""
+    def _upsert_invocations(
+        self, entries: list[tuple["InvocationDTO", "CallDTO"]]
+    ) -> None:
+        """Store invocation and call DTO pairs as discrete columns."""
+        import json
+
         with sqlite_conn(self.sqlite_db_path) as conn:
-            for invocation in invocations:
+            for inv_dto, call_dto in entries:
+                wf = inv_dto.workflow
                 conn.execute(
-                    f"INSERT OR REPLACE INTO {Tables.INVOCATIONS} (invocation_id, invocation_json) VALUES (?, ?)",
-                    (invocation.invocation_id, invocation.to_json()),
+                    f"""INSERT OR REPLACE INTO {Tables.INVOCATIONS}
+                    (invocation_id, call_id_key, task_id_key, arguments_id,
+                     serialized_arguments,
+                     parent_invocation_id,
+                     workflow_id, workflow_type_key, parent_workflow_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        inv_dto.invocation_id,
+                        call_dto.call_id.key,
+                        call_dto.call_id.task_id.key,
+                        call_dto.call_id.args_id,
+                        json.dumps(call_dto.serialized_arguments),
+                        inv_dto.parent_invocation_id,
+                        wf.workflow_id,
+                        wf.workflow_type.key,
+                        wf.parent_workflow_id,
+                    ),
                 )
             conn.commit()
 
-    def _get_invocation(self, invocation_id: str) -> Optional["DistributedInvocation"]:
-        """Retrieves an invocation by its ID."""
+    def _get_invocation(
+        self, invocation_id: str
+    ) -> tuple["InvocationDTO", "CallDTO"] | None:
+        """Retrieve invocation and call DTOs by invocation ID."""
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
-                f"SELECT invocation_json FROM {Tables.INVOCATIONS} WHERE invocation_id = ?",
+                f"""SELECT invocation_id, call_id_key, serialized_arguments, parent_invocation_id,
+                           workflow_id, workflow_type_key, parent_workflow_id
+                    FROM {Tables.INVOCATIONS} WHERE invocation_id = ?""",
                 (invocation_id,),
             )
             row = cursor.fetchone()
             cursor.close()
             if row:
-                return DistributedInvocation.from_json(self.app, row[0])
+                (
+                    inv_id,
+                    call_id_key,
+                    ser_args,
+                    parent_inv_id,
+                    wf_id,
+                    wf_type_key,
+                    wf_parent_id,
+                ) = row
+                call_id = CallId.from_key(call_id_key)
+                workflow = WorkflowIdentity(
+                    workflow_id=InvocationId(wf_id),
+                    workflow_type=TaskId.from_key(wf_type_key),
+                    parent_workflow_id=InvocationId(wf_parent_id)
+                    if wf_parent_id
+                    else None,
+                )
+                inv_dto = InvocationDTO(
+                    invocation_id=InvocationId(inv_id),
+                    call_id=call_id,
+                    workflow=workflow,
+                    parent_invocation_id=InvocationId(parent_inv_id)
+                    if parent_inv_id
+                    else None,
+                )
+                call_dto = CallDTO(
+                    call_id=call_id,
+                    serialized_arguments=json.loads(ser_args),
+                )
+                return (inv_dto, call_dto)
         return None
 
     def _add_histories(
-        self, invocation_ids: list[str], invocation_history: "InvocationHistory"
+        self,
+        invocation_ids: list["InvocationId"],
+        invocation_history: "InvocationHistory",
     ) -> None:
         """Adds the same history record for a list of invocations.
 
@@ -263,7 +334,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
                 )
             conn.commit()
 
-    def _get_history(self, invocation_id: str) -> list["InvocationHistory"]:
+    def _get_history(self, invocation_id: "InvocationId") -> list["InvocationHistory"]:
         """Retrieves the history of an invocation ordered by timestamp."""
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
@@ -278,7 +349,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
             cursor.close()
             return [InvocationHistory.from_json(r[0]) for r in rows]
 
-    def _get_result(self, invocation_id: str) -> Result:
+    def _get_result(self, invocation_id: "InvocationId") -> str:
         """Retrieves the result of an invocation by ID."""
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
@@ -287,24 +358,26 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
             )
             row = cursor.fetchone()
             if row:
-                return self.app.serializer.deserialize(row[0])
+                return row[0]
             raise KeyError(f"Result for invocation {invocation_id} not found")
 
-    def _set_result(self, invocation_id: str, result: Result) -> None:
+    def _set_result(
+        self, invocation_id: "InvocationId", serialized_result: str
+    ) -> None:
         """Sets the result of an invocation by ID."""
         with sqlite_conn(self.sqlite_db_path) as conn:
             conn.execute(
                 f"INSERT OR REPLACE INTO {Tables.RESULTS} (invocation_id, result_data) VALUES (?, ?)",
-                (invocation_id, self.app.serializer.serialize(result)),
+                (invocation_id, serialized_result),
             )
             conn.commit()
 
-    def _get_exception(self, invocation_id: str) -> Exception:
+    def _get_exception(self, invocation_id: "InvocationId") -> str:
         """
         Retrieves the exception of an invocation by ID.
 
-        :param str invocation_id: The ID of the invocation
-        :return: The exception object
+        :param InvocationId invocation_id: The ID of the invocation
+        :return: The serialized exception string
         """
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
@@ -314,15 +387,17 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
             row = cursor.fetchone()
             cursor.close()
             if row:
-                return self.deserialize_exception(row[0])
+                return row[0]
             raise KeyError(f"Exception for invocation {invocation_id} not found")
 
-    def _set_exception(self, invocation_id: str, exception: Exception) -> None:
+    def _set_exception(
+        self, invocation_id: "InvocationId", serialized_exception: str
+    ) -> None:
         """Sets the raised exception by invocation ID."""
         with sqlite_conn(self.sqlite_db_path) as conn:
             conn.execute(
                 f"INSERT OR REPLACE INTO {Tables.EXCEPTIONS} (invocation_id, exception_data) VALUES (?, ?)",
-                (invocation_id, self.serialize_exception(exception)),
+                (invocation_id, serialized_exception),
             )
             conn.commit()
 
@@ -338,7 +413,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
                 INSERT OR REPLACE INTO {Tables.WORKFLOW_DATA} (workflow_id, data_key, data_value)
                 VALUES (?, ?, ?)
             """,
-                (workflow_identity.workflow_invocation_id, key, serialized_value),
+                (workflow_identity.workflow_id, key, serialized_value),
             )
             conn.commit()
 
@@ -352,7 +427,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
                 SELECT data_value FROM {Tables.WORKFLOW_DATA}
                 WHERE workflow_id = ? AND data_key = ?
             """,
-                (workflow_identity.workflow_invocation_id, key),
+                (workflow_identity.workflow_id, key),
             )
             row = cursor.fetchone()
             cursor.close()
@@ -360,37 +435,46 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
                 return self.app.serializer.deserialize(row[0])
             return default
 
-    def get_all_workflow_types(self) -> Iterator[str]:
+    def get_all_workflow_types(self) -> Iterator["TaskId"]:
         """Retrieve all workflow IDs."""
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
-                f"SELECT DISTINCT workflow_type FROM {Tables.WORKFLOWS}"
+                f"SELECT DISTINCT workflow_type_key FROM {Tables.WORKFLOWS}"
             )
             cursor_rows = cursor.fetchall()
             cursor.close()
             for row in cursor_rows:
-                yield row[0]
+                yield TaskId.from_key(row[0])
 
     def get_all_workflow_runs(self) -> Iterator["WorkflowIdentity"]:
         """Retrieve all stored workflows."""
-        with sqlite_conn(self.sqlite_db_path) as conn:
-            cursor = conn.execute(f"SELECT workflow_json FROM {Tables.WORKFLOWS}")
-            cursor_rows = cursor.fetchall()
-            cursor.close()
-            for row in cursor_rows:
-                yield WorkflowIdentity.from_json(row[0])
+        yield from self._get_workflow_runs(workflow_type_key=None)
 
-    def get_workflow_runs(self, workflow_type: str) -> Iterator["WorkflowIdentity"]:
+    def get_workflow_runs(
+        self, workflow_type: "TaskId"
+    ) -> Iterator["WorkflowIdentity"]:
+        yield from self._get_workflow_runs(workflow_type_key=workflow_type.key)
+
+    def _get_workflow_runs(
+        self, workflow_type_key: str | None
+    ) -> Iterator["WorkflowIdentity"]:
         """Retrieve workflow runs for a specific task."""
+        filter = "WHERE workflow_type_key = ?" if workflow_type_key else ""
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
-                f"SELECT workflow_json FROM {Tables.WORKFLOWS} WHERE workflow_type = ?",
-                (workflow_type,),
+                f"SELECT workflow_id, workflow_type_key, parent_workflow_id FROM {Tables.WORKFLOWS} {filter}",
+                (workflow_type_key,) if workflow_type_key else (),
             )
             cursor_rows = cursor.fetchall()
             cursor.close()
-            for row in cursor_rows:
-                yield WorkflowIdentity.from_json(row[0])
+            for wf_id, wf_type_key, parent_wf_id in cursor_rows:
+                yield WorkflowIdentity(
+                    workflow_id=InvocationId(wf_id),
+                    workflow_type=TaskId.from_key(wf_type_key),
+                    parent_workflow_id=InvocationId(parent_wf_id)
+                    if parent_wf_id
+                    else None,
+                )
 
     def store_workflow_sub_invocation(
         self, parent_workflow_id: str, sub_invocation_id: str
@@ -406,7 +490,9 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
             )
             conn.commit()
 
-    def get_workflow_sub_invocations(self, workflow_id: str) -> Iterator[str]:
+    def get_workflow_sub_invocations(
+        self, workflow_id: "InvocationId"
+    ) -> Iterator["InvocationId"]:
         """Get workflow sub-invocations."""
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
@@ -418,15 +504,15 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
             )
             cursor_rows = cursor.fetchall()
             cursor.close()
-            for row in cursor_rows:
-                yield row[0]
+            for (sub_invocation_id,) in cursor_rows:
+                yield InvocationId(sub_invocation_id)
 
     def iter_invocations_in_timerange(
         self,
         start_time: datetime,
         end_time: datetime,
         batch_size: int = 100,
-    ) -> Iterator[list[str]]:
+    ) -> Iterator[list["InvocationId"]]:
         """Iterate over invocation IDs that have history within time range."""
         offset = 0
         while True:
@@ -441,7 +527,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
                 """,
                     (start_time.timestamp(), end_time.timestamp(), batch_size, offset),
                 )
-                batch = [row[0] for row in cursor.fetchall()]
+                batch = [InvocationId(inv_id) for (inv_id,) in cursor.fetchall()]
                 cursor.close()
 
             if not batch:

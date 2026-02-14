@@ -9,9 +9,11 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from pynenc.exceptions import InvocationNotFoundError
+from pynenc.identifiers.invocation_id import InvocationId
+from pynenc.identifiers.task_id import TaskId
 from pynenc.invocation.status import InvocationStatus
 from pynmon.app import get_pynenc_instance, templates
-from pynmon.util.formatting import RunnerContextInfo, format_task_extra_info
+from pynmon.util.formatting import RunnerContextInfo
 from pynmon.util.time_ranges import parse_time_range, parse_resolution
 from pynmon.util.view_helpers import format_call_arguments
 from pynmon.util.svg.builder import TimelineDataBuilder
@@ -31,12 +33,13 @@ logger = logging.getLogger("pynmon.views.invocations")
 async def invocations_list(
     request: Request,
     status: str | None = None,
-    task_id: str | None = None,
+    task_id_key: str | None = None,
     limit: int = 50,
     page: int = 1,
 ) -> HTMLResponse:
     """Display invocations with optional filtering and pagination."""
     app = get_pynenc_instance()
+    task_id = TaskId.from_key(task_id_key) if task_id_key else None
 
     # Convert status to list format for consistent processing
     status_list = None
@@ -107,7 +110,7 @@ async def invocations_list(
     )
 
 
-def _get_tasks_to_check(app: "Pynenc", task_id: str | None) -> list:
+def _get_tasks_to_check(app: "Pynenc", task_id: "TaskId | None") -> list:
     """Get the list of tasks to check based on task_id filter.
 
     :param app: The Pynenc application instance
@@ -123,11 +126,11 @@ def _get_tasks_to_check(app: "Pynenc", task_id: str | None) -> list:
             # Re-raise with a more descriptive error message
             if isinstance(e, ModuleNotFoundError):
                 raise ValueError(
-                    f"Task not found: Module '{task_id.rsplit('.', 1)[0]}' could not be imported. {str(e)}"
+                    f"Task not found: Module '{task_id.module}' could not be imported. {str(e)}"
                 ) from e
             elif isinstance(e, AttributeError):
-                module_name = task_id.rsplit(".", 1)[0]
-                function_name = task_id.rsplit(".", 1)[1]
+                module_name = task_id.module
+                function_name = task_id.func_name
                 raise ValueError(
                     f"Task not found: Function '{function_name}' not found in module '{module_name}'. {str(e)}"
                 ) from e
@@ -136,101 +139,6 @@ def _get_tasks_to_check(app: "Pynenc", task_id: str | None) -> list:
                     f"Task not found: Invalid task ID format '{task_id}'. {str(e)}"
                 ) from e
     return list(app.tasks.values())
-
-
-def _collect_invocations_from_tasks(
-    app: "Pynenc", tasks_to_check: list, limit: int
-) -> list["DistributedInvocation"]:
-    """Collect invocations from the specified tasks up to the limit."""
-    all_invocation_ids = []
-    logger.info(f"Fetching invocations from {len(tasks_to_check)} tasks")
-
-    for task in tasks_to_check:
-        invocation_ids = list(app.orchestrator.get_existing_invocations(task=task))
-        all_invocation_ids.extend(invocation_ids)
-
-        # Limit the number to avoid overloading the browser
-        if len(all_invocation_ids) >= limit:
-            all_invocation_ids = all_invocation_ids[:limit]
-            break
-
-    logger.info(f"Found {len(all_invocation_ids)} invocations before time filtering")
-    all_invocations = [
-        app.state_backend.get_invocation(inv_id) for inv_id in all_invocation_ids
-    ]
-    return all_invocations
-
-
-def _filter_invocations_by_time(
-    app: "Pynenc",
-    all_invocations: list["DistributedInvocation"],
-    start_datetime: datetime,
-    end_datetime: datetime,
-    show_relationships: bool,
-) -> list[dict[str, str | None]]:
-    """Filter invocations based on time range and format for timeline display."""
-    filtered_invocations = []
-
-    for invocation in all_invocations:
-        # Try to get history for the invocation
-        history = app.state_backend.get_history(invocation.invocation_id)
-
-        if not history:
-            logger.debug(
-                f"Invocation {invocation.invocation_id} has no history, skipping"
-            )
-            continue
-
-        # Sort history by timestamp
-        sorted_history = sorted(history, key=lambda entry: entry.timestamp)
-
-        # Get start time (first entry)
-        invocation_start_time = sorted_history[0].timestamp
-
-        # Skip if outside our time range
-        if (
-            invocation_start_time < start_datetime
-            or invocation_start_time > end_datetime
-        ):
-            logger.debug(
-                f"Invocation {invocation.invocation_id} outside time range, skipping"
-            )
-            continue
-
-        # Get end time (last entry if in final state)
-        invocation_end_time = None
-        if (
-            sorted_history[-1].status_record.status
-            and sorted_history[-1].status_record.status.is_final()
-        ):
-            invocation_end_time = sorted_history[-1].timestamp
-
-        # Find parent invocation if it exists
-        parent_id = None
-        if show_relationships and invocation.parent_invocation:
-            parent_id = invocation.parent_invocation.invocation_id
-
-        # Add to filtered list
-        filtered_invocations.append(
-            {
-                "invocation_id": invocation.invocation_id,
-                "task_id": invocation.task.task_id,
-                "status": invocation.status.name,
-                "start_time": invocation_start_time.isoformat(),
-                "end_time": invocation_end_time.isoformat()
-                if invocation_end_time
-                else None,
-                "parent_id": parent_id,
-            }
-        )
-
-    # Sort by start time
-    def get_start_time(inv: dict) -> str:
-        start_time = inv.get("start_time")
-        return start_time if isinstance(start_time, str) else ""
-
-    filtered_invocations.sort(key=get_start_time)
-    return filtered_invocations
 
 
 def _build_svg_timeline(
@@ -529,7 +437,9 @@ def _get_invocation_timestamps_and_duration(
 
 
 @router.get("/{invocation_id}", response_class=HTMLResponse)
-async def invocation_detail(request: Request, invocation_id: str) -> HTMLResponse:
+async def invocation_detail(
+    request: Request, invocation_id: "InvocationId"
+) -> HTMLResponse:
     """Display detailed information about a specific invocation."""
     app = get_pynenc_instance()
     logger.info(f"Retrieving details for invocation: {invocation_id}")
@@ -562,8 +472,6 @@ async def invocation_detail(request: Request, invocation_id: str) -> HTMLRespons
 
         formatted_arguments = format_call_arguments(call)
 
-        task_extra = format_task_extra_info(task)
-
         logger.info(
             f"Rendering invocation detail template in {time.time() - start_time:.2f}s"
         )
@@ -576,7 +484,6 @@ async def invocation_detail(request: Request, invocation_id: str) -> HTMLRespons
                 "invocation": invocation,
                 "call": call,
                 "task": task,
-                "task_extra": task_extra,
                 "result": formatted_result,
                 "exception": formatted_exception,
                 "history": formatted_history,
@@ -619,7 +526,9 @@ async def invocation_detail(request: Request, invocation_id: str) -> HTMLRespons
 
 
 @router.get("/{invocation_id}/history")
-async def invocation_history(request: Request, invocation_id: str) -> JSONResponse:
+async def invocation_history(
+    request: Request, invocation_id: "InvocationId"
+) -> JSONResponse:
     """Return invocation history as JSON for timeline visualization."""
     app = get_pynenc_instance()
     logger.info(f"Retrieving history for invocation {invocation_id} (API)")
@@ -681,7 +590,9 @@ async def invocation_history(request: Request, invocation_id: str) -> JSONRespon
 
 
 @router.get("/{invocation_id}/api")
-async def invocation_api(request: Request, invocation_id: str) -> JSONResponse:
+async def invocation_api(
+    request: Request, invocation_id: "InvocationId"
+) -> JSONResponse:
     """Return invocation data as JSON for the timeline visualization."""
     app = get_pynenc_instance()
     logger.info(f"Retrieving API data for invocation {invocation_id}")
@@ -697,12 +608,10 @@ async def invocation_api(request: Request, invocation_id: str) -> JSONResponse:
         # Create a simplified representation for the API
         invocation_data = {
             "invocation_id": invocation.invocation_id,
-            "task_id": invocation.task.task_id,
+            "task_id_key": invocation.task.task_id.key,
             "status": invocation.status.name,
             "num_retries": invocation.num_retries,
-            "parent_invocation_id": invocation.parent_invocation.invocation_id
-            if invocation.parent_invocation
-            else None,
+            "parent_invocation_id": invocation.parent_invocation_id,
         }
 
         return JSONResponse(invocation_data)
@@ -718,12 +627,13 @@ async def invocation_api(request: Request, invocation_id: str) -> JSONResponse:
 async def invocations_table(
     request: Request,
     status: str | None = None,
-    task_id: str | None = None,
+    task_id_key: str | None = None,
     limit: int = 50,
 ) -> HTMLResponse:
     """Return just the invocations table for HTMX refresh."""
     # This is essentially the same logic as invocations_list but returns only the table partial
     app = get_pynenc_instance()
+    task_id = TaskId.from_key(task_id_key) if task_id_key else None
 
     # Parse status parameter
     status_list = None

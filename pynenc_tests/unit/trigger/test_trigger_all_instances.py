@@ -12,6 +12,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from pynenc.invocation.status import InvocationStatus
+from pynenc.identifiers.task_id import TaskId
 from pynenc.trigger.arguments import create_argument_filter
 from pynenc.trigger.arguments.argument_providers import StaticArgumentProvider
 from pynenc.trigger.conditions import (
@@ -28,6 +29,7 @@ from pynenc_tests.conftest import MockPynenc
 if TYPE_CHECKING:
     from pynenc import Pynenc
     from pynenc.trigger import BaseTrigger
+    from pynenc.models.trigger_definition_dto import TriggerDefinitionDTO
 
 # Create a test app instance
 app = MockPynenc()
@@ -60,11 +62,12 @@ def test_register_and_get_trigger(trigger: "BaseTrigger") -> None:
     trigger.register_condition(condition)
 
     trigger_def = TriggerDefinition(
-        task_id="test_task",
+        task_id=TaskId("test_module", "test_func"),
         condition_ids=[condition.condition_id],
         argument_provider=StaticArgumentProvider({"arg": "value"}),
     )
-    trigger.register_trigger(trigger_def)
+    trigger_def_dto = trigger_def.to_dto(app)
+    trigger.register_trigger(trigger_def_dto)
 
     retrieved = trigger.get_trigger(trigger_def.trigger_id)
     assert retrieved == trigger_def
@@ -76,15 +79,16 @@ def test_get_triggers_for_condition(trigger: "BaseTrigger") -> None:
     trigger.register_condition(condition)
 
     trigger_def = TriggerDefinition(
-        task_id="test_task",
+        task_id=TaskId("test_module", "test_func"),
         condition_ids=[condition.condition_id],
         argument_provider=StaticArgumentProvider({"arg": "value"}),
     )
-    trigger.register_trigger(trigger_def)
+    trigger_def_dto = trigger_def.to_dto(app)
+    trigger.register_trigger(trigger_def_dto)
 
     triggers = trigger.get_triggers_for_condition(condition.condition_id)
     assert len(triggers) == 1
-    assert triggers[0] == trigger_def
+    assert triggers[0] == trigger_def_dto
 
 
 def test_get_conditions_sourced_from_task(trigger: "BaseTrigger") -> None:
@@ -203,7 +207,7 @@ def test_register_task_triggers(trigger: "BaseTrigger") -> None:
     """Test registering triggers for a task."""
     # Create a mock task
     task = Mock()
-    task.task_id = "test_task"
+    task.task_id = TaskId("test_module", "test_func")
 
     # Create a trigger builder with a condition
     builder = TriggerBuilder().on_cron("0 * * * *")
@@ -230,7 +234,7 @@ def test_register_task_triggers_should_register_triggers_for_task(
     """Test that register_task_triggers registers triggers for a task using public API."""
     # Arrange
     task = Mock()
-    task.task_id = "test_task"
+    task.task_id = TaskId("test_module", "test_func")
     builder = TriggerBuilder().on_cron("0 * * * *")
 
     # Act
@@ -242,7 +246,7 @@ def test_register_task_triggers_should_register_triggers_for_task(
     assert any(isinstance(c, CronCondition) for c in all_conditions)
 
     # Assert: fetch all triggers using get_triggers_for_condition
-    all_triggers = []
+    all_triggers: list[TriggerDefinitionDTO] = []
     for cond in all_conditions:
         all_triggers.extend(trigger.get_triggers_for_condition(cond.condition_id))
     assert len(all_triggers) == len(all_conditions)
@@ -395,7 +399,7 @@ def test_cron_execution_should_preserve_utc_timezone_when_storing_and_retrieving
 def test_trigger_loop_iteration(trigger: "BaseTrigger") -> None:
     """Test processing a trigger loop iteration."""
     # Set up task, condition, and trigger
-    task_id = "test_task"
+    task_id = TaskId("test_module", "test_func")
 
     # Create a condition
     condition = CronCondition("0 * * * *")
@@ -407,7 +411,8 @@ def test_trigger_loop_iteration(trigger: "BaseTrigger") -> None:
         condition_ids=[condition.condition_id],
         argument_provider=StaticArgumentProvider({"arg": "value"}),
     )
-    trigger.register_trigger(trigger_def)
+    trigger_def_dto = trigger_def.to_dto(app)
+    trigger.register_trigger(trigger_def_dto)
 
     # Create a valid condition
     context = CronContext()

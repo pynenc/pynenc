@@ -33,7 +33,7 @@ from pynenc.trigger.conditions.result import ResultCondition, ResultContext
 from pynenc.trigger.trigger_definitions import TriggerDefinition
 
 if TYPE_CHECKING:
-    from pynenc.task import Task
+    from pynenc.task import Task, TaskId
     from pynenc.trigger.conditions.base import TriggerCondition
     from pynenc.trigger.trigger_context import TriggerContext
 
@@ -336,7 +336,7 @@ class TriggerBuilder:
         self.conditions.append(condition)
         return self
 
-    def build(self, task_id: str) -> TriggerDefinition:
+    def build(self, task_id: "TaskId") -> TriggerDefinition:
         """
         Build the trigger definition for a task.
 

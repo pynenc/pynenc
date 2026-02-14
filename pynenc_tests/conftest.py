@@ -21,8 +21,11 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from pynenc import Pynenc, PynencBuilder
-from pynenc.arg_cache.base_arg_cache import BaseArgCache
 from pynenc.broker.base_broker import BaseBroker
+from pynenc.client_data_store.base_client_data_store import BaseClientDataStore
+from pynenc.identifiers.call_id import CallId
+from pynenc.identifiers.invocation_id import InvocationId
+from pynenc.identifiers.task_id import TaskId
 from pynenc.orchestrator.base_orchestrator import BaseBlockingControl, BaseOrchestrator
 from pynenc.runner.base_runner import BaseRunner
 from pynenc.state_backend.base_state_backend import BaseStateBackend
@@ -54,26 +57,37 @@ def patch_abstract_methods(cls: type) -> type:
 
 @pytest.fixture(autouse=True)
 def reset_mock_classes() -> Generator[None, None, None]:
-    """Reset all mocked methods between tests."""
-    yield
+    """Reset all mocked methods around each test to ensure isolation."""
 
-    for mock_cls in [
+    mock_classes: list[type] = [
         MockBroker,
         MockBlockingControl,
         MockBaseOrchestrator,
         MockStateBackend,
-        MockArgCache,
+        MockClientDataStore,
         MockRunner,
-    ]:
-        for method_name in getattr(mock_cls, "_patched_methods", []):
-            getattr(mock_cls, method_name).reset_mock()
+    ]
+
+    def _reset_all() -> None:
+        for mock_cls in mock_classes:
+            for method_name in getattr(mock_cls, "_patched_methods", []):
+                getattr(mock_cls, method_name).reset_mock(
+                    return_value=True,
+                    side_effect=True,
+                )
+
+    # Clear leftovers from previous tests before this one starts.
+    _reset_all()
+    yield
+    # Also clear state after the test for safety.
+    _reset_all()
 
 
 MockBroker = patch_abstract_methods(BaseBroker)  # type: ignore[misc]
 MockBlockingControl = patch_abstract_methods(BaseBlockingControl)  # type: ignore[misc]
 MockBaseOrchestrator = patch_abstract_methods(BaseOrchestrator)  # type: ignore[misc]
 MockStateBackend = patch_abstract_methods(BaseStateBackend)  # type: ignore[misc]
-MockArgCache = patch_abstract_methods(BaseArgCache)  # type: ignore[misc]
+MockClientDataStore = patch_abstract_methods(BaseClientDataStore)  # type: ignore[misc]
 MockRunner = patch_abstract_methods(BaseRunner)  # type: ignore[misc]
 
 
@@ -90,8 +104,6 @@ class MockPynenc(Pynenc):
     def __init__(self, app_id: str = "mock_pynenc") -> None:
         super().__init__(app_id=app_id)
         self._runner_instance = MockRunner(self)  # type: ignore[misc]
-        # Ensure runner.cache is always a real dict for all tests
-        self._runner_instance.cache = {}  # type: ignore
 
     @cached_property
     def broker(self):  # type: ignore
@@ -106,8 +118,8 @@ class MockPynenc(Pynenc):
         return MockStateBackend(self)  # type: ignore[misc]
 
     @cached_property
-    def arg_cache(self):  # type: ignore
-        return MockArgCache(self)  # type: ignore[misc]
+    def client_data(self):  # type: ignore
+        return MockClientDataStore(self)  # type: ignore[misc]
 
     @property
     def runner(self):  # type: ignore
@@ -184,3 +196,39 @@ def app_instance(request: "FixtureRequest", temp_sqlite_db_path: str) -> Pynenc:
         return PynencBuilder().sqlite(sqlite_db_path=str(temp_sqlite_db_path)).build()
     else:
         raise ValueError(f"Unknown app backend: {request.param}")
+
+
+@pytest.fixture
+def task_id() -> TaskId:
+    """Fixture for a sample TaskId."""
+    return TaskId("some_module", "some_func")
+
+
+@pytest.fixture
+def other_task_id() -> TaskId:
+    """Fixture for a different sample TaskId."""
+    return TaskId("some_other_module", "some_other_func")
+
+
+@pytest.fixture
+def call_id(task_id: TaskId) -> CallId:
+    """Fixture for a sample CallId."""
+    return CallId(task_id=task_id, args_id="some_args_id")
+
+
+@pytest.fixture
+def other_call_id(other_task_id: TaskId) -> CallId:
+    """Fixture for a different sample CallId."""
+    return CallId(task_id=other_task_id, args_id="some_other_args_id")
+
+
+@pytest.fixture
+def inv_id() -> InvocationId:
+    """Fixture for a sample InvocationId."""
+    return InvocationId("some_inv_id")
+
+
+@pytest.fixture
+def other_inv_id() -> InvocationId:
+    """Fixture for a different sample InvocationId."""
+    return InvocationId("some_other_inv_id")

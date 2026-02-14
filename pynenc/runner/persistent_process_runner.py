@@ -7,6 +7,7 @@ from multiprocessing import Manager, Process
 from typing import TYPE_CHECKING, Any
 import uuid
 
+
 # Use 'spawn' method on macOS to avoid connection issues
 if (
     hasattr(multiprocessing, "get_start_method")
@@ -28,6 +29,7 @@ from pynenc.util.multiprocessing_utils import warn_missing_main_guard
 if TYPE_CHECKING:
     from multiprocessing.synchronize import Event
     from pynenc.app import Pynenc
+    from pynenc.identifiers.invocation_id import InvocationId
 
 
 def persistent_process_main(
@@ -103,7 +105,6 @@ class PersistentProcessRunner(BaseRunner):
 
     child_runner_ids: dict[str, Process]  # Maps child runner_id to Process
     manager: Manager  # type: ignore
-    runner_cache: dict
     num_processes: int
     stop_event: "Event"
 
@@ -113,11 +114,6 @@ class PersistentProcessRunner(BaseRunner):
             config_values=self.app.config_values,
             config_filepath=self.app.config_filepath,
         )
-
-    @property
-    def cache(self) -> dict:
-        """Returns the shared cache for all processes."""
-        return self.runner_cache
 
     @staticmethod
     def mem_compatible() -> bool:
@@ -272,8 +268,8 @@ class PersistentProcessRunner(BaseRunner):
 
     def _waiting_for_results(
         self,
-        running_invocation_id: str,
-        result_invocation_ids: list[str],
+        running_invocation_id: "InvocationId",
+        result_invocation_ids: list["InvocationId"],
         runner_args: dict[str, Any] | None = None,
     ) -> None:
         """

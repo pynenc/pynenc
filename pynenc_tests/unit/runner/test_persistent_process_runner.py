@@ -240,13 +240,6 @@ def test_mem_compatible(runner: PersistentProcessRunner) -> None:
     assert runner.mem_compatible() is False
 
 
-def test_cache_property(runner: PersistentProcessRunner, mock_manager: Mock) -> None:
-    # Manually initialize runner_cache without spawning processes
-    runner.manager = mock_manager.return_value
-    runner.runner_cache = runner.manager.dict()  # type: ignore
-    assert runner.cache is runner.runner_cache
-
-
 def test_persistent_process_main_handle_terminate(
     app: MockPynenc, mock_manager: Mock
 ) -> None:

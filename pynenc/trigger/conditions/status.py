@@ -9,6 +9,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from pynenc.arguments import Arguments
+from pynenc.identifiers.call_id import CallId
+from pynenc.identifiers.invocation_id import InvocationId
+from pynenc.identifiers.task_id import TaskId
 from pynenc.invocation.status import InvocationStatus
 from pynenc.trigger.arguments import ArgumentFilter
 from pynenc.trigger.conditions.base import ConditionContext, TriggerCondition
@@ -28,11 +31,11 @@ class StatusContext(ConditionContext):
     to evaluate status-based conditions.
     """
 
-    task_id: str
-    call_id: str
-    invocation_id: str
+    call_id: "CallId"
+    invocation_id: "InvocationId"
     arguments: Arguments
     status: InvocationStatus
+    disable_cache_args: tuple[str, ...]
 
     @property
     def context_id(self) -> str:
@@ -49,14 +52,14 @@ class StatusContext(ConditionContext):
 
         :param invocation: The invocation to extract context from
         :param status: Optional status to override the invocation's status
-        :return: A StatusContext with task ID, call ID, invocation ID, status, and call arguments
+        :return: A StatusContext with call ID, invocation ID, status, and call arguments
         """
         return cls(
-            task_id=invocation.task.task_id,
-            call_id=invocation.call_id,
+            call_id=invocation.call.call_id,
             invocation_id=invocation.invocation_id,
             status=status or invocation.status,
             arguments=invocation.call.arguments,
+            disable_cache_args=invocation.call.task.conf.disable_cache_args,
         )
 
     def _to_json(self, app: "Pynenc") -> dict[str, Any]:
@@ -66,12 +69,15 @@ class StatusContext(ConditionContext):
         :param app: Pynenc application instance
         :return: Dictionary with serialized context data
         """
+        serialized_args = app.client_data_store.serialize_arguments(
+            self.arguments.kwargs, self.disable_cache_args
+        )
         return {
-            "task_id": self.task_id,
-            "call_id": self.call_id,
+            "call_id_key": self.call_id.key,
             "invocation_id": self.invocation_id,
-            "status": self.status.value,
-            "arguments": self.arguments.to_json(app),
+            "status_value": self.status.value,
+            "arguments_json": serialized_args,
+            "disable_cache_args": list(self.disable_cache_args),
         }
 
     @classmethod
@@ -83,31 +89,15 @@ class StatusContext(ConditionContext):
         :param app: Pynenc application instance
         :return: A new StatusContext instance
         """
-        # Get required fields
-        task_id = data.get("task_id")
-        call_id = data.get("call_id")
-        invocation_id = data.get("invocation_id")
-        status_str = data.get("status")
-        arguments_json = data.get("arguments", {})
-
-        if not all([task_id, call_id, invocation_id, status_str]):
-            raise ValueError("Missing required fields in StatusContext data")
-        if not task_id:
-            raise ValueError("Missing task_id in StatusContext data")
-        if not call_id:
-            raise ValueError("Missing call_id in StatusContext data")
-        if not invocation_id:
-            raise ValueError("Missing invocation_id in StatusContext data")
-        if not status_str:
-            raise ValueError("Missing status in StatusContext data")
-        status = InvocationStatus(status_str)
-
+        deserialized_args = app.client_data_store.deserialize_arguments(
+            data["arguments_json"]
+        )
         return cls(
-            task_id=task_id,
-            call_id=call_id,
-            invocation_id=invocation_id,
-            status=status,
-            arguments=Arguments.from_json(app, arguments_json),
+            call_id=CallId.from_key(data["call_id_key"]),
+            invocation_id=InvocationId(data["invocation_id"]),
+            status=InvocationStatus(data["status_value"]),
+            arguments=Arguments(deserialized_args),
+            disable_cache_args=tuple(data["disable_cache_args"]),
         )
 
 
@@ -122,7 +112,7 @@ class StatusCondition(TriggerCondition[StatusContext]):
 
     def __init__(
         self,
-        task_id: str,
+        task_id: "TaskId",
         statuses: list[InvocationStatus],
         arguments_filter: ArgumentFilter,
     ):
@@ -137,7 +127,7 @@ class StatusCondition(TriggerCondition[StatusContext]):
         self.statuses = statuses
         self.arguments_filter = arguments_filter
 
-    def get_source_task_ids(self) -> set[str]:
+    def get_source_task_ids(self) -> set["TaskId"]:
         return {self.task_id}
 
     @property
@@ -161,7 +151,7 @@ class StatusCondition(TriggerCondition[StatusContext]):
         :return: Dictionary with serialized condition data
         """
         data: dict = {
-            "task_id": self.task_id,
+            "task_id": self.task_id.key,
             "statuses": self.statuses,
             "arguments_filter": self.arguments_filter.to_json(app),
         }
@@ -177,11 +167,9 @@ class StatusCondition(TriggerCondition[StatusContext]):
         :return: A new StatusCondition instance
         :raises ValueError: If the data is invalid for this condition type
         """
-        task_id = data.get("task_id")
+        task_id = TaskId.from_key(data["task_id"])
         statuses = data.get("statuses", [])
 
-        if not task_id:
-            raise ValueError("Missing required task_id in StatusCondition data")
         if not statuses:
             raise ValueError("Missing required statuses in StatusCondition data")
 
@@ -204,13 +192,13 @@ class StatusCondition(TriggerCondition[StatusContext]):
         :param context: Status context with task ID, status, and call arguments
         :return: True if the condition is satisfied
         """
-        if context.task_id != self.task_id:
+        if context.call_id.task_id != self.task_id:
             return False
         if context.status not in self.statuses:
             return False
         return self.arguments_filter.filter_arguments(context.arguments.kwargs)
 
-    def affects_task(self, task_id: str) -> bool:
+    def affects_task(self, task_id: "TaskId") -> bool:
         """
         Check if this condition is affected by a specific task.
 

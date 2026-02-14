@@ -10,8 +10,8 @@ from typing import TYPE_CHECKING
 import pytest
 
 from pynenc import Pynenc
-from pynenc.workflow.deterministic import DeterministicExecutor
-from pynenc.workflow.identity import WorkflowIdentity
+from pynenc.workflow.workflow_deterministic import DeterministicExecutor
+from pynenc.workflow.workflow_identity import WorkflowIdentity
 
 if TYPE_CHECKING:
     from pynenc.task import Task
@@ -30,7 +30,7 @@ def app() -> Pynenc:
         "state_backend_cls": "MemStateBackend",
         "broker_cls": "MemBroker",
         "orchestrator_cls": "MemOrchestrator",
-        "arg_cache_cls": "MemArgCache",
+        "client_data_store_cls": "MemClientDataStore",
     }
     app = Pynenc(app_id="test_deterministic", config_values=config)
     app.purge()
@@ -38,13 +38,10 @@ def app() -> Pynenc:
 
 
 @pytest.fixture
-def workflow_identity() -> WorkflowIdentity:
-    """Create a test workflow identity with fixed ID for deterministic tests."""
-    return WorkflowIdentity(
-        workflow_task_id="test_workflow",
-        workflow_invocation_id="test-invocation-123",
-        parent_workflow=None,
-    )
+def app_with_task(app: Pynenc) -> "Task":
+    """Create a test app with a simple task for execute_task testing."""
+    task = app.task(add_task_func)
+    return task
 
 
 @pytest.fixture
@@ -53,10 +50,3 @@ def deterministic_executor(
 ) -> DeterministicExecutor:
     """Create a deterministic executor for testing."""
     return DeterministicExecutor(workflow_identity, app)
-
-
-@pytest.fixture
-def app_with_task(app: Pynenc) -> "Task":
-    """Create a test app with a simple task for execute_task testing."""
-    task = app.task(add_task_func)
-    return task

@@ -9,6 +9,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from pynenc.identifiers.task_id import TaskId
 from pynenc.trigger.conditions.base import TriggerCondition
 from pynenc.trigger.conditions.composite import CompositeCondition, CompositeLogic
 from pynenc.trigger.conditions.cron import CronContext
@@ -118,7 +119,7 @@ def test_get_condition_data(
 
 
 def test_affects_task(
-    composite_conditions_setup: tuple[Mock, Mock, CronContext],
+    composite_conditions_setup: tuple[Mock, Mock, CronContext], task_id: "TaskId"
 ) -> None:
     """Test affects_task method checks all child conditions."""
     condition1, condition2, _ = composite_conditions_setup
@@ -128,9 +129,9 @@ def test_affects_task(
     # When no child condition is affected
     condition1.affects_task.return_value = False
     condition2.affects_task.return_value = False
-    assert not composite.affects_task("task1")
+    assert not composite.affects_task(task_id)
 
     # When one child condition is affected
     condition1.affects_task.return_value = True
     condition2.affects_task.return_value = False
-    assert composite.affects_task("task1")
+    assert composite.affects_task(task_id)

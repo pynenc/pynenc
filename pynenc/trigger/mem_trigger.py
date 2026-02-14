@@ -16,8 +16,9 @@ from pynenc.trigger.conditions import ConditionContext, TriggerCondition, ValidC
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
-    from pynenc.trigger.trigger_definitions import TriggerDefinition
-    from pynenc.trigger.types import ConditionId, TaskId
+    from pynenc.identifiers.task_id import TaskId
+    from pynenc.models.trigger_definition_dto import TriggerDefinitionDTO
+    from pynenc.trigger.types import ConditionId
 
 
 class MemTrigger(BaseTrigger):
@@ -38,13 +39,13 @@ class MemTrigger(BaseTrigger):
         # Map of condition_id to condition object
         self._conditions: dict[str, TriggerCondition] = {}
         # Map of trigger_id to trigger definition
-        self._triggers: dict[str, TriggerDefinition] = {}
+        self._triggers: dict[str, TriggerDefinitionDTO] = {}
         # Map of condition_id to list of trigger_ids that use this condition
         self._condition_triggers: dict[str, list[str]] = defaultdict(list)
         # Map of condition_id to valid condition
         self._valid_conditions: dict[str, ValidCondition] = {}
         # Map of task_id to set of condition_ids that are sourced from this task
-        self._source_task_conditions: dict[str, set[str]] = defaultdict(set)
+        self._source_task_conditions: dict[TaskId, set[str]] = defaultdict(set)
         # Map of condition_id to last execution time (for cron conditions)
         self._last_cron_executions: dict[str, datetime] = {}
         # Lock to ensure thread safety for cron execution tracking
@@ -74,7 +75,7 @@ class MemTrigger(BaseTrigger):
         """
         return self._conditions.get(condition_id)
 
-    def register_trigger(self, trigger: "TriggerDefinition") -> None:
+    def register_trigger(self, trigger: "TriggerDefinitionDTO") -> None:
         """
         Register a trigger definition in the in-memory system.
 
@@ -86,7 +87,7 @@ class MemTrigger(BaseTrigger):
         for condition_id in trigger.condition_ids:
             self._condition_triggers[condition_id].append(trigger.trigger_id)
 
-    def get_trigger(self, trigger_id: str) -> Optional["TriggerDefinition"]:
+    def _get_trigger(self, trigger_id: str) -> Optional["TriggerDefinitionDTO"]:
         """
         Get a trigger definition by ID from the in-memory store.
 
@@ -97,7 +98,7 @@ class MemTrigger(BaseTrigger):
 
     def get_triggers_for_condition(
         self, condition_id: str
-    ) -> list["TriggerDefinition"]:
+    ) -> list["TriggerDefinitionDTO"]:
         """
         Get all triggers that depend on a specific condition from the in-memory store.
 
@@ -285,7 +286,7 @@ class MemTrigger(BaseTrigger):
             self._trigger_run_claims[trigger_run_id] = expiration
             return True
 
-    def clean_task_trigger_definitions(self, task_id: str) -> None:
+    def clean_task_trigger_definitions(self, task_id: "TaskId") -> None:
         """Remove all trigger definitions for a specific task from memory."""
         # Find all triggers for this task
         task_triggers = [t for t in self._triggers.values() if t.task_id == task_id]

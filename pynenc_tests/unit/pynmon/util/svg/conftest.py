@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+
 from pynmon.util.svg import (
     InvocationBar,
     RunnerLane,
@@ -68,7 +69,6 @@ def sample_bar() -> InvocationBar:
     end = datetime(2024, 1, 1, 10, 0, 30, tzinfo=UTC)
     return InvocationBar(
         invocation_id="inv-001",
-        task_id="task:sample",
         start_time=start,
         end_time=end,
         status="RUNNING",
@@ -134,7 +134,6 @@ def multi_lane_data(config: TimelineConfig) -> TimelineData:
             bar_end = bar_start + timedelta(seconds=20)
             bar = InvocationBar(
                 invocation_id=f"inv-{i}-{j}",
-                task_id=f"task:{i}",
                 start_time=bar_start,
                 end_time=bar_end,
                 status="RUNNING" if j == 0 else "SUCCESS",

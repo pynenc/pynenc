@@ -111,17 +111,6 @@ def test_workflow_data_isolation(isolated_workflow_test: "Task") -> None:
         "Workflow IDs should be different"
     )
 
-    # Each workflow should have different invocation IDs
-    assert first_result["invocation_id"] != second_result["invocation_id"], (
-        "Invocation IDs should be different"
-    )
-    assert first_result["invocation_id"] != third_result["invocation_id"], (
-        "Invocation IDs should be different"
-    )
-    assert second_result["invocation_id"] != third_result["invocation_id"], (
-        "Invocation IDs should be different"
-    )
-
     # Each workflow should have its own isolated data
     assert first_result["stored_value"] == 100, "First workflow should store its value"
     assert second_result["stored_value"] == 200, (

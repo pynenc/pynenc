@@ -14,6 +14,7 @@ from pynenc.runner.runner_context import RunnerContext
 
 if TYPE_CHECKING:
     from pynenc import Pynenc
+    from pynenc.identifiers.invocation_id import InvocationId
     from pynenc.task import Task
 
 
@@ -24,7 +25,7 @@ class Vars:
     inv1: DistributedInvocation
     inv2: DistributedInvocation
     inv3: DistributedInvocation
-    expected_ids: set[str]
+    expected_ids: set["InvocationId"]
 
 
 @pytest.fixture
@@ -32,14 +33,14 @@ def test_vars_gi(task_concat_io: "Task") -> Vars:
     """Test the implementation of abstract methods:
     set_invocation_status, get_existing_invocations
     """
-    inv1: DistributedInvocation = DistributedInvocation(
-        Call(task_concat_io, Arguments({"arg0": "a", "arg1": "a"})), None
+    inv1: DistributedInvocation = DistributedInvocation.isolated(
+        Call(task_concat_io, Arguments({"arg0": "a", "arg1": "a"}))
     )
-    inv2: DistributedInvocation = DistributedInvocation(
-        Call(task_concat_io, Arguments({"arg0": "a", "arg1": "b"})), None
+    inv2: DistributedInvocation = DistributedInvocation.isolated(
+        Call(task_concat_io, Arguments({"arg0": "a", "arg1": "b"}))
     )
-    inv3: DistributedInvocation = DistributedInvocation(
-        Call(task_concat_io, Arguments({"arg0": "a", "arg1": "a"})), None
+    inv3: DistributedInvocation = DistributedInvocation.isolated(
+        Call(task_concat_io, Arguments({"arg0": "a", "arg1": "a"}))
     )
     app = task_concat_io.app
     app.orchestrator.register_new_invocations([inv1, inv2, inv3])
@@ -205,8 +206,8 @@ def test_get_invocations_to_run_atomicity(task_concat_io: "Task") -> None:
     for _ in range(attempts):
         # broker should not return the same invocation twice
         # Create a new invocation each time to do multiple attemps
-        inv: DistributedInvocation = DistributedInvocation(
-            Call(task_concat_io, Arguments({"arg0": "a", "arg1": "a"})), None
+        inv: DistributedInvocation = DistributedInvocation.isolated(
+            Call(task_concat_io, Arguments({"arg0": "a", "arg1": "a"}))
         )
         task_concat_io.app.orchestrator.register_new_invocations([inv])
         # Run get_invocations_to_run concurrently in two threads

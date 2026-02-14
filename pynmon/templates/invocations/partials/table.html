@@ -32,10 +32,10 @@
         </td>
         <td>
           <a
-            href="/calls/?call_id={{ invocation.call_id|urlencode }}"
+            href="/calls/?call_id_key={{ invocation.call.call_id.key|urlencode }}"
             class="text-decoration-none"
           >
-            <code class="text-secondary">{{ invocation.call_id }}</code>
+            <code class="text-secondary">{{ invocation.call.call_id }}</code>
           </a>
         </td>
         <td>{{ status_badge(invocation.status.name) }}</td>

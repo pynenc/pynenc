@@ -18,6 +18,9 @@ from pynenc_tests.conftest import MockPynenc
 
 if TYPE_CHECKING:
     from pynenc import Pynenc
+    from pynenc.identifiers.call_id import CallId
+    from pynenc.identifiers.invocation_id import InvocationId
+    from pynenc.identifiers.task_id import TaskId
     from pynenc.types import Params, Result
 
 
@@ -31,7 +34,7 @@ def dummy() -> None: ...
 @pytest.fixture
 def invocation(app_instance: "Pynenc") -> "DistributedInvocation[Params, Result]":
     dummy.app = app_instance
-    return DistributedInvocation(Call(dummy), None)
+    return DistributedInvocation.isolated(Call(dummy))
 
 
 def test_store_invocation(invocation: "DistributedInvocation[Params, Result]") -> None:
@@ -110,7 +113,14 @@ def test_set_exception(invocation: "DistributedInvocation[Params, Result]") -> N
     assert str(retrieved_exception) == "Test exception message"
 
 
-def test_set_pynenc_exceptions(app_instance: "Pynenc") -> None:
+def test_set_pynenc_exceptions(
+    app_instance: "Pynenc",
+    task_id: "TaskId",
+    inv_id: "InvocationId",
+    other_inv_id: "InvocationId",
+    call_id: "CallId",
+    other_call_id: "CallId",
+) -> None:
     """Test that can store and retrieve different types of exceptions"""
     app = app_instance
     dummy.app = app_instance
@@ -127,13 +137,13 @@ def test_set_pynenc_exceptions(app_instance: "Pynenc") -> None:
 
     for exception_cls in get_all_subclasses(PynencError):
         fake_data = {
-            "invocation_id": "fake_invocation_id",
-            "task_id": "fake_task_id",
+            "invocation_id": inv_id,
+            "task_id": task_id,
             "message": "fake_message",
-            "existing_invocation_id": "fake_existing_invocation_id",
-            "new_call_id": "fake_new_call_id",
+            "existing_invocation_id": other_inv_id,
+            "new_call_id": other_call_id,
             "diff": "fake_diff",
-            "call_ids": ["fake_call_id_1", "fake_call_id_2"],
+            "call_ids": [call_id, other_call_id],
             "final_status": InvocationStatus.FAILED,
             "new_status": InvocationStatus.SUCCESS,
             "from_status": InvocationStatus.REGISTERED,
@@ -166,7 +176,7 @@ def test_set_pynenc_exceptions(app_instance: "Pynenc") -> None:
         exception_instance = exception_cls(**filtered_fake_data)
 
         # Create a new invocation, as final status and result should only be set once
-        invocation = DistributedInvocation(Call(dummy), None)  # type: ignore
+        invocation = DistributedInvocation.isolated(Call(dummy))
 
         # Store the exception using set_exception
         app.state_backend.set_exception(invocation.invocation_id, exception_instance)

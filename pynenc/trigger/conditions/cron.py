@@ -21,6 +21,7 @@ DEFAULT_STRICT_TIMING = False
 
 if TYPE_CHECKING:
     from ...app import Pynenc
+    from pynenc.identifiers.task_id import TaskId
 
 
 class CronContext(ConditionContext):
@@ -153,7 +154,7 @@ class CronCondition(TriggerCondition[CronContext]):
         """
         return f"cron_{self.cron_expression}"
 
-    def get_source_task_ids(self) -> set[str]:
+    def get_source_task_ids(self) -> set["TaskId"]:
         return set()
 
     def _to_json(self, app: "Pynenc") -> dict[str, Any]:

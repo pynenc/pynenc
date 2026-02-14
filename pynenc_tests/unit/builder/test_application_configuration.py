@@ -32,7 +32,6 @@ def test_task_control_should_configure_correctly() -> None:
     app = (
         PynencBuilder()
         .task_control(
-            cycle_control=True,
             blocking_control=True,
             queue_timeout_sec=0.05,
         )
@@ -40,7 +39,6 @@ def test_task_control_should_configure_correctly() -> None:
     )
 
     assert isinstance(app.orchestrator.conf, ConfigOrchestrator)
-    assert app.orchestrator.conf.cycle_control is True
     assert app.orchestrator.conf.blocking_control is True
     assert isinstance(app.broker.conf, ConfigBroker)
     assert app.broker.conf.queue_timeout_sec == 0.05

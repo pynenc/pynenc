@@ -12,6 +12,7 @@ from pynenc.runner.runner_context import RunnerContext
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
+    from pynenc.identifiers.invocation_id import InvocationId
 
 
 class ThreadInfo(NamedTuple):
@@ -50,16 +51,6 @@ class ThreadRunner(BaseRunner):
             config_values=self.app.config_values,
             config_filepath=self.app.config_filepath,
         )
-
-    @property
-    def cache(self) -> dict:
-        """
-        The cache for the ThreadRunner instance.
-        :return: A dictionary representing the cache for the ThreadRunner.
-        """
-        if not self._runner_cache:
-            self._runner_cache = {}
-        return self._runner_cache
 
     @staticmethod
     def mem_compatible() -> bool:
@@ -183,15 +174,15 @@ class ThreadRunner(BaseRunner):
 
     def _waiting_for_results(
         self,
-        running_invocation_id: str,
-        result_invocation_ids: list[str],
+        running_invocation_id: "InvocationId",
+        result_invocation_ids: list["InvocationId"],
         runner_args: dict[str, Any] | None = None,
     ) -> None:
         """
         Handles invocations waiting for results by polling a local final cache instead of pausing threads.
 
-        :param running_invocation: The invocation that is waiting for results.
-        :param result_invocations: A list of invocations whose results are being awaited.
+        :param running_invocation_id: The invocation that is waiting for results.
+        :param result_invocation_ids: A list of invocations whose results are being awaited.
         :param runner_args: Additional arguments required for the ThreadRunner.
         """
         del runner_args

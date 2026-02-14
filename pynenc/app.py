@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING, Any, Optional, Union, overload
 
 from pynenc import context
 from pynenc.app_info import AppInfo
-from pynenc.arg_cache.base_arg_cache import BaseArgCache
 from pynenc.broker.base_broker import BaseBroker
+from pynenc.client_data_store.base_client_data_store import BaseClientDataStore
 from pynenc.conf.config_pynenc import ConfigPynenc
 from pynenc.conf.config_task import ConcurrencyControlType
 from pynenc.core_tasks import core_tasks_registry
@@ -25,6 +25,7 @@ from pynenc.util.subclasses import get_subclass
 if TYPE_CHECKING:
     from pynenc.arguments import Arguments
     from pynenc.invocation import BaseInvocationGroup
+    from pynenc.identifiers.task_id import TaskId
     from pynenc.trigger import TriggerBuilder
     from pynenc.types import Args, Func, Params, Result
 
@@ -74,7 +75,7 @@ class Pynenc:
         self.config_filepath = config_filepath
         self.reporting = None
         self._runner_instance: BaseRunner | None = None
-        self._tasks: dict[str, Task] = {}
+        self._tasks: dict[TaskId, Task] = {}
         self.logger.info(f"Initialized Pynenc app with id {self.app_id}")
         load_all_plugins()
         self.register_core_tasks()
@@ -111,7 +112,7 @@ class Pynenc:
         return self._app_id or self.conf.app_id
 
     @property
-    def tasks(self) -> dict[str, Task]:
+    def tasks(self) -> dict["TaskId", Task]:
         """
         Get the dictionary of registered tasks.
 
@@ -119,7 +120,7 @@ class Pynenc:
         """
         return self._tasks
 
-    def get_task(self, task_id: str) -> Task:
+    def get_task(self, task_id: "TaskId") -> Task:
         """
         Get a task by its ID.
 
@@ -154,6 +155,19 @@ class Pynenc:
         # self._tasks = state.get("tasks", {})
         self._runner_instance = None
         load_all_plugins()  # Ensure plugins are loaded in subprocess
+        # Re-register core tasks in the child process so Task.from_id can
+        # resolve core tasks to Task instances instead of finding the
+        # CoreTaskFunction wrapper in the module namespace.
+        # Initialize tasks dict and register core tasks the same way as
+        # during normal app startup.
+        self._tasks = {}
+        try:
+            self.register_core_tasks()
+        except Exception:
+            # Avoid failing unpickle if registration can't run in this context;
+            # the logger or other subsystems may not be available yet.
+            # The app will still attempt to register tasks lazily when needed.
+            pass
 
     @cached_property
     def conf(self) -> ConfigPynenc:
@@ -188,8 +202,8 @@ class Pynenc:
         return get_subclass(BaseSerializer, self.conf.serializer_cls)()  # type: ignore # mypy issue #4717
 
     @cached_property
-    def arg_cache(self) -> BaseArgCache:
-        return get_subclass(BaseArgCache, self.conf.arg_cache_cls)(self)  # type: ignore # mypy issue #4717
+    def client_data_store(self) -> BaseClientDataStore:
+        return get_subclass(BaseClientDataStore, self.conf.client_data_store_cls)(self)  # type: ignore # mypy issue #4717
 
     @property
     def runner(self) -> BaseRunner:
@@ -224,7 +238,7 @@ class Pynenc:
         self.broker.purge()
         self.orchestrator.purge()
         self.state_backend.purge()
-        self.arg_cache.purge()
+        self.client_data_store.purge()
         self.trigger.purge()
 
     @overload

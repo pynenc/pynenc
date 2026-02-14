@@ -79,7 +79,7 @@ def test_is_satisfied_by_different_event_code() -> None:
     context = EventContext(
         event_id="event2",
         event_code="different_event",  # Different event code
-        payload=filter_param_1.arguments.kwargs,
+        payload=filter_param_1.filter_args,
     )
 
     # Verify - context with different event_code should not satisfy

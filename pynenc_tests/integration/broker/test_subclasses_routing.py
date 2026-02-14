@@ -20,9 +20,9 @@ def test_routing(app_instance: "Pynenc") -> None:
     app = app_instance
     dummy.app = app
     call: Call = Call(dummy)
-    inv1: DistributedInvocation = DistributedInvocation(call, None)
+    inv1: DistributedInvocation = DistributedInvocation.isolated(call)
     app.broker.route_invocation(inv1.invocation_id)
-    inv2: DistributedInvocation = DistributedInvocation(call, None)
+    inv2: DistributedInvocation = DistributedInvocation.isolated(call)
     expected_ids = {inv1.invocation_id, inv2.invocation_id}
     app.broker.route_invocation(inv2.invocation_id)
     assert app.broker.count_invocations() == 2
@@ -37,9 +37,9 @@ def test_broker_purge(app_instance: "Pynenc") -> None:
     app = app_instance
     dummy.app = app
     call: Call = Call(dummy)
-    inv1: DistributedInvocation = DistributedInvocation(call, None)
+    inv1: DistributedInvocation = DistributedInvocation.isolated(call)
     app.broker.route_invocation(inv1.invocation_id)
-    inv2: DistributedInvocation = DistributedInvocation(call, None)
+    inv2: DistributedInvocation = DistributedInvocation.isolated(call)
     app.broker.route_invocation(inv2.invocation_id)
     assert app.broker.count_invocations() == 2
     app.broker.purge()

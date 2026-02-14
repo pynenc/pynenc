@@ -43,8 +43,8 @@ class ConfigPynenc(ConfigPynencBase):
         The state backend class to use.
     :cvar str serializer_cls:
         The serializer class to use.
-    :cvar str arg_cache_cls:
-        The argument cache class to use.
+    :cvar str client_data_store_cls:
+        The client data store class to use.
     :cvar str runner_cls:
         The runner class to use.
     :cvar bool dev_mode_force_sync_tasks:
@@ -107,7 +107,7 @@ class ConfigPynenc(ConfigPynencBase):
     broker_cls = ConfigField("MemBroker")
     state_backend_cls = ConfigField("MemStateBackend")
     serializer_cls = ConfigField("JsonPickleSerializer")
-    arg_cache_cls = ConfigField("DisabledArgCache")
+    client_data_store_cls = ConfigField("MemClientDataStore")
     runner_cls = ConfigField("DummyRunner")
 
     # Development Mode

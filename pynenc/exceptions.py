@@ -5,11 +5,17 @@ Global Pynenc exception and warning classes.
 import json
 from typing import TYPE_CHECKING, Any
 
-from .util.subclasses import get_all_subclasses
+from pynenc.identifiers.call_id import CallId
+from pynenc.identifiers.task_id import TaskId
+from pynenc.util.subclasses import get_all_subclasses
 
 if TYPE_CHECKING:
-    from .call import Call
-    from .invocation import BaseInvocation, InvocationStatus, InvocationStatusRecord
+    from pynenc.call import Call
+    from pynenc.invocation import (
+        BaseInvocation,
+        InvocationStatus,
+        InvocationStatusRecord,
+    )
 
 
 class PynencError(Exception):
@@ -48,7 +54,7 @@ class ConcurrencyRetryError(RetryError):
 class TaskError(PynencError):
     """Base class for all Task related errors."""
 
-    def __init__(self, task_id: str, message: str | None = None) -> None:
+    def __init__(self, task_id: "TaskId", message: str | None = None) -> None:
         self.task_id = task_id
         self.message = message
 
@@ -60,12 +66,12 @@ class TaskError(PynencError):
 
     def _to_json_dict(self) -> dict[str, Any]:
         """:return: the serialized error"""
-        return {"task_id": self.task_id, "message": self.message}
+        return {"task_id_key": self.task_id.key, "message": self.message}
 
     @classmethod
     def _from_json_dict(cls, json_dict: dict[str, Any]) -> "TaskError":
         """:return: the serialized error"""
-        return cls(json_dict["task_id"], json_dict["message"])
+        return cls(TaskId.from_key(json_dict["task_id_key"]), json_dict["message"])
 
 
 class InvalidTaskOptionsError(TaskError):
@@ -88,9 +94,9 @@ class InvocationConcurrencyWithDifferentArgumentsError(TaskRoutingError):
 
     def __init__(
         self,
-        task_id: str,
+        task_id: "TaskId",
         existing_invocation_id: str,
-        new_call_id: str,
+        new_call_id: "CallId",
         diff: str,
         message: str | None = None,
     ) -> None:
@@ -107,7 +113,7 @@ class InvocationConcurrencyWithDifferentArgumentsError(TaskRoutingError):
         message: str | None = None,
     ) -> "InvocationConcurrencyWithDifferentArgumentsError":
         return cls(
-            existing_invocation.task.task_id,
+            existing_invocation.call.task.task_id,
             existing_invocation.invocation_id,
             new_call.call_id,
             cls.format_difference(existing_invocation.call, new_call),
@@ -116,33 +122,39 @@ class InvocationConcurrencyWithDifferentArgumentsError(TaskRoutingError):
 
     @staticmethod
     def format_difference(existing_call: "Call", new_call: "Call") -> str:
-        existing = existing_call.arguments.kwargs
-        new = new_call.arguments.kwargs
-        common_keys = set(existing.keys()).intersection(new.keys())
-        removed_keys = set(existing.keys()).difference(new.keys())
-        added_keys = set(new.keys()).difference(existing.keys())
+        """Format argument differences in a clear, concise way."""
+        existing_args = existing_call.arguments.kwargs
+        new_args = new_call.arguments.kwargs
 
-        lines = []
+        existing_keys = set(existing_args.keys())
+        new_keys = set(new_args.keys())
+        common_keys = existing_keys & new_keys
+        removed_keys = existing_keys - new_keys
+        added_keys = new_keys - existing_keys
 
-        lines.append("==============================")
-        lines.append(f"Differences for {existing_call.task.task_id}:")
-        lines.append("==============================")
-        lines.append(f"  * Original: {existing}")
-        lines.append(f"  * Updated: {new}")
-        lines.append("------------------------------")
-        lines.append("  * Changes: ")
+        lines = [f"Arguments differ for task {existing_call.task.task_id}:"]
 
-        for key in common_keys:
-            if existing[key] != new[key]:
-                lines.append(f"    - {key}: {existing[key]} -> {new[key]}")
+        # Show changed values
+        changed = []
+        for key in sorted(common_keys):
+            if existing_args[key] != new_args[key]:
+                changed.append(f"  {key}: {existing_args[key]!r} -> {new_args[key]!r}")
 
-        for key in removed_keys:
-            lines.append(f"    - {key}: Removed")
+        if changed:
+            lines.append("Changed:")
+            lines.extend(changed)
 
-        for key in added_keys:
-            lines.append(f"    - {key}: Added")
+        # Show removed keys
+        if removed_keys:
+            lines.append("Removed:")
+            for key in sorted(removed_keys):
+                lines.append(f"  {key}: {existing_args[key]!r}")
 
-        lines.append("==============================")
+        # Show added keys
+        if added_keys:
+            lines.append("Added:")
+            for key in sorted(added_keys):
+                lines.append(f"  {key}: {new_args[key]!r}")
 
         return "\n".join(lines)
 
@@ -156,7 +168,7 @@ class InvocationConcurrencyWithDifferentArgumentsError(TaskRoutingError):
         return {
             **super()._to_json_dict(),
             "existing_invocation_id": self.existing_invocation_id,
-            "new_call_id": self.new_call_id,
+            "new_call_id_key": self.new_call_id.key,
             "diff": self.diff,
         }
 
@@ -166,9 +178,9 @@ class InvocationConcurrencyWithDifferentArgumentsError(TaskRoutingError):
     ) -> "InvocationConcurrencyWithDifferentArgumentsError":
         """:return: a new error from a serialized error"""
         return cls(
-            json_dict["task_id"],
+            TaskId.from_key(json_dict["task_id_key"]),
             json_dict["existing_invocation_id"],
-            json_dict["new_call_id"],
+            CallId.from_key(json_dict["new_call_id_key"]),
             json_dict["diff"],
             json_dict["message"],
         )
@@ -222,34 +234,6 @@ class InvocationNotFoundError(StateBackendError):
 
 class RunnerNotExecutableError(PynencError):
     """Raised when trying to execute a runner that is not meant to be executed."""
-
-
-class CycleDetectedError(PynencError):
-    """Raised when a cycle is detected in the DependencyGraph"""
-
-    def __init__(self, call_ids: list[str], message: str) -> None:
-        self.call_ids = call_ids
-        self.message = message
-        super().__init__(message)
-
-    @classmethod
-    def from_cycle(cls, call_ids: list[str]) -> "CycleDetectedError":
-        message = f"A cycle was detected: {cls._format_cycle(call_ids)}"
-        return cls(call_ids, message)
-
-    @staticmethod
-    def _format_cycle(call_ids: list[str]) -> str:
-        calls_repr = [str(cid) for cid in call_ids]
-        calls_repr.append(f"back to {calls_repr[0]}")
-        formatted_cycle = "\n".join(f"- {call}" for call in calls_repr)
-        return f"Cycle detected:\n{formatted_cycle}"
-
-    def _to_json_dict(self) -> dict[str, Any]:
-        return {"call_ids": self.call_ids, "message": self.message}
-
-    @classmethod
-    def _from_json_dict(cls, json_dict: dict[str, Any]) -> "CycleDetectedError":
-        return cls(json_dict["call_ids"], json_dict["message"])
 
 
 class RunnerError(PynencError):

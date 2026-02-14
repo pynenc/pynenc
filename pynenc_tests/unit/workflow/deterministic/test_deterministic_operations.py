@@ -5,7 +5,7 @@ This module tests value storage, retrieval, replay logic, and sequence isolation
 for the fundamental deterministic operation mechanism.
 """
 
-from pynenc.workflow.deterministic import DeterministicExecutor
+from pynenc.workflow.workflow_deterministic import DeterministicExecutor
 
 
 def test_stores_and_retrieves_values(

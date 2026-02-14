@@ -131,6 +131,9 @@ def test_get_all_workflow_runs() -> None:
         assert result1 is not None
         assert result2 is not None
 
+        # Verify that the workflow IDs are different for each execution
+        assert result1["workflow_id"] != result2["workflow_id"]
+
         # Test get_workflow_runs returns both instances
         workflow_runs = list(
             app.state_backend.get_workflow_runs(simple_workflow.task_id)
@@ -143,7 +146,7 @@ def test_get_all_workflow_runs() -> None:
 
         # Verify workflow identities match what we expect
         for run in workflow_runs:
-            assert run.workflow_task_id == simple_workflow.task_id
+            assert run.workflow_type == simple_workflow.task_id
     finally:
         # Stop the runner
         app.runner.stop_runner_loop()
@@ -177,12 +180,11 @@ def test_workflow_runs() -> None:
         another_runs = app.state_backend.get_workflow_runs(another_workflow.task_id)
 
         # Verify isolation - each workflow type has its own runs
-        simple_workflow_ids = {run.workflow_task_id for run in simple_runs}
-        another_workflow_ids = {run.workflow_task_id for run in another_runs}
+        simple_workflow_types = {run.workflow_type for run in simple_runs}
+        another_workflow_types = {run.workflow_type for run in another_runs}
 
-        assert simple_workflow.task_id in simple_workflow_ids
-        assert another_workflow.task_id in another_workflow_ids
-        assert simple_workflow_ids.isdisjoint(another_workflow_ids)
+        assert {simple_workflow.task_id} == simple_workflow_types
+        assert {another_workflow.task_id} == another_workflow_types
 
     finally:
         app.runner.stop_runner_loop()

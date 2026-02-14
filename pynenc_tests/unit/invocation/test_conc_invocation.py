@@ -1,7 +1,7 @@
 import pytest
 
 from pynenc.call import Call
-from pynenc.exceptions import PynencError, RetryError
+from pynenc.exceptions import RetryError
 from pynenc.invocation import ConcurrentInvocation, InvocationStatus
 from pynenc_tests.conftest import MockPynenc
 
@@ -18,15 +18,6 @@ def test_distributed_invocation_instantiation() -> None:
     invocation = add(1, 2)
     assert isinstance(invocation, ConcurrentInvocation)
     assert isinstance(invocation.call, Call)
-
-
-def test_distributed_invocation_no_serializable() -> None:
-    invocation = add(1, 2)
-    # test raises an exceptions when invocation.to_json()
-    with pytest.raises(PynencError):
-        invocation.to_json()
-    with pytest.raises(PynencError):
-        invocation.from_json(app, "")
 
 
 def test_status_registered() -> None:

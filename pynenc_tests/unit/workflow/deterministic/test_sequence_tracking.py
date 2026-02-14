@@ -5,7 +5,7 @@ This module tests the core sequence tracking logic that ensures deterministic
 operation ordering and proper counter persistence across executor instances.
 """
 
-from pynenc.workflow.deterministic import DeterministicExecutor
+from pynenc.workflow.workflow_deterministic import DeterministicExecutor
 
 
 def test_operation_sequence_increments_correctly(

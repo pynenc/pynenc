@@ -1,5 +1,4 @@
 from pynenc import Pynenc
-from pynenc.workflow.identity import WorkflowIdentity
 
 config = {"runner_cls": "ThreadRunner"}
 app = Pynenc(app_id="test_workflow_identity", config_values=config)
@@ -28,9 +27,9 @@ def test_workflow_identity_initialization(runner: None) -> None:
     """
     parent_inv = parent_task()
     assert parent_inv.result == 2
-    assert parent_inv.workflow.workflow_task_id == parent_inv.task.task_id
-    assert parent_inv.workflow.workflow_invocation_id == parent_inv.invocation_id
-    assert parent_inv.workflow.parent_workflow is None
+    assert parent_inv.workflow.workflow_id == parent_inv.invocation_id
+    assert parent_inv.workflow.workflow_type == parent_inv.task.task_id
+    assert parent_inv.workflow.parent_workflow_id is None
     childs_inv_ids = list(app.orchestrator.get_existing_invocations(child_task))
     new_sub_inv_ids = list(app.orchestrator.get_existing_invocations(new_sub_workflow))
     assert len(childs_inv_ids) == 1
@@ -39,37 +38,9 @@ def test_workflow_identity_initialization(runner: None) -> None:
 
     assert len(new_sub_inv_ids) == 1
     new_sub_inv = app.state_backend.get_invocation(new_sub_inv_ids[0])
-    assert new_sub_inv.workflow.workflow_task_id == new_sub_inv.task.task_id
-    assert new_sub_inv.workflow.workflow_invocation_id == new_sub_inv.invocation_id
-    assert new_sub_inv.workflow.parent_workflow == parent_inv.workflow
-
-
-def test_workflow_identity_serialization() -> None:
-    """
-    Test that WorkflowIdentity can be properly serialized and deserialized.
-    """
-    # Create a simple workflow identity
-    identity = WorkflowIdentity(
-        workflow_task_id="test_task", workflow_invocation_id="test_invocation_id"
-    )
-
-    # Test basic properties
-    assert identity.workflow_task_id == "test_task"
-    assert identity.workflow_invocation_id == "test_invocation_id"
-    assert identity.workflow_id == "test_invocation_id"
-    assert identity.parent_workflow is None
-    assert not identity.is_subworkflow
-
-    # Serialize to JSON
-    serialized = identity.to_json()
-    assert isinstance(serialized, str)
-
-    # Deserialize and verify
-    restored = WorkflowIdentity.from_json(serialized)
-    assert restored.workflow_task_id == identity.workflow_task_id
-    assert restored.workflow_invocation_id == identity.workflow_invocation_id
-    assert restored.parent_workflow is None
-    assert not restored.is_subworkflow
+    assert new_sub_inv.workflow.workflow_type == new_sub_inv.task.task_id
+    assert new_sub_inv.workflow.workflow_id == new_sub_inv.invocation_id
+    assert new_sub_inv.workflow.parent_workflow_id == parent_inv.workflow.workflow_id
 
 
 @app.task(force_new_workflow=True)
@@ -128,7 +99,7 @@ def test_subworkflow_boundary_with_flag(runner: None) -> None:
     assert parent_inv.workflow == entry_inv.workflow
 
     # Verify boundary_workflow_1 creates its own workflow (with force_new_workflow=True)
-    assert boundary1_inv.workflow.parent_workflow == entry_inv.workflow
+    assert boundary1_inv.workflow.parent_workflow_id == entry_inv.workflow.workflow_id
 
     # Verify boundary_workflow_1_task_2 shares boundary_workflow_1's workflow
     assert boundary1_task2_inv.workflow == boundary1_inv.workflow

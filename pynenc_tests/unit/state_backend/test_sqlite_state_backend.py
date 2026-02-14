@@ -3,7 +3,9 @@ import sqlite3
 import pytest
 
 from pynenc import Pynenc, PynencBuilder
+from pynenc.identifiers.invocation_id import InvocationId
 from pynenc.state_backend.sqlite_state_backend import SQLiteStateBackend
+from pynenc.identifiers.task_id import TaskId
 from pynenc.workflow import WorkflowIdentity
 
 
@@ -25,7 +27,9 @@ def test_workflow_purge(temp_sqlite_db_path: str) -> None:
         assert "state_backend_workflow_data" in tables
 
     # Store workflow data
-    wf_id = WorkflowIdentity("wf_task", "wf_id")
+    wf_id = WorkflowIdentity(
+        InvocationId("test_wf_id"), TaskId("test_module", "test_func")
+    )
     # Use the app's backend for assertions
     app.state_backend.set_workflow_data(wf_id, "key0", "value0")
     assert app.state_backend.get_workflow_data(wf_id, "key0") == "value0"

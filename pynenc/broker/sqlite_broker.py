@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from pynenc.broker.base_broker import BaseBroker
 from pynenc.conf.config_broker import ConfigBrokerSQLite
+from pynenc.identifiers.invocation_id import InvocationId
 from pynenc.util.sqlite_utils import create_sqlite_connection as sqlite_conn
 from pynenc.util.sqlite_utils import (
     delete_tables_with_prefix,
@@ -73,7 +74,7 @@ class SQLiteBroker(BaseBroker):
             config_filepath=self.app.config_filepath,
         )
 
-    def send_message(self, invocation_id: str) -> None:
+    def send_message(self, invocation_id: "InvocationId") -> None:
         """Send a message (invocation ID) to the queue."""
         with sqlite_conn(self.sqlite_db_path) as conn:
             conn.execute(
@@ -82,16 +83,16 @@ class SQLiteBroker(BaseBroker):
             )
             conn.commit()
 
-    def route_invocation(self, invocation_id: str) -> None:
+    def route_invocation(self, invocation_id: "InvocationId") -> None:
         """Route a single invocation ID by sending it to the message queue."""
         self.send_message(invocation_id)
 
-    def route_invocations(self, invocation_ids: list[str]) -> None:
+    def route_invocations(self, invocation_ids: list["InvocationId"]) -> None:
         """Route multiple invocation IDs by sending them to the message queue."""
         for invocation_id in invocation_ids:
             self.route_invocation(invocation_id)
 
-    def retrieve_invocation(self) -> str | None:
+    def retrieve_invocation(self) -> "InvocationId | None":
         """
         Atomically retrieve and remove a single invocation from the queue.
         Ensures that no two processes can retrieve the same invocation.
@@ -109,7 +110,7 @@ class SQLiteBroker(BaseBroker):
             message_id, invocation_id = row
             conn.execute(f"DELETE FROM {Tables.QUEUE} WHERE id = ?", (message_id,))
             conn.commit()
-            return invocation_id
+            return InvocationId(invocation_id)
 
     def count_invocations(self) -> int:
         """Count the number of invocations in the queue."""

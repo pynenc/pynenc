@@ -7,6 +7,7 @@ from pynenc.invocation.status import InvocationStatus
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
+    from pynenc.identifiers.invocation_id import InvocationId
     from pynenc.runner.runner_context import RunnerContext
 
 
@@ -81,7 +82,7 @@ def recover_pending_invocations() -> None:
     """Recovers PENDING invocations that exceeded the allowed pending time"""
     # It will run as a Pynenc tasks
     app, runner_ctx = get_app_and_runner_ctx()
-    invocations_to_reroute: set[str] = set()
+    invocations_to_reroute: set[InvocationId] = set()
     # Recover PENDING invocations that exceeded timeout
     for invocation_id in app.orchestrator.get_pending_invocations_for_recovery():
         invocations_to_reroute.add(invocation_id)
@@ -99,7 +100,7 @@ def recover_pending_invocations() -> None:
 def recover_running_invocations() -> None:
     """Recovers PENDING invocations that exceeded the allowed pending time"""
     app, runner_ctx = get_app_and_runner_ctx()
-    invocations_to_reroute: set[str] = set()
+    invocations_to_reroute: set[InvocationId] = set()
     # Recover RUNNING invocations owned by inactive runners
     for invocation_id in app.orchestrator.get_running_invocations_for_recovery():
         invocations_to_reroute.add(invocation_id)

@@ -13,7 +13,7 @@ This Usage Guide is designed to provide you with detailed instructions and pract
 ./use_case_004_auto_orchestration
 ./use_case_005_sync_unit_testing
 ./use_case_006_mem_unit_testing
-./use_case_009_argument_caching
+./use_case_009_client_data_store
 ./use_case_010_trigger_system
 ./use_case_011_workflow_system
 ./invocation_status
@@ -352,9 +352,9 @@ Or using environment variables:
 
 For more details on configuration options, refer to the {doc}`../configuration/index`.
 
-## Use Case 9: Argument Caching
+## Use Case 9: Client Data Store
 
-Discover Pynenc's argument caching system, designed to optimize task execution by efficiently handling large serialized arguments. This feature is particularly valuable when working with substantial data objects that are frequently passed between distributed tasks.
+Pynenc's client data store optimizes task execution by efficiently handling large serialized arguments.
 
 ```python
 from pynenc import Pynenc
@@ -384,7 +384,7 @@ The argument caching system offers several key features:
 Configure the caching behavior through simple configuration settings:
 
 ```toml
-[tool.pynenc.arg_cache]
+[tool.pynenc.client_data_store]
 min_size_to_cache = 1024  # Cache arguments larger than 1KB
 local_cache_size = 1000   # Keep 1000 most recent entries
 ```

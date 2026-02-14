@@ -15,7 +15,6 @@ async def orchestrator_view(request: Request) -> HTMLResponse:
     # Get basic orchestrator info
     orchestrator_info = {
         "type": app.orchestrator.__class__.__name__,
-        "cycle_control_enabled": app.orchestrator.conf.cycle_control,
         "blocking_control_enabled": app.orchestrator.conf.blocking_control,
         "auto_purge_hours": app.orchestrator.conf.auto_final_invocation_purge_hours,
     }

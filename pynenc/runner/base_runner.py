@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from types import FrameType
 
     from pynenc.app import Pynenc
+    from pynenc.identifiers.invocation_id import InvocationId
 
 
 class BaseRunner(ABC):
@@ -82,15 +83,6 @@ class BaseRunner(ABC):
             config_values=self.app.config_values,
             config_filepath=self.app.config_filepath,
         )
-
-    @property
-    @abstractmethod
-    def cache(self) -> dict:
-        """
-        Returns the runner cache.
-
-        :return: A dictionary representing the runner cache
-        """
 
     @staticmethod
     @abstractmethod
@@ -192,8 +184,8 @@ class BaseRunner(ABC):
     @abstractmethod
     def _waiting_for_results(
         self,
-        running_invocation_id: str,
-        result_invocation_ids: list[str],
+        running_invocation_id: "InvocationId",
+        result_invocation_ids: list["InvocationId"],
         runner_args: dict[str, Any] | None = None,
     ) -> None:
         """
@@ -220,16 +212,16 @@ class BaseRunner(ABC):
 
     def waiting_for_results(
         self,
-        running_invocation_id: str | None,
-        result_invocation_ids: list[str],
+        running_invocation_id: "InvocationId | None",
+        result_invocation_ids: list["InvocationId"],
         runner_args: dict[str, Any] | None = None,
     ) -> None:
         """
         Handles invocations that are waiting for results from other invocations.
         Pauses the current thread and registers it to wait for the results of specified invocations.
 
-        :param str | None running_invocation_id: The ID of the invocation that is waiting for results
-        :param list[str] result_invocation_ids: A list of IDs of the invocations whose results are being awaited
+        :param InvocationId | None running_invocation_id: The ID of the invocation that is waiting for results
+        :param list[InvocationId] result_invocation_ids: A list of IDs of the invocations whose results are being awaited
         :param dict[str, Any] | None runner_args: Additional arguments required for the ThreadRunner
         """
         if not running_invocation_id:
@@ -246,8 +238,8 @@ class BaseRunner(ABC):
 
     async def async_waiting_for_results(
         self,
-        running_invocation_id: str | None,
-        result_invocation_ids: list[str],
+        running_invocation_id: "InvocationId | None",
+        result_invocation_ids: list["InvocationId"],
         runner_args: dict[str, Any] | None = None,
     ) -> None:
         if not running_invocation_id:
@@ -416,8 +408,8 @@ class DummyRunner(BaseRunner):
 
     def _waiting_for_results(
         self,
-        running_invocation_id: str,
-        result_invocation_ids: list[str],
+        running_invocation_id: "InvocationId",
+        result_invocation_ids: list["InvocationId"],
         runner_args: dict[str, Any] | None = None,
     ) -> None:
         # Parameters are ids (string) to conform with BaseRunner interface.

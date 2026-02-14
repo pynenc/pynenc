@@ -1,13 +1,10 @@
-import os
 import threading
 from collections import Counter
 from time import sleep, time
-from unittest.mock import patch
 
 import pytest
 
 from pynenc import Task
-from pynenc.exceptions import CycleDetectedError
 from pynenc.invocation import DistributedInvocation, InvocationStatus
 
 
@@ -154,41 +151,6 @@ def test_parallel_execution(task_sum: Task) -> None:
     thread.join()
 
 
-def test_cycle_detection(task_cycle: Task) -> None:
-    """Test that the execution will detect the cycle raising an exception"""
-    app = task_cycle.app
-    with patch.dict(
-        os.environ,
-        {
-            "PYNENC__ORCHESTRATOR__CYCLE_CONTROL": "True",
-        },
-    ):
-
-        def run_in_thread() -> None:
-            app.runner.run()
-
-        invocation = task_cycle()
-        thread = threading.Thread(target=run_in_thread, daemon=True)
-        thread.start()
-        # TODO:
-        # - if finish but does not go trough the cycle
-        # - next check task cycle_start/cycle_end
-        # - does keeping invocation_context in app root work? does it require a tree or references?
-        with pytest.raises(CycleDetectedError) as exc_info:
-            _ = invocation.result
-
-        expected_error = (
-            "A cycle was detected: Cycle detected:\n"
-            "- #task_id#pynenc_tests.integration.combinations.tasks.cycle_end#args_id#no_args\n"
-            "- #task_id#pynenc_tests.integration.combinations.tasks.cycle_start#args_id#no_args\n"
-            "- back to #task_id#pynenc_tests.integration.combinations.tasks.cycle_end#args_id#no_args"
-        )
-
-        assert str(exc_info.value) == expected_error
-        app.runner.stop_runner_loop()
-        thread.join()
-
-
 def test_raise_exception(task_raise_exception: Task) -> None:
     """Test that an exception is raised if the task raises an exception"""
 
@@ -217,34 +179,6 @@ def test_sub_invocation_dependency(task_get_upper: Task) -> None:
     thread = threading.Thread(target=run_in_thread, daemon=True)
     thread.start()
     assert task_get_upper().result == "EXAMPLE"
-    app.runner.stop_runner_loop()
-    thread.join()
-
-
-def test_avoid_direct_self_cycles(task_direct_cycle: Task) -> None:
-    """Test that a cycle in the dependency graph is detected"""
-
-    app = task_direct_cycle.app
-
-    def run_in_thread() -> None:
-        app.runner.run()
-
-    thread = threading.Thread(target=run_in_thread, daemon=True)
-    thread.start()
-    # the request of invocation should work without problem,
-    # as the cycle wasn't executed yet
-    invocation = task_direct_cycle()
-    with pytest.raises(CycleDetectedError) as exc_info:
-        # however, when retrieving the result, an exception should be raised
-        # because the function is calling itself
-        _ = invocation.result
-
-    expected_error = (
-        "A cycle was detected: Cycle detected:\n"
-        "- #task_id#pynenc_tests.integration.combinations.tasks.direct_cycle#args_id#no_args\n"
-        "- back to #task_id#pynenc_tests.integration.combinations.tasks.direct_cycle#args_id#no_args"
-    )
-    assert str(exc_info.value) == expected_error
     app.runner.stop_runner_loop()
     thread.join()
 

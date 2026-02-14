@@ -10,6 +10,7 @@ from datetime import datetime
 
 import pytest
 
+from pynenc.identifiers.task_id import TaskId
 from pynenc.trigger.conditions.cron import CronCondition, CronContext
 
 
@@ -207,7 +208,8 @@ def test_affects_task() -> None:
     condition = CronCondition("0 12 * * *")
 
     # Time-based conditions don't specifically affect any task
-    assert not condition.affects_task("any_task")
+    task_id = TaskId("any_module", "any_task")
+    assert not condition.affects_task(task_id)
 
 
 def test_validate_expression_rejects_seconds_precision() -> None:

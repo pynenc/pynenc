@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 import pytest
 
 from pynenc import Pynenc
@@ -12,6 +14,10 @@ from pynenc.trigger.conditions import (
 )
 from pynenc.trigger.trigger_builder import TriggerBuilder, on_cron, on_event, on_status
 from pynenc.trigger.trigger_definitions import TriggerDefinition
+
+
+if TYPE_CHECKING:
+    from pynenc.identifiers.task_id import TaskId
 
 app = Pynenc()
 
@@ -112,9 +118,8 @@ def test_add_condition() -> None:
     assert builder.conditions[0] == condition
 
 
-def test_build() -> None:
+def test_build(task_id: "TaskId") -> None:
     """Test building a trigger definition."""
-    task_id = "test_task"
     builder = TriggerBuilder().on_cron("0 0 * * *").with_arguments({"arg1": "value1"})
 
     trigger_def = builder.build(task_id)
@@ -125,13 +130,13 @@ def test_build() -> None:
     assert trigger_def.get_arguments(None) == {"arg1": "value1"}  # type: ignore
 
 
-def test_build_empty_conditions() -> None:
+def test_build_empty_conditions(task_id: "TaskId") -> None:
     """Test building with no conditions raises ValueError."""
     builder = TriggerBuilder()
     with pytest.raises(
         ValueError, match="Cannot create a trigger definition with no conditions"
     ):
-        builder.build("test_task")
+        builder.build(task_id)
 
 
 def test_helper_functions() -> None:
@@ -155,7 +160,7 @@ def test_helper_functions() -> None:
     assert isinstance(task_builder.conditions[0], StatusCondition)
 
 
-def test_method_chaining() -> None:
+def test_method_chaining(other_task_id: "TaskId") -> None:
     """Test method chaining works properly."""
     builder = (
         TriggerBuilder()
@@ -169,8 +174,8 @@ def test_method_chaining() -> None:
     assert builder.logic == CompositeLogic.OR
     assert builder.argument_providers == [StaticArgumentProvider({"arg1": "value1"})]
 
-    trigger_def = builder.build("task2")
-    assert trigger_def.task_id == "task2"
+    trigger_def = builder.build(other_task_id)
+    assert trigger_def.task_id == other_task_id
     assert len(trigger_def.condition_ids) == 2
     assert trigger_def.logic == CompositeLogic.OR
     assert trigger_def.get_arguments(None) == {"arg1": "value1"}  # type: ignore

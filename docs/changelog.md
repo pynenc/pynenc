@@ -82,10 +82,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
   - Enhanced argument string formatting for better debugging and logging of task parameters.
 
-- **Enhanced Cycle Exception Handling**:
-
-  - Improved detection and handling of cyclic dependencies in task execution graphs.
-
 - **New Exception: InvocationOnFinalStatusError**:
 
   - Introduced `InvocationOnFinalStatusError` exception, raised when attempting to modify the status of an invocation that is already in a final state within the orchestrator.

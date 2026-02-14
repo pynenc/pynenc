@@ -105,7 +105,7 @@ class StaticResultFilter(StaticArgumentFilter):
         :return: A new StaticResultFilter instance
         """
         arg_filter = StaticArgumentFilter._from_json(data, app)
-        return cls(arg_filter.arguments.kwargs["result"])
+        return cls(arg_filter.filter_args["result"])
 
     def filter_result(self, result: Any) -> bool:
         """

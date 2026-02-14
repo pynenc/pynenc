@@ -3,6 +3,7 @@ from unittest.mock import ANY, Mock, patch
 import pytest
 
 from pynenc.conf.config_task import ConcurrencyControlType
+from pynenc.identifiers.invocation_id import InvocationId
 from pynenc.exceptions import InvocationStatusError
 from pynenc.invocation import (
     DistributedInvocation,
@@ -169,8 +170,25 @@ def test_get_blocking_invocations_to_run(
 
     # Mock method to return these invocations as blocking invocations
     mock_base_app.orchestrator.blocking_control.get_blocking_invocations.return_value = iter(
-        [mock_invocation_1, mock_invocation_2, mock_invocation_3]
+        [
+            mock_invocation_1.invocation_id,
+            mock_invocation_2.invocation_id,
+            mock_invocation_3.invocation_id,
+        ]
     )
+
+    # Mock the _get_invocation method to return different tuples based on the invocation_id
+    def mock_get_invocation(invocation_id: "InvocationId") -> tuple:
+        if invocation_id == mock_invocation_1.invocation_id:
+            return mock_invocation_1.to_dto(), mock_invocation_1.call.to_dto()  # type: ignore
+        elif invocation_id == mock_invocation_2.invocation_id:
+            return mock_invocation_2.to_dto(), mock_invocation_2.call.to_dto()  # type: ignore
+        elif invocation_id == mock_invocation_3.invocation_id:
+            return mock_invocation_3.to_dto(), mock_invocation_3.call.to_dto()  # type: ignore
+        else:
+            raise ValueError(f"Unexpected invocation_id: {invocation_id}")
+
+    mock_base_app.state_backend._get_invocation.side_effect = mock_get_invocation
 
     mock_authorize_run.return_value = True
 
@@ -182,15 +200,15 @@ def test_get_blocking_invocations_to_run(
 
     # Assert that the method returns the expected invocations
     assert blocking_invocations == [
-        mock_invocation_1,
-        mock_invocation_2,
-        mock_invocation_3,
+        mock_invocation_1.invocation_id,
+        mock_invocation_2.invocation_id,
+        mock_invocation_3.invocation_id,
     ]
 
     # Assert that _set_pending was called for each invocation
     for invocation in [mock_invocation_1, mock_invocation_2, mock_invocation_3]:
         mock_set_status.assert_any_call(
-            invocation, InvocationStatus.PENDING, runner_ctx
+            invocation.invocation_id, InvocationStatus.PENDING, runner_ctx
         )
 
 
@@ -206,7 +224,12 @@ def test_get_blocking_invocations_to_run_disabled(
 
     # Mock method to return these invocations as blocking invocations
     mock_base_app.orchestrator.blocking_control.get_blocking_invocations.return_value = iter(
-        [mock_invocation_1]
+        [mock_invocation_1.invocation_id]
+    )
+
+    mock_base_app.state_backend._get_invocation.side_effect = lambda invocation_id: (
+        mock_invocation_1.to_dto(),  # type: ignore
+        mock_invocation_1.call.to_dto(),
     )
 
     mock_authorize_run.return_value = False
@@ -232,7 +255,12 @@ def test_get_blocking_invocations_to_run_handles_lock(
 
     # Mock method to return these invocations as blocking invocations
     mock_base_app.orchestrator.blocking_control.get_blocking_invocations.return_value = iter(
-        [mock_invocation_1]
+        [mock_invocation_1.invocation_id]
+    )
+
+    mock_base_app.state_backend._get_invocation.side_effect = lambda invocation_id: (
+        mock_invocation_1.to_dto(),  # type: ignore
+        mock_invocation_1.call.to_dto(),
     )
 
     # mock_set_pending raises exception PendingInvocationLockError
@@ -247,7 +275,7 @@ def test_get_blocking_invocations_to_run_handles_lock(
     )
     assert blocking_invocations == []
     mock_set_status.assert_called_once_with(
-        mock_invocation_1, InvocationStatus.PENDING, runner_ctx
+        mock_invocation_1.invocation_id, InvocationStatus.PENDING, runner_ctx
     )
 
 

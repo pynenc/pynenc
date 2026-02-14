@@ -6,12 +6,14 @@ import pytest
 
 from pynenc.app import AppInfo
 from pynenc.exceptions import InvocationNotFoundError
+from pynenc.identifiers.invocation_id import InvocationId
 from pynenc.invocation.status import InvocationStatus
 from pynenc.runner import RunnerContext
 from pynenc.state_backend.base_state_backend import (
     InvocationHistory,
     InvocationStatusRecord,
 )
+from pynenc.identifiers.task_id import TaskId
 from pynenc.workflow import WorkflowIdentity
 from pynenc_tests.conftest import MockPynenc
 
@@ -42,6 +44,7 @@ def test_history_records_are_stored_and_ordered(app_instance: "Pynenc") -> None:
     """
     backend = app_instance.state_backend
     runner_ctx_id = "test-runner-id"
+    inv_1_id = InvocationId("inv-1")
 
     # Use the actual InvocationHistory class and set timestamps explicitly
     # This keeps the test simple and ensures type compatibility.
@@ -53,24 +56,24 @@ def test_history_records_are_stored_and_ordered(app_instance: "Pynenc") -> None:
     hist1._timestamp = datetime.fromtimestamp(1.0)
 
     hist2 = InvocationHistory(
-        invocation_id="inv-1",
+        invocation_id=inv_1_id,
         status_record=InvocationStatusRecord(status=InvocationStatus.RUNNING),
         runner_context_id=runner_ctx_id,
     )
     hist2._timestamp = datetime.fromtimestamp(2.0)
 
     hist3 = InvocationHistory(
-        invocation_id="inv-1",
+        invocation_id=inv_1_id,
         status_record=InvocationStatusRecord(status=InvocationStatus.FAILED),
         runner_context_id=runner_ctx_id,
     )
     hist3._timestamp = datetime.fromtimestamp(3.0)
 
-    backend._add_histories(["inv-1"], hist2)
-    backend._add_histories(["inv-1"], hist1)
-    backend._add_histories(["inv-1"], hist3)
+    backend._add_histories([inv_1_id], hist2)
+    backend._add_histories([inv_1_id], hist1)
+    backend._add_histories([inv_1_id], hist3)
 
-    histories = backend.get_history("inv-1")
+    histories = backend.get_history(inv_1_id)
     assert [hist.status_record.status for hist in histories] == [
         hist1.status_record.status,
         hist2.status_record.status,
@@ -100,7 +103,7 @@ def test_get_invocation_raises_when_not_found(app_instance: "Pynenc") -> None:
     :return: None
     """
     backend = app_instance.state_backend
-    invocation_id = "inv-unknown"
+    invocation_id = InvocationId("inv-unknown")
 
     with pytest.raises(InvocationNotFoundError):
         backend.get_invocation(invocation_id)
@@ -111,7 +114,7 @@ def test_add_and_get_ordered_histories(app_instance: "Pynenc") -> None:
     Test that adding and getting (ordered by ts) invocation histories works correctly.
     """
     backend = app_instance.state_backend
-    invocation_id = "inv-xyz"
+    invocation_id = InvocationId("inv-xyz")
     runner_context_id = "test-runner-id"
 
     hist1 = InvocationHistory(
@@ -158,7 +161,7 @@ def test_get_history_retrurns_empty_list_when_no_history(
     :return: None
     """
     backend = app_instance.state_backend
-    invocation_id = "inv-no-history"
+    invocation_id = InvocationId("inv-no-history")
 
     histories = backend.get_history(invocation_id)
     assert histories == []
@@ -169,7 +172,7 @@ def test_set_and_get_result(app_instance: "Pynenc") -> None:
     Test that setting and getting invocation result works correctly.
     """
     backend = app_instance.state_backend
-    invocation_id = "inv-abc"
+    invocation_id = InvocationId("inv-abc")
     result = "some result"
 
     backend._set_result(invocation_id, result)
@@ -185,7 +188,7 @@ def test_get_result_raises_when_not_set(app_instance: "Pynenc") -> None:
     :return: None
     """
     backend = app_instance.state_backend
-    invocation_id = "inv-no-result"
+    invocation_id = InvocationId("inv-no-result")
 
     with pytest.raises(KeyError):
         backend.get_result(invocation_id)
@@ -196,10 +199,10 @@ def test_set_and_get_exception(app_instance: "Pynenc") -> None:
     Test that setting and getting invocation exception works correctly.
     """
     backend = app_instance.state_backend
-    invocation_id = "inv-exc"
+    invocation_id = InvocationId("inv-exc")
     original_exc = KeyError("some key error")
 
-    backend._set_exception(invocation_id, original_exc)
+    backend.set_exception(invocation_id, original_exc)
     fetched = backend.get_exception(invocation_id)
     assert isinstance(fetched, type(original_exc))
     assert getattr(fetched, "args", None) == original_exc.args
@@ -213,10 +216,19 @@ def test_get_exception_raises_when_not_set(app_instance: "Pynenc") -> None:
     :return: None
     """
     backend = app_instance.state_backend
-    invocation_id = "inv-no-exc"
+    invocation_id = InvocationId("inv-no-exc")
 
     with pytest.raises(KeyError):
         backend.get_exception(invocation_id)
+
+
+def get_workflow_identity(
+    inv_suffix: str, task_suffix: str | None = None
+) -> WorkflowIdentity:
+    return WorkflowIdentity(
+        InvocationId(f"inv-{inv_suffix}"),
+        TaskId("module", f"func_{task_suffix or inv_suffix}"),
+    )
 
 
 def test_get_and_set_workflow_data(app_instance: "Pynenc") -> None:
@@ -224,7 +236,7 @@ def test_get_and_set_workflow_data(app_instance: "Pynenc") -> None:
     Test that setting and getting workflow data works correctly.
     """
     backend = app_instance.state_backend
-    workflow = WorkflowIdentity("task-1", "inv-1")
+    workflow = get_workflow_identity("1")
     key = "key"
     data = "some data"
 
@@ -238,9 +250,7 @@ def test_get_and_set_workflow_data(app_instance: "Pynenc") -> None:
     assert fetched == default
 
     # for a missing workflow, the default is returned
-    fetched = backend.get_workflow_data(
-        WorkflowIdentity("task-x", "inv-x"), key, default
-    )
+    fetched = backend.get_workflow_data(get_workflow_identity("x"), key, default)
     assert fetched == default
 
 
@@ -261,7 +271,7 @@ def test_store_and_get_workflow_runs(app_instance: "Pynenc") -> None:
     Test that storing and retrieving workflow run works correctly.
     """
     backend = app_instance.state_backend
-    workflow_id = WorkflowIdentity("task-1", "inv-1")
+    workflow_id = get_workflow_identity("1")
 
     backend.store_workflow_run(workflow_id)
     backend.store_workflow_run(workflow_id)
@@ -278,24 +288,25 @@ def test_get_all_workflow_types_and_runs(app_instance: "Pynenc") -> None:
     Test that getting all workflow types and runs works correctly.
     """
     backend = app_instance.state_backend
-    wf1 = WorkflowIdentity("task-1", "inv-1")
-    wf2 = WorkflowIdentity("task-1", "inv-2")
-    wf3 = WorkflowIdentity("task-2", "inv-3")
+    wf1 = get_workflow_identity(task_suffix="1", inv_suffix="1")
+    wf2 = get_workflow_identity(task_suffix="1", inv_suffix="2")
+    wf3 = get_workflow_identity(task_suffix="2", inv_suffix="3")
 
     backend.store_workflow_run(wf1)
     backend.store_workflow_run(wf2)
     backend.store_workflow_run(wf3)
 
-    wf_types = backend.get_all_workflow_types()
-    assert set(wf_types) == {"task-1", "task-2"}
+    wf_types = set(backend.get_all_workflow_types())
+    assert len(wf_types) == 2
+    assert set(wf_types) == {wf1.workflow_type, wf3.workflow_type}
 
     wf_runs = backend.get_all_workflow_runs()
     assert set(wf_runs) == {wf1, wf2, wf3}
 
-    runs_task_1 = list(backend.get_workflow_runs("task-1"))
+    runs_task_1 = list(backend.get_workflow_runs(wf1.workflow_type))
     assert set(runs_task_1) == {wf1, wf2}
 
-    runs_task_2 = list(backend.get_workflow_runs("task-2"))
+    runs_task_2 = list(backend.get_workflow_runs(wf3.workflow_type))
     assert runs_task_2 == [wf3]
 
 
@@ -303,9 +314,9 @@ def test_store_and_get_workflow_subinvocations(app_instance: "Pynenc") -> None:
     """
     Test that setting and getting workflow sub-invocations works correctly.
     """
-    parent_workflow_id = "parent_inv_id"
-    sub_invocation1 = "sub_inv_id_1"
-    sub_invocation2 = "sub_inv_id_2"
+    parent_workflow_id = InvocationId("parent_inv_id")
+    sub_invocation1 = InvocationId("sub_inv_id_1")
+    sub_invocation2 = InvocationId("sub_inv_id_2")
     backend = app_instance.state_backend
 
     backend.store_workflow_sub_invocation(parent_workflow_id, sub_invocation1)
@@ -359,10 +370,10 @@ def test_iter_history_in_timerange_returns_entries_within_range(
     hist_after._timestamp = base_time + timedelta(hours=2)
 
     # Add all histories
-    backend._add_histories(["inv-before"], hist_before)
-    backend._add_histories(["inv-within-1"], hist_within_1)
-    backend._add_histories(["inv-within-2"], hist_within_2)
-    backend._add_histories(["inv-after"], hist_after)
+    backend._add_histories([InvocationId("inv-before")], hist_before)
+    backend._add_histories([InvocationId("inv-within-1")], hist_within_1)
+    backend._add_histories([InvocationId("inv-within-2")], hist_within_2)
+    backend._add_histories([InvocationId("inv-after")], hist_after)
 
     # Query the time range
     all_entries: list[InvocationHistory] = []
@@ -408,8 +419,8 @@ def test_iter_history_in_timerange_returns_all_statuses_for_invocation(
     )
     hist_success._timestamp = base_time + timedelta(minutes=20)
 
-    backend._add_histories(["inv-complete"], hist_running)
-    backend._add_histories(["inv-complete"], hist_success)
+    backend._add_histories([InvocationId("inv-complete")], hist_running)
+    backend._add_histories([InvocationId("inv-complete")], hist_success)
 
     # Query the time range
     all_entries: list[InvocationHistory] = []
@@ -434,6 +445,7 @@ def test_iter_history_in_timerange_ongoing_invocation_within_range(
     """
     backend = app_instance.state_backend
     runner_context_id = "test-runner-id"
+    inv_ongoing_id = InvocationId("inv-ongoing")
 
     base_time = datetime(2025, 1, 15, 12, 0, 0, tzinfo=UTC)
     query_start = base_time
@@ -441,13 +453,13 @@ def test_iter_history_in_timerange_ongoing_invocation_within_range(
 
     # Create an invocation that started RUNNING within the range but never completed
     hist_running = InvocationHistory(
-        invocation_id="inv-ongoing",
+        invocation_id=inv_ongoing_id,
         status_record=InvocationStatusRecord(status=InvocationStatus.RUNNING),
         runner_context_id=runner_context_id,
     )
     hist_running._timestamp = base_time + timedelta(minutes=15)
 
-    backend._add_histories(["inv-ongoing"], hist_running)
+    backend._add_histories([inv_ongoing_id], hist_running)
 
     # Query the time range
     all_entries: list[InvocationHistory] = []
@@ -456,7 +468,7 @@ def test_iter_history_in_timerange_ongoing_invocation_within_range(
 
     # The ongoing invocation should be included since its RUNNING started within range
     assert len(all_entries) == 1
-    assert all_entries[0].invocation_id == "inv-ongoing"
+    assert all_entries[0].invocation_id == inv_ongoing_id
     assert all_entries[0].status_record.status == InvocationStatus.RUNNING
 
 
@@ -482,13 +494,14 @@ def test_iter_history_in_timerange_entries_ordered_by_timestamp(
     ]
 
     for i, ts in enumerate(times):
+        inv_id = InvocationId(f"inv-{i}")
         hist = InvocationHistory(
-            invocation_id=f"inv-{i}",
+            invocation_id=inv_id,
             status_record=InvocationStatusRecord(status=InvocationStatus.SUCCESS),
             runner_context_id=runner_context_id,
         )
         hist._timestamp = ts
-        backend._add_histories([f"inv-{i}"], hist)
+        backend._add_histories([inv_id], hist)
 
     # Query the time range
     all_entries: list[InvocationHistory] = []
@@ -542,10 +555,10 @@ def test_iter_invocations_in_timerange(app_instance: "Pynenc") -> None:
     )
     hist4._timestamp = base_time + timedelta(hours=2)
 
-    backend._add_histories(["inv-multi"], hist1)
-    backend._add_histories(["inv-multi"], hist2)
-    backend._add_histories(["inv-single"], hist3)
-    backend._add_histories(["inv-outside"], hist4)
+    backend._add_histories([InvocationId("inv-multi")], hist1)
+    backend._add_histories([InvocationId("inv-multi")], hist2)
+    backend._add_histories([InvocationId("inv-single")], hist3)
+    backend._add_histories([InvocationId("inv-outside")], hist4)
 
     # Query the time range
     all_ids: list[str] = []

@@ -1,46 +1,24 @@
 from __future__ import annotations
 
-import uuid
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator, Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from pynenc.call import Call
+from pynenc.identifiers.invocation_id import InvocationId, generate_invocation_id
 from pynenc.types import Params, Result
-from pynenc.workflow.identity import WorkflowIdentity
 
 if TYPE_CHECKING:
-    from ..app import Pynenc
-    from ..arguments import Arguments
-    from ..task import Task
-    from .status import InvocationStatus
+    from pynenc.app import Pynenc
+    from pynenc.arguments import Arguments
+    from pynenc.task import Task
+    from pynenc.invocation.status import InvocationStatus
+    from pynenc.workflow.workflow_identity import WorkflowIdentity
 
 
 T = TypeVar("T", bound="BaseInvocation")
-
-
-@dataclass(frozen=True)
-class InvocationIdentity(Generic[Params, Result]):
-    """Immutable identity of an invocation"""
-
-    call: Call[Params, Result]
-    invocation_id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    parent_invocation: BaseInvocation | None = None
-
-    def __str__(self) -> str:
-        parent_id = (
-            self.parent_invocation.invocation_id if self.parent_invocation else None
-        )
-        return (
-            f"InvocationIdentity(call_id={self.call.call_id}, "
-            f"invocation_id={self.invocation_id}, "
-            f"parent_invocation_id={parent_id})"
-        )
-
-    def __repr__(self) -> str:
-        return self.__str__()
 
 
 class BaseInvocation(ABC, Generic[Params, Result]):
@@ -55,7 +33,6 @@ class BaseInvocation(ABC, Generic[Params, Result]):
     - **Invocation**: A specific execution instance of a call.
 
     A single task can be called with different arguments, and each call can be executed multiple times.
-    This distinction is crucial for orchestration and cycle control within the system.
 
     The `BaseInvocation` class serves as a template for two key types of invocations:
     - `DistributedInvocation`: The primary invocation type used in the system for distributed execution.
@@ -71,43 +48,20 @@ class BaseInvocation(ABC, Generic[Params, Result]):
     def __init__(
         self,
         call: Call[Params, Result],
-        parent_invocation: BaseInvocation | None = None,
-        invocation_id: str | None = None,
-        workflow: WorkflowIdentity | None = None,
+        invocation_id: InvocationId | None = None,
     ):
         """Initialize the invocation with its identity."""
-        self.identity = InvocationIdentity(
-            call=call,
-            invocation_id=invocation_id or str(uuid.uuid4()),
-            parent_invocation=parent_invocation if parent_invocation else None,
-        )
-        self.workflow: WorkflowIdentity = workflow or WorkflowIdentity.from_invocation(
-            self.identity
-        )
-
-    def is_main_workflow_task(self) -> bool:
-        """Check if the task is the main workflow task.
-
-        :return: True if the task is the main workflow task, False otherwise
-
-        ```{note}
-            All tasks run within a workflow, the main workflow task is just the first task in the workflow.
-            To determine that, we check if the task_id of the workflow task is the same as the task_id of the current task.
-        ```
-        """
-        return self.workflow.workflow_task_id == self.task.task_id
+        self._call = call
+        self._invocation_id = invocation_id or generate_invocation_id()
 
     @property
     def call(self) -> Call[Params, Result]:
-        return self.identity.call
+        """Get the call associated with this invocation."""
+        return self._call
 
     @property
-    def invocation_id(self) -> str:
-        return self.identity.invocation_id
-
-    @property
-    def parent_invocation(self) -> BaseInvocation | None:
-        return self.identity.parent_invocation
+    def invocation_id(self) -> InvocationId:
+        return self._invocation_id
 
     @property
     def app(self) -> Pynenc:
@@ -122,21 +76,9 @@ class BaseInvocation(ABC, Generic[Params, Result]):
         return self.call.arguments
 
     @property
-    def serialized_arguments(self) -> dict[str, str]:
-        return self.call.serialized_arguments
-
     @abstractmethod
-    def to_json(self) -> str:
-        """:return: The serialized invocation"""
-
-    @classmethod
-    @abstractmethod
-    def from_json(cls: type[T], app: Pynenc, serialized: str) -> T:
-        """:return: a new invocation from a serialized invocation"""
-
-    @property
-    def call_id(self) -> str:
-        return self.call.call_id
+    def workflow(self) -> WorkflowIdentity:
+        """"""
 
     @property
     @abstractmethod
@@ -169,21 +111,10 @@ class BaseInvocation(ABC, Generic[Params, Result]):
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, BaseInvocation):
             return False
-        try:
-            return self.identity == other.identity and self.status == other.status
-        except KeyError as e:
-            # Handle cross-app invocation comparisons where status lookup fails
-            # This happens when comparing invocations from different app instances (e.g., child processes)
-            print(
-                f"DEBUG: KeyError in invocation comparison: {e}, falling back to identity-only comparison"
-            )
-            return self.identity == other.identity
-        except Exception as e:
-            # Handle any other exceptions during status comparison
-            print(
-                f"DEBUG: Exception in invocation comparison: {e}, falling back to identity-only comparison"
-            )
-            return self.identity == other.identity
+        return (
+            self.invocation_id == other.invocation_id
+            and self.call.call_id == other.call.call_id
+        )
 
 
 @dataclass(frozen=True)
@@ -196,14 +127,14 @@ class BaseInvocationGroup(ABC, Generic[Params, Result, T]):
     Subclasses of `BaseInvocationGroup`, such as `ConcurrentInvocationGroup` and `DistributedInvocationGroup`, provide specific implementations for synchronous and distributed environments, respectively.
 
     :param Task task: The task associated with the invocations.
-    :param dict[str, BaseInvocation] invocations: A dictionary of invocations, each an instance of a `BaseInvocation` subclass.
+    :param dict[InvocationId, BaseInvocation] invocations: A dictionary of invocations, each an instance of a `BaseInvocation` subclass.
     """
 
     task: Task
     invocations: list[T]
 
     @cached_property
-    def invocation_map(self) -> dict[str, T]:
+    def invocation_map(self) -> dict[InvocationId, T]:
         return {inv.invocation_id: inv for inv in self.invocations}
 
     @property

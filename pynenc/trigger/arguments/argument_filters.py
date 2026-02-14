@@ -6,18 +6,49 @@ based on various conditions. It enables flexible matching of task arguments
 against filter criteria.
 """
 
+import hashlib
 import json
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
-from pynenc.arguments import Arguments
+
 from pynenc.trigger.arguments.arguments_common import SerializableCallable
 from pynenc.util.subclasses import build_class_cache
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
+
+
+def _compute_arguments_hash(arguments: dict[str, Any]) -> str:
+    """
+    Compute deterministic hash from arguments dictionary.
+
+    Sorts arguments recursively to ensure consistent hashing regardless of
+    insertion order. Uses JSON for serialization of standard types.
+
+    :param dict[str, Any] arguments: Arguments to hash
+    :return: SHA256 hash of the arguments
+    """
+    if not arguments:
+        return "no_args"
+
+    def _sort_value(obj: Any) -> Any:
+        """Recursively sort dictionaries for deterministic serialization."""
+        if isinstance(obj, dict):
+            return {k: _sort_value(obj[k]) for k in sorted(obj.keys())}
+        if isinstance(obj, list):
+            return [_sort_value(item) for item in obj]
+        return obj
+
+    try:
+        sorted_args = _sort_value(arguments)
+        serialized = json.dumps(sorted_args, sort_keys=True, default=str)
+        return hashlib.sha256(serialized.encode()).hexdigest()
+    except (TypeError, ValueError):
+        # Fallback for non-serializable objects
+        return hashlib.sha256(repr(sorted(arguments.items())).encode()).hexdigest()
 
 
 class ArgumentFilter(ABC):
@@ -147,7 +178,7 @@ class StaticArgumentFilter(ArgumentFilter):
     """
     Filters task arguments based on exact matching with provided arguments.
 
-    This is the traditional approach using the Arguments class.
+    Stores filter arguments as a plain dictionary for direct comparison.
     """
 
     def __init__(self, arguments: dict[str, Any]) -> None:
@@ -156,16 +187,17 @@ class StaticArgumentFilter(ArgumentFilter):
 
         :param arguments: Arguments that task arguments must match
         """
-        self.arguments = Arguments(arguments)
+        self.filter_args = arguments
 
     @cached_property
     def filter_id(self) -> str:
         """
         Generate a unique ID for this argument filter.
 
-        The ID is based on the hash of the filter arguments.
+        The ID is based on a deterministic hash of the filter arguments,
+        handling both JSON-serializable and complex types.
         """
-        return f"static_{self.arguments.args_id}"
+        return f"static_{_compute_arguments_hash(self.filter_args)}"
 
     def filter_arguments(self, arguments: dict[str, Any]) -> bool:
         """
@@ -175,7 +207,7 @@ class StaticArgumentFilter(ArgumentFilter):
         :return: True if arguments match the filter, False otherwise
         """
         # Check if each filter argument matches the corresponding task argument
-        for key, value in self.arguments.kwargs.items():
+        for key, value in self.filter_args.items():
             if key not in arguments or arguments[key] != value:
                 return False
         return True
@@ -187,7 +219,10 @@ class StaticArgumentFilter(ArgumentFilter):
         :param app: Pynenc application instance for serializing complex arguments
         :return: Dictionary with serialized argument filter data
         """
-        return {"arguments": self.arguments.to_json(app)}
+        serialized_args = app.client_data_store.serialize_arguments(
+            self.filter_args, ()
+        )
+        return {"arguments": serialized_args}
 
     @classmethod
     def _from_json(cls, data: dict[str, Any], app: "Pynenc") -> "StaticArgumentFilter":
@@ -198,8 +233,10 @@ class StaticArgumentFilter(ArgumentFilter):
         :param app: Pynenc application instance for deserializing complex arguments
         :return: A new StaticArgumentFilter instance
         """
-        arguments = Arguments.from_json(app, data.get("arguments", {}))
-        return cls(arguments.kwargs)
+        deserialized_args = app.client_data_store.deserialize_arguments(
+            data["arguments"]
+        )
+        return cls(deserialized_args)
 
     def __eq__(self, other: Any) -> bool:
         """
@@ -209,7 +246,7 @@ class StaticArgumentFilter(ArgumentFilter):
         :return: True if equal, False otherwise
         """
         if isinstance(other, StaticArgumentFilter):
-            return self.arguments == other.arguments
+            return self.filter_args == other.filter_args
         return False
 
 

@@ -37,18 +37,18 @@ status_badge %} {% block content %}
                       <tr>
                         <th style="width: 100px">Task:</th>
                         <td>
-                          <a href="/tasks/{{ task.task_id }}"
+                          <a href="/tasks/{{ task.task_id.key }}"
                             >{{ task.task_id }}</a
                           >
                         </td>
                       </tr>
                       <tr>
                         <th>Module:</th>
-                        <td>{{ task.module }}</td>
+                        <td>{{ task.task_id.module }}</td>
                       </tr>
                       <tr>
                         <th>Function:</th>
-                        <td>{{ task.func_qualname }}</td>
+                        <td>{{ task.task_id.func_name }}</td>
                       </tr>
                       <tr>
                         <th>Invocations:</th>

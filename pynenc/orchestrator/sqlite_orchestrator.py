@@ -6,13 +6,14 @@ true cross-process coordination for testing process runners. Unlike shared memor
 SQLite provides ACID transactions and handles concurrent access automatically.
 """
 
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from functools import cached_property
 from time import time
 from typing import TYPE_CHECKING
 
 from pynenc.conf.config_orchestrator import ConfigOrchestratorSQLite
+from pynenc.identifiers.invocation_id import InvocationId
 from pynenc.invocation.status import (
     InvocationStatus,
     InvocationStatusRecord,
@@ -20,7 +21,6 @@ from pynenc.invocation.status import (
 )
 from pynenc.orchestrator.base_orchestrator import (
     BaseBlockingControl,
-    BaseCycleControl,
     BaseOrchestrator,
 )
 from pynenc.orchestrator.atomic_service import ActiveRunnerInfo
@@ -32,186 +32,17 @@ from pynenc.util.sqlite_utils import (
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
+    from pynenc.identifiers.call_id import CallId
     from pynenc.invocation.dist_invocation import DistributedInvocation
-    from pynenc.task import Task
+    from pynenc.task import Task, TaskId
     from pynenc.types import Params, Result
-    from pynenc.util.sqlite_utils import SQLiteConnection
 
 
 class Tables:
     INVOCATIONS = "orchestrator_invocations"
     INVOCATION_ARGS = "orchestrator_invocation_args"
-    CYCLE_CALLS = "orchestrator_cycle_calls"
-    CYCLE_EDGES = "orchestrator_cycle_edges"
     BLOCKING_EDGES = "orchestrator_blocking_edges"
     RUNNER_HEARTBEATS = "orchestrator_runner_heartbeats"
-
-
-class SQLiteCycleControl(BaseCycleControl):
-    """
-    Cycle control for SQLiteOrchestrator using SQLite for cross-process cycle detection.
-    """
-
-    def __init__(self, app: "Pynenc", sqlite_db_path: str) -> None:
-        self.app = app
-        self.sqlite_db_path = sqlite_db_path
-        self._init_tables()
-
-    def _init_tables(self) -> None:
-        """Initialize SQLite tables for cycle tracking."""
-        with sqlite_conn(self.sqlite_db_path) as conn:
-            conn.execute(
-                f"""
-                CREATE TABLE IF NOT EXISTS {Tables.CYCLE_CALLS} (
-                    call_id TEXT PRIMARY KEY
-                )
-            """
-            )
-            conn.execute(
-                f"""
-                CREATE TABLE IF NOT EXISTS {Tables.CYCLE_EDGES} (
-                    caller_id TEXT NOT NULL,
-                    callee_id TEXT NOT NULL,
-                    PRIMARY KEY (caller_id, callee_id)
-                )
-            """
-            )
-            conn.commit()
-
-    def cleanup(self) -> None:
-        """Cleanup method for BaseCycleControl compatibility."""
-        try:
-            with sqlite_conn(self.sqlite_db_path) as conn:
-                conn.execute(f"DELETE FROM {Tables.CYCLE_CALLS}")
-                conn.execute(f"DELETE FROM {Tables.CYCLE_EDGES}")
-                conn.commit()
-        except Exception:
-            pass  # Ignore cleanup errors
-
-    def add_call_and_check_cycles(
-        self, caller: "DistributedInvocation", callee: "DistributedInvocation"
-    ) -> None:
-        """
-        Add a call dependency and check for cycles using graph traversal.
-        """
-        from pynenc.exceptions import CycleDetectedError
-
-        # Check for direct self-cycle first
-        if caller.call_id == callee.call_id:
-            raise CycleDetectedError.from_cycle([caller.call_id])
-
-        caller_id = caller.call_id
-        callee_id = callee.call_id
-
-        with sqlite_conn(self.sqlite_db_path) as conn:
-            # Add calls to tracking
-            conn.execute(
-                f"INSERT OR REPLACE INTO {Tables.CYCLE_CALLS} (call_id) VALUES (?)",
-                (caller_id,),
-            )
-            conn.execute(
-                f"INSERT OR REPLACE INTO {Tables.CYCLE_CALLS} (call_id) VALUES (?)",
-                (callee_id,),
-            )
-
-            # Check for cycle before adding edge
-            cycle = self._find_cycle_with_new_edge(conn, caller_id, callee_id)
-            if cycle:
-                raise CycleDetectedError.from_cycle(cycle)
-
-            # If no cycle, add the edge permanently
-            conn.execute(
-                f"""
-                INSERT OR IGNORE INTO {Tables.CYCLE_EDGES} (caller_id, callee_id) VALUES (?, ?)
-            """,
-                (caller_id, callee_id),
-            )
-            conn.commit()
-
-    def get_callees(self, caller_call_id: str) -> Iterator[str]:
-        """
-        Returns an iterator of direct callee call_ids for the given caller_call_id.
-
-        :param str caller_call_id: The call_id of the caller invocation.
-        :return: Iterator of callee call_ids.
-        :rtype: Iterator[str]
-        """
-        with sqlite_conn(self.sqlite_db_path) as conn:
-            cursor = conn.execute(
-                f"SELECT callee_id FROM {Tables.CYCLE_EDGES} WHERE caller_id = ?",
-                (caller_call_id,),
-            )
-            cursor_rows = cursor.fetchall()
-            cursor.close()
-            for row in cursor_rows:
-                yield row[0]
-
-    def _find_cycle_with_new_edge(
-        self, conn: "SQLiteConnection", caller_id: str, callee_id: str
-    ) -> list[str] | None:
-        """
-        Find cycle that would be caused by adding a new edge from caller to callee.
-        """
-        # Use DFS to detect cycles
-        visited: set[str] = set()
-        path: list[str] = []
-
-        # Temporarily consider the new edge exists
-        def get_edges(call_id: str) -> list[str]:
-            cursor = conn.execute(
-                f"SELECT callee_id FROM {Tables.CYCLE_EDGES} WHERE caller_id = ?",
-                (call_id,),
-            )
-            edges = [row[0] for row in cursor.fetchall()]
-            cursor.close()
-            # Add the temporary edge if it's from this caller
-            if call_id == caller_id and callee_id not in edges:
-                edges.append(callee_id)
-            return edges
-
-        return self._find_cycle_dfs(caller_id, visited, path, get_edges)
-
-    def _find_cycle_dfs(
-        self,
-        current_id: str,
-        visited: set[str],
-        path: list[str],
-        get_edges: Callable[[str], list[str]],
-    ) -> list[str] | None:
-        """
-        DFS utility to find cycles.
-        """
-        visited.add(current_id)
-        path.append(current_id)
-
-        for next_id in get_edges(current_id):
-            if next_id not in visited:
-                cycle = self._find_cycle_dfs(next_id, visited, path, get_edges)
-                if cycle:
-                    return cycle
-            elif next_id in path:
-                # Found cycle, return from cycle start to end
-                cycle_start_idx = path.index(next_id)
-                return path[cycle_start_idx:]
-
-        path.remove(current_id)
-        return None
-
-    def clean_up_invocation_cycles(self, invocation_id: str) -> None:
-        """Clean up cycle tracking data for a completed invocation."""
-        call_id = self.app.orchestrator.get_invocation_call_id(invocation_id)
-        if not self.app.orchestrator.any_non_final_invocations(call_id):
-            with sqlite_conn(self.sqlite_db_path) as conn:
-                # Remove from calls tracking
-                conn.execute(
-                    f"DELETE FROM {Tables.CYCLE_CALLS} WHERE call_id = ?", (call_id,)
-                )
-                # Remove from edges tracking
-                conn.execute(
-                    f"DELETE FROM {Tables.CYCLE_EDGES} WHERE caller_id = ? OR callee_id = ?",
-                    (call_id, call_id),
-                )
-                conn.commit()
 
 
 class SQLiteBlockingControl(BaseBlockingControl):
@@ -252,7 +83,9 @@ class SQLiteBlockingControl(BaseBlockingControl):
             conn.commit()
 
     def waiting_for_results(
-        self, caller_invocation_id: str, result_invocation_ids: list[str]
+        self,
+        caller_invocation_id: "InvocationId",
+        result_invocation_ids: list["InvocationId"],
     ) -> None:
         """Notifies the system that an invocation is waiting for the results of other invocations."""
         waiter_id = caller_invocation_id
@@ -277,7 +110,9 @@ class SQLiteBlockingControl(BaseBlockingControl):
             )
             conn.commit()
 
-    def get_blocking_invocations(self, max_num_invocations: int) -> Iterator[str]:
+    def get_blocking_invocations(
+        self, max_num_invocations: int
+    ) -> Iterator["InvocationId"]:
         """Retrieves invocations that are blocking others but are not themselves waiting for any results."""
         available_statuses = tuple(
             status.value for status in InvocationStatus.get_available_for_run_statuses()
@@ -326,7 +161,6 @@ class SQLiteOrchestrator(BaseOrchestrator):
         self._init_tables()
 
         # Initialize control components
-        self._cycle_control = SQLiteCycleControl(app, self.sqlite_db_path)
         self._blocking_control = SQLiteBlockingControl(app, self.sqlite_db_path)
 
     def _init_tables(self) -> None:
@@ -336,8 +170,8 @@ class SQLiteOrchestrator(BaseOrchestrator):
                 f"""
                 CREATE TABLE IF NOT EXISTS {Tables.INVOCATIONS} (
                     invocation_id TEXT PRIMARY KEY,
-                    task_id TEXT NOT NULL,
-                    call_id TEXT NOT NULL,
+                    task_id_key TEXT NOT NULL,
+                    call_id_key TEXT NOT NULL,
                     status TEXT NOT NULL,
                     status_runner_id TEXT,
                     status_timestamp REAL NOT NULL,
@@ -347,10 +181,10 @@ class SQLiteOrchestrator(BaseOrchestrator):
             """
             )
             conn.execute(
-                f"CREATE INDEX IF NOT EXISTS idx_orchestrator_task_id ON {Tables.INVOCATIONS}(task_id)"
+                f"CREATE INDEX IF NOT EXISTS idx_orchestrator_task_id ON {Tables.INVOCATIONS}(task_id_key)"
             )
             conn.execute(
-                f"CREATE INDEX IF NOT EXISTS idx_orchestrator_call_id ON {Tables.INVOCATIONS}(call_id)"
+                f"CREATE INDEX IF NOT EXISTS idx_orchestrator_call_id ON {Tables.INVOCATIONS}(call_id_key)"
             )
             conn.execute(
                 f"CREATE INDEX IF NOT EXISTS idx_orchestrator_status ON {Tables.INVOCATIONS}(status)"
@@ -401,11 +235,6 @@ class SQLiteOrchestrator(BaseOrchestrator):
         )
 
     @property
-    def cycle_control(self) -> BaseCycleControl:
-        """Return cycle control."""
-        return self._cycle_control
-
-    @property
     def blocking_control(self) -> BaseBlockingControl:
         """Return blocking control."""
         return self._blocking_control
@@ -416,21 +245,20 @@ class SQLiteOrchestrator(BaseOrchestrator):
         runner_id: str | None = None,
     ) -> InvocationStatusRecord:
         """Register new invocations with status Register if they don't exist yet."""
-        # TRY TO INSERT, IF CONFLICT, DO NOTHING
         status_record = InvocationStatusRecord(InvocationStatus.REGISTERED, runner_id)
         with sqlite_conn(self.sqlite_db_path) as conn:
             for invocation in invocations:
                 conn.execute(
                     f"""
                     INSERT INTO {Tables.INVOCATIONS} (
-                    invocation_id, task_id, call_id, status, status_runner_id, status_timestamp
+                    invocation_id, task_id_key, call_id_key, status, status_runner_id, status_timestamp
                 ) VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT(invocation_id) DO NOTHING
                 """,
                     (
                         invocation.invocation_id,
-                        invocation.task.task_id,
-                        invocation.call_id,
+                        invocation.task.task_id.key,
+                        invocation.call.call_id.key,
                         status_record.status.value,
                         status_record.runner_id,
                         status_record.timestamp.timestamp(),
@@ -444,7 +272,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
         task: "Task[Params, Result]",
         key_serialized_arguments: dict[str, str] | None = None,
         statuses: list[InvocationStatus] | None = None,
-    ) -> Iterator[str]:
+    ) -> Iterator["InvocationId"]:
         """
         Get existing invocation IDs for a task, optionally filtered by arguments and statuses.
 
@@ -465,8 +293,8 @@ class SQLiteOrchestrator(BaseOrchestrator):
                 )
                 params.extend([k, v])
                 idx += 1
-        wheres = ["i.task_id = ?"]
-        params.append(task.task_id)
+        wheres = ["i.task_id_key = ?"]
+        params.append(task.task_id.key)
         if statuses:
             wheres.append(f"i.status IN ({','.join(['?' for _ in statuses])})")
             params.extend([s.value for s in statuses])
@@ -478,31 +306,31 @@ class SQLiteOrchestrator(BaseOrchestrator):
             cursor_rows = cursor.fetchall()
             cursor.close()
             for (invocation_id,) in cursor_rows:
-                yield invocation_id
+                yield InvocationId(invocation_id)
 
-    def get_task_invocation_ids(self, task_id: str) -> Iterator[str]:
+    def get_task_invocation_ids(self, task_id: "TaskId") -> Iterator["InvocationId"]:
         """Retrieves all invocation ids for a given task id."""
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
-                f"SELECT invocation_id FROM {Tables.INVOCATIONS} WHERE task_id = ?",
-                (task_id,),
+                f"SELECT invocation_id FROM {Tables.INVOCATIONS} WHERE task_id_key = ?",
+                (task_id.key,),
             )
             cursor_rows = cursor.fetchall()
             cursor.close()
             for (invocation_id,) in cursor_rows:
-                yield invocation_id
+                yield InvocationId(invocation_id)
 
     def get_invocation_ids_paginated(
         self,
-        task_id: str | None = None,
+        task_id: "TaskId | None" = None,
         statuses: list[InvocationStatus] | None = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> list[str]:
+    ) -> list["InvocationId"]:
         """
         Retrieves invocation IDs with pagination support.
 
-        :param str | None task_id: Optional task ID to filter by.
+        :param TaskId | None task_id: Optional task ID to filter by.
         :param list[InvocationStatus] | None statuses: Optional statuses to filter by.
         :param int limit: Maximum number of results to return.
         :param int offset: Number of results to skip.
@@ -513,8 +341,8 @@ class SQLiteOrchestrator(BaseOrchestrator):
         params: list = []
 
         if task_id:
-            wheres.append("task_id = ?")
-            params.append(task_id)
+            wheres.append("task_id_key = ?")
+            params.append(task_id.key)
 
         if statuses:
             wheres.append(f"status IN ({','.join(['?' for _ in statuses])})")
@@ -536,7 +364,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
 
     def count_invocations(
         self,
-        task_id: str | None = None,
+        task_id: "TaskId | None" = None,
         statuses: list[InvocationStatus] | None = None,
     ) -> int:
         """
@@ -551,8 +379,8 @@ class SQLiteOrchestrator(BaseOrchestrator):
         params: list = []
 
         if task_id:
-            wheres.append("task_id = ?")
-            params.append(task_id)
+            wheres.append("task_id_key = ?")
+            params.append(task_id.key)
 
         if statuses:
             wheres.append(f"status IN ({','.join(['?' for _ in statuses])})")
@@ -568,43 +396,32 @@ class SQLiteOrchestrator(BaseOrchestrator):
             cursor.close()
             return count
 
-    def get_call_invocation_ids(self, call_id: str) -> Iterator[str]:
+    def get_call_invocation_ids(self, call_id: "CallId") -> Iterator["InvocationId"]:
         """Retrieves all invocation ids for a given call id."""
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
-                f"SELECT invocation_id FROM {Tables.INVOCATIONS} WHERE call_id = ?",
-                (call_id,),
+                f"SELECT invocation_id FROM {Tables.INVOCATIONS} WHERE call_id_key = ?",
+                (call_id.key,),
             )
             cursor_rows = cursor.fetchall()
             cursor.close()
             for (invocation_id,) in cursor_rows:
-                yield invocation_id
+                yield InvocationId(invocation_id)
 
-    def get_invocation_call_id(self, invocation_id: str) -> str:
+    def get_invocation_call_id(self, invocation_id: "InvocationId") -> "CallId":
         """Retrieves the call ID associated with a specific invocation ID."""
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
-                f"SELECT call_id FROM {Tables.INVOCATIONS} WHERE invocation_id = ?",
+                f"SELECT call_id_key FROM {Tables.INVOCATIONS} WHERE invocation_id = ?",
                 (invocation_id,),
             )
-            return cursor.fetchone()[0]
-
-    def any_non_final_invocations(self, call_id: str) -> bool:
-        """Checks if there are any non-final invocations for a specific call ID."""
-        final_status = [s.value for s in InvocationStatus.get_final_statuses()]
-        with sqlite_conn(self.sqlite_db_path) as conn:
-            cursor = conn.execute(
-                f"""
-                SELECT 1 FROM {Tables.INVOCATIONS}
-                WHERE call_id = ? AND status NOT IN ({",".join(["?" for _ in final_status])})
-                LIMIT 1
-                """,
-                (call_id, *final_status),
-            )
-            return cursor.fetchone() is not None
+            return CallId.from_key(cursor.fetchone()[0])
 
     def _atomic_status_transition(
-        self, invocation_id: str, status: InvocationStatus, runner_id: str | None = None
+        self,
+        invocation_id: "InvocationId",
+        status: InvocationStatus,
+        runner_id: str | None = None,
     ) -> InvocationStatusRecord:
         """Set the status of an invocation by ID."""
         with sqlite_conn(self.sqlite_db_path) as conn:
@@ -641,7 +458,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
         invocation: "DistributedInvocation[Params, Result]",
     ) -> None:
         with sqlite_conn(self.sqlite_db_path) as conn:
-            for key, value in invocation.serialized_arguments.items():
+            for key, value in invocation.call.serialized_arguments.items():
                 conn.execute(
                     f"INSERT OR REPLACE INTO {Tables.INVOCATION_ARGS} (invocation_id, arg_key, arg_value) VALUES (?, ?, ?)",
                     (invocation.invocation_id, key, value),
@@ -672,7 +489,6 @@ class SQLiteOrchestrator(BaseOrchestrator):
             to_purge = [row[0] for row in cursor.fetchall()]
             cursor.close()
             for invocation_id in to_purge:
-                self.clean_up_invocation_cycles(invocation_id)
                 self.release_waiters(invocation_id)
                 conn.execute(
                     f"DELETE FROM {Tables.INVOCATIONS} WHERE invocation_id = ?",
@@ -739,13 +555,15 @@ class SQLiteOrchestrator(BaseOrchestrator):
             return row[0] if row else 0
 
     def filter_by_status(
-        self, invocation_ids: list[str], status_filter: frozenset["InvocationStatus"]
-    ) -> list[str]:
+        self,
+        invocation_ids: list["InvocationId"],
+        status_filter: frozenset["InvocationStatus"],
+    ) -> list["InvocationId"]:
         """
         Filter invocations by status by ID.
 
-        :param list[str] invocation_ids: The invocation IDs to filter
-        :param set[InvocationStatus] | None status_filter: The statuses to filter by
+        :param list["InvocationId"] invocation_ids: The invocation IDs to filter
+        :param frozenset["InvocationStatus"] | None status_filter: The statuses to filter by
         :return: List of invocation IDs matching the status filter
         """
         if not invocation_ids or status_filter is None:
@@ -853,7 +671,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
             )
             conn.commit()
 
-    def get_pending_invocations_for_recovery(self) -> Iterator[str]:
+    def get_pending_invocations_for_recovery(self) -> Iterator["InvocationId"]:
         """Retrieve invocation IDs stuck in PENDING status beyond the allowed time."""
         max_pending_seconds = self.app.conf.max_pending_seconds
         current_time = time()
@@ -872,11 +690,11 @@ class SQLiteOrchestrator(BaseOrchestrator):
             cursor.close()
 
             for (invocation_id,) in cursor_rows:
-                yield invocation_id
+                yield InvocationId(invocation_id)
 
     def _get_running_invocations_for_recovery(
         self, timeout_seconds: float
-    ) -> Iterator[str]:
+    ) -> Iterator["InvocationId"]:
         """Retrieve RUNNING invocation IDs owned by inactive runners."""
         current_time = time()
         cutoff_time = current_time - timeout_seconds
@@ -899,7 +717,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
             cursor.close()
 
             for (invocation_id,) in cursor_rows:
-                yield invocation_id
+                yield InvocationId(invocation_id)
 
     def purge(self) -> None:
         """

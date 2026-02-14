@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+
 from pynmon.util.svg.models import InvocationBar, TimelineBounds, TimelineConfig
 
 
@@ -93,7 +94,6 @@ def test_bar_creation() -> None:
     end = datetime(2025, 1, 1, 0, 5, 0, tzinfo=UTC)
     bar = InvocationBar(
         invocation_id="inv-123",
-        task_id="my_app.tasks.process",
         start_time=start,
         end_time=end,
         status="RUNNING",
@@ -101,7 +101,6 @@ def test_bar_creation() -> None:
         tooltip="Processing data",
     )
     assert bar.invocation_id == "inv-123"
-    assert bar.task_id == "my_app.tasks.process"
     assert bar.status == "RUNNING"
     assert bar.color == "#3498db"
 
@@ -112,7 +111,6 @@ def test_bar_duration_seconds() -> None:
     end = datetime(2025, 1, 1, 0, 5, 0, tzinfo=UTC)  # 5 minutes
     bar = InvocationBar(
         invocation_id="inv-123",
-        task_id="task",
         start_time=start,
         end_time=end,
         status="RUNNING",
@@ -126,7 +124,6 @@ def test_bar_frozen_immutability() -> None:
     start = datetime(2025, 1, 1, 0, 0, 0, tzinfo=UTC)
     bar = InvocationBar(
         invocation_id="inv-123",
-        task_id="task",
         start_time=start,
         end_time=start,
         status="RUNNING",

@@ -15,12 +15,12 @@ from pynenc.trigger.conditions import ConditionContext, TriggerCondition, ValidC
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
     from pynenc.invocation import DistributedInvocation
-    from pynenc.invocation.base_invocation import BaseInvocation
+    from pynenc.invocation.base_invocation import BaseInvocation, InvocationId
     from pynenc.invocation.status import InvocationStatus
-    from pynenc.task import Task
+    from pynenc.models.trigger_definition_dto import TriggerDefinitionDTO
+    from pynenc.task import Task, TaskId
     from pynenc.trigger.trigger_builder import TriggerBuilder
-    from pynenc.trigger.trigger_definitions import TriggerDefinition
-    from pynenc.trigger.types import ConditionId, TaskId
+    from pynenc.trigger.types import ConditionId
 
 
 class DisabledTrigger(BaseTrigger):
@@ -61,21 +61,21 @@ class DisabledTrigger(BaseTrigger):
         """Always returns None as conditions are disabled."""
         return None
 
-    def register_trigger(self, trigger: "TriggerDefinition") -> None:
+    def register_trigger(self, trigger: "TriggerDefinitionDTO") -> None:
         """No-op implementation for trigger registration."""
 
-    def get_trigger(self, trigger_id: str) -> "TriggerDefinition | None":
+    def _get_trigger(self, trigger_id: str) -> "TriggerDefinitionDTO | None":
         """Always returns None as triggers are disabled."""
         return None
 
     def get_triggers_for_condition(
         self, condition_id: str
-    ) -> list["TriggerDefinition"]:
+    ) -> list["TriggerDefinitionDTO"]:
         """Always returns empty list as triggers are disabled."""
         return []
 
     def get_conditions_sourced_from_task(
-        self, task_id: str, context_type: type["ConditionContext"] | None = None
+        self, task_id: "TaskId", context_type: type["ConditionContext"] | None = None
     ) -> list["TriggerCondition"]:
         """Always returns empty list as conditions are disabled."""
         return []
@@ -103,7 +103,7 @@ class DisabledTrigger(BaseTrigger):
 
     def report_tasks_status(
         self,
-        invocation_ids: list[str],
+        invocation_ids: list["InvocationId"],
         status: Optional["InvocationStatus"] = None,
     ) -> None:
         """No-op implementation for reporting task status."""
@@ -138,12 +138,12 @@ class DisabledTrigger(BaseTrigger):
         return False
 
     def execute_task(
-        self, task_id: str, arguments: dict[str, Any] | None = None
+        self, task_id: "TaskId", arguments: dict[str, Any] | None = None
     ) -> "BaseInvocation":
         """Raises NotImplementedError as task execution via triggers is disabled."""
         raise NotImplementedError("Task execution via triggers is disabled.")
 
-    def clean_task_trigger_definitions(self, task_id: str) -> None:
+    def clean_task_trigger_definitions(self, task_id: "TaskId") -> None:
         """No-op implementation for cleaning task trigger definitions."""
 
     def _purge(self) -> None:

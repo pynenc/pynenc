@@ -154,12 +154,39 @@ def test_task_getstate() -> None:
     """Test that __getstate__ correctly serializes the task instance."""
     task = example_task  # Use an existing task for testing
 
+    # Get the state
+    state = task.__getstate__()
+
     # Expected state should contain:
     # - The associated Pynenc app
-    # - The serialized task JSON
-    expected_state = {
-        "app": task.app,
-        "task_json": task.to_json(),
-    }
+    # - The task_id_key
+    # - The serialized options JSON
+    assert "app" in state
+    assert state["app"] == task.app
+    assert "task_id_key" in state
+    assert state["task_id_key"] == task.task_id.key
+    assert "options_json" in state
+    assert state["options_json"] == task.conf.options_to_json()
 
-    assert task.__getstate__() == expected_state
+
+def test_task_pickle_roundtrip() -> None:
+    """Test that a task can be pickled and unpickled correctly."""
+    import pickle
+
+    # Test with a task that has options
+    task = add_with_max_retries
+
+    # Pickle and unpickle
+    pickled = pickle.dumps(task)
+    unpickled_task = pickle.loads(pickled)
+
+    # Verify the unpickled task has the same properties
+    assert unpickled_task.task_id == task.task_id
+    assert unpickled_task.func == task.func
+    assert unpickled_task.app.app_id == task.app.app_id
+    assert unpickled_task.conf.max_retries == task.conf.max_retries
+    assert unpickled_task.options == task.options
+
+    # Verify the unpickled task is functional
+    invocation = unpickled_task(1, 2)
+    assert invocation.call.task.task_id == task.task_id

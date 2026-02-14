@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from pynenc.invocation import InvocationStatus
+from pynenc.identifiers.invocation_id import InvocationId
 from pynenc.runner.runner_context import RunnerContext
 
 if TYPE_CHECKING:
@@ -13,7 +14,7 @@ if TYPE_CHECKING:
 
 
 def check_status_and_get_elapsed_time(
-    invocation_id: str, expected_status: InvocationStatus, app: "Pynenc"
+    invocation_id: "InvocationId", expected_status: InvocationStatus, app: "Pynenc"
 ) -> float:
     start_time = time.time()
     current_status = app.orchestrator.get_invocation_status(invocation_id)

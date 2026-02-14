@@ -14,15 +14,11 @@ def mock_app() -> Mock:
     return app
 
 
-def test_arguments_str_repr_no_app() -> None:
+def test_arguments_str_no_app() -> None:
     """Test string representation without app instance."""
     long_string = "long_string" * 10
     args = Arguments(kwargs={"a": 1, "b": long_string})
     assert str(args) == "{a:1, b:long_stringlong_stringlong_strin...}"
-    assert repr(args) in (
-        f"Arguments({{'a', 'b'}}, id={args.args_id})",
-        f"Arguments({{'b', 'a'}}, id={args.args_id})",
-    )
 
 
 def test_arguments_str_hidden(mock_app: Mock) -> None:

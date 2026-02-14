@@ -4,7 +4,7 @@
 # Plugins should import: from pynenc_tests.integration.combinations.all_tests import *
 
 from pynenc_tests.integration.combinations.test_app_combinations import *
-from pynenc_tests.integration.combinations.test_arg_cache_performance import *
+from pynenc_tests.integration.combinations.test_client_data_store_performance import *
 from pynenc_tests.integration.combinations.test_async_combinations import *
 from pynenc_tests.integration.combinations.test_parallelize_performance import *
 from pynenc_tests.integration.combinations.test_performance import *

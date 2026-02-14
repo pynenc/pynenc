@@ -8,6 +8,7 @@ and real Pynenc app integration.
 from fastapi.testclient import TestClient
 
 from pynenc.builder import PynencBuilder
+from pynenc.identifiers.task_id import TaskId
 
 # Debug configuration - Set to 1 to keep server alive for browser debugging
 KEEP_ALIVE = 0
@@ -42,7 +43,7 @@ def test_task_detail_page_renders_successfully(pynmon_client: TestClient) -> Non
     """
     # Use the task_id from our registered task
     task_id = hello_task.task_id
-    response = pynmon_client.get(f"/tasks/{task_id}")
+    response = pynmon_client.get(f"/tasks/{task_id.key}")
 
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
@@ -55,13 +56,14 @@ def test_task_detail_displays_task_information(pynmon_client: TestClient) -> Non
     :param pynmon_client: TestClient fixture with configured pynmon
     """
     task_id = add_task.task_id
-    response = pynmon_client.get(f"/tasks/{task_id}")
+    response = pynmon_client.get(f"/tasks/{task_id.key}")
 
     assert response.status_code == 200
     content = response.text
 
     # Check that task information is displayed
-    assert task_id in content
+    assert task_id.module in content
+    assert task_id.func_name in content
     assert "test-pynmon-task-detail-app" in content
 
     # Check for page structure
@@ -81,7 +83,7 @@ def test_task_detail_shows_configuration_details(pynmon_client: TestClient) -> N
     :param pynmon_client: TestClient fixture with configured pynmon
     """
     task_id = hello_task.task_id
-    response = pynmon_client.get(f"/tasks/{task_id}")
+    response = pynmon_client.get(f"/tasks/{task_id.key}")
 
     assert response.status_code == 200
     content = response.text
@@ -94,24 +96,39 @@ def test_task_detail_shows_configuration_details(pynmon_client: TestClient) -> N
     assert "Retry For Exceptions:" in content
 
 
-def test_task_detail_returns_404_for_invalid_task(pynmon_client: TestClient) -> None:
+def test_task_detail_returns_404_for_not_found_tasks(
+    pynmon_client: TestClient, task_id: "TaskId"
+) -> None:
     """
-    Test that the task detail page returns 404 for a non-existent task ID.
+    Test that the task detail page returns 404 for a properly formatted but non-existent task ID.
 
     :param pynmon_client: TestClient fixture with configured pynmon
     """
-    # Use a task ID that references this test module but a non-existent function
-    # This will pass the module import but fail to find the function
-    response = pynmon_client.get(
-        "/tasks/tests.integration.pynmon.test_task_details.nonexistent_task"
-    )
+    # Use a properly formatted but non-existent task ID
+    response = pynmon_client.get(f"/tasks/{task_id.key}")
 
     assert response.status_code == 404
     content = response.text
 
     # Check error message content
     assert "Task Not Found" in content
-    assert (
-        "No task found with ID: tests.integration.pynmon.test_task_details.nonexistent_task"
-        in content
-    )
+    assert task_id.module in content
+    assert task_id.func_name in content
+
+
+def test_task_detail_invalid_task_id_format(pynmon_client: TestClient) -> None:
+    """
+    Test that the task detail page returns 400 for an improperly formatted task ID.
+
+    :param pynmon_client: TestClient fixture with configured pynmon
+    """
+    # Test with badly formatted task ID (missing colon separator)
+    invalid_task_id = "invalid-task-id-format"
+    response = pynmon_client.get(f"/tasks/{invalid_task_id}")
+
+    assert response.status_code == 400
+    content = response.text
+
+    # Check error message content
+    assert "Invalid Task ID Format" in content
+    assert "not properly formatted" in content

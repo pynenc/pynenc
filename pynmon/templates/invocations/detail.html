@@ -108,7 +108,7 @@ status_badge %} {% block content %}
                         <th>Call ID:</th>
                         <td>
                           <a
-                            href="/calls/?call_id={{ call.call_id|urlencode }}"
+                            href="/calls/?call_id_key={{ call.call_id.key|urlencode }}"
                           >
                             <code style="font-size: 11px; word-break: break-all"
                               >{{ call.call_id }}</code
@@ -126,11 +126,11 @@ status_badge %} {% block content %}
                       </tr>
                       <tr>
                         <th>Task Module:</th>
-                        <td>{{ task_extra.module }}</td>
+                        <td>{{ task.task_id.module }}</td>
                       </tr>
                       <tr>
                         <th>Task Function:</th>
-                        <td>{{ task_extra.func_qualname }}</td>
+                        <td>{{ task.task_id.func_name }}</td>
                       </tr>
                     </tbody>
                   </table>

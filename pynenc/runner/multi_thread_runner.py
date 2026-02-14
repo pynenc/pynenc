@@ -14,6 +14,7 @@ from pynenc.util.multiprocessing_utils import warn_missing_main_guard
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
+    from pynenc.identifiers.invocation_id import InvocationId
 
 
 class ProcessState(Enum):
@@ -93,7 +94,6 @@ class MultiThreadRunner(BaseRunner):
     manager: Manager  # type: ignore
     shared_status: dict[str, ProcessStatus]
     max_processes: int
-    runner_cache: dict
 
     @cached_property
     def conf(self) -> ConfigMultiThreadRunner:
@@ -101,11 +101,6 @@ class MultiThreadRunner(BaseRunner):
             config_values=self.app.config_values,
             config_filepath=self.app.config_filepath,
         )
-
-    @property
-    def cache(self) -> dict:
-        """Returns the shared cache for all processes."""
-        return self.runner_cache
 
     @staticmethod
     def mem_compatible() -> bool:
@@ -281,8 +276,8 @@ class MultiThreadRunner(BaseRunner):
 
     def _waiting_for_results(
         self,
-        running_invocation_id: str,
-        result_invocation_ids: list[str],
+        running_invocation_id: "InvocationId",
+        result_invocation_ids: list["InvocationId"],
         runner_args: dict[str, Any] | None = None,
     ) -> None:
         """
@@ -291,8 +286,8 @@ class MultiThreadRunner(BaseRunner):
         This method warns if called directly on MultiThreadRunner, as result waiting
         should occur within a ThreadRunner process using the context-set runner.
 
-        :param str running_invocation_id: ID of the invocation waiting for results
-        :param list[str] result_invocation_ids: IDs of invocations being awaited
+        :param InvocationId running_invocation_id: ID of the invocation waiting for results
+        :param list[InvocationId] result_invocation_ids: IDs of invocations being awaited
         :param dict[str, Any] | None runner_args: Additional runner-specific arguments
         """
         del running_invocation_id, result_invocation_ids, runner_args

@@ -366,10 +366,13 @@ def test_hierarchical_workflow_execution(pynmon_client: "PynmonClient") -> None:
         # Test workflow discovery in pynmon
         response = pynmon_client.get("/workflows/")
         assert response.status_code == 200
-        assert user_onboarding_workflow.task_id in response.text
+        assert user_onboarding_workflow.task_id.module in response.text
+        assert user_onboarding_workflow.task_id.func_name in response.text
 
         # Test workflow detail view
-        response = pynmon_client.get(f"/workflows/{user_onboarding_workflow.task_id}")
+        response = pynmon_client.get(
+            f"/workflows/{user_onboarding_workflow.task_id.key}"
+        )
         assert response.status_code == 200
         assert result["workflow_id"] in response.text
 
@@ -419,8 +422,10 @@ def test_multiple_workflow_types_with_hierarchies(
         # Test that both workflow types are discoverable
         response = pynmon_client.get("/workflows/")
         assert response.status_code == 200
-        assert user_onboarding_workflow.task_id in response.text
-        assert data_analysis_workflow.task_id in response.text
+        assert user_onboarding_workflow.task_id.module in response.text
+        assert user_onboarding_workflow.task_id.func_name in response.text
+        assert data_analysis_workflow.task_id.module in response.text
+        assert data_analysis_workflow.task_id.func_name in response.text
 
         # Test individual workflow detail views
         user_detail_response = pynmon_client.get(
@@ -559,10 +564,13 @@ def test_workflow_with_validation_failure(pynmon_client: "PynmonClient") -> None
         # Test that failed workflow is still discoverable in pynmon
         response = pynmon_client.get("/workflows/")
         assert response.status_code == 200
-        assert user_onboarding_workflow.task_id in response.text
+        assert user_onboarding_workflow.task_id.module in response.text
+        assert user_onboarding_workflow.task_id.func_name in response.text
 
         # Test workflow detail view shows failed workflow
-        response = pynmon_client.get(f"/workflows/{user_onboarding_workflow.task_id}")
+        response = pynmon_client.get(
+            f"/workflows/{user_onboarding_workflow.task_id.key}"
+        )
         assert response.status_code == 200
         assert result["workflow_id"] in response.text
 

@@ -15,6 +15,7 @@ from pynenc.trigger.conditions.status import StatusCondition, StatusContext
 
 if TYPE_CHECKING:
     from ...app import Pynenc
+    from pynenc.identifiers.task_id import TaskId
 
 
 @dataclass
@@ -56,10 +57,10 @@ class ExceptionContext(StatusContext):
         """
         status_context = StatusContext._from_json(data, app)
         return cls(
-            task_id=status_context.task_id,
             call_id=status_context.call_id,
             invocation_id=status_context.invocation_id,
             arguments=status_context.arguments,
+            disable_cache_args=status_context.disable_cache_args,
             status=status_context.status,
             exception_type=data["exception_type"],
             exception_message=data["exception_message"],
@@ -81,7 +82,7 @@ class ExceptionCondition(TriggerCondition[ExceptionContext]):
 
     def __init__(
         self,
-        task_id: str,
+        task_id: "TaskId",
         arguments_filter: ArgumentFilter,
         exception_types: list[str],
     ) -> None:
@@ -103,7 +104,7 @@ class ExceptionCondition(TriggerCondition[ExceptionContext]):
         )
 
     @property
-    def task_id(self) -> str:
+    def task_id(self) -> "TaskId":
         """
         Get the task ID that this condition monitors.
 
@@ -149,7 +150,7 @@ class ExceptionCondition(TriggerCondition[ExceptionContext]):
 
         return f"{base_id}{exception_id}"
 
-    def get_source_task_ids(self) -> set[str]:
+    def get_source_task_ids(self) -> set["TaskId"]:
         return self._status_condition.get_source_task_ids()
 
     def _to_json(self, app: "Pynenc") -> dict[str, Any]:
@@ -193,7 +194,7 @@ class ExceptionCondition(TriggerCondition[ExceptionContext]):
             return True
         return context.exception_type in self.exception_types
 
-    def affects_task(self, task_id: str) -> bool:
+    def affects_task(self, task_id: "TaskId") -> bool:
         """
         Check if this condition is affected by a specific task.
 

@@ -6,7 +6,6 @@
 from pynenc_tests.unit.orchestrator.test_all_orchestrator_instances import *
 from pynenc_tests.unit.orchestrator.test_atomic_service_all_instances import *
 from pynenc_tests.unit.orchestrator.test_blocking_control_all_instances import *
-from pynenc_tests.unit.orchestrator.test_cycle_control_all_instances import *
 from pynenc_tests.unit.orchestrator.test_recovery_service_all_instances import *
 from pynenc_tests.unit.orchestrator.test_running_concurrency_all_instances import *
 from pynenc_tests.unit.orchestrator.test_dead_runner_detection_all_instances import *

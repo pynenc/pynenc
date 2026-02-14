@@ -61,17 +61,17 @@
                   <tr>
                     <td>
                       <a
-                        href="/workflows/{{ run.workflow_task_id }}"
+                        href="/workflows/{{ run.workflow_type.key }}"
                         class="text-decoration-none"
                       >
-                        <strong>{{ run.workflow_task_id }}</strong>
+                        <strong>{{ run.workflow_type }}</strong>
                       </a>
                     </td>
                     <td>
                       <a
-                        href="/invocations/{{ run.workflow_invocation_id }}"
+                        href="/invocations/{{ run.workflow_id }}"
                         class="font-monospace text-decoration-none"
-                        >{{ run.workflow_invocation_id }}</a
+                        >{{ run.workflow_id }}</a
                       >
                     </td>
                     <td>

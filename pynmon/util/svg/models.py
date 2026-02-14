@@ -126,7 +126,6 @@ class InvocationBar:
     changes status or moves between runners.
 
     :param str invocation_id: The invocation identifier
-    :param str task_id: The task identifier
     :param datetime start_time: Start of this segment
     :param datetime end_time: End of this segment (or current time if ongoing)
     :param str status: The invocation status during this segment
@@ -135,7 +134,6 @@ class InvocationBar:
     """
 
     invocation_id: str
-    task_id: str
     start_time: datetime
     end_time: datetime
     status: str
@@ -158,7 +156,6 @@ class StatusPoint:
     also getting a bar extending from the point.
 
     :param str invocation_id: The invocation identifier
-    :param str task_id: The task identifier
     :param datetime timestamp: When this status occurred
     :param str status: The invocation status
     :param str color: Hex color for rendering this point
@@ -168,7 +165,6 @@ class StatusPoint:
     """
 
     invocation_id: str
-    task_id: str
     timestamp: datetime
     status: str
     color: str
@@ -187,7 +183,6 @@ class StatusSegment:
     from the status point to either the next status or current time.
 
     :param str invocation_id: The invocation identifier
-    :param str task_id: The task identifier
     :param datetime start_time: Start of this segment (when status began)
     :param datetime end_time: End of segment (next status time or now)
     :param str status: The invocation status during this segment
@@ -199,7 +194,6 @@ class StatusSegment:
     """
 
     invocation_id: str
-    task_id: str
     start_time: datetime
     end_time: datetime
     status: str

@@ -38,14 +38,15 @@ def test_get_final_invocations() -> None:
         invocation0.invocation_id,
         invocation1.invocation_id,
     ]
-    app.state_backend._get_result.return_value = -13
+    app.state_backend._get_result.return_value = app.serializer.serialize(-13)
     # Both invocations are final so results should be yielded immediately.
     assert list(invocation_group.results) == [-13, -13]
 
 
 def test_get_pending_results() -> None:
-    invocation0: DistributedInvocation = DistributedInvocation(
-        call=Call(add, Arguments()), parent_invocation=MagicMock()
+    parent_inv: DistributedInvocation = add(1, 2)  # type: ignore
+    invocation0: DistributedInvocation = DistributedInvocation.from_parent(
+        call=Call(add, Arguments()), parent_invocation=parent_inv
     )
     invocation1: DistributedInvocation = add(3, 4)  # type: ignore
     invocation_group: DistributedInvocationGroup = DistributedInvocationGroup(

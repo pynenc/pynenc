@@ -28,7 +28,7 @@ def parent_workflow(numbers: list[int]) -> dict:
     return {
         "original": numbers,
         "doubled": results,
-        "workflow_id": parent_workflow.invocation.workflow.workflow_invocation_id,
+        "workflow_id": parent_workflow.invocation.workflow.workflow_id,
     }
 
 

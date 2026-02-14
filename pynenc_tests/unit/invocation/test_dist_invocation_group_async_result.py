@@ -1,5 +1,5 @@
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -55,8 +55,9 @@ async def test_async_final_invocations() -> None:
 @pytest.mark.asyncio
 async def test_async_pending_results(monkeypatch: pytest.MonkeyPatch) -> None:
     # Create two invocations; use a dummy Arguments instance.
-    invocation0: DistributedInvocation = DistributedInvocation(
-        call=Call(add, Arguments()), parent_invocation=MagicMock()
+    parent_inv: DistributedInvocation = add(1, 2)  # type: ignore
+    invocation0: DistributedInvocation = DistributedInvocation.from_parent(
+        call=Call(add, Arguments()), parent_invocation=parent_inv
     )
     invocation1: DistributedInvocation = add(3, 4)  # type: ignore
     group: DistributedInvocationGroup = DistributedInvocationGroup(

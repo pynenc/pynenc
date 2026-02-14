@@ -34,7 +34,7 @@ class MetadataContainer:
 app = Pynenc(
     config_values={
         "serializer_cls": "PickleSerializer",
-        "arg_cache": "MemArgCache",
+        "client_data_store_cls": "MemClientDataStore",
         "min_size_to_cache": 0,
     }
 )

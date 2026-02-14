@@ -90,8 +90,8 @@ def test_broker_queue_shows_pending_invocations(app_broker: "Pynenc") -> None:
     call2: Call = Call(task_two, Arguments({"duration": 5}))
 
     # Create invocations
-    invocation1: DistributedInvocation = DistributedInvocation(call1)
-    invocation2: DistributedInvocation = DistributedInvocation(call2)
+    invocation1: DistributedInvocation = DistributedInvocation.isolated(call1)
+    invocation2: DistributedInvocation = DistributedInvocation.isolated(call2)
 
     print(
         f"Created invocations: {invocation1.invocation_id[:8]}, {invocation2.invocation_id[:8]}"

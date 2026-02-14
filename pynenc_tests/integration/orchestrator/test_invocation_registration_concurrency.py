@@ -51,22 +51,16 @@ def test_task_concurrency_control_raising(task_mirror_io: "Task") -> None:
     assert excinfo.value.task_id == task_mirror_io.task_id
     assert excinfo.value.existing_invocation_id == first_invocation.invocation_id
     assert excinfo.value.diff == (
-        "==============================\n"
-        "Differences for pynenc_tests.integration.orchestrator.orchestrator_tasks.dummy_mirror:\n"
-        "==============================\n"
-        "  * Original: {'arg': '0'}\n"
-        "  * Updated: {'arg': '1'}\n"
-        "------------------------------\n"
-        "  * Changes: \n"
-        "    - arg: 0 -> 1\n"
-        "=============================="
+        f"Arguments differ for task {task_mirror_io.task_id}:\n"
+        "Changed:\n"
+        "  arg: '0' -> '1'"
     )
     # Trying with same arguments
     next_invocation = task_mirror_io("0")
     assert isinstance(first_invocation, DistributedInvocation)
     assert isinstance(next_invocation, ReusedInvocation)
     assert first_invocation.invocation_id == next_invocation.invocation_id
-    assert first_invocation.arguments == next_invocation.arguments
+    assert first_invocation.arguments.kwargs == next_invocation.arguments.kwargs
     assert first_invocation.arguments.kwargs["arg"] == "0"
     assert next_invocation.diff_arg is None
 
@@ -92,7 +86,7 @@ def test_registration_concurrency_not_raising(task_mirror_io: "Task") -> None:
     assert isinstance(first_invocation, DistributedInvocation)
     assert isinstance(next_invocation, ReusedInvocation)
     assert first_invocation.invocation_id == next_invocation.invocation_id
-    assert first_invocation.arguments == next_invocation.arguments
+    assert first_invocation.arguments.kwargs == next_invocation.arguments.kwargs
     assert first_invocation.arguments.kwargs["arg"] == "0"
     assert isinstance(next_invocation.diff_arg, Arguments)
     assert next_invocation.diff_arg.kwargs["arg"] == "1"
@@ -138,15 +132,9 @@ def test_registration_concurrency_keys_raising(task_key_arg_io: "Task") -> None:
     assert excinfo.value.task_id == task_key_arg_io.task_id
     assert excinfo.value.existing_invocation_id == inv_k0.invocation_id
     assert excinfo.value.diff == (
-        "==============================\n"
-        "Differences for pynenc_tests.integration.orchestrator.orchestrator_tasks.dummy_key_arg:\n"
-        "==============================\n"
-        "  * Original: {'key': 'key0', 'arg': 'a'}\n"
-        "  * Updated: {'key': 'key0', 'arg': 'b'}\n"
-        "------------------------------\n"
-        "  * Changes: \n"
-        "    - arg: a -> b\n"
-        "=============================="
+        f"Arguments differ for task {task_key_arg_io.task_id}:\n"
+        "Changed:\n"
+        "  arg: 'a' -> 'b'"
     )
 
     assert inv_k0.invocation_id == task_key_arg_io("key0", "a").invocation_id
@@ -177,8 +165,8 @@ def test_single_invocation_keys_not_raising(task_key_arg_io: "Task") -> None:
     # Reuse invocations
     assert inv_k0.invocation_id == next_inv_k0.invocation_id
     assert inv_k1.invocation_id == next_inv_k1.invocation_id
-    assert inv_k0.arguments == next_inv_k0.arguments
-    assert inv_k1.arguments == next_inv_k1.arguments
+    assert inv_k0.arguments.kwargs == next_inv_k0.arguments.kwargs
+    assert inv_k1.arguments.kwargs == next_inv_k1.arguments.kwargs
     # with diff_args specified for the differences
     assert isinstance(next_inv_k0.diff_arg, Arguments)
     assert isinstance(next_inv_k1.diff_arg, Arguments)

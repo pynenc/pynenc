@@ -7,7 +7,6 @@ from pynenc import Pynenc
 config = {
     # "serializer_cls": "JsonSerializer",
     "runner_cls": "ThreadRunner",
-    "cycle_control": False,
     "blocking_control": False,
     # "runner_loop_sleep_time_sec": 0.01,
     # "invocation_wait_results_sleep_time_sec": 0.01,

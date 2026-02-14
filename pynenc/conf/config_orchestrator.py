@@ -8,12 +8,6 @@ class ConfigOrchestrator(ConfigPynencBase):
     """
     Main config of the orchestrator components.
 
-    :cvar ConfigField[bool] cycle_control:
-        This boolean flag enables the orchestrator to detect cycles of calls to subtasks.
-        For example, if task1 calls task2 and task2 calls back to task1, this can create
-        an endless loop. The cycle control functionality is enabled by default to prevent
-        such scenarios. Users can choose to disable it if needed.
-
     :cvar ConfigField[bool] blocking_control:
         This boolean flag activates control over tasks that are blocking on other tasks.
         If a task invocation is waiting on another invocation, it notifies the runner,
@@ -31,7 +25,6 @@ class ConfigOrchestrator(ConfigPynencBase):
         is stored in the result backend, which can handle more data and afford to be slower.
     """
 
-    cycle_control = ConfigField(True)
     blocking_control = ConfigField(True)
     auto_final_invocation_purge_hours = ConfigField(24.0)
 

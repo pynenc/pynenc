@@ -6,8 +6,9 @@ from typing import TYPE_CHECKING, Any
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
+from pynenc.call import CallId
+
 from pynmon.app import get_pynenc_instance, templates
-from pynmon.util.formatting import format_task_extra_info
 from pynmon.util.view_helpers import (
     format_serialized_arguments,
     render_error_response,
@@ -15,7 +16,7 @@ from pynmon.util.view_helpers import (
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
-    from pynenc.call import Call
+    from pynenc.call import Call, CallId
     from pynenc.invocation import DistributedInvocation
     from pynenc.task import Task
 
@@ -37,7 +38,7 @@ def _check_timeout_for_call_search(
 
 
 def _search_invocations_in_task(
-    app: "Pynenc", task: "Task", call_id: str, task_timeout: float
+    app: "Pynenc", task: "Task", call_id: "CallId", task_timeout: float
 ) -> tuple[list["DistributedInvocation"], Any, bool]:
     """
     Search for invocations matching call_id in a specific task.
@@ -87,7 +88,7 @@ def _search_invocations_in_task(
 
 
 def find_call_and_invocations(
-    app: "Pynenc", call_id: str, timeout: int = 10
+    app: "Pynenc", call_id: "CallId", timeout: int = 10
 ) -> tuple["Call | None", "Task | None", list["DistributedInvocation"]]:
     """
     Find a call by its ID along with related invocations and task.
@@ -151,7 +152,7 @@ def find_call_and_invocations(
 
 
 async def process_call_detail(
-    request: Request, call_id: str, request_source: str
+    request: Request, call_id: "CallId", request_source: str
 ) -> HTMLResponse:
     """
     Process a call detail request regardless of how the call_id was provided.
@@ -162,15 +163,6 @@ async def process_call_detail(
     :return: HTML response with call details or error page
     """
     app = get_pynenc_instance()
-
-    if not call_id or call_id.strip() == "":
-        return render_error_response(
-            templates,
-            request,
-            "Missing Call ID",
-            "No call_id was provided. Please check the URL and try again.",
-            400,
-        )
 
     logger.info(f"Looking for call with ID ({request_source}): {call_id}")
     start_time = time.time()
@@ -191,7 +183,7 @@ async def process_call_detail(
 
         # Create template context
         context = _create_call_detail_context(
-            request, app, target_call, target_task, invocations, call_id
+            request, app, target_call, target_task, invocations
         )
 
         logger.info(
@@ -218,28 +210,16 @@ def _create_call_detail_context(
     target_call: "Call",
     target_task: "Task",
     invocations: list["DistributedInvocation"],
-    call_id: str,
 ) -> dict[str, Any]:
     """Create the template context for call detail page."""
     serialized = getattr(target_call, "serialized_arguments", None)
     formatted_args, raw_args = format_serialized_arguments(serialized)
 
-    task_info = {
-        "task_id": target_task.task_id,
-        **format_task_extra_info(target_task),
-    }
-
-    # Use a simple title for the browser tab only
-    func_name = task_info.get("func_qualname", "")
-    module_name = task_info.get("module", "")
-    title = f"{module_name}.{func_name}" if module_name else func_name
-
     return {
         "request": request,
-        "title": title,
         "app_id": app.app_id,
         "call": target_call,
-        "task": task_info,
+        "task": target_task,
         "arguments": getattr(target_call, "arguments", None),
         "serialized_arguments": raw_args if raw_args is not None else formatted_args,
         "formatted_args": formatted_args,
@@ -251,7 +231,26 @@ def _create_call_detail_context(
 async def call_detail_by_query(request: Request) -> HTMLResponse:
     """Display detailed information about a specific call via query parameter."""
     try:
-        call_id = request.query_params.get("call_id", "")
+        call_id_key = request.query_params.get("call_id_key")
+        if not call_id_key:
+            return render_error_response(
+                templates,
+                request,
+                "Missing Call ID",
+                "No call_id was provided. Please check the URL and try again.",
+                400,
+            )
+        try:
+            call_id = CallId.from_key(call_id_key)
+        except ValueError as e:
+            logger.warning(f"Invalid call ID format: {call_id_key} - {str(e)}")
+            return render_error_response(
+                templates,
+                request,
+                "Invalid Call ID Format",
+                f"The provided call ID is not properly formatted: {str(e)}",
+                400,
+            )
         logger.info(f"Call detail by query requested for: {call_id}")
         logger.debug(f"Query params: {dict(request.query_params)}")
 
@@ -270,12 +269,23 @@ async def call_detail_by_query(request: Request) -> HTMLResponse:
         )
 
 
-@router.get("/{call_id:path}", response_class=HTMLResponse)
-async def call_detail(request: Request, call_id: str) -> HTMLResponse:
+@router.get("/{call_id_key:path}", response_class=HTMLResponse)
+async def call_detail(request: Request, call_id_key: str) -> HTMLResponse:
     """Display detailed information about a specific call via path parameter."""
     # Check if this is accidentally a query param request
-    if call_id == "" and "call_id" in request.query_params:
+    if call_id_key == "" and "call_id_key" in request.query_params:
         # Redirect to the query param handler
         return await call_detail_by_query(request)
 
+    try:
+        call_id = CallId.from_key(call_id_key)
+    except ValueError as e:
+        logger.warning(f"Invalid call ID format: {call_id_key} - {str(e)}")
+        return render_error_response(
+            templates,
+            request,
+            "Invalid Call ID Format",
+            f"The provided call ID is not properly formatted: {str(e)}",
+            400,
+        )
     return await process_call_detail(request, call_id, "path param")

@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
+from _pytest.capture import CaptureFixture
 
 from pynenc import Pynenc
 from pynenc.cli import config_cli
@@ -13,6 +14,7 @@ from pynenc.cli.main_cli import main
 from pynenc.conf.config_base import ConfigPynencBase
 from pynenc.conf.config_runner import ConfigThreadRunner
 from pynenc.conf.config_task import ConfigTask
+from pynenc.identifiers.task_id import TaskId
 from pynenc.util.subclasses import get_all_subclasses
 
 if TYPE_CHECKING:
@@ -74,7 +76,7 @@ def test_parse_config_docstring(config_cls: type["ConfigPynencBase"]) -> None:
     """
     field_docs = config_cli.extract_descriptions_from_docstring(config_cls)
     if issubclass(config_cls, ConfigTask):
-        config: ConfigPynencBase = config_cls("module.task")
+        config: ConfigPynencBase = config_cls(TaskId("module", "task"))
     else:
         config = config_cls()
     for key in config.all_fields:
@@ -99,16 +101,16 @@ def test_show_config_missing_app_error() -> None:
             assert "command" in line
 
 
-def test_cli_show_config_app() -> None:
+def test_cli_show_config_app(capsys: CaptureFixture[str]) -> None:
     """Test show_config command for app configuration."""
     with patch(
         "sys.argv",
         ["pynenc", "--app", "pynenc_tests.unit.cli.test_config_cli.app", "show_config"],
     ):
-        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
-            main()
+        main()
 
-    output = mock_stdout.getvalue()
+    captured = capsys.readouterr()
+    output = captured.out
     assert "Showing configuration for Pynenc instance:" in output
     assert "location: pynenc_tests.unit.cli.test_config_cli.app" in output
     assert f"id: {app.conf.app_id}" in output
@@ -116,7 +118,7 @@ def test_cli_show_config_app() -> None:
     check_fields_in_output(output, app.conf)
 
 
-def test_cli_show_config_runner() -> None:
+def test_cli_show_config_runner(capsys: CaptureFixture[str]) -> None:
     """Test show_config command for runner configuration."""
     with patch(
         "sys.argv",
@@ -128,10 +130,10 @@ def test_cli_show_config_runner() -> None:
             "show_config",
         ],
     ):
-        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
-            main()
+        main()
 
-    output = mock_stdout.getvalue()
+    captured = capsys.readouterr()
+    output = captured.out
     assert "Showing configuration for Pynenc instance:" in output
     assert "location: pynenc_tests.unit.cli.test_config_cli.app" in output
     assert f"id: {app.conf.app_id}" in output
@@ -140,7 +142,7 @@ def test_cli_show_config_runner() -> None:
     check_fields_in_output(output, app.runner.conf)
 
 
-def test_cli_show_config_mem_runner() -> None:
+def test_cli_show_config_mem_runner(capsys: CaptureFixture[str]) -> None:
     """Check that modifying env var for RUNNER_CLS affects show_config command."""
     with patch.dict(os.environ, {"PYNENC__RUNNER_CLS": "ThreadRunner"}):
         with patch(
@@ -153,10 +155,10 @@ def test_cli_show_config_mem_runner() -> None:
                 "show_config",
             ],
         ):
-            with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
-                main()
+            main()
 
-    output = mock_stdout.getvalue()
+    captured = capsys.readouterr()
+    output = captured.out
     assert "Showing configuration for Pynenc instance:" in output
     assert "location: pynenc_tests.unit.cli.test_config_cli.app" in output
     assert f"id: {app.conf.app_id}" in output
@@ -200,13 +202,13 @@ def test_show_config_command_with_invalid_app_instance() -> None:
 SOME_APP_PATH = str(Path(__file__).parent / "some_app.py")
 
 
-def test_cli_show_config_with_file_path() -> None:
+def test_cli_show_config_with_file_path(capsys: CaptureFixture[str]) -> None:
     """Test show_config command with a file path."""
     with patch("sys.argv", ["pynenc", "--app", SOME_APP_PATH, "show_config"]):
-        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
-            main()
+        main()
 
-    output = mock_stdout.getvalue()
+    captured = capsys.readouterr()
+    output = captured.out
     assert "Showing configuration for Pynenc instance:" in output
     assert f"location: {SOME_APP_PATH}" in output
     assert "id: pynenc" in output

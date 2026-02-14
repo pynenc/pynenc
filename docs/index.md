@@ -41,7 +41,7 @@ license
 - Workflow System for Complex Task Orchestration with Deterministic Execution
 - Trigger System for Event-Driven and Scheduled Tasks
 - Invocation Status State Machine with Recovery
-- Automatic Task Pausing and Cycle Detection
+- Automatic Task Pausing
 - Real-Time Monitoring with Pynmon
 - Flexible Configuration Builder
 

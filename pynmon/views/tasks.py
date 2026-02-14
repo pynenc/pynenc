@@ -6,13 +6,15 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
+from pynenc.identifiers.task_id import TaskId
+
 from pynmon.app import get_pynenc_instance, templates
 from pynmon.util.formatting import format_task_extra_info
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
-    from pynenc.call import Call
     from pynenc.task import Task
+    from pynenc.call import Call
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 logger = logging.getLogger("pynmon.views.tasks")
@@ -98,17 +100,40 @@ async def refresh_tasks_list(request: Request) -> HTMLResponse:
     )
 
 
-@router.get("/{task_id}", response_class=HTMLResponse)
-async def task_detail(request: Request, task_id: str) -> HTMLResponse:
+@router.get("/{task_id_key}", response_class=HTMLResponse)
+async def task_detail(request: Request, task_id_key: str) -> HTMLResponse:
     """Display detailed information about a specific task."""
+    if not task_id_key:
+        return templates.TemplateResponse(
+            "shared/error.html",
+            {
+                "request": request,
+                "title": "Missing Task ID",
+                "message": "No task_id was provided. Please check the URL and try again.",
+            },
+            status_code=400,
+        )
+
+    try:
+        task_id = TaskId.from_key(task_id_key)
+    except ValueError as e:
+        logger.warning(f"Invalid task ID format: {task_id_key} - {str(e)}")
+        return templates.TemplateResponse(
+            "shared/error.html",
+            {
+                "request": request,
+                "title": "Invalid Task ID Format",
+                "message": f"The provided task ID is not properly formatted: {str(e)}",
+            },
+            status_code=400,
+        )
+
     logger.info(f"Retrieving details for task: {task_id}")
     start_time = time.time()
 
     try:
         app = get_pynenc_instance()
         logger.info(f"Got app instance: {app.app_id}")
-
-        # Try to find the task by ID
         try:
             task = app.get_task(task_id)
             logger.info(f"Task found: {task is not None}")

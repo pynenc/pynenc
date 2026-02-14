@@ -1,6 +1,7 @@
 import pytest
 
-from pynenc import Pynenc, Task
+from pynenc import Pynenc
+from pynenc.identifiers.task_id import TaskId
 
 app = Pynenc()
 
@@ -18,23 +19,29 @@ def test_task_id() -> None:
     """
     Test that the task id is set correctly on task registration
     """
-    assert add.task_id == "test_task_id.add"
-    *module, func_name = add.task_id.split(".")
-    assert add.func.__module__ == ".".join(module)
-    assert add.func.__name__ == func_name
+    expected_task_id = TaskId("test_task_id", "add")
+    assert add.task_id == expected_task_id
+    assert add.func.__module__ == expected_task_id.module
+    assert add.func.__name__ == expected_task_id.func_name
 
 
-def test_deserialize_task() -> None:
+def test_pickle_task() -> None:
     """
-    Test that a task can be deserialized from a serialized task
+    Test that a task can be serialized and deserialized using pickle (__getstate__/__setstate__)
     """
-    serialized_task = add.to_json()
-    assert serialized_task == '{"task_id": "test_task_id.add", "options": "{}"}'
+    import pickle
+
+    # Serialize the task using pickle
+    serialized_task = pickle.dumps(add)
+
     # Deserialize the task
-    deserialized_task = Task.from_json(app, serialized_task)
+    deserialized_task = pickle.loads(serialized_task)
+
     # Check if the deserialized task is the same as the original task
     assert deserialized_task.task_id == add.task_id
     assert deserialized_task.func == add.func
+    assert deserialized_task.app.app_id == add.app.app_id
+    assert deserialized_task.options == add.options
 
 
 def test_error_on_main() -> None:

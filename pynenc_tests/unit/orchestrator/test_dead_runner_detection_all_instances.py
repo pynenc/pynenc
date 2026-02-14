@@ -17,6 +17,7 @@ from pynenc_tests.conftest import MockPynenc
 if TYPE_CHECKING:
     from pynenc import Pynenc
     from pynenc.invocation import DistributedInvocation
+    from pynenc.identifiers.invocation_id import InvocationId
 
 # Create app and tasks for testing
 app = MockPynenc()
@@ -44,7 +45,7 @@ def create_runner_context(runner_id: str) -> RunnerContext:
 
 def create_running_invocation(
     app_instance: "Pynenc", runner_ctx: RunnerContext, task_value: int = 0
-) -> str:
+) -> "InvocationId":
     """
     Helper to create a RUNNING invocation owned by the specified runner.
 

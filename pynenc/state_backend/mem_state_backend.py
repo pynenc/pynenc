@@ -2,14 +2,17 @@ import itertools
 from collections import defaultdict
 from collections.abc import Iterator
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from pynenc.state_backend.base_state_backend import BaseStateBackend
+from pynenc.identifiers.task_id import TaskId
 from pynenc.types import Params, Result
 
 if TYPE_CHECKING:
     from pynenc.app import AppInfo, Pynenc
-    from pynenc.invocation.dist_invocation import DistributedInvocation
+    from pynenc.identifiers.invocation_id import InvocationId
+    from pynenc.invocation.dist_invocation import InvocationDTO
+    from pynenc.models.call_dto import CallDTO
     from pynenc.runner.runner_context import RunnerContext
     from pynenc.state_backend.base_state_backend import InvocationHistory
     from pynenc.workflow import WorkflowIdentity
@@ -32,18 +35,18 @@ class MemStateBackend(BaseStateBackend[Params, Result]):
     """
 
     def __init__(self, app: "Pynenc") -> None:
-        self._cache: dict[str, DistributedInvocation] = {}
+        self._cache: dict[str, tuple[InvocationDTO, CallDTO]] = {}
         self._runner_contexts: dict[str, RunnerContext] = {}
-        self._history: dict[str, list] = defaultdict(list)
-        self._results: dict[str, Any] = {}
-        self._exceptions: dict[str, Exception] = {}
-        self._workflow_data: dict[str, dict[str, Any]] = defaultdict(dict)
-        self._workflow_types: set[str] = set()  # Stores workflow_task_ids
-        self._workflow_runs: dict[str, set[WorkflowIdentity]] = defaultdict(
+        self._history: dict[InvocationId, list] = defaultdict(list)
+        self._results: dict[InvocationId, str] = {}
+        self._exceptions: dict[InvocationId, str] = {}
+        self._workflow_data: dict[InvocationId, dict[str, Any]] = defaultdict(dict)
+        self._workflow_types: set[TaskId] = set()  # Stores workflow_task_ids
+        self._workflow_runs: dict[TaskId, set[WorkflowIdentity]] = defaultdict(
             set
         )  # workflow_task_id -> runs
-        self._workflow_sub_invocations: dict[str, set[str]] = defaultdict(
-            set
+        self._workflow_sub_invocations: dict[InvocationId, set[InvocationId]] = (
+            defaultdict(set)
         )  # workflow_id -> sub_invocation_ids
         super().__init__(app)
 
@@ -57,32 +60,37 @@ class MemStateBackend(BaseStateBackend[Params, Result]):
         self._workflow_runs.clear()
         self._workflow_sub_invocations.clear()
 
-    def upsert_invocations(self, invocations: list["DistributedInvocation"]) -> None:
-        """Inserts or updates multiple invocations in the memory cache."""
-        for invocation in invocations:
-            self._cache[invocation.invocation_id] = invocation
+    def _upsert_invocations(
+        self, entries: list[tuple["InvocationDTO", "CallDTO"]]
+    ) -> None:
+        """Store invocation and call DTO pairs in the memory cache."""
+        for inv_dto, call_dto in entries:
+            self._cache[inv_dto.invocation_id] = (inv_dto, call_dto)
 
-    def _get_invocation(self, invocation_id: str) -> Optional["DistributedInvocation"]:
-        """
-        Retrieves an invocation from the memory cache by its ID.
+    def _get_invocation(
+        self, invocation_id: str
+    ) -> tuple["InvocationDTO", "CallDTO"] | None:
+        """Retrieve an invocation DTO pair from the memory cache.
 
         :param str invocation_id: The ID of the invocation to retrieve.
-        :return: The retrieved invocation object.
+        :return: Paired DTOs if found, else None.
         """
         return self._cache.get(invocation_id)
 
     def _add_histories(
-        self, invocation_ids: list[str], invocation_history: "InvocationHistory"
+        self,
+        invocation_ids: list["InvocationId"],
+        invocation_history: "InvocationHistory",
     ) -> None:
         """Adds the same history record for a list of invocations."""
         for invocation_id in invocation_ids:
             self._history[invocation_id].append(invocation_history)
 
-    def _get_history(self, invocation_id: str) -> list["InvocationHistory"]:
+    def _get_history(self, invocation_id: "InvocationId") -> list["InvocationHistory"]:
         """
         Retrieves the history of an invocation ordered by timestamp.
 
-        :param str invocation_id: The ID of the invocation to get the history from
+        :param "InvocationId" invocation_id: The ID of the invocation to get the history from
         :return: List of InvocationHistory records
         """
         return sorted(
@@ -90,41 +98,45 @@ class MemStateBackend(BaseStateBackend[Params, Result]):
             key=lambda record: record.timestamp,
         )
 
-    def _get_result(self, invocation_id: str) -> Result:
+    def _get_result(self, invocation_id: "InvocationId") -> str:
         """
         Retrieves the result of an invocation.
 
-        :param str invocation_id: The ID of the invocation to get the result from
-        :return: The result value
+        :param "InvocationId" invocation_id: The ID of the invocation to get the result from
+        :return: The serialized result string
         """
         return self._results[invocation_id]
 
-    def _set_result(self, invocation_id: str, result: Result) -> None:
+    def _set_result(
+        self, invocation_id: "InvocationId", serialized_result: str
+    ) -> None:
         """
         Sets the result of an invocation.
 
-        :param str invocation_id: The ID of the invocation to set
-        :param object result: The result to set
+        :param "InvocationId" invocation_id: The ID of the invocation to set
+        :param str serialized_result: The serialized result string to set
         """
-        self._results[invocation_id] = result
+        self._results[invocation_id] = serialized_result
 
-    def _get_exception(self, invocation_id: str) -> "Exception":
+    def _get_exception(self, invocation_id: "InvocationId") -> str:
         """
         Retrieves the exception of an invocation.
 
-        :param str invocation_id: The ID of the invocation to get the exception from
-        :return: The exception object
+        :param "InvocationId" invocation_id: The ID of the invocation to get the exception from
+        :return: The serialized exception string
         """
         return self._exceptions[invocation_id]
 
-    def _set_exception(self, invocation_id: str, exception: "Exception") -> None:
+    def _set_exception(
+        self, invocation_id: "InvocationId", serialized_exception: str
+    ) -> None:
         """
         Sets the raised exception by an invocation ran.
 
-        :param str invocation_id: The ID of the invocation to set
-        :param Exception exception: The exception raised
+        :param "InvocationId" invocation_id: The ID of the invocation to set
+        :param str serialized_exception: The serialized exception string to set
         """
-        self._exceptions[invocation_id] = exception
+        self._exceptions[invocation_id] = serialized_exception
 
     def get_workflow_data(
         self, workflow_identity: "WorkflowIdentity", key: str, default: Any = None
@@ -132,9 +144,9 @@ class MemStateBackend(BaseStateBackend[Params, Result]):
         """
         Get a value from workflow data.
 
-        :param workflow_identity: Workflow identity
-        :param key: Data key to retrieve
-        :param default: Default value if key doesn't exist
+        :param "WorkflowIdentity" workflow_identity: Workflow identity
+        :param str key: Data key to retrieve
+        :param Any default: Default value if key doesn't exist
         :return: Stored value or default
         """
         workflow_id = workflow_identity.workflow_id
@@ -185,10 +197,10 @@ class MemStateBackend(BaseStateBackend[Params, Result]):
 
         :param workflow_identity: The workflow identity to store
         """
-        self._workflow_types.add(workflow_identity.workflow_task_id)
-        self._workflow_runs[workflow_identity.workflow_task_id].add(workflow_identity)
+        self._workflow_types.add(workflow_identity.workflow_type)
+        self._workflow_runs[workflow_identity.workflow_type].add(workflow_identity)
 
-    def get_all_workflow_types(self) -> Iterator[str]:
+    def get_all_workflow_types(self) -> Iterator["TaskId"]:
         """
         Retrieve all workflow types (workflow_task_ids) stored in this state backend.
 
@@ -204,7 +216,9 @@ class MemStateBackend(BaseStateBackend[Params, Result]):
         """
         return itertools.chain.from_iterable(self._workflow_runs.values())
 
-    def get_workflow_runs(self, workflow_type: str) -> Iterator["WorkflowIdentity"]:
+    def get_workflow_runs(
+        self, workflow_type: "TaskId"
+    ) -> Iterator["WorkflowIdentity"]:
         """
         Retrieve workflow run identities from this state backend.
 
@@ -214,7 +228,7 @@ class MemStateBackend(BaseStateBackend[Params, Result]):
         return iter(self._workflow_runs.get(workflow_type, []))
 
     def store_workflow_sub_invocation(
-        self, parent_workflow_id: str, sub_invocation_id: str
+        self, parent_workflow_id: "InvocationId", sub_invocation_id: "InvocationId"
     ) -> None:
         """
         Store a sub-invocation ID that runs inside a parent workflow.
@@ -224,7 +238,9 @@ class MemStateBackend(BaseStateBackend[Params, Result]):
         """
         self._workflow_sub_invocations[parent_workflow_id].add(sub_invocation_id)
 
-    def get_workflow_sub_invocations(self, workflow_id: str) -> Iterator[str]:
+    def get_workflow_sub_invocations(
+        self, workflow_id: "InvocationId"
+    ) -> Iterator["InvocationId"]:
         """
         Retrieve all sub-invocation IDs that run inside a specific workflow.
 
@@ -238,10 +254,10 @@ class MemStateBackend(BaseStateBackend[Params, Result]):
         start_time: datetime,
         end_time: datetime,
         batch_size: int = 100,
-    ) -> Iterator[list[str]]:
+    ) -> Iterator[list["InvocationId"]]:
         """Iterate over invocation IDs that have history within time range."""
         # Collect all invocation IDs that have history entries in the time range
-        matching_ids: set[str] = set()
+        matching_ids: set[InvocationId] = set()
         for invocation_id, history_list in self._history.items():
             for history_entry in history_list:
                 if start_time <= history_entry.timestamp <= end_time:

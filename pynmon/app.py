@@ -144,9 +144,9 @@ def setup_routes() -> None:
     """Set up all route modules."""
     # Import view modules only when needed to avoid circular imports
     from pynmon.views import (
-        arg_cache,
         broker,
         calls,
+        client_data_store,
         invocations,
         orchestrator,
         runners,
@@ -157,13 +157,13 @@ def setup_routes() -> None:
 
     # Register the routes
     app.include_router(broker.router)
+    app.include_router(client_data_store.router)
     app.include_router(orchestrator.router)
     app.include_router(runners.router)
     app.include_router(invocations.router)
     app.include_router(tasks.router)
     app.include_router(calls.router)
     app.include_router(state_backend.router)
-    app.include_router(arg_cache.router)
     app.include_router(workflows.router)
 
 
