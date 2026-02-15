@@ -246,7 +246,7 @@ class PynencBuilder:
                 "orchestrator_cls": "MemOrchestrator",
                 "broker_cls": "MemBroker",
                 "state_backend_cls": "MemStateBackend",
-                "client_data_cls": MemClientDataStore.__name__,
+                "client_data_store_cls": MemClientDataStore.__name__,
                 "trigger_cls": MemTrigger.__name__,
             }
         )
@@ -272,7 +272,7 @@ class PynencBuilder:
                 "orchestrator_cls": "SQLiteOrchestrator",
                 "broker_cls": "SQLiteBroker",
                 "state_backend_cls": "SQLiteStateBackend",
-                "client_data_cls": "SQLiteClientDataStore",
+                "client_data_store_cls": "SQLiteClientDataStore",
                 "trigger_cls": "SQLiteTrigger",
             }
         )
@@ -299,7 +299,7 @@ class PynencBuilder:
         """
         self._config.update(
             {
-                "client_data_cls": MemClientDataStore.__name__,
+                "client_data_store_cls": MemClientDataStore.__name__,
                 "min_size_to_cache": min_size_to_cache,
                 "local_cache_size": local_cache_size,
             }

@@ -58,7 +58,7 @@ Set up caching in your `pyproject.toml` file:
 
 ```toml
 [tool.pynenc]
-arg_client_data_cls = "SQLiteClientDataStore"  # or "MemClientDataStore"
+arg_client_data_store_cls = "SQLiteClientDataStore"  # or "MemClientDataStore"
 
 [tool.pynenc.client_data_store]
 min_size_to_cache = 1024  # Cache arguments larger than 1KB

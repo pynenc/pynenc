@@ -232,8 +232,6 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
         self, entries: list[tuple["InvocationDTO", "CallDTO"]]
     ) -> None:
         """Store invocation and call DTO pairs as discrete columns."""
-        import json
-
         with sqlite_conn(self.sqlite_db_path) as conn:
             for inv_dto, call_dto in entries:
                 wf = inv_dto.workflow
@@ -407,7 +405,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
     ) -> None:
         """Set workflow data."""
         with sqlite_conn(self.sqlite_db_path) as conn:
-            serialized_value = self.app.serializer.serialize(value)
+            serialized_value = self.app.client_data_store.serialize(value)
             conn.execute(
                 f"""
                 INSERT OR REPLACE INTO {Tables.WORKFLOW_DATA} (workflow_id, data_key, data_value)
@@ -432,7 +430,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
             row = cursor.fetchone()
             cursor.close()
             if row:
-                return self.app.serializer.deserialize(row[0])
+                return self.app.client_data_store.deserialize(row[0])
             return default
 
     def get_all_workflow_types(self) -> Iterator["TaskId"]:
