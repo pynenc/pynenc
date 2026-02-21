@@ -23,6 +23,7 @@ from pynenc import context
 from pynenc.conf.config_runner import ConfigPersistentProcessRunner
 from pynenc.runner.base_runner import BaseRunner
 from pynenc.runner.runner_context import RunnerContext
+from pynenc.runner.shutdown_diagnostics import log_runner_shutdown
 from pynenc.util.multiprocessing_utils import warn_missing_main_guard
 
 
@@ -67,10 +68,18 @@ def persistent_process_main(
     app.logger.info(f"Persistent process worker started with PID {os.getpid()}")
 
     def handle_terminate(signum: int, frame: Any) -> None:
-        app.logger.info(f"Process {runner_id} received SIGTERM, setting stop event")
+        inv_info = f" (active invocation: {invocation_id})" if invocation_id else ""
+        app.logger.warning(
+            f"Process {runner_id} received signal {signum}{inv_info}, stopping"
+        )
         stop_event.set()
+        # Raising KeyboardInterrupt interrupts any blocking call in invocation.run()
+        # (e.g. time.sleep). The inner `except Exception` does not catch BaseException,
+        # so it propagates to `except KeyboardInterrupt` where the outer finally reroutes.
+        raise KeyboardInterrupt
 
     signal.signal(signal.SIGTERM, handle_terminate)  # Handle SIGTERM gracefully
+    invocation_id: str | None = None
     try:
         while not stop_event.is_set():
             invocations = list(app.orchestrator.get_invocations_to_run(1, runner_ctx))
@@ -86,11 +95,19 @@ def persistent_process_main(
                 invocation.run(runner_ctx)
             except Exception:
                 app.logger.exception(f"Error executing invocation {invocation_id}")
+            # Do NOT clear invocation_id here: the outer finally needs it to attempt
+            # rerouting if stop_event was set while run() was in progress. If the
+            # invocation already reached a final status the reroute attempt is a no-op.
     except KeyboardInterrupt:
         app.logger.info(f"Process {runner_id} received KeyboardInterrupt, exiting")
     except Exception as e:
         app.logger.exception(f"Process {runner_id} error: {e}")
     finally:
+        if invocation_id:
+            app.logger.warning(
+                f"Process {runner_id} shutting down with active invocation {invocation_id}, rerouting"
+            )
+            app.runner._kill_and_reroute(invocation_id, runner_ctx=runner_ctx)
         app.logger.info(f"Process {runner_id} shutting down")
 
 
@@ -127,11 +144,7 @@ class PersistentProcessRunner(BaseRunner):
 
     def get_active_child_runner_ids(self) -> list[str]:
         """
-        Returns the list of currently active child runner IDs.
-
-        Uses OS-level process checks (Process.is_alive()) to determine which
-        child workers are still running. This enables parent-based health
-        reporting as an alternative to heartbeat-only detection.
+        Returns runner_ids of alive child workers for parent-based health reporting.
 
         :return: List of runner_ids for child workers with alive processes.
         """
@@ -142,6 +155,18 @@ class PersistentProcessRunner(BaseRunner):
             for runner_id, proc in self.child_runner_ids.items()
             if proc.is_alive()
         ]
+
+    def _log_shutdown(self, signum: int | None) -> None:
+        log_runner_shutdown(
+            self.app.logger,
+            self.__class__.__name__,
+            self.runner_id,
+            signum,
+            processes={
+                rid: (proc, None)
+                for rid, proc in getattr(self, "child_runner_ids", {}).items()
+            },
+        )
 
     def _on_start(self) -> None:
         """Initializes the runner and spawns initial processes."""

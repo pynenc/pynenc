@@ -1,3 +1,6 @@
+import multiprocessing
+import os
+import signal
 import threading
 from collections import Counter
 from time import sleep, time
@@ -201,6 +204,132 @@ def test_single_run(task_sum: Task) -> None:
     ), f"Invocation ran more than once: {history}"
     app.runner.stop_runner_loop()
     thread.join()
+
+
+def test_runner_kills_and_reroutes_running_invocation_on_stop(task_sleep: Task) -> None:
+    """Test that stopping the runner while a task runs marks it KILLED then REROUTED.
+
+    MultiThreadRunner delegates work to child processes that each have their own
+    signal handlers. When _on_stop sends SIGTERM to a child, the child's thread.join()
+    call can itself be interrupted by the signal handler raising KeyboardInterrupt,
+    preventing _kill_and_reroute from running. MultiThreadRunner is covered by
+    test_runner_reroutes_on_real_os_signal instead.
+    """
+    app = task_sleep.app
+    if type(app.runner).__name__ == "MultiThreadRunner":
+        pytest.skip(
+            "MultiThreadRunner cleanup runs in child processes; covered by real-signal test"
+        )
+
+    def run_in_thread() -> None:
+        app.runner.run()
+
+    thread = threading.Thread(target=run_in_thread, daemon=True)
+    thread.start()
+
+    invocation = task_sleep(seconds=1)
+    assert isinstance(invocation, DistributedInvocation)
+
+    ini = time()
+    while invocation.status != InvocationStatus.RUNNING:
+        assert time() - ini < 5, "Invocation did not reach RUNNING status in time"
+        sleep(0.05)
+
+    app.runner.stop_runner_loop()
+    thread.join(timeout=10)
+
+    statuses = [
+        h.status_record.status
+        for h in app.state_backend.get_history(invocation.invocation_id)
+    ]
+    assert InvocationStatus.RUNNING in statuses
+    assert InvocationStatus.KILLED in statuses
+    assert InvocationStatus.REROUTED in statuses
+
+
+def _subprocess_runner_main() -> None:
+    """Entry point for subprocess runner worker in real signal tests."""
+    from pynenc import Pynenc
+    from pynenc_tests.integration.combinations import tasks, tasks_async
+
+    app = Pynenc()
+    for mod in (tasks, tasks_async):
+        for attr in dir(mod):
+            obj = getattr(mod, attr)
+            if hasattr(obj, "app"):
+                obj.app = app
+                obj.__dict__.pop("conf", None)
+    app.runner.run()
+
+
+@pytest.mark.parametrize(
+    "signum",
+    [signal.SIGTERM, signal.SIGKILL],
+    ids=["sigterm", "sigkill"],
+)
+def test_runner_reroutes_on_real_os_signal(task_sleep: Task, signum: int) -> None:
+    """
+    Test real OS signal delivery against a subprocess runner.
+
+    The runner runs in a real subprocess so its main thread registers signal handlers.
+    Skipped for Mem backends (no cross-process state sharing).
+
+    SIGTERM expected behaviour by runner type:
+    - ThreadRunner / MultiThreadRunner: handler fires, joins workers, _kill_and_reroute
+      → KILLED + REROUTED in history.
+    - PersistentProcessRunner: handler fires, terminates children with SIGTERM,
+      child finally-block reroutes → KILLED + REROUTED in history.
+    - ProcessRunner: handler fires but _on_stop calls process.kill() (SIGKILL) on
+      children, so children cannot reroute → invocation stays RUNNING.
+
+    SIGKILL (all runners): process dies instantly, no handler, no cleanup
+    → invocation stays RUNNING.
+    """
+    app = task_sleep.app
+
+    if "Mem" in type(app.state_backend).__name__:
+        pytest.skip("Mem backends do not support cross-process state sharing")
+
+    # Must NOT be daemon=True: ProcessRunner creates a Manager() child process during
+    # _on_start, and daemon processes are not allowed to have children on macOS/Windows.
+    proc = multiprocessing.Process(target=_subprocess_runner_main, daemon=False)
+    proc.start()
+    assert proc.pid is not None, "Subprocess failed to start"
+
+    try:
+        invocation = task_sleep(seconds=3)
+        assert isinstance(invocation, DistributedInvocation)
+
+        ini = time()
+        while invocation.status != InvocationStatus.RUNNING:
+            assert time() - ini < 10, "Invocation did not reach RUNNING status in time"
+            sleep(0.1)
+
+        os.kill(proc.pid, signum)
+        proc.join(timeout=30)
+    finally:
+        if proc.is_alive():
+            proc.terminate()
+            proc.join(timeout=5)
+        if proc.is_alive():
+            proc.kill()
+            proc.join(timeout=2)
+
+    statuses = [
+        h.status_record.status
+        for h in app.state_backend.get_history(invocation.invocation_id)
+    ]
+    assert InvocationStatus.RUNNING in statuses
+    if signum == signal.SIGKILL:
+        # Unhandleable: process dies instantly, no handler runs, no cleanup
+        assert InvocationStatus.KILLED not in statuses
+    else:
+        # All runners reroute on SIGTERM:
+        # - ThreadRunner / MultiThreadRunner: _on_stop calls _kill_and_reroute
+        # - PersistentProcessRunner: child finally-block reroutes
+        # - ProcessRunner: parent _on_stop calls _kill_and_reroute before SIGKILL
+        assert InvocationStatus.KILLED in statuses
+        assert InvocationStatus.REROUTED in statuses
 
 
 def test_very_large_invocation_storage(task_process_large_shared_arg: Task) -> None:

@@ -213,6 +213,7 @@ class Task(Generic[Params, Result]):
         :raises ValueError: If the task_id cannot be resolved to a Task
         """
         # Check app's registered tasks first — handles dynamically registered tasks
+        # and tasks whose module-level name was replaced by a wrapper (e.g. direct_task)
         if task_id in app._tasks:
             return app._tasks[task_id]
         function = Task._get_from_task_id(task_id)
@@ -222,6 +223,18 @@ class Task(Generic[Params, Result]):
             task: Task = Task(app, function.func, function.options)
             app._tasks[task_id] = task
             return task
+        # Handle direct_task wrappers: the decorator stores a __pynenc_task__
+        # reference on the wrapper function so we can recover the Task even
+        # when the module-level attribute is a wrapper, not a Task instance.
+        if source_task := getattr(function, "__pynenc_task__", None):
+            if isinstance(source_task, Task):
+                task = Task(app, source_task.func, source_task.options)
+                app._tasks[task_id] = task
+                return task
+        # After importing the module, the decorator may have registered the
+        # task in app._tasks (when the module shares the same app instance).
+        if task_id in app._tasks:
+            return app._tasks[task_id]
         app.logger.warning(
             f"_get_from_task_id returns a non-Task function {function} for {task_id=}"
         )

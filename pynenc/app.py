@@ -643,8 +643,9 @@ class Pynenc:
                         return _aggregate_results(results)
                     return await task(*args, **kwargs).async_result()
 
-                # Attach the original function as an attribute
+                # Attach references for serialization and from_id resolution
                 async_wrapper.__inner_function__ = func  # type: ignore
+                async_wrapper.__pynenc_task__ = task  # type: ignore
                 return async_wrapper  # type: ignore
 
             @wraps(func)
@@ -656,8 +657,9 @@ class Pynenc:
                     return _aggregate_results(invocation_group.results)
                 return task(*args, **kwargs).result
 
-            # Attach the original function as an attribute
+            # Attach references for serialization and from_id resolution
             sync_wrapper.__inner_function__ = func  # type: ignore
+            sync_wrapper.__pynenc_task__ = task  # type: ignore
             return sync_wrapper
 
         if func is None:

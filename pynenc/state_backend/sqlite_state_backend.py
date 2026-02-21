@@ -257,7 +257,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
             conn.commit()
 
     def _get_invocation(
-        self, invocation_id: str
+        self, invocation_id: "InvocationId"
     ) -> tuple["InvocationDTO", "CallDTO"] | None:
         """Retrieve invocation and call DTOs by invocation ID."""
         with sqlite_conn(self.sqlite_db_path) as conn:

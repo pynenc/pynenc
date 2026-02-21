@@ -6,6 +6,7 @@ from typing import Any, NamedTuple, TYPE_CHECKING
 from pynenc.exceptions import InvocationStatusError, RunnerError
 from pynenc.invocation import InvocationStatus
 from pynenc.runner.base_runner import BaseRunner
+from pynenc.runner.shutdown_diagnostics import log_runner_shutdown
 from pynenc.util.multiprocessing_utils import warn_missing_main_guard
 
 if TYPE_CHECKING:
@@ -90,6 +91,19 @@ class ProcessRunner(BaseRunner):
             if info.process.is_alive()
         ]
 
+    def _log_shutdown(self, signum: int | None) -> None:
+        log_runner_shutdown(
+            self.app.logger,
+            self.__class__.__name__,
+            self.runner_id,
+            signum,
+            processes={
+                rid: (info.process, str(info.invocation_id))
+                for rid, info in self.child_runner_ids.items()
+            },
+            waiting_inv_ids=[str(k) for k in (self.wait_invocation or {})],
+        )
+
     @property
     def runner_args(self) -> dict[str, Any]:
         """
@@ -136,22 +150,29 @@ class ProcessRunner(BaseRunner):
     def _on_stop(self) -> None:
         """
         Internal method called when the ProcessRunner stops.
-        Terminates all running processes and updates their invocation statuses.
+
+        Kills each alive child with SIGKILL, waits for it to die, then calls
+        _kill_and_reroute. This ordering avoids a race where the task finishes
+        after we set KILLED but before the process actually dies: by joining
+        first we know the process is gone, and _kill_and_reroute silently skips
+        invocations that already reached a final status.
         """
         self.logger.info("Stopping ProcessRunner")
         for runner_id, info in self.child_runner_ids.items():
-            info.process.kill()
-            try:
-                self.app.orchestrator.set_invocation_status(
-                    info.invocation_id, InvocationStatus.RETRY, self.runner_context
-                )
-            except InvocationStatusError:
+            if info.process.is_alive():
                 self.logger.warning(
-                    f"Could not set invocation {info.invocation_id} to RETRY status"
+                    f"Killing runner {runner_id} (pid={info.process.pid}) "
+                    f"with invocation {info.invocation_id}"
                 )
-            self.logger.info(
-                f"Killing runner {runner_id} with invocation {info.invocation_id}"
+                info.process.kill()
+                info.process.join()
+            # Reconstruct the child's RunnerContext so the ownership check passes:
+            # the invocation was set to RUNNING under the child's runner_id, so
+            # only a context carrying that same runner_id can transition it further.
+            child_ctx = self.runner_context.new_child_context(
+                "ProcessRunnerWorker", runner_id=runner_id
             )
+            self._kill_and_reroute(info.invocation_id, runner_ctx=child_ctx)
         self.manager.shutdown()  # type: ignore
         self.logger.info("ProcessRunner stopped")
 

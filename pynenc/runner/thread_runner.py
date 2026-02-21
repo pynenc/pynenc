@@ -5,10 +5,10 @@ from functools import cached_property
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 from pynenc.conf.config_runner import ConfigThreadRunner
-from pynenc.invocation.dist_invocation import DistributedInvocation, InvocationStatus
-from pynenc.exceptions import InvocationStatusError
+from pynenc.invocation.dist_invocation import DistributedInvocation
 from pynenc.runner.base_runner import BaseRunner
 from pynenc.runner.runner_context import RunnerContext
+from pynenc.runner.shutdown_diagnostics import log_runner_shutdown
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
@@ -74,6 +74,19 @@ class ThreadRunner(BaseRunner):
         """ThreadRunner doesn't spawn child processes, so returns empty list."""
         return []
 
+    def _log_shutdown(self, signum: int | None) -> None:
+        log_runner_shutdown(
+            self.app.logger,
+            self.__class__.__name__,
+            self.runner_id,
+            signum,
+            threads={
+                str(inv_id): (ti.thread, str(ti.invocation.invocation_id))
+                for inv_id, ti in self.threads.items()
+            },
+            waiting_inv_ids=[str(w) for w in self.waiting_invocation_ids],
+        )
+
     def _on_start(self) -> None:
         """
         Internal method called when the ThreadRunner starts.
@@ -88,25 +101,25 @@ class ThreadRunner(BaseRunner):
         """
         Internal method called when the ThreadRunner stops.
         Joins all running threads and updates their invocation statuses.
+
+        For alive threads: reroute first while we still own the RUNNING status,
+        then join. If we joined first the task would complete as SUCCESS and the
+        RUNNING→KILLED transition would no longer be valid.
+        For already-dead threads: join (no-op) then reroute, which silently
+        ignores the final status.
         """
-        self.logger.debug("Stopping ThreadRunner, joining all threads.")
-        # Join all running threads and mark their invocations for retry.
+        self.logger.info(f"Stopping ThreadRunner, joining {len(self.threads)} threads.")
         for thread_info in self.threads.values():
-            thread_info.thread.join()
-            try:
-                self.app.orchestrator.set_invocation_status(
-                    thread_info.invocation.invocation_id,
-                    InvocationStatus.KILLED,
-                    self.runner_context,
-                )
-                self.app.orchestrator.reroute_invocations(
-                    {thread_info.invocation.invocation_id},
-                    self.runner_context,
-                )
-            except InvocationStatusError as e:
-                self.logger.warning(
-                    f"Not possible to set invocation {thread_info.invocation.invocation_id} to RETRY: {e}"
-                )
+            self.logger.warning(
+                f"Joining thread for invocation {thread_info.invocation.invocation_id} "
+                f"(thread={thread_info.thread.name}, alive={thread_info.thread.is_alive()})"
+            )
+            if thread_info.thread.is_alive():
+                self._kill_and_reroute(thread_info.invocation.invocation_id)
+                thread_info.thread.join()
+            else:
+                thread_info.thread.join()
+                self._kill_and_reroute(thread_info.invocation.invocation_id)
 
     def _on_stop_runner_loop(self) -> None:
         """

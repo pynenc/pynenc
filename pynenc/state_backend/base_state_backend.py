@@ -132,11 +132,11 @@ class BaseStateBackend(ABC, Generic[Params, Result]):
 
     @abstractmethod
     def _get_invocation(
-        self, invocation_id: str
+        self, invocation_id: "InvocationId"
     ) -> tuple["InvocationDTO", "CallDTO"] | None:
         """Retrieve invocation and call DTOs by invocation ID.
 
-        :param str invocation_id: The ID of the invocation to retrieve.
+        :param "InvocationId" invocation_id: The ID of the invocation to retrieve.
         :return: Paired DTOs if found, else None.
         """
 

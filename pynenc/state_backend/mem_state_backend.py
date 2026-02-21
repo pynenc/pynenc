@@ -68,11 +68,11 @@ class MemStateBackend(BaseStateBackend[Params, Result]):
             self._cache[inv_dto.invocation_id] = (inv_dto, call_dto)
 
     def _get_invocation(
-        self, invocation_id: str
+        self, invocation_id: "InvocationId"
     ) -> tuple["InvocationDTO", "CallDTO"] | None:
         """Retrieve an invocation DTO pair from the memory cache.
 
-        :param str invocation_id: The ID of the invocation to retrieve.
+        :param "InvocationId" invocation_id: The ID of the invocation to retrieve.
         :return: Paired DTOs if found, else None.
         """
         return self._cache.get(invocation_id)

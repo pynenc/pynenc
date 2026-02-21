@@ -357,9 +357,15 @@ def test_persistent_process_main_sigterm_calls_handle_terminate(
             # Give it a moment to start and register the signal handler
             time.sleep(0.1)
 
-            # Simulate SIGTERM by calling the registered handler directly
+            # Simulate SIGTERM by calling the registered handler directly.
+            # Catch KeyboardInterrupt: handle_terminate raises it to interrupt a running
+            # invocation, but when called from the main test thread it would propagate
+            # to pytest and kill the whole session.
             assert registered_handler is not None, "Signal handler was not registered"
-            registered_handler(signal.SIGTERM, None)
+            try:
+                registered_handler(signal.SIGTERM, None)
+            except KeyboardInterrupt:
+                pass
 
             # Wait for the thread to complete
             process_thread.join(timeout=1.0)

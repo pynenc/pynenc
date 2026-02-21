@@ -13,8 +13,15 @@ from typing import TYPE_CHECKING, Any
 
 from pynenc import context
 from pynenc.conf.config_runner import ConfigRunner
-from pynenc.exceptions import RunnerNotExecutableError, PynencError
+from pynenc.exceptions import (
+    InvocationStatusError,
+    InvocationStatusTransitionError,
+    RunnerNotExecutableError,
+    PynencError,
+)
+from pynenc.invocation.status import InvocationStatus
 from pynenc.runner.runner_context import RunnerContext
+from pynenc.runner.shutdown_diagnostics import classify_signal, log_runner_shutdown
 
 if TYPE_CHECKING:
     from types import FrameType
@@ -54,6 +61,7 @@ class BaseRunner(ABC):
     ) -> None:
         # Initialize instance attributes first, before making runner accessible
         self.running = False
+        self._shutdown_signum: int | None = None
         self._runner_cache = runner_cache
         self._runner_context = runner_context or RunnerContext(self.__class__.__name__)
 
@@ -166,18 +174,75 @@ class BaseRunner(ABC):
     def _on_stop_runner_loop(self) -> None:
         """This method is called after the runner loop signal is received"""
 
+    def _kill_and_reroute(
+        self, invocation_id: Any, runner_ctx: "RunnerContext | None" = None
+    ) -> None:
+        """
+        Mark an invocation as KILLED and reroute it for retry.
+
+        Silently ignores if the invocation already reached a final status
+        (it completed before we killed it — nothing to reroute).
+
+        :param Any invocation_id: Invocation to kill and reroute
+        :param RunnerContext | None runner_ctx: Runner context to use for ownership;
+            defaults to self.runner_context. Pass the child's context when the parent
+            is acting on behalf of a child (e.g. ProcessRunner killing a worker).
+        """
+        ctx = runner_ctx or self.runner_context
+        try:
+            self.app.orchestrator.set_invocation_status(
+                invocation_id, InvocationStatus.KILLED, ctx
+            )
+            self.app.orchestrator.reroute_invocations({invocation_id}, ctx)
+            self.logger.info(f"Rerouted invocation {invocation_id} after kill")
+        except InvocationStatusTransitionError as e:
+            if e.from_status and e.from_status.is_final():
+                self.logger.debug(
+                    f"Invocation {invocation_id} already in final status, no rerouting needed"
+                )
+            else:
+                self.logger.warning(
+                    f"Could not reroute invocation {invocation_id}: {e}"
+                )
+        except InvocationStatusError as e:
+            self.logger.warning(
+                f"Not possible to set invocation {invocation_id} to KILLED and reroute: {e}"
+            )
+
+    def _log_shutdown(self, signum: int | None) -> None:
+        """
+        Log diagnostics when the runner receives a shutdown signal.
+
+        Override in subclasses to include active processes/threads/invocations.
+        The default logs only the runner identity and system environment.
+        """
+        log_runner_shutdown(
+            self.app.logger, self.__class__.__name__, self.runner_id, signum
+        )
+
     def stop_runner_loop(
         self, signum: int | None = None, frame: "FrameType | None" = None
     ) -> None:
         """
         Stops the runner loop, typically in response to a signal.
 
+        Logs shutdown diagnostics (including system env, running workers, and
+        invocation state) before stopping. Critical for debugging OOM events.
+
         :param int | None signum: Signal number
         :param FrameType | None frame: Frame object at the time the signal was received
         """
-        self.app.logger.info(
-            f"Received signal {signum=} {frame=} Stopping runner loop..."
+        self._shutdown_signum = signum
+        reason = classify_signal(signum)
+        self.app.logger.warning(
+            f"Received signal {signum=} reason={reason} Stopping runner loop..."
         )
+        try:
+            self._log_shutdown(signum)
+        except Exception as e:
+            self.app.logger.error(
+                f"Failed to collect shutdown diagnostics: {e}", exc_info=True
+            )
         self.running = False
         self._on_stop_runner_loop()
 

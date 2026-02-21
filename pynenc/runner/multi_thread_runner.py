@@ -8,6 +8,7 @@ from pynenc import context
 from pynenc.conf.config_runner import ConfigMultiThreadRunner
 from pynenc.runner.base_runner import BaseRunner
 from pynenc.runner.runner_context import RunnerContext
+from pynenc.runner.shutdown_diagnostics import log_runner_shutdown
 from pynenc.runner.thread_runner import ThreadRunner
 from pynenc.util.multiprocessing_utils import warn_missing_main_guard
 
@@ -48,6 +49,8 @@ def thread_runner_process_main(
     The parent pre-generates the child_runner_id before spawning, enabling parent-based
     health reporting. The parent reports heartbeats for alive children via its main loop.
     """
+    import signal as _signal
+
     parent_ctx = RunnerContext.from_json(parent_ctx_json)
     runner_ctx = parent_ctx.new_child_context(
         ThreadRunner.__name__, runner_id=child_runner_id
@@ -58,6 +61,13 @@ def thread_runner_process_main(
     context.set_runner_context(app.app_id, runner_ctx)
     runner._on_start()
     app.logger.info(f"ThreadRunner process {child_runner_id} started")
+
+    def _handle_signal(signum: int, frame: Any) -> None:
+        runner._log_shutdown(signum)
+        raise KeyboardInterrupt  # trigger _on_stop via finally block
+
+    _signal.signal(_signal.SIGTERM, _handle_signal)
+
     try:
         while True:
             # Clean up finished threads.
@@ -74,7 +84,9 @@ def thread_runner_process_main(
             )
             runner.runner_loop_iteration()
     except KeyboardInterrupt:
-        pass
+        app.logger.warning(
+            f"ThreadRunner process {child_runner_id} interrupted, shutting down"
+        )
     finally:
         runner._on_stop()
 
@@ -127,6 +139,18 @@ class MultiThreadRunner(BaseRunner):
             for runner_id, proc in self.child_runner_ids.items()
             if proc.is_alive()
         ]
+
+    def _log_shutdown(self, signum: int | None) -> None:
+        log_runner_shutdown(
+            self.app.logger,
+            self.__class__.__name__,
+            self.runner_id,
+            signum,
+            processes={
+                rid: (proc, None)
+                for rid, proc in getattr(self, "child_runner_ids", {}).items()
+            },
+        )
 
     def _on_start(self) -> None:
         """
