@@ -223,14 +223,14 @@ class Task(Generic[Params, Result]):
             task: Task = Task(app, function.func, function.options)
             app._tasks[task_id] = task
             return task
-        # Handle direct_task wrappers: the decorator stores a __pynenc_task__
-        # reference on the wrapper function so we can recover the Task even
-        # when the module-level attribute is a wrapper, not a Task instance.
-        if source_task := getattr(function, "__pynenc_task__", None):
-            if isinstance(source_task, Task):
-                task = Task(app, source_task.func, source_task.options)
-                app._tasks[task_id] = task
-                return task
+        # Handle wrappers that hold a reference to the underlying Task.
+        # Scan the object's attributes for any Task instance — this covers
+        # direct_task's __pynenc_task__, Celery shims with pynenc_task, or
+        # any other wrapper pattern without hardcoding attribute names.
+        if source_task := _extract_task_from_wrapper(function):
+            task = Task(app, source_task.func, source_task.options)
+            app._tasks[task_id] = task
+            return task
         # After importing the module, the decorator may have registered the
         # task in app._tasks (when the module shares the same app instance).
         if task_id in app._tasks:
@@ -238,7 +238,7 @@ class Task(Generic[Params, Result]):
         app.logger.warning(
             f"_get_from_task_id returns a non-Task function {function} for {task_id=}"
         )
-        raise ValueError(f"Cannot reference direct_task by {task_id=}")
+        raise ValueError(f"Cannot resolve Task from {task_id=}")
 
     @cached_property
     def retriable_exceptions(self) -> tuple[type[Exception], ...]:
@@ -381,6 +381,26 @@ class Task(Generic[Params, Result]):
         if can_batch_process(self, len(param_list)):
             return distribute_batch_calls(self, param_list, common_args)
         return distribute_calls(self, param_list, common_args)
+
+
+def _extract_task_from_wrapper(wrapper: object) -> Task | None:
+    """Extract a Task from a wrapper by scanning its instance attributes.
+
+    Handles any wrapper pattern (direct_task's ``__pynenc_task__``,
+    Celery migration shims with ``pynenc_task``, etc.) without
+    hardcoding attribute names.
+
+    :param object wrapper: The object to inspect
+    :return: The first Task instance found, or None
+    """
+    try:
+        for value in vars(wrapper).values():
+            if isinstance(value, Task):
+                return value
+    except TypeError:
+        # vars() fails on objects without __dict__ (e.g. slots-only)
+        pass
+    return None
 
 
 def can_batch_process(task: Task, num_calls: int) -> bool:

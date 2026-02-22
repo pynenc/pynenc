@@ -13,6 +13,7 @@ Key components:
 - test_from_id_should_resolve_dynamically_registered_task: Reproduces the conftest/fixture pattern
 - test_from_id_should_resolve_module_level_task: Tests @app.task module-level decoration
 - test_from_id_should_resolve_module_level_direct_task: Tests @app.direct_task resolution
+- test_from_id_should_resolve_pynenc_task_wrapper: Tests wrapper objects with pynenc_task attr
 """
 
 from typing import TYPE_CHECKING
@@ -108,6 +109,32 @@ def test_from_id_should_resolve_module_level_direct_task_from_different_app() ->
 
     # This should work but currently fails:
     # _get_from_task_id finds the sync_wrapper, not a Task instance
+    resolved = Task.from_id(new_app, task_id)
+    assert resolved.task_id == task_id
+    assert resolved.app is new_app
+
+
+def test_from_id_should_resolve_pynenc_task_wrapper() -> None:
+    """Test that from_id resolves a wrapper object with a pynenc_task attribute.
+
+    This reproduces the Celery migration pattern where the module-level name
+    is a StatusBase-like wrapper that holds a reference to the underlying Task
+    via a ``pynenc_task`` attribute.  Task.from_id should extract the inner Task
+    and bind it to the requesting app.
+    """
+    config = {
+        "runner_cls": "ThreadRunner",
+        "state_backend_cls": "MemStateBackend",
+        "broker_cls": "MemBroker",
+        "orchestrator_cls": "MemOrchestrator",
+        "client_data_store_cls": "MemClientDataStore",
+    }
+    new_app = Pynenc(app_id="test_resolve_wrapper", config_values=config)
+
+    # The helper module attribute "helper_wrapped_func" is a _TaskWrapper,
+    # not a Task.  Its .pynenc_task attribute IS a Task.
+    task_id = TaskId("pynenc_tests.unit.task.tasks_get_tasks", "helper_wrapped_func")
+
     resolved = Task.from_id(new_app, task_id)
     assert resolved.task_id == task_id
     assert resolved.app is new_app

@@ -29,7 +29,7 @@ except ImportError:
     entry_points = None  # type: ignore[assignment]
 
 try:
-    import pkg_resources
+    import pkg_resources  # type: ignore[import-untyped]
 except ImportError:
     pkg_resources = None  # type: ignore[assignment]
 
