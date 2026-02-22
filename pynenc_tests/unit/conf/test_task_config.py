@@ -9,7 +9,8 @@ import yaml
 from pynenc import Pynenc
 from pynenc.conf.config_task import ConcurrencyControlType, ConfigTask
 from pynenc.exceptions import InvalidTaskOptionsError
-from pynenc.task import Task, TaskId
+from pynenc.identifiers.task_id import TASK_ID_SEPARATOR, TaskId
+from pynenc.task import Task
 
 app = Pynenc()
 
@@ -147,7 +148,7 @@ def test_exception_on_wrong_options() -> None:
 
     assert (
         str(exc_info.value)
-        == "InvalidTaskOptionsError(builtins:print): Invalid options: ['non_existing_option']"
+        == f"InvalidTaskOptionsError(builtins{TASK_ID_SEPARATOR}print): Invalid options: ['non_existing_option']"
     )
 
 

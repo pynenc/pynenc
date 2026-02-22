@@ -2,6 +2,9 @@ from dataclasses import dataclass
 from functools import cached_property
 
 
+TASK_ID_SEPARATOR = "."
+
+
 @dataclass(frozen=True)
 class TaskId:
     """Structured identifier for a task.
@@ -15,7 +18,7 @@ class TaskId:
 
     @cached_property
     def key(self) -> str:
-        return self.module + ":" + self.func_name
+        return self.module + TASK_ID_SEPARATOR + self.func_name
 
     @cached_property
     def config_key(self) -> str:
@@ -28,10 +31,12 @@ class TaskId:
 
     @classmethod
     def from_key(cls, key: str) -> "TaskId":
-        try:
-            module, func_name = key.split(":")
-        except ValueError as ex:
-            raise ValueError(f"Invalid TaskId key format: {key}") from ex
+        # Split on the last separator so module may contain dots.
+        if TASK_ID_SEPARATOR not in key:
+            raise ValueError(f"Invalid TaskId key format: {key}")
+        module, _, func_name = key.rpartition(TASK_ID_SEPARATOR)
+        if not module or not func_name:
+            raise ValueError(f"Invalid TaskId key format: {key}")
         return cls(module, func_name)
 
     def __str__(self) -> str:
