@@ -116,6 +116,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Added "Zoom to Timeline" button on invocation details page
   - Added comprehensive tests for pagination functionality
 
+- **JsonSerializable Protocol for Custom JSON Serialization**:
+
+  - Introduced `JsonSerializable` protocol for lightweight, explicit JSON serialization of domain objects
+  - Added `to_json()` and `from_json()` methods for full round-trip serialization without external dependencies
+
 ### Changed
 
 - **Redis Extraction to Plugin**:
@@ -213,7 +218,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - **ArgCache size handling**: Added `max_size_to_cache` configuration and enforcement in `BaseArgCache` to avoid storing oversized arguments in backends (default `0` = no limit). Tests were added to validate behavior and prevent backend document-size errors.
 
-### Migration Guide
+- **State Backend Serialized Arguments Regression Tests**:
+
+  - Added regression tests for empty and non-empty serialized arguments round-trips in invocation storage
+  - Guards against plugins that incorrectly handle missing `arguments` field (e.g., MongoDB plugin KeyError bug)
+  - Ensures all state backend implementations properly preserve task arguments on store and retrieve
+
+- **Updated Documentation**
+
+  - Revised Use Case 7 documentation to focus on `JsonSerializable` protocol for custom JSON serialization instead of generic extensibility
 
 - **For Redis Users**: Install the Redis plugin to maintain existing functionality:
 

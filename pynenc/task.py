@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import importlib
 from logging import Logger
-import json
 import time
 from collections.abc import Callable, Iterable
 from functools import cached_property
@@ -163,12 +162,6 @@ class Task(Generic[Params, Result]):
         ```
         """
         return WorkflowContext(self)
-
-    def to_json(self) -> str:
-        """:return: The serialized task"""
-        return json.dumps(
-            {"task_id_key": self.task_id.key, "options": self.conf.options_to_json()}
-        )
 
     def __getstate__(self) -> dict:
         # Return state as a dictionary and a secondary value as a tuple

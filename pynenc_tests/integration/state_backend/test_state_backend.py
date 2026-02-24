@@ -31,6 +31,11 @@ mock_app = MockPynenc()
 def dummy() -> None: ...
 
 
+@mock_app.task
+def dummy_with_args(a: int, b: int) -> int:
+    return a + b
+
+
 @pytest.fixture
 def invocation(app_instance: "Pynenc") -> "DistributedInvocation[Params, Result]":
     dummy.app = app_instance
@@ -45,6 +50,48 @@ def test_store_invocation(invocation: "DistributedInvocation[Params, Result]") -
     sleep(0.1)
     retrieved_invocation = app.state_backend.get_invocation(invocation.invocation_id)
     assert invocation == retrieved_invocation
+
+
+def test_store_invocation_with_no_arguments_preserves_empty_serialized_arguments(
+    app_instance: "Pynenc",
+) -> None:
+    """Plugins must not raise KeyError when an invocation has no arguments.
+
+    Regression guard: a plugin that omits an empty 'arguments' field from the
+    stored document and then reads it with ``doc['arguments']`` instead of
+    ``doc.get('arguments', {})`` will raise ``KeyError: 'arguments'`` here.
+    """
+    dummy.app = app_instance
+    inv = DistributedInvocation.isolated(Call(dummy))
+    app_instance.state_backend.upsert_invocations([inv])
+    sleep(0.1)
+
+    retrieved = app_instance.state_backend.get_invocation(inv.invocation_id)
+
+    # serialized_arguments must be an empty dict, not raise on access
+    assert retrieved.call.serialized_arguments == {}
+
+
+def test_store_invocation_with_arguments_preserves_serialized_arguments(
+    app_instance: "Pynenc",
+) -> None:
+    """Plugins must persist and restore all named arguments without data loss.
+
+    Paired with the no-arguments regression test above: together they ensure
+    the plugin handles both the empty and non-empty argument cases correctly.
+    """
+    from pynenc.arguments import Arguments
+
+    dummy_with_args.app = app_instance
+    args = Arguments(kwargs={"a": 1, "b": 2})
+    inv = DistributedInvocation.isolated(Call(dummy_with_args, arguments=args))
+    app_instance.state_backend.upsert_invocations([inv])
+    sleep(0.1)
+
+    retrieved = app_instance.state_backend.get_invocation(inv.invocation_id)
+
+    # Both argument keys must survive the round-trip
+    assert set(retrieved.call.serialized_arguments.keys()) == {"a", "b"}
 
 
 def test_store_history_status(

@@ -13,6 +13,7 @@ This Usage Guide is designed to provide you with detailed instructions and pract
 ./use_case_004_auto_orchestration
 ./use_case_005_sync_unit_testing
 ./use_case_006_mem_unit_testing
+./use_case_007_json_serializable
 ./use_case_009_client_data_store
 ./use_case_010_trigger_system
 ./use_case_011_workflow_system
@@ -252,54 +253,54 @@ This use case also demonstrates configuring Pynenc through environment variables
 
 For a detailed guide and examples, see {doc}`./use_case_006_mem_unit_testing`.
 
-## Use Case 7: Extending Pynenc for Your Needs
+## Use Case 7: Custom JSON Serialization with `JsonSerializable`
 
-Pynenc's modular design is aimed at providing a flexible framework that can be easily extended to meet your specific requirements. Whether you have a unique use case or need to integrate Pynenc with other systems, this section will guide you through customizing and extending its capabilities.
+When using `JsonSerializer`, any task argument or return value that is not a JSON primitive
+will raise a `TypeError` — unless the class implements the `JsonSerializable` protocol.
+This protocol is a lightweight alternative to switching serializers: add two methods to
+your domain object and Pynenc handles the rest automatically.
 
-### Creating Custom Components
+```python
+from pynenc.serializer import JsonSerializable
 
-Pynenc is built with extensibility in mind, allowing you to create custom components to suit your specific needs. This can be done by subclassing the base classes provided by Pynenc:
+class Money:
+    def __init__(self, amount: float, currency: str) -> None:
+        self.amount = amount
+        self.currency = currency
 
-- **Custom Orchestrators**: Create a subclass of `BaseOrchestrator` to implement custom orchestration logic.
-- **Custom State Backends**: Develop a state backend that aligns with your data storage and retrieval needs by subclassing the `BaseStateBackend`.
-- **Custom Brokers**: Design a message broker tailored to your messaging and communication requirements by subclassing `BaseBroker`.
-- **Custom Runners**: Build a runner that matches your execution environment and task management style by subclassing `BaseRunner`.
+    def to_json(self) -> dict:
+        return {"amount": self.amount, "currency": self.currency}
 
-### Creating a Plugin
-
-Pynenc uses a plugin system based on Python's entry points. You can create a plugin that provides backend implementations and extends the `PynencBuilder` with custom methods.
-
-To create a plugin:
-
-1. Implement your backend classes (orchestrator, broker, state backend, etc.)
-2. Create a plugin class with a `register_builder_methods` class method
-3. Register your plugin via entry points in your `pyproject.toml`
-
-Example plugin registration in `pyproject.toml`:
-
-```{code-block} toml
-[project.entry-points."pynenc.plugins"]
-my_backend = "my_plugin.plugin:MyBackendPlugin"
+    @classmethod
+    def from_json(cls, data: dict) -> "Money":
+        return cls(data["amount"], data["currency"])
 ```
 
-### Configuring Your Custom Components
+With both methods in place, any Pynenc task can accept and return `Money` values
+without further configuration:
 
-Integrating your custom components into your Pynenc application is straightforward. While one way to specify these components is through environment variables, it is important to note that this is just one of several methods available.
+```python
+from pynenc import Pynenc
 
-To configure using environment variables:
+app = Pynenc()
 
-```{code-block} bash
-    PYNENC__ORCHESTRATOR_CLS="path.to.CustomOrchestrator"
-    PYNENC__STATE_BACKEND_CLS="path.to.CustomStateBackend"
-    PYNENC__BROKER_CLS="path.to.CustomBroker"
-    PYNENC__RUNNER_CLS="path.to.CustomRunner"
+@app.task
+def calculate_total(unit_price: Money, quantity: int) -> Money:
+    return Money(unit_price.amount * quantity, unit_price.currency)
 ```
 
-Replace `path.to.CustomComponent` with the actual import path of your custom component. This method is particularly useful for deploying applications in different environments without modifying the code.
+The serializer embeds the class's module and qualified name alongside the data so
+that deserialization reconstructs the exact original type — not a plain `dict`.
 
-For a comprehensive guide on all available configuration options, including file-based and code-based configurations, please refer to the {doc}`../configuration/index`. This document will provide you with detailed information on tailoring Pynenc to meet your specific requirements.
+| Method                         | Direction     | Purpose                                               |
+| ------------------------------ | ------------- | ----------------------------------------------------- |
+| `to_json(self) -> Any`         | object → JSON | Return a JSON-native value (`dict`, `list`, `str`, …) |
+| `from_json(cls, data) -> Self` | JSON → object | Reconstruct from the value `to_json` returned         |
 
-By offering various configuration methods, Pynenc ensures flexibility and ease of adaptation to a wide range of use cases, environments, and integration requirements.
+Because `JsonSerializable` is `@runtime_checkable`, compliance can be verified at
+runtime with a standard `isinstance` check.
+
+For a detailed guide and examples, see {doc}`./use_case_007_json_serializable`.
 
 ## Use Case 8: Customizing Data Serialization
 

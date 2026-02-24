@@ -29,6 +29,11 @@ def dummy_task() -> None:
     pass
 
 
+@mock_app.task
+def dummy_task_with_args(a: int, b: int) -> int:
+    return a + b
+
+
 @pytest.fixture
 def invocation(app_instance: "Pynenc") -> "DistributedInvocation":
     """Helper to create a dummy invocation."""
@@ -93,6 +98,51 @@ def test_upsert_and_get_invocation(invocation: "DistributedInvocation") -> None:
     backend.upsert_invocations([invocation])
     fetched = backend.get_invocation(invocation.invocation_id)
     assert fetched == invocation
+
+
+def test_upsert_and_get_invocation_with_no_arguments_preserves_empty_serialized_arguments(
+    app_instance: "Pynenc",
+) -> None:
+    """Plugins must not raise KeyError when retrieving an invocation with no arguments.
+
+    Regression guard: a plugin that omits an empty 'arguments' field from the
+    stored document and then reads it with ``doc['arguments']`` instead of
+    ``doc.get('arguments', {})`` will raise ``KeyError: 'arguments'`` here.
+    """
+    from pynenc.call import Call
+    from pynenc.invocation import DistributedInvocation
+
+    dummy_task.app = app_instance
+    inv = DistributedInvocation.isolated(Call(dummy_task))
+    app_instance.state_backend.upsert_invocations([inv])
+
+    retrieved = app_instance.state_backend.get_invocation(inv.invocation_id)
+
+    # serialized_arguments must be an empty dict, not raise on access
+    assert retrieved.call.serialized_arguments == {}
+
+
+def test_upsert_and_get_invocation_with_arguments_preserves_serialized_arguments(
+    app_instance: "Pynenc",
+) -> None:
+    """Plugins must persist and restore all named arguments without data loss.
+
+    Paired with the no-arguments regression test above: together they ensure
+    the plugin handles both the empty and non-empty argument cases correctly.
+    """
+    from pynenc.arguments import Arguments
+    from pynenc.call import Call
+    from pynenc.invocation import DistributedInvocation
+
+    dummy_task_with_args.app = app_instance
+    args = Arguments(kwargs={"a": 10, "b": 20})
+    inv = DistributedInvocation.isolated(Call(dummy_task_with_args, arguments=args))
+    app_instance.state_backend.upsert_invocations([inv])
+
+    retrieved = app_instance.state_backend.get_invocation(inv.invocation_id)
+
+    # Both argument keys must survive the round-trip
+    assert set(retrieved.call.serialized_arguments.keys()) == {"a", "b"}
 
 
 def test_get_invocation_raises_when_not_found(app_instance: "Pynenc") -> None:
