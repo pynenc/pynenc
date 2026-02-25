@@ -18,6 +18,7 @@ from functools import cached_property
 from typing import TYPE_CHECKING, Any, Generic
 
 from pynenc.arguments import Arguments
+from pynenc.exceptions import SerializationError
 from pynenc.models.call_dto import CallDTO
 from pynenc.conf.config_task import ConcurrencyControlType
 from pynenc.identifiers.call_id import CallId
@@ -80,11 +81,20 @@ class Call(Generic[Params, Result]):
         """Serialize arguments with external storage for large values.
 
         :return: Mapping of argument names to serialized values or storage keys
+        :raises SerializationError: If an argument cannot be serialized,
+            enriched with task context.
         """
         if self._serialized_arguments is None:
-            self._serialized_arguments = self.app.client_data_store.serialize_arguments(
-                self.arguments.kwargs, self.task.conf.disable_cache_args
-            )
+            try:
+                self._serialized_arguments = (
+                    self.app.client_data_store.serialize_arguments(
+                        self.arguments.kwargs, self.task.conf.disable_cache_args
+                    )
+                )
+            except SerializationError as exc:
+                raise SerializationError(
+                    f"Task '{self.task.task_id.key}': {exc}"
+                ) from exc
         return self._serialized_arguments
 
     @property

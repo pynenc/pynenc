@@ -1,10 +1,14 @@
 import builtins
 import importlib
 import json
-from typing import Any, Protocol, runtime_checkable
+from enum import Enum
+from typing import Any, Protocol, runtime_checkable, TypeVar
 
 from pynenc.serializer.base_serializer import BaseSerializer
 from pynenc.serializer.constants import ReservedKeys
+
+
+TJsonSerializable = TypeVar("TJsonSerializable", bound="JsonSerializable")
 
 
 @runtime_checkable
@@ -42,7 +46,7 @@ class JsonSerializable(Protocol):
 
     @classmethod
     def from_json(cls, data: Any) -> Any:
-        """Reconstruct an instance from the value returned by ``__json__``."""
+        """Reconstruct an instance from the value returned by ``to_json``."""
         ...
 
 
@@ -52,8 +56,9 @@ class DefaultJSONEncoder(json.JSONEncoder):
 
     This encoder handles:
 
+    - **Enums** — serialized with module, qualname, and value for full round-trip reconstruction.
     - **Python exceptions** — serialized to a dict with ``type``, ``args``, and ``message``.
-        - **Objects implementing** :class:`JsonSerializable` — any object with a ``to_json()``
+    - **Objects implementing** :class:`JsonSerializable` — any object with a ``to_json()``
       method is serialized by calling that method.  This is the recommended way for
       application code to make domain objects compatible with Pynenc's JSON serializer
       without subclassing or patching the encoder.
@@ -65,15 +70,27 @@ class DefaultJSONEncoder(json.JSONEncoder):
 
         Resolution order:
 
-        1. **Exception** — serialized to ``{ReservedKeys.ERROR: {...}}``.
-        2. **JsonSerializable** — any object that implements ``to_json()``
+        1. **Enum** — serialized with module, qualname, and value for reconstruction.
+        2. **Exception** — serialized to ``{ReservedKeys.ERROR: {...}}``.
+        3. **JsonSerializable** — any object that implements ``to_json()``
            is serialized by calling that method.
-        3. All other types fall back to :meth:`json.JSONEncoder.default`,
-           which raises ``TypeError``.
+        4. All other types raise ``TypeError`` with a descriptive message
+           including the object's type and a truncated repr.
 
         :param Any obj: The object to be serialized.
         :returns: A JSON-serializable representation of ``obj``.
+        :raises TypeError: If the object is not serializable.
         """
+        json_cls: type
+        if isinstance(obj, Enum):
+            json_cls = type(obj)
+            return {
+                ReservedKeys.ENUM.value: {
+                    "module": json_cls.__module__,
+                    "qualname": json_cls.__qualname__,
+                    "value": obj.value,
+                }
+            }
         if isinstance(obj, Exception):
             return {
                 ReservedKeys.ERROR.value: {
@@ -83,15 +100,77 @@ class DefaultJSONEncoder(json.JSONEncoder):
                 }
             }
         if isinstance(obj, JsonSerializable):
-            cls_ = type(obj)
+            json_cls = type(obj)
             return {
                 ReservedKeys.JSON_SERIALIZABLE.value: {
-                    "module": cls_.__module__,
-                    "qualname": cls_.__qualname__,
+                    "module": json_cls.__module__,
+                    "qualname": json_cls.__qualname__,
                     "data": obj.to_json(),
                 }
             }
-        return super().default(obj)
+        raise TypeError(
+            f"Object of type {type(obj).__module__}.{type(obj).__qualname__} "
+            f"is not JSON serializable. "
+            f"Value (truncated): {repr(obj)[:200]}. "
+            f"Consider implementing the JsonSerializable protocol (to_json/from_json) "
+            f"or switching to JsonPickleSerializer."
+        )
+
+
+def _preprocess_for_json(obj: Any) -> Any:
+    """Recursively convert Enum instances to envelope dicts before encoding.
+
+    IntEnum and StrEnum subclasses are natively serializable by json, so
+    ``JSONEncoder.default()`` is never called for them.  This pre-pass
+    ensures they get the same envelope treatment as regular Enums.
+    """
+    if isinstance(obj, Enum):
+        cls_ = type(obj)
+        return {
+            ReservedKeys.ENUM.value: {
+                "module": cls_.__module__,
+                "qualname": cls_.__qualname__,
+                "value": obj.value,
+            }
+        }
+    if isinstance(obj, dict):
+        return {k: _preprocess_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_preprocess_for_json(item) for item in obj]
+    return obj
+
+
+def _resolve_class(module_name: str, qualname: str) -> type:
+    """Import a module and traverse a dotted qualname to find the class."""
+    module = importlib.import_module(module_name)
+    cls_: Any = module
+    for part in qualname.split("."):
+        cls_ = getattr(cls_, part)
+    return cls_
+
+
+def _reconstruct_from_json(data: Any) -> TJsonSerializable | Any:
+    """Recursively reconstruct typed objects from reserved-key envelopes."""
+    if isinstance(data, dict):
+        if error_data := data.get(ReservedKeys.ERROR.value):
+            error_type = error_data["type"]
+            error_args = error_data["args"]
+            if hasattr(builtins, error_type):
+                return getattr(builtins, error_type)(*error_args)
+        if js_data := data.get(ReservedKeys.JSON_SERIALIZABLE.value):
+            json_cls: type[TJsonSerializable] = _resolve_class(
+                js_data["module"], js_data["qualname"]
+            )
+            return json_cls.from_json(js_data["data"])
+        if enum_data := data.get(ReservedKeys.ENUM.value):
+            enum_cls: type[Enum] = _resolve_class(
+                enum_data["module"], enum_data["qualname"]
+            )
+            return enum_cls(enum_data["value"])
+        return {k: _reconstruct_from_json(v) for k, v in data.items()}
+    if isinstance(data, list):
+        return [_reconstruct_from_json(item) for item in data]
+    return data
 
 
 class JsonSerializer(BaseSerializer):
@@ -107,33 +186,23 @@ class JsonSerializer(BaseSerializer):
         """
         Serializes an object into a JSON string.
 
+        Enum instances (including IntEnum/StrEnum) are preprocessed into
+        envelope dicts so they survive the round-trip.
+
         :param Any obj: The object to serialize.
         :returns: A JSON string representation of 'obj'.
         """
-        return json.dumps(obj, cls=DefaultJSONEncoder)
+        return json.dumps(_preprocess_for_json(obj), cls=DefaultJSONEncoder)
 
     @staticmethod
     def deserialize(obj: str) -> Any:
         """
         Deserializes a JSON string back into an object.
 
-        If the string represents a serialized Python exception, it reconstructs the exception object.
+        Recursively reconstructs objects from reserved-key envelopes
+        (exceptions, JsonSerializable, Enum).
 
         :param str obj: The JSON string to deserialize.
-        :returns: The deserialized object, which could be a Python exception if appropriate.
+        :returns: The deserialized object.
         """
-        data = json.loads(obj)
-        if isinstance(data, dict):
-            if error_data := data.get(ReservedKeys.ERROR.value):
-                error_type = error_data["type"]
-                error_args = error_data["args"]
-                if hasattr(builtins, error_type):
-                    return getattr(builtins, error_type)(*error_args)
-            if js_data := data.get(ReservedKeys.JSON_SERIALIZABLE.value):
-                module = importlib.import_module(js_data["module"])
-                # qualname may be "Outer.Inner" for nested classes
-                cls_ = module
-                for part in js_data["qualname"].split("."):
-                    cls_ = getattr(cls_, part)
-                return cls_.from_json(js_data["data"])  # type: ignore[union-attr]
-        return data
+        return _reconstruct_from_json(json.loads(obj))

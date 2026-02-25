@@ -51,6 +51,21 @@ class ConcurrencyRetryError(RetryError):
     """Error raised when a task should be retried due to concurrency control."""
 
 
+class SerializationError(PynencError):
+    """Error raised when an argument cannot be serialized.
+
+    Wraps the original serialization error with context about which argument
+    failed and truncated value information to aid debugging.
+    """
+
+    def __init__(self, message: str) -> None:
+        self.message = message
+        super().__init__(message)
+
+    def __str__(self) -> str:
+        return self.message
+
+
 class TaskError(PynencError):
     """Base class for all Task related errors."""
 

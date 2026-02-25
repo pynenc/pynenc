@@ -15,3 +15,4 @@ class ReservedKeys(StrEnum):
     ERROR = "__pynenc__std_py_exc__"
     CLIENT_DATA = "__pynenc__client_data__"
     JSON_SERIALIZABLE = "__pynenc__json_serializable__"
+    ENUM = "__pynenc__enum__"

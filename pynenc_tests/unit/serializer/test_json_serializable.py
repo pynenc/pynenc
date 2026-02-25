@@ -6,6 +6,8 @@ can locate and reconstruct them during deserialization (qualname resolution requ
 the class to be reachable via module attribute lookup).
 """
 
+from enum import Enum, IntEnum
+
 import json
 
 import pytest
@@ -16,6 +18,21 @@ from pynenc.serializer.json_serializer import (
     JsonSerializable,
     JsonSerializer,
 )
+
+
+# ---------------------------------------------------------------------------
+# Module-level Enum types for round-trip tests (importlib must be able to find them)
+# ---------------------------------------------------------------------------
+
+
+class _Color(Enum):
+    RED = "red"
+    GREEN = "green"
+
+
+class _Priority(IntEnum):
+    LOW = 1
+    HIGH = 10
 
 
 # ---------------------------------------------------------------------------
@@ -183,13 +200,57 @@ def test_encoder_should_raise_type_error_for_object_missing_from_json() -> None:
 
 
 def test_encoder_should_raise_type_error_for_non_conforming_object() -> None:
-    """Arbitrary objects with no protocol support must raise TypeError."""
+    """Arbitrary objects raise TypeError with helpful context (type, value, hint)."""
 
     class _Arbitrary:
         pass
 
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="JsonSerializable"):
         json.dumps(_Arbitrary(), cls=DefaultJSONEncoder)
+
+
+# ---------------------------------------------------------------------------
+# Enum serialization tests
+# ---------------------------------------------------------------------------
+
+
+def test_encoder_should_embed_enum_envelope_with_module_and_qualname() -> None:
+    """Enums are serialized with full type info for round-trip reconstruction."""
+    raw = json.dumps(_Color.RED, cls=DefaultJSONEncoder)
+    data = json.loads(raw)
+
+    envelope = data[ReservedKeys.ENUM.value]
+    assert envelope["module"] == _Color.__module__
+    assert envelope["qualname"] == _Color.__qualname__
+    assert envelope["value"] == "red"
+
+
+def test_round_trip_should_reconstruct_str_enum() -> None:
+    """String-valued Enum must survive serialization and return the exact member."""
+    result = JsonSerializer.deserialize(JsonSerializer.serialize(_Color.GREEN))
+
+    assert isinstance(result, _Color)
+    assert result is _Color.GREEN
+
+
+def test_round_trip_should_reconstruct_int_enum() -> None:
+    """IntEnum must survive serialization and return the exact member."""
+    result = JsonSerializer.deserialize(JsonSerializer.serialize(_Priority.HIGH))
+
+    assert isinstance(result, _Priority)
+    assert result is _Priority.HIGH
+
+
+def test_round_trip_enum_inside_dict() -> None:
+    """Enums nested inside dicts are reconstructed as proper Enum members."""
+    data = {"color": _Color.RED, "priority": _Priority.LOW, "count": 3}
+    result = JsonSerializer.deserialize(JsonSerializer.serialize(data))
+
+    assert isinstance(result["color"], _Color)
+    assert result["color"] is _Color.RED
+    assert isinstance(result["priority"], _Priority)
+    assert result["priority"] is _Priority.LOW
+    assert result["count"] == 3
 
 
 # ---------------------------------------------------------------------------

@@ -18,6 +18,7 @@ from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
 from pynenc.conf.config_client_data_store import ConfigClientDataStore
+from pynenc.exceptions import SerializationError
 from pynenc.serializer.constants import ReservedKeys
 
 if TYPE_CHECKING:
@@ -84,12 +85,20 @@ class BaseClientDataStore(ABC):
         :return: Dict of argument name → serialized value (inline or reference key).
         """
         disable_all = "*" in disable_cache_args
-        return {
-            key: self.serialize(
-                value, disable_cache=(disable_all or key in disable_cache_args)
-            )
-            for key, value in kwargs.items()
-        }
+        result: dict[str, str] = {}
+        for key, value in kwargs.items():
+            try:
+                result[key] = self.serialize(
+                    value, disable_cache=(disable_all or key in disable_cache_args)
+                )
+            except (TypeError, ValueError) as exc:
+                truncated = repr(value)[:200]
+                raise SerializationError(
+                    f"Failed to serialize argument '{key}' "
+                    f"(type={type(value).__qualname__}): {exc}\n"
+                    f"  value (truncated): {truncated}"
+                ) from exc
+        return result
 
     def deserialize_arguments(self, serialized_args: dict[str, str]) -> dict[str, Any]:
         """Deserialize argument values, resolving any external references.
