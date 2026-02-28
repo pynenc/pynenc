@@ -13,7 +13,7 @@ Key components:
 """
 
 import warnings
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from typing import TYPE_CHECKING, Any
 
 from pynenc.client_data_store.mem_client_data_store import MemClientDataStore
@@ -665,6 +665,25 @@ class PynencBuilder:
         :return: The builder instance for method chaining
         """
         self._config.update(kwargs)
+        return self
+
+    def trigger_task_modules(self, modules: Iterable[str]) -> "PynencBuilder":
+        """
+        Declare modules that contain trigger-dependent tasks.
+
+        Runners will import these modules at startup to ensure tasks that
+        depend on triggers (cron, event, status, etc.) are registered. This
+        avoids importing all task modules during normal application import
+        time and prevents eager connections to external systems.
+
+        :param Iterable[str] modules: Iterable of module import paths (e.g. ["myapp.tasks.scheduled"]).
+        :return: The builder instance for method chaining
+
+        This method accepts any iterable of strings and stores the value as a
+        deduplicated `set[str]` in the configuration. Using a `set` ensures
+        uniqueness and avoids ordering assumptions.
+        """
+        self._config["trigger_task_modules"] = set(modules)
         return self
 
     def _validate_plugin_compatibility(self) -> None:

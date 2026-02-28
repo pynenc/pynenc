@@ -129,15 +129,16 @@ def another_task() -> None:
 
 def test_retriable_exceptions() -> None:
     """Test that the task will contain RetryError by default as a retriable exception"""
-    task = app.task(another_task)
+    local_app = Pynenc(app_id="test_retriable_exceptions")
+    task = local_app.task(another_task)
     task.conf.retry_for = ()
     assert task.retriable_exceptions == (RetryError,)
 
-    task = app.task(another_task)
+    task = local_app.task(another_task)
     task.conf.retry_for = (RetryError,)
     assert task.retriable_exceptions == (RetryError,)
 
-    task = app.task(another_task)
+    task = local_app.task(another_task)
     task.conf.retry_for = (RuntimeError,)
     assert task.retriable_exceptions == (RuntimeError, RetryError)
 

@@ -1,5 +1,6 @@
 import asyncio
 from datetime import UTC, datetime
+import importlib
 from logging import Logger
 import os
 import signal
@@ -149,6 +150,7 @@ class BaseRunner(ABC):
                 "Running in a secondary thread. Signal handling will be skipped.",
                 stacklevel=2,
             )
+        self.init_trigger_tasks_modules()
         self.running = True
         self._on_start()
 
@@ -318,6 +320,21 @@ class BaseRunner(ABC):
         self._waiting_for_results(
             running_invocation_id, result_invocation_ids, runner_args
         )
+
+    def init_trigger_tasks_modules(self) -> None:
+        """Initialize trigger task modules and register trigger tasks."""
+        modules = getattr(self.app.conf, "trigger_task_modules", None) or ()
+        if modules:
+            self.app.logger.info("Initializing trigger task modules:")
+        for module_name in modules:
+            msg = f"trigger module '{module_name}'"
+            try:
+                importlib.import_module(module_name)
+                self.app.logger.info(f"  - Successfully imported {msg}")
+            except ImportError as e:
+                self.app.logger.warning(f"  - Error importing {msg}: {e}")
+        self.app.register_core_tasks()
+        self.app.register_deferred_triggers()
 
     def _check_atomic_services(self) -> None:
         """

@@ -27,8 +27,11 @@ class ArgumentPrintMode(StrEnum):
 
 class ConfigPynenc(ConfigPynencBase):
     """
-    Main config of the pynenc app.
+    Main configuration for the Pynenc app.
 
+    =============================
+    Core Classes Configuration
+    =============================
     :cvar str app_id:
         The id of the application.
     :cvar str orchestrator_cls:
@@ -47,6 +50,19 @@ class ConfigPynenc(ConfigPynencBase):
         The client data store class to use.
     :cvar str runner_cls:
         The runner class to use.
+
+    =============================
+    Triggering Configuration
+    =============================
+    :cvar set[str] trigger_task_modules:
+        Set of module names (as strings) containing tasks with trigger conditions (e.g., cron, event, status).
+        These modules will be imported by runners at startup to ensure all trigger-dependent tasks are registered.
+        Only modules listed here will have their trigger tasks considered for automatic execution.
+        Example: {"myapp.tasks.scheduled", "myapp.tasks.event_driven"}
+
+    =============================
+    Development & Logging
+    =============================
     :cvar bool dev_mode_force_sync_tasks:
         If True, forces tasks to run synchronously, useful for development.
     :cvar str logging_level:
@@ -65,6 +81,10 @@ class ConfigPynenc(ConfigPynencBase):
     :cvar bool truncate_log_ids:
         If True, truncates long IDs (invocation_id, runner_id, etc.) in log output
         to improve readability. If False, displays full IDs. Default True.
+
+    =============================
+    Atomic Global Services
+    =============================
     :cvar float atomic_service_interval_minutes:
         The total cycle interval for atomic global services (triggers, recovery, etc.).
         The interval is divided equally among all active runners, with each runner assigned
@@ -79,12 +99,14 @@ class ConfigPynenc(ConfigPynencBase):
         its assigned time slot. Should be significantly less than atomic_service_interval_minutes
         to ensure runners don't miss their execution window. Default 0.5 minutes (30 seconds).
 
+    =============================
+    Recovery & Heartbeat
+    =============================
     :cvar str recover_pending_invocations_cron:
         Cron expression defining how often to run the recover_pending_invocations core task.
     :cvar float max_pending_seconds:
         Maximum time in seconds a task can remain in PENDING state before it expires.
         See :class:`~pynenc.invocation.status.InvocationStatus` for more details.
-
     :cvar str recover_running_invocations_cron:
         Cron expression defining how often to run the recover_running_invocations core task.
     :cvar float runner_considered_dead_after_minutes:
@@ -102,6 +124,8 @@ class ConfigPynenc(ConfigPynencBase):
     """
 
     app_id = ConfigField("pynenc")
+
+    # Core Classes Configuration
     orchestrator_cls = ConfigField("MemOrchestrator")
     trigger_cls = ConfigField("DisabledTrigger")
     broker_cls = ConfigField("MemBroker")
@@ -109,6 +133,9 @@ class ConfigPynenc(ConfigPynencBase):
     serializer_cls = ConfigField("JsonPickleSerializer")
     client_data_store_cls = ConfigField("MemClientDataStore")
     runner_cls = ConfigField("DummyRunner")
+
+    # Trigger task module declaration (if using triggers)
+    trigger_task_modules: ConfigField[set[str]] = ConfigField(set())
 
     # Development Mode
     dev_mode_force_sync_tasks = ConfigField(False)

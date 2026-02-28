@@ -134,7 +134,7 @@ def test_pynenc_getstate_setstate() -> None:
         "config_values": {"runner_cls": "ThreadRunner"},
         "config_filepath": None,
         "reporting": None,
-        # "tasks": {}, # TODO disabled for now
+        "tasks": {},
     }
     assert state == expected_state
 
@@ -145,3 +145,4 @@ def test_pynenc_getstate_setstate() -> None:
     assert new_app.app_id == "test_app"
     assert new_app.config_values == {"runner_cls": "ThreadRunner"}
     assert new_app._runner_instance is None  # should reset runner instance
+    assert new_app._tasks == {}  # should reset tasks

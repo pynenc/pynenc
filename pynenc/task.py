@@ -216,6 +216,13 @@ class Task(Generic[Params, Result]):
             task: Task = Task(app, function.func, function.options)
             app._tasks[task_id] = task
             return task
+
+        if isinstance(function, CoreTaskFunction):
+            # For CoreTaskFunction, just register all of them in the app
+            # and return the one matching the task_id.
+            app.register_core_tasks()
+            return app._tasks[task_id]
+
         # Handle wrappers that hold a reference to the underlying Task.
         # Scan the object's attributes for any Task instance — this covers
         # direct_task's __pynenc_task__, Celery shims with pynenc_task, or

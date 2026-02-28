@@ -188,6 +188,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - On Future implementations of queues and priorities, the orchestrator will forward the required data to the broker,
     instead of the broker using an instance of an invocation to get data relevant for queueing and priorizing.
 
+- **Core Task Refactor and Lazy Trigger Registration**:
+
+  - Refactored core task registration to support lazy loading and ensure proper initialization in distributed runners.
+  - Improved `Task.from_id` to dynamically register core tasks when resolving `CoreTaskFunction`.
+  - Added lazy trigger registration mechanism to defer backend operations until runner startup.
+  - Enhanced `BaseRunner` to import trigger modules and register deferred triggers during initialization.
+  - Updated `Pynenc.__getstate__` and `__setstate__` to handle deferred trigger tasks properly.
+  - Improved test coverage for core task registration and lazy trigger loading.
+
 - **Logging**:
 
   - Introduced `contextvars`-based logging context that automatically injects `runner_id`, `task_id`, and `invocation_id` into log messages without requiring explicit logger adapters

@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from typing import Any
 
 import pytest
@@ -527,3 +528,28 @@ def test_trigger_configuration_with_disabled_trigger() -> None:
 
     assert app.conf.trigger_cls == "DisabledTrigger"
     assert isinstance(app.trigger, DisabledTrigger)
+
+
+@pytest.mark.parametrize(
+    "modules_iterable, expected",
+    [
+        (["a.b.tasks", "c.d.tasks"], {"a.b.tasks", "c.d.tasks"}),
+        (("a.b.tasks", "a.b.tasks"), {"a.b.tasks"}),
+        ({"x.tasks", "y.tasks"}, {"x.tasks", "y.tasks"}),
+        ((m for m in ["gen.tasks", "gen.tasks"]), {"gen.tasks"}),
+    ],
+)
+def test_trigger_task_modules_accepts_iterables(
+    modules_iterable: Iterable, expected: Iterable
+) -> None:
+    """Ensure `trigger_task_modules` accepts different iterables and stores a deduplicated set."""
+    builder = PynencBuilder()
+    # call the builder method with the iterable
+    builder.trigger_task_modules(modules_iterable)
+
+    # builder stores a deduplicated set in its internal config
+    assert builder._config["trigger_task_modules"] == expected
+
+    # build an app and ensure the config propagates into the app
+    app = builder.build()
+    assert set(app.conf.trigger_task_modules) == expected

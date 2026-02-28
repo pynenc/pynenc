@@ -1,5 +1,6 @@
 import asyncio
 from collections.abc import Callable, Iterable
+from collections import defaultdict
 from functools import cached_property, wraps
 from logging import Logger
 from typing import TYPE_CHECKING, Any, Optional, Union, overload
@@ -24,6 +25,7 @@ from pynenc.util.subclasses import get_subclass
 
 if TYPE_CHECKING:
     from pynenc.arguments import Arguments
+    from pynenc.core_tasks import CoreTaskDefinition
     from pynenc.invocation import BaseInvocationGroup
     from pynenc.identifiers.task_id import TaskId
     from pynenc.trigger import TriggerBuilder
@@ -76,9 +78,11 @@ class Pynenc:
         self.reporting = None
         self._runner_instance: BaseRunner | None = None
         self._tasks: dict[TaskId, Task] = {}
+        self._deferred_trigger_tasks: dict[TaskId, list[TriggerBuilder]] = defaultdict(
+            list
+        )
         self.logger.info(f"Initialized Pynenc app with id {self.app_id}")
         load_all_plugins()
-        self.register_core_tasks()
 
     @classmethod
     def from_info(cls, app_info: AppInfo) -> "Pynenc":
@@ -106,6 +110,46 @@ class Pynenc:
                 cron_val = getattr(self.conf, task_def.config_cron)
                 options["triggers"] = [on_cron(cron_val)]
             self.task(task_def.func, **options)
+
+    def register_core_task(self, task_def: "CoreTaskDefinition") -> None:
+        options = task_def.options.copy()
+        if task_def.config_cron:
+            cron_val = getattr(self.conf, task_def.config_cron)
+            options["triggers"] = [on_cron(cron_val)]
+        self.task(task_def.func, **options)
+
+    def _store_deferred_trigger(
+        self,
+        task: "Task",
+        triggers: Union["TriggerBuilder", list["TriggerBuilder"], None],
+    ) -> None:
+        """Store triggers to be registered later by the runner.
+
+        :param Task task: The Task instance that declared triggers
+        :param triggers: TriggerBuilder or list of TriggerBuilder
+        """
+        if not triggers:
+            return
+        if isinstance(triggers, list):
+            trigger_list = triggers
+        else:
+            trigger_list = [triggers]
+        self._deferred_trigger_tasks[task.task_id] = trigger_list
+
+    def register_deferred_triggers(self) -> None:
+        """Register all deferred task triggers that were collected during task decoration.
+
+        This is intended to be called by a runner during startup after relevant
+        modules have been imported so trigger backends are available.
+        """
+        if not self._deferred_trigger_tasks:
+            return
+        self.logger.info("Registering deferred task trigger(s):")
+        for task_id, triggers in self._deferred_trigger_tasks.items():
+            task = self.get_task(task_id)
+            self.trigger.register_task_triggers(task, triggers)
+            self.logger.info(f"  - Registered {task_id.key} triggers")
+        self._deferred_trigger_tasks.clear()
 
     @property
     def app_id(self) -> str:
@@ -141,7 +185,7 @@ class Pynenc:
             "config_values": self.config_values,
             "config_filepath": self.config_filepath,
             "reporting": self.reporting,
-            # "tasks": self._tasks,
+            "tasks": self._tasks,
         }
 
     def __setstate__(self, state: dict) -> None:
@@ -152,22 +196,10 @@ class Pynenc:
         self.config_values = state["config_values"]
         self.config_filepath = state["config_filepath"]
         self.reporting = state["reporting"]
-        # self._tasks = state.get("tasks", {})
+        self._tasks = state.get("tasks", {})
+        self._deferred_trigger_tasks = defaultdict(list)
         self._runner_instance = None
         load_all_plugins()  # Ensure plugins are loaded in subprocess
-        # Re-register core tasks in the child process so Task.from_id can
-        # resolve core tasks to Task instances instead of finding the
-        # CoreTaskFunction wrapper in the module namespace.
-        # Initialize tasks dict and register core tasks the same way as
-        # during normal app startup.
-        self._tasks = {}
-        try:
-            self.register_core_tasks()
-        except Exception:
-            # Avoid failing unpickle if registration can't run in this context;
-            # the logger or other subsystems may not be available yet.
-            # The app will still attempt to register tasks lazily when needed.
-            pass
 
     @cached_property
     def conf(self) -> ConfigPynenc:
@@ -399,7 +431,7 @@ class Pynenc:
                 )
             task: Task = Task(self, _func, options)
             self._tasks[task.task_id] = task
-            self.trigger.register_task_triggers(task, triggers)
+            self._store_deferred_trigger(task, triggers)
             return task
 
         if func is None:
