@@ -221,7 +221,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Ensured all runners (`MultiThreadRunner`, `ProcessRunner`, `PersistentProcessRunner`) use a single, idempotent setup for the `spawn` method.
   - Prevented duplicate or missing multiprocessing configuration, improving cross-platform reliability (especially on macOS and under debuggers).
 
-- **DisabledTrigger**: Fixed `AttributeError` when registering conditions or triggers while triggering is disabled. Overrode `register_condition` and `register_task_triggers` with no-op implementations that issue a warning.
+- **DisabledTrigger**: Triggering it's a core functionality and cannot be disabled, the option has been removed.
 
 - **Triggering cron**: Fixed a bug on the Cron Trigger validation and execution that prevented some valid cron triggers to run.
 

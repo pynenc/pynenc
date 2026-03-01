@@ -121,6 +121,10 @@ class MockPynenc(Pynenc):
     def client_data(self):  # type: ignore
         return MockClientDataStore(self)  # type: ignore[misc]
 
+    @cached_property
+    def trigger(self):  # type: ignore
+        return MagicMock()  # type: ignore[misc]
+
     @property
     def runner(self):  # type: ignore
         return self._runner_instance

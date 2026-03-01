@@ -37,9 +37,7 @@ class ConfigPynenc(ConfigPynencBase):
     :cvar str orchestrator_cls:
         The orchestrator class to use.
     :cvar str trigger_cls:
-        The trigger class to use. Default is "DisabledTrigger" which provides no trigger
-        functionality. Enable triggers by setting to "MemTrigger", "SqliteTrigger", or a
-        distributed trigger backend from a plugin (e.g., "RedisTrigger" from pynenc-redis).
+        The trigger class to use.
     :cvar str broker_cls:
         The broker class to use.
     :cvar str state_backend_cls:
@@ -127,7 +125,7 @@ class ConfigPynenc(ConfigPynencBase):
 
     # Core Classes Configuration
     orchestrator_cls = ConfigField("MemOrchestrator")
-    trigger_cls = ConfigField("DisabledTrigger")
+    trigger_cls = ConfigField("MemTrigger")
     broker_cls = ConfigField("MemBroker")
     state_backend_cls = ConfigField("MemStateBackend")
     serializer_cls = ConfigField("JsonPickleSerializer")

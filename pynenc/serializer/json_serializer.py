@@ -57,7 +57,10 @@ class DefaultJSONEncoder(json.JSONEncoder):
     This encoder handles:
 
     - **Enums** — serialized with module, qualname, and value for full round-trip reconstruction.
-    - **Python exceptions** — serialized to a dict with ``type``, ``args``, and ``message``.
+    - **Builtin exceptions** (e.g. ``ValueError``) — serialized with type, args, and message
+      under :attr:`ReservedKeys.ERROR`.
+    - **Custom (non-builtin) exceptions** — serialized with module, qualname, args, and message
+      under :attr:`ReservedKeys.CLIENT_EXCEPTION` so they can be fully reconstructed.
     - **Objects implementing** :class:`JsonSerializable` — any object with a ``to_json()``
       method is serialized by calling that method.  This is the recommended way for
       application code to make domain objects compatible with Pynenc's JSON serializer
@@ -71,10 +74,12 @@ class DefaultJSONEncoder(json.JSONEncoder):
         Resolution order:
 
         1. **Enum** — serialized with module, qualname, and value for reconstruction.
-        2. **Exception** — serialized to ``{ReservedKeys.ERROR: {...}}``.
-        3. **JsonSerializable** — any object that implements ``to_json()``
+        2. **Builtin Exception** — serialized to ``{ReservedKeys.ERROR: {type, args, message}}``.
+        3. **Custom Exception** — serialized to ``{ReservedKeys.CLIENT_EXCEPTION: {module, qualname, args, message}}``
+           so that non-builtin exceptions (user-defined) can be fully round-tripped.
+        4. **JsonSerializable** — any object that implements ``to_json()``
            is serialized by calling that method.
-        4. All other types raise ``TypeError`` with a descriptive message
+        5. All other types raise ``TypeError`` with a descriptive message
            including the object's type and a truncated repr.
 
         :param Any obj: The object to be serialized.
@@ -92,9 +97,19 @@ class DefaultJSONEncoder(json.JSONEncoder):
                 }
             }
         if isinstance(obj, Exception):
+            json_cls = type(obj)
+            if json_cls.__module__ == "builtins":
+                return {
+                    ReservedKeys.ERROR.value: {
+                        "type": json_cls.__name__,
+                        "args": obj.args,
+                        "message": str(obj),
+                    }
+                }
             return {
-                ReservedKeys.ERROR.value: {
-                    "type": type(obj).__name__,
+                ReservedKeys.CLIENT_EXCEPTION.value: {
+                    "module": json_cls.__module__,
+                    "qualname": json_cls.__qualname__,
                     "args": obj.args,
                     "message": str(obj),
                 }
@@ -157,6 +172,20 @@ def _reconstruct_from_json(data: Any) -> TJsonSerializable | Any:
             error_args = error_data["args"]
             if hasattr(builtins, error_type):
                 return getattr(builtins, error_type)(*error_args)
+            # Fallback for legacy data serialized without module/qualname
+            return RuntimeError(
+                f"{error_type}: {error_data.get('message', str(error_args))}"
+            )
+        if client_exc_data := data.get(ReservedKeys.CLIENT_EXCEPTION.value):
+            try:
+                exc_cls = _resolve_class(
+                    client_exc_data["module"], client_exc_data["qualname"]
+                )
+                return exc_cls(*client_exc_data["args"])
+            except Exception:
+                return RuntimeError(
+                    f"{client_exc_data['qualname']}: {client_exc_data['message']}"
+                )
         if js_data := data.get(ReservedKeys.JSON_SERIALIZABLE.value):
             json_cls: type[TJsonSerializable] = _resolve_class(
                 js_data["module"], js_data["qualname"]

@@ -21,8 +21,7 @@ def add(x: int, y: int) -> int:
     return x + y
 
 
-@patch("pynenc.trigger.disabled_trigger.DisabledTrigger.report_tasks_status")
-def test_route_default(mock_trigger_report_task_status: Mock) -> None:
+def test_route_default() -> None:
     """Test that the orchestrator will route the task by default
 
     If there are no options:
@@ -47,7 +46,7 @@ def test_route_default(mock_trigger_report_task_status: Mock) -> None:
         [invocation.invocation_id], ANY
     )
     # And report the change to the triggers
-    mock_trigger_report_task_status.assert_called_once_with(
+    mock_base_app.trigger.report_tasks_status.assert_called_once_with(
         [invocation.invocation_id], InvocationStatus.REGISTERED
     )
 

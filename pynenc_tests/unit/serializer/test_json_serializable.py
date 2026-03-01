@@ -141,6 +141,25 @@ class _OnlyFromJson:
         return cls()
 
 
+class _CustomAppError(Exception):
+    """Non-builtin exception for round-trip serialization tests.
+
+    Must be defined at module level so importlib can locate it by qualname.
+    """
+
+    def __init__(self, message: str, code: int = 0) -> None:
+        super().__init__(message, code)
+        self.code = code
+
+
+class _ChainedError(Exception):
+    """Exception with a dict argument, mirrors user exceptions like MissingRiskFactorInDTOError."""
+
+    def __init__(self, context: dict) -> None:
+        super().__init__(context)
+        self.context = context
+
+
 # ---------------------------------------------------------------------------
 # Protocol conformance tests
 # ---------------------------------------------------------------------------
@@ -322,3 +341,121 @@ def test_deserialize_should_still_reconstruct_exceptions_alongside_protocol() ->
 
     assert isinstance(result, ValueError)
     assert result.args == exc.args
+
+
+# ---------------------------------------------------------------------------
+# Client (non-builtin) exception serialization tests
+# ---------------------------------------------------------------------------
+
+
+def test_encoder_should_use_client_exception_key_for_non_builtin_exception() -> None:
+    """Custom exceptions must be serialized under CLIENT_EXCEPTION, not ERROR."""
+    raw = JsonSerializer.serialize(_CustomAppError("boom", 42))
+    data = json.loads(raw)
+
+    assert ReservedKeys.CLIENT_EXCEPTION.value in data
+    assert ReservedKeys.ERROR.value not in data
+    envelope = data[ReservedKeys.CLIENT_EXCEPTION.value]
+    assert envelope["module"] == _CustomAppError.__module__
+    assert envelope["qualname"] == _CustomAppError.__qualname__
+    assert envelope["args"] == ["boom", 42]
+
+
+def test_encoder_should_use_error_key_for_builtin_exception() -> None:
+    """Builtin exceptions must continue to use the ERROR key (backward compat)."""
+    raw = JsonSerializer.serialize(ValueError("bad value"))
+    data = json.loads(raw)
+
+    assert ReservedKeys.ERROR.value in data
+    assert ReservedKeys.CLIENT_EXCEPTION.value not in data
+
+
+def test_round_trip_should_reconstruct_custom_exception_with_exact_type() -> None:
+    """Custom exception class must be re-imported and reconstructed on deserialize."""
+    original = _CustomAppError("something failed", 500)
+    result = JsonSerializer.deserialize(JsonSerializer.serialize(original))
+
+    assert type(result) is _CustomAppError
+    assert result.args == ("something failed", 500)
+    assert result.code == 500
+
+
+def test_round_trip_should_reconstruct_exception_with_dict_arg() -> None:
+    """Exceptions whose arg is a dict (e.g. MissingRiskFactorInDTOError) must round-trip."""
+    original = _ChainedError({"id": 910400})
+    result = JsonSerializer.deserialize(JsonSerializer.serialize(original))
+
+    assert type(result) is _ChainedError
+    assert result.context == {"id": 910400}
+
+
+def test_deserialized_custom_exception_should_be_raiseable() -> None:
+    """The deserialized result must be raiseable without TypeError.
+
+    This is the exact failure mode reported: ``raise get_exception(...)`` threw
+    ``TypeError: exceptions must derive from BaseException`` because the old
+    deserializer returned a plain dict for unknown exception types.
+    """
+    result = JsonSerializer.deserialize(
+        JsonSerializer.serialize(_CustomAppError("fail"))
+    )
+
+    with pytest.raises(_CustomAppError):
+        raise result
+
+
+def test_deserialize_unimportable_client_exception_should_fallback_to_runtime_error() -> (
+    None
+):
+    """When the exception class cannot be imported, must return a RuntimeError (not a dict).
+
+    This guarantees ``raise get_exception(...)`` always works even if the custom
+    exception class is not available in the current process.
+    """
+    fake_payload = json.dumps(
+        {
+            ReservedKeys.CLIENT_EXCEPTION.value: {
+                "module": "non.existent.module",
+                "qualname": "GhostError",
+                "args": ["something went wrong"],
+                "message": "something went wrong",
+            }
+        }
+    )
+    result = JsonSerializer.deserialize(fake_payload)
+
+    assert isinstance(result, RuntimeError)
+    with pytest.raises(RuntimeError):
+        raise result
+
+
+def test_deserialize_legacy_error_key_for_non_builtin_should_fallback_to_runtime_error() -> (
+    None
+):
+    """Legacy ERROR envelopes for non-builtin types (old serialized data) must not
+    return a plain dict — they must return a proper exception so raise still works.
+    """
+    legacy_payload = json.dumps(
+        {
+            ReservedKeys.ERROR.value: {
+                "type": "SomeCustomClientError",
+                "args": ["Risk factor cleaning service failed unexpectedly"],
+                "message": "Risk factor cleaning service failed unexpectedly",
+            }
+        }
+    )
+    result = JsonSerializer.deserialize(legacy_payload)
+
+    # Ensure the result is a RuntimeError (fallback for unknown exceptions)
+    assert isinstance(result, RuntimeError)
+    assert (
+        str(result)
+        == "SomeCustomClientError: Risk factor cleaning service failed unexpectedly"
+    )
+
+    # Ensure the exception can be raised
+    with pytest.raises(
+        RuntimeError,
+        match="SomeCustomClientError: Risk factor cleaning service failed unexpectedly",
+    ):
+        raise result

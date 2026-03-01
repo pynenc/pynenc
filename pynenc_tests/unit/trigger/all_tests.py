@@ -9,5 +9,4 @@ from pynenc_tests.unit.trigger.test_trigger_all_instances import *
 # (implementation-specific tests or base class tests)
 IGNORED_FILES = {
     "test_trigger_builder",  # Builder-specific tests
-    "test_disabled_trigger_issue",  # DisabledTrigger-specific tests
 }

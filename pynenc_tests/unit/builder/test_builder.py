@@ -26,7 +26,7 @@ from pynenc.runner import (
 )
 from pynenc.serializer import JsonPickleSerializer, JsonSerializer, PickleSerializer
 from pynenc.state_backend import MemStateBackend
-from pynenc.trigger import DisabledTrigger, MemTrigger
+from pynenc.trigger import MemTrigger
 
 
 def test_basic_builder_should_create_valid_pynenc_app() -> None:
@@ -135,14 +135,6 @@ def test_mem_trigger_should_accept_custom_values() -> None:
     assert isinstance(app.trigger, MemTrigger)
     assert app.trigger.conf.scheduler_interval_seconds == 30  # Custom value
     assert app.trigger.conf.enable_scheduler is False  # Custom value
-
-
-def test_disable_trigger_should_disable_triggers() -> None:
-    """Test that disable_trigger correctly disables trigger functionality."""
-    app = PynencBuilder().disable_trigger().build()
-
-    assert app.conf.trigger_cls == "DisabledTrigger"
-    assert isinstance(app.trigger, DisabledTrigger)
 
 
 def test_multi_thread_runner_should_configure_correctly() -> None:
@@ -520,14 +512,6 @@ def test_trigger_configuration_with_memory_components() -> None:
 
     assert app.conf.trigger_cls == "MemTrigger"
     assert isinstance(app.trigger, MemTrigger)
-
-
-def test_trigger_configuration_with_disabled_trigger() -> None:
-    """Test disabled trigger configuration."""
-    app = PynencBuilder().disable_trigger().build()
-
-    assert app.conf.trigger_cls == "DisabledTrigger"
-    assert isinstance(app.trigger, DisabledTrigger)
 
 
 @pytest.mark.parametrize(

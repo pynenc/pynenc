@@ -5,7 +5,7 @@ from pynenc.builder import PynencBuilder
 from pynenc.client_data_store import MemClientDataStore
 from pynenc.orchestrator import MemOrchestrator
 from pynenc.state_backend import MemStateBackend
-from pynenc.trigger import DisabledTrigger, MemTrigger
+from pynenc.trigger import MemTrigger
 
 
 def test_memory_components_should_configure_correctly() -> None:
@@ -78,14 +78,6 @@ def test_mem_trigger_should_accept_custom_values() -> None:
     assert isinstance(app.trigger, MemTrigger)
     assert app.trigger.conf.scheduler_interval_seconds == 30  # Custom value
     assert app.trigger.conf.enable_scheduler is False  # Custom value
-
-
-def test_disable_trigger_should_disable_triggers() -> None:
-    """Test that disable_trigger correctly disables trigger functionality."""
-    app = PynencBuilder().disable_trigger().build()
-
-    assert app.conf.trigger_cls == "DisabledTrigger"
-    assert isinstance(app.trigger, DisabledTrigger)
 
 
 def test_memory_compatibility_validation_should_work_with_compatible_runners() -> None:

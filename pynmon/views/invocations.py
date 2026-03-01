@@ -145,8 +145,8 @@ def _build_svg_timeline(
     app: "Pynenc",
     start_datetime: datetime,
     end_datetime: datetime,
-    limit: int = 100,
-    resolution_seconds: int | None = None,
+    limit: int | None,
+    resolution_seconds: int | None,
 ) -> str:
     """
     Build SVG timeline using iter_history_in_timerange.
@@ -156,7 +156,7 @@ def _build_svg_timeline(
     :param Pynenc app: The Pynenc application instance
     :param datetime start_datetime: Start of the time range
     :param datetime end_datetime: End of the time range
-    :param int limit: Maximum number of invocations to include
+    :param int | None limit: Maximum number of invocations to include
     :param int | None resolution_seconds: Tick interval in seconds (None for auto)
     :return: SVG string for the timeline
     """
@@ -178,7 +178,7 @@ def _build_svg_timeline(
         required_runner_context_ids: set[str] = set()
         for history in batch:
             if history.invocation_id not in invocations_seen:
-                if len(invocations_seen) >= limit:
+                if limit and len(invocations_seen) >= limit:
                     break
                 invocations_seen.add(history.invocation_id)
             filtered_batch.append(history)
@@ -196,7 +196,7 @@ def _build_svg_timeline(
             builder.add_history_batch(filtered_batch, runner_contexts)
 
         # Stop if we've hit the limit
-        if len(invocations_seen) >= limit:
+        if limit and len(invocations_seen) >= limit:
             break
 
     logger.info(
@@ -216,7 +216,7 @@ async def invocations_timeline(
     time_range: str = "1h",
     start_date: str | None = None,
     end_date: str | None = None,
-    limit: int = 100,
+    limit: int | None = 500,
     resolution: str = "auto",
 ) -> HTMLResponse:
     """Display a visual SVG timeline of invocations with filters."""

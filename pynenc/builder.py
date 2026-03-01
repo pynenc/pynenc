@@ -343,18 +343,6 @@ class PynencBuilder:
         self._using_memory_components = True
         return self
 
-    def disable_trigger(self) -> "PynencBuilder":
-        """
-        Disable trigger functionality completely.
-
-        This turns off all trigger functionality, preventing any scheduled or
-        event-driven task execution.
-
-        :return: The builder instance for method chaining
-        """
-        self._config["trigger_cls"] = "DisabledTrigger"
-        return self
-
     def multi_thread_runner(
         self,
         min_threads: int = 1,

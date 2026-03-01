@@ -40,8 +40,15 @@
 
             <div class="mb-2">
               <label for="limit" class="form-label">Limit</label>
-              <input type="number" class="form-control form-control-sm" id="limit" name="limit"
-                     value="{{ current_filters.limit }}" min="1" max="500">
+              <select class="form-select form-select-sm" id="limit" name="limit">
+                <option value="100" {% if current_filters.limit == 100 %}selected{% endif %}>100</option>
+                <option value="500" {% if current_filters.limit == 500 %}selected{% endif %}>500</option>
+                <option value="1000" {% if current_filters.limit == 1000 %}selected{% endif %}>1,000</option>
+                <option value="5000" {% if current_filters.limit == 5000 %}selected{% endif %}>5,000</option>
+                <option value="20000" {% if current_filters.limit == 20000 %}selected{% endif %}>20,000</option>
+                <option value="50000" {% if current_filters.limit == 50000 %}selected{% endif %}>50,000</option>
+                <option value="" {% if not current_filters.limit %}selected{% endif %}>No limit</option>
+              </select>
             </div>
 
             <button type="submit" class="btn btn-primary btn-sm w-100">Apply Filters & Refresh</button>

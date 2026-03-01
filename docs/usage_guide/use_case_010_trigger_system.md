@@ -4,13 +4,11 @@
 
 This guide explores Pynenc's powerful trigger system, which enables declarative task scheduling and event-driven execution. The trigger system allows you to automatically execute tasks in response to various conditions, such as cron schedules, task statuses, results, exceptions, or custom events.
 
-**Important**: Triggers are **disabled by default** in Pynenc. You must explicitly configure a trigger backend to enable trigger functionality.
-
 ## Prerequisites
 
 **Trigger Backend Configuration**:
 
-By default, Pynenc uses `DisabledTrigger` which provides no trigger functionality. To enable triggers, you must configure one of the available trigger backends:
+You must select one of the available trigger backends:
 
 **For Development and Testing**:
 
@@ -499,7 +497,6 @@ trigger = (
 
 **Built-in Backends** (no plugin required):
 
-- **Disabled** (`DisabledTrigger`): Default, no trigger functionality
 - **Memory-based** (`MemTrigger`): Single-process, data lost on restart, thread-safe with ThreadRunner only
 - **SQLite-based** (`SqliteTrigger`): Single-host, persistent storage, works with any runner sharing the database
 
@@ -520,20 +517,18 @@ Each trigger condition provides rich context information:
 
 ## Best Practices
 
-1. **Enable triggers before using**: Verify that `trigger_cls` is configured to something other than `DisabledTrigger`
-2. **Choose appropriate backend**: Use memory/SQLite for development, distributed backends for production
-3. **Keep triggers focused**: Each trigger should have a clear, specific purpose
-4. **Use appropriate filters**: Filters reduce unnecessary task executions
-5. **Consider idempotence**: Triggered tasks should handle potential duplicate executions gracefully
-6. **Monitor trigger performance**: Complex trigger conditions can impact system performance
-7. **Use consistent naming**: Develop a naming convention for triggered tasks to improve maintainability
-8. **Avoid lambdas in filters or providers**: Always use module-level named functions for argument filters and providers
+1. **Choose appropriate backend**: Use memory/SQLite for development, distributed backends for production
+2. **Keep triggers focused**: Each trigger should have a clear, specific purpose
+3. **Use appropriate filters**: Filters reduce unnecessary task executions
+4. **Consider idempotence**: Triggered tasks should handle potential duplicate executions gracefully
+5. **Monitor trigger performance**: Complex trigger conditions can impact system performance
+6. **Use consistent naming**: Develop a naming convention for triggered tasks to improve maintainability
+7. **Avoid lambdas in filters or providers**: Always use module-level named functions for argument filters and providers
 
 ## Troubleshooting
 
 **Triggers not executing?**
 
-- Verify `trigger_cls` is not set to `DisabledTrigger` (the default)
 - Ensure the trigger backend service (Redis, MongoDB, RabbitMQ) is running for distributed backends
 - Check that the required plugin is installed for distributed backends
 - Verify the runner is compatible with your trigger backend (e.g., MemTrigger requires ThreadRunner)
