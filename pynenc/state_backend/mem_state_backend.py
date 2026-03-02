@@ -92,20 +92,20 @@ class MemStateBackend(BaseStateBackend[Params, Result]):
 
     def get_child_invocations(
         self, parent_invocation_id: "InvocationId"
-    ) -> list["InvocationId"]:
+    ) -> Iterator["InvocationId"]:
         """Return IDs of invocations that name the given ID as their parent.
 
         Uses the pre-built parent-to-children index instead of scanning the
         entire cache, providing O(1) lookup per parent.
 
         :param parent_invocation_id: The parent invocation ID to search for.
-        :return: List of child invocation IDs.
+        :return: Iterator of child invocation IDs.
         """
         parent_key = str(parent_invocation_id)
-        return [
+        return (
             InvId(child_key)
             for child_key in self._parent_to_children.get(parent_key, [])
-        ]
+        )
 
     def _add_histories(
         self,

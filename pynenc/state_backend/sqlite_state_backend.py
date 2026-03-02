@@ -307,11 +307,11 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
 
     def get_child_invocations(
         self, parent_invocation_id: "InvocationId"
-    ) -> list["InvocationId"]:
+    ) -> Iterator["InvocationId"]:
         """Return IDs of invocations that name the given ID as their parent.
 
         :param parent_invocation_id: The parent invocation ID to search for.
-        :return: List of child invocation IDs.
+        :return: Iterator of child invocation IDs.
         """
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
@@ -320,7 +320,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
             )
             rows = cursor.fetchall()
             cursor.close()
-        return [InvocationId(row[0]) for row in rows]
+        return (InvocationId(row[0]) for row in rows)
 
     def _add_histories(
         self,

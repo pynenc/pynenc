@@ -299,7 +299,7 @@ class BaseStateBackend(ABC, Generic[Params, Result]):
     @abstractmethod
     def get_child_invocations(
         self, parent_invocation_id: "InvocationId"
-    ) -> list["InvocationId"]:
+    ) -> Iterator["InvocationId"]:
         """Return IDs of all invocations directly spawned by the given parent.
 
         Used for family-tree traversal: given a parent invocation ID, find all
