@@ -5,6 +5,8 @@
 
 from pynenc_tests.integration.pynmon.test_calls import *
 from pynenc_tests.integration.pynmon.test_home_page import *
+from pynenc_tests.integration.pynmon.test_family_tree_deep import *
+from pynenc_tests.integration.pynmon.test_family_tree_massive import *
 from pynenc_tests.integration.pynmon.test_invocation import *
 from pynenc_tests.integration.pynmon.test_invocations_pagination import *
 from pynenc_tests.integration.pynmon.test_invocations_timeline import *

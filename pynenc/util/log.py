@@ -53,7 +53,7 @@ class PynencContextFilter(logging.Filter):
         Initialize the filter with the app_id to read context for.
 
         :param str app_id: The application identifier.
-        :param ConfigPynenc conf: The app configuration (read dynamically for truncate_log_ids).
+        :param ConfigPynenc conf: The app configuration (read dynamically for compact_log_context).
         """
         super().__init__()
         self.app_id = app_id
@@ -73,10 +73,10 @@ class PynencContextFilter(logging.Filter):
         record.runner_ctx = context.get_current_runner_context(self.app_id)
         if invocation := context.get_dist_invocation_context(self.app_id):
             record.invocation_id = invocation.invocation_id
-            record.task_id = invocation.task.task_id
+            record.task_id = invocation.task.task_id.key
 
-        # Read truncate_log_ids dynamically from config (allows runtime changes)
-        record.truncate_log_ids = self.conf.truncate_log_ids
+        # Read compact_log_context dynamically from config (allows runtime changes)
+        record.compact_log_context = self.conf.compact_log_context
         return True
 
 
@@ -126,35 +126,36 @@ class ColoredFormatter(logging.Formatter):
         runner_ctx = getattr(record, "runner_ctx", None)
         task_id = getattr(record, "task_id", None)
         invocation_id = getattr(record, "invocation_id", None)
-        truncate_ids = getattr(record, "truncate_log_ids", True)
+        truncate_ids = getattr(record, "compact_log_context", True)
 
         # Build context prefix
-        # Format: RunnerClass(id) or RunnerClass(id).Child[id]
-        context_parts = []
+        prefix = ""
 
         # Format the context display from raw data
-        if context_display := self._format_context_display(runner_ctx, truncate_ids):
-            context_parts.append(context_display)
-
-        # Add task context if available
-        if task_id:
-            context_parts.append(f"task:{task_id}")
+        if context_display := self._format_runner_ctx_display(runner_ctx, truncate_ids):
+            prefix = context_display
 
         # Add invocation context if available
         if invocation_id:
             inv_display = self._maybe_truncate(invocation_id, truncate_ids)
-            context_parts.append(f"inv:{inv_display}")
+            prefix += inv_display
+
+        # Add task context if available
+        if task_id:
+            if invocation_id:
+                prefix += ":"
+            prefix += task_id
 
         # Apply colors
         if levelname in self.LEVEL_COLORS:
             color = self.LEVEL_COLORS[levelname]
             record.levelname = f"{color}{levelname:<8}{Colors.RESET}"
             record.name = f"{Colors.BLUE}{name}{Colors.RESET}"
-
             # Add colored context prefix if any context is available
-            if context_parts:
-                prefix = f"[{' '.join(context_parts)}]"
-                record.msg = f"{color}{prefix}{Colors.RESET} {color}{msg}{Colors.RESET}"
+            if prefix:
+                record.msg = (
+                    f"{color}[{prefix}]{Colors.RESET} {color}{msg}{Colors.RESET}"
+                )
             else:
                 record.msg = f"{color}{msg}{Colors.RESET}"
 
@@ -168,10 +169,10 @@ class ColoredFormatter(logging.Formatter):
 
         return result
 
-    def _format_context_display(
+    def _format_runner_ctx_display(
         self,
         runner_ctx: "RunnerContext | None",
-        truncate_ids: bool,
+        compact_context: bool,
     ) -> str | None:
         """
         Format context data into a display string for logging.
@@ -181,24 +182,30 @@ class ColoredFormatter(logging.Formatter):
         - With parent: ParentClass(id).ChildClass[id]
 
         :param RunnerContext | None runner_ctx: The current runner context
-        :param bool truncate_ids: Whether to truncate long IDs
+        :param bool compact_context: Whether to compact class names
         :return: Formatted display string or None if no context
         """
         if runner_ctx is None:
             return None
-
+        curr_cls = self._maybe_compact_class_name(
+            runner_ctx.runner_cls, compact_context
+        )
+        if "External" in runner_ctx.runner_cls:
+            # Don't truncate external runner ID (hostname+PID)
+            curr_id = runner_ctx.runner_id
+        else:
+            curr_id = self._maybe_truncate(runner_ctx.runner_id, compact_context)
         if runner_ctx.parent_ctx is not None:
             # Two levels: parent -> current
             parent = runner_ctx.parent_ctx
-            parent_id = self._maybe_truncate(parent.runner_id, truncate_ids)
-            child_id = self._maybe_truncate(runner_ctx.runner_id, truncate_ids)
-            return (
-                f"{parent.runner_cls}({parent_id}).{runner_ctx.runner_cls}[{child_id}]"
+            parent_cls = self._maybe_compact_class_name(
+                parent.runner_cls, compact_context
             )
+            parent_id = self._maybe_truncate(parent.runner_id, compact_context)
+            return f"{parent_cls}({parent_id}).{curr_cls}({curr_id})"
 
         # Just current context
-        runner_id = self._maybe_truncate(runner_ctx.runner_id, truncate_ids)
-        return f"{runner_ctx.runner_cls}({runner_id})"
+        return f"{curr_cls}({curr_id})"
 
     def _maybe_truncate(self, value: str, truncate: bool) -> str:
         """
@@ -211,6 +218,21 @@ class ColoredFormatter(logging.Formatter):
         if truncate and len(value) > _TRUNCATE_LENGTH:
             return value[:_TRUNCATE_LENGTH]
         return value
+
+    def _maybe_compact_class_name(self, class_name: str, compact: bool) -> str:
+        """
+        Abbreviate class name to capital letters if compact is True.
+
+        Examples: PersistentProcessRunner -> PPR, PPRWorker -> PPRW
+
+        :param str class_name: The class name to potentially compact
+        :param bool compact: Whether to compact
+        :return: Original or compacted class name
+        """
+        if not compact:
+            return class_name
+
+        return "".join(char for char in class_name if char.isupper())
 
 
 def create_logger(app: "Pynenc", use_colors: bool = True) -> logging.Logger:
@@ -225,7 +247,7 @@ def create_logger(app: "Pynenc", use_colors: bool = True) -> logging.Logger:
     logger = logging.getLogger(f"pynenc.{app.app_id}")
 
     # Add context filter that reads from context.py
-    # Pass conf reference so truncate_log_ids is read dynamically
+    # Pass conf reference so compact_log_context is read dynamically
     context_filter = PynencContextFilter(app.app_id, app.conf)
     logger.addFilter(context_filter)
 

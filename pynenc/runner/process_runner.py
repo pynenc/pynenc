@@ -301,9 +301,6 @@ class ProcessRunner(BaseRunner):
                 args=(self.app, invocation, reserved_ctx, self.runner_args),
                 daemon=True,
             )
-            self.app.logger.info(
-                f"{self.runner_id} starting invocation:{invocation.invocation_id} with reserved_ctx {reserved_ctx.runner_id}"
-            )
             process.start()
             if process.pid:
                 self.child_runner_ids[reserved_ctx.runner_id] = ChildProcessInfo(

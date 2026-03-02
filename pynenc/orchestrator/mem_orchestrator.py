@@ -414,18 +414,35 @@ class MemOrchestrator(BaseOrchestrator):
         self.invocation_status_record.pop(invocation_id, None)
         self.invocation_retries.pop(invocation_id, None)
 
+    def _get_invocation_lock(self, invocation_id: "InvocationId") -> threading.Lock:
+        """Get or create a per-invocation lock for atomic transitions.
+
+        :param invocation_id: The invocation to get the lock for.
+        :return: A threading Lock for the given invocation.
+        """
+        if invocation_id not in self.locks:
+            self.locks[invocation_id] = threading.Lock()
+        return self.locks[invocation_id]
+
     def _atomic_status_transition(
         self,
         invocation_id: "InvocationId",
         status: InvocationStatus,
         runner_id: str | None = None,
     ) -> InvocationStatusRecord:
-        """Sets the status record of a specific invocation."""
-        prev_status_record = self.invocation_status_record.get(invocation_id)
-        new_record = status_record_transition(prev_status_record, status, runner_id)
-        return self._interanl_atomic_status_transition(
-            invocation_id, prev_status_record, new_record
-        )
+        """Sets the status record of a specific invocation.
+
+        Uses per-invocation locking to prevent TOCTOU race conditions where
+        multiple threads could read the same current status, both validate
+        their transition, and both write — producing duplicate history entries.
+        """
+        lock = self._get_invocation_lock(invocation_id)
+        with lock:
+            prev_status_record = self.invocation_status_record.get(invocation_id)
+            new_record = status_record_transition(prev_status_record, status, runner_id)
+            return self._interanl_atomic_status_transition(
+                invocation_id, prev_status_record, new_record
+            )
 
     def _interanl_atomic_status_transition(
         self,

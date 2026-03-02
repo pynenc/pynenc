@@ -628,3 +628,63 @@ code {
     padding: 0.5rem;
   }
 }
+
+/* ===== LOADING SPINNERS ===== */
+
+/* Full-page overlay shown while navigating to a slow page */
+.pynmon-loading-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(248, 249, 250, 0.85);
+  z-index: 9999;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pynmon-loading-overlay.active {
+  display: flex;
+}
+
+.pynmon-loading-overlay .spinner-border {
+  width: 2.5rem;
+  height: 2.5rem;
+  color: var(--nav-active);
+}
+
+.pynmon-loading-overlay .loading-text {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+/* Inline spinner for sections loading inside a page */
+.pynmon-inline-spinner {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 2rem;
+  gap: 10px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.pynmon-inline-spinner .spinner-border {
+  width: 1.5rem;
+  height: 1.5rem;
+  color: var(--nav-active);
+}
+
+/* HTMX indicator support */
+.htmx-indicator {
+  display: none;
+}
+
+.htmx-request .htmx-indicator {
+  display: inline-block;
+}
+
+.htmx-request .htmx-hide-on-request {
+  display: none;
+}

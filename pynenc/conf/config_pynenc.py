@@ -76,9 +76,9 @@ class ConfigPynenc(ConfigPynencBase):
         Time in seconds to cache invocation status for non-final states. This helps
         reduce the amount of queries by avoiding repeated status checks within this time window.
         Final statuses are cached indefinitely since they never change. Default 0.1.
-    :cvar bool truncate_log_ids:
-        If True, truncates long IDs (invocation_id, runner_id, etc.) in log output
-        to improve readability. If False, displays full IDs. Default True.
+    :cvar bool compact_log_context:
+        If True, truncates IDs (first 7 chars) and compacts class names (e.g., PPR for
+        PersistentProcessRunner) for shorter log output. Default True.
 
     =============================
     Atomic Global Services
@@ -144,7 +144,7 @@ class ConfigPynenc(ConfigPynencBase):
     truncate_arguments_length = ConfigField(32)
     argument_print_mode = ConfigField(ArgumentPrintMode.TRUNCATED)
     cached_status_time = ConfigField(0.1)
-    truncate_log_ids = ConfigField(True)
+    compact_log_context = ConfigField(True)
 
     # Atomic Global Services Configuration
     atomic_service_interval_minutes = ConfigField(5.0)

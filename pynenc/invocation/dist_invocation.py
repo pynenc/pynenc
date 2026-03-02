@@ -102,7 +102,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             call.app.logger.info(f"Creating a new sub-workflow {workflow=}")
         else:
             workflow = parent_invocation.workflow
-            call.app.logger.info(
+            call.app.logger.debug(
                 f"Inheriting workflow from parent {workflow=} for {new_invocation_id=}"
             )
         return cls(
@@ -319,7 +319,6 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         context.set_runner_context(self.app.app_id, runner_ctx)
         previous_invocation_context = self.swap_context()
         try:
-            self.task.logger.info("Invocation STARTED")
             if not self.app.orchestrator.is_authorize_to_run_by_concurrency_control(
                 self
             ):
@@ -332,7 +331,6 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             self._register_workflow_run()
             result = run_task_sync(self.task.func, **self.arguments.kwargs)
             self.app.orchestrator.set_invocation_result(self, result, runner_ctx)
-            self.task.logger.info("Invocation FINISHED")
         except WorkflowPauseError as ex:
             self.task.logger.warning(
                 f"Workflow pause requested but not implemented yet: {ex.reason}"

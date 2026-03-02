@@ -35,12 +35,12 @@ def app(request: "FixtureRequest", app_instance: "Pynenc") -> "Pynenc":
 
 @pytest.fixture
 def app_no_truncate(request: "FixtureRequest", app_instance: "Pynenc") -> "Pynenc":
-    """App fixture with truncate_log_ids disabled."""
+    """App fixture with compact_log_context disabled."""
     app = app_instance
     app.runner = ThreadRunner(app)
     app._tasks = mock_app._tasks
     app.conf.logging_level = "DEBUG"
-    app.conf.truncate_log_ids = False
+    app.conf.compact_log_context = False
     add.app = app
     app.purge()
     request.addfinalizer(app.purge)
@@ -91,7 +91,7 @@ def test_task_runner_logs_truncated(app: "Pynenc") -> None:
 
 def test_task_runner_logs_full_ids(app_no_truncate: "Pynenc") -> None:
     """
-    Test that logs show full IDs when truncate_log_ids is disabled.
+    Test that logs show full IDs when compact_log_context is disabled.
     """
     app = app_no_truncate
 

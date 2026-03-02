@@ -207,8 +207,52 @@
       {% endblock %}
     </div>
 
+    <!-- Loading overlay (shown on slow navigation) -->
+    <div id="pynmon-loading" class="pynmon-loading-overlay">
+      <div class="spinner-border" role="status">
+        <span class="visually-hidden">Loading…</span>
+      </div>
+      <span class="loading-text">Loading…</span>
+    </div>
+
     <!-- Bootstrap JS Bundle -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Global loading-overlay logic -->
+    <script>
+      (function () {
+        const overlay = document.getElementById("pynmon-loading");
+        if (!overlay) return;
+
+        // Show overlay when a normal <a> link navigates to a slow page
+        document.querySelectorAll('a[href^="/"]').forEach(function (link) {
+          // Skip links that open new tabs, HTMX links, or hash-only links
+          if (
+            link.target === "_blank" ||
+            link.hasAttribute("hx-get") ||
+            link.getAttribute("href") === "#"
+          )
+            return;
+          link.addEventListener("click", function () {
+            overlay.classList.add("active");
+          });
+        });
+
+        // Show overlay when a filter form is submitted (e.g. invocations, timeline)
+        document
+          .querySelectorAll("form[method='get']")
+          .forEach(function (form) {
+            form.addEventListener("submit", function () {
+              overlay.classList.add("active");
+            });
+          });
+
+        // Hide overlay when the page is loaded from bfcache (back/forward)
+        window.addEventListener("pageshow", function (e) {
+          if (e.persisted) overlay.classList.remove("active");
+        });
+      })();
+    </script>
 
     <!-- Extra JavaScript block for child templates -->
     {% block extra_js %}{% endblock %}

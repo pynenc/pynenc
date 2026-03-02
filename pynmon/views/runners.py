@@ -3,8 +3,10 @@ Runners monitoring views.
 
 Provides monitoring interfaces for runner heartbeat tracking,
 active runner status, and recovery service coordination.
+All heavy data queries are offloaded to threads so the event loop stays free.
 """
 
+import asyncio
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -72,9 +74,9 @@ async def runners_view(request: Request) -> HTMLResponse:
     """Display active runners and heartbeat information."""
     app = get_pynenc_instance()
 
-    active_runners = app.orchestrator.get_active_runners()
+    active_runners = await asyncio.to_thread(app.orchestrator.get_active_runners)
     runner_ids = [r.runner_id for r in active_runners]
-    contexts = _get_runner_contexts(app, runner_ids)
+    contexts = await asyncio.to_thread(_get_runner_contexts, app, runner_ids)
 
     # Enrich runners with context
     enriched_runners = [
@@ -110,9 +112,9 @@ async def refresh_runners(request: Request) -> HTMLResponse:
     """Refresh runner data for HTMX partial updates."""
     app = get_pynenc_instance()
 
-    active_runners = app.orchestrator.get_active_runners()
+    active_runners = await asyncio.to_thread(app.orchestrator.get_active_runners)
     runner_ids = [r.runner_id for r in active_runners]
-    contexts = _get_runner_contexts(app, runner_ids)
+    contexts = await asyncio.to_thread(_get_runner_contexts, app, runner_ids)
 
     enriched_runners = [
         _enrich_runner_info(runner, contexts.get(runner.runner_id))
@@ -134,7 +136,7 @@ async def runner_detail(request: Request, runner_id: str) -> HTMLResponse:
     app = get_pynenc_instance()
 
     # Find runner in active runners
-    active_runners = app.orchestrator.get_active_runners()
+    active_runners = await asyncio.to_thread(app.orchestrator.get_active_runners)
     runner_info = next((r for r in active_runners if r.runner_id == runner_id), None)
 
     if not runner_info:
@@ -177,7 +179,7 @@ async def atomic_service_timeline(request: Request) -> HTMLResponse:
     """Display atomic service execution timeline."""
     app = get_pynenc_instance()
 
-    active_runners = app.orchestrator.get_active_runners()
+    active_runners = await asyncio.to_thread(app.orchestrator.get_active_runners)
 
     # Filter runners that have executed atomic service
     runners_with_executions = [

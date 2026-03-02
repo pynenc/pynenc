@@ -59,6 +59,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Displays runner details: ID, class, hostname, PID, creation time, last heartbeat, and age
   - Integrated runner statistics into orchestrator overview page
 
+- **Pynmon Family Tree Visualization**:
+
+  - Interactive invocation family tree with time-ordered grid layout and parent-child hierarchies
+  - Floating draggable panel with resize, collapse, and zoom controls
+  - Progressive tree expansion with "load more" badges for large trees
+  - Cross-highlighting between timeline and family tree on selection
+
+- **Logging**:
+
+  - Enhanced Pynmon logging with colored timestamps and uvicorn integration
+  - Shortened context logs with ID truncation and compacted class names when `compact_log_context` is enabled
+
+- **Pynmon UI Enhancements**:
+
+  - Global loading overlay for slow page navigation
+  - Inline spinners for HTMX-loaded sections
+  - Re-run call functionality to spawn independent invocations
+  - Workflow information display on invocation detail pages
+  - Enhanced timeline detail panels with status history and runner context
+  - Improved pagination and filter state persistence
+
 - **Builder System Improvements**:
 
   - Enhanced builder test coverage with comprehensive unit tests
@@ -72,7 +93,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Enhanced `InvocationHistory` to include parent invocation references and runner context
   - Added efficient time-range iteration methods (`iter_invocations_in_timerange`, `iter_history_in_timerange`) for timeline visualization
   - Improved logging context to display runner, task, and invocation information when available
-  - Added `truncate_log_ids` configuration option to control ID truncation in logs (default: True)
+  - Added `compact_log_context` configuration option to reduce lenght of logging messages (default: True)
 
 - **Test Coverage for ArgCache Implementations**:
 

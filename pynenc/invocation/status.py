@@ -73,6 +73,10 @@ class InvocationStatus(StrEnum):
         """Check if the task can be picked up and run by any broker."""
         return self in _CONFIG.available_for_run_statuses
 
+    def can_transition_to(self, target: "InvocationStatus") -> bool:
+        """Check if this status has a valid transition to the target status."""
+        return target in _CONFIG.get_definition(self).allowed_transitions
+
     @classmethod
     def get_final_statuses(cls) -> frozenset["InvocationStatus"]:
         """Return all statuses that terminate the invocation lifecycle."""

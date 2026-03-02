@@ -81,6 +81,9 @@ def init_tables(sqlite_db_path: str) -> None:
         """
         )
         conn.execute(
+            f"CREATE INDEX IF NOT EXISTS idx_state_backend_invocations_parent ON {Tables.INVOCATIONS}(parent_invocation_id)"
+        )
+        conn.execute(
             f"""
             CREATE TABLE IF NOT EXISTS {Tables.RUNNER_CONTEXTS} (
                 runner_id TEXT PRIMARY KEY,
@@ -301,6 +304,23 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
                 )
                 return (inv_dto, call_dto)
         return None
+
+    def get_child_invocations(
+        self, parent_invocation_id: "InvocationId"
+    ) -> list["InvocationId"]:
+        """Return IDs of invocations that name the given ID as their parent.
+
+        :param parent_invocation_id: The parent invocation ID to search for.
+        :return: List of child invocation IDs.
+        """
+        with sqlite_conn(self.sqlite_db_path) as conn:
+            cursor = conn.execute(
+                f"SELECT invocation_id FROM {Tables.INVOCATIONS} WHERE parent_invocation_id = ?",
+                (parent_invocation_id,),
+            )
+            rows = cursor.fetchall()
+            cursor.close()
+        return [InvocationId(row[0]) for row in rows]
 
     def _add_histories(
         self,

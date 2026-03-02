@@ -438,6 +438,7 @@ class BaseOrchestrator(ABC):
             self.set_up_invocation_auto_purge(invocation_id)
         self.app.state_backend.add_history(invocation_id, new_status_record, runner_ctx)
         self.app.trigger.report_tasks_status([invocation_id], status)
+        self.app.logger.info(f"invocation {invocation_id} status {status.value}")
 
     def set_invocation_result(
         self,
@@ -589,6 +590,11 @@ class BaseOrchestrator(ABC):
         for blocking_invocation_id in self.get_blocking_invocations(
             max_num_invocations
         ):
+            current_status = self.get_invocation_status(blocking_invocation_id)
+            # Skip silently if the invocation is already past the point where PENDING makes sense
+            # (e.g. already RUNNING, SUCCESS, FAILED) — another worker already claimed it
+            if not current_status.can_transition_to(InvocationStatus.PENDING):
+                continue
             blocking_invocation = self.app.state_backend.get_invocation(
                 blocking_invocation_id
             )
@@ -601,7 +607,8 @@ class BaseOrchestrator(ABC):
                 )
                 yield blocking_invocation_id
             except InvocationStatusError as ex:
-                self.app.logger.warning(
+                # Race condition: another worker claimed it between our status check and transition
+                self.app.logger.debug(
                     f"Could not set blocking invocation {blocking_invocation_id} to PENDING: {ex}"
                 )
                 continue
@@ -727,6 +734,12 @@ class BaseOrchestrator(ABC):
         self.app.state_backend.add_histories(invocations, status_record, runner_ctx)
         self.app.trigger.report_tasks_status(inv_ids, status_record.status)
         self.app.broker.route_invocations(inv_ids)
+        for invocation in invocations:
+            task_key = invocation.call.task.task_id.key
+            inv_id = invocation.invocation_id
+            self.app.logger.info(
+                f"NEW Invocation {task_key}:{inv_id} REGISTERED and ROUTED"
+            )
 
     def _route_new_call_invocation(
         self, call: "Call[Params, Result]", runner_id: str | None = None
@@ -743,16 +756,13 @@ class BaseOrchestrator(ABC):
         """
         parent_invocation = context.get_dist_invocation_context(self.app.app_id)
         new_invocation = DistributedInvocation.from_parent(call, parent_invocation)
-        self.app.logger.info(f"routing {new_invocation=}")
         self.register_new_invocations([new_invocation])
         if (
             call.task.conf.registration_concurrency != ConcurrencyControlType.DISABLED
             or call.task.conf.running_concurrency != ConcurrencyControlType.DISABLED
         ):
             self.index_arguments_for_concurrency_control(new_invocation)
-        self.app.logger.info(
-            f"routed task {call.task.task_id} with invocation {new_invocation.invocation_id}"
-        )
+        self.app.logger.info(f"invocation {new_invocation.invocation_id} ROUTED")
         return new_invocation
 
     def route_call(self, call: "Call") -> "DistributedInvocation":

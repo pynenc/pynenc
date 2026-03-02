@@ -149,10 +149,14 @@ class TimelineSVGRenderer:
 
     def _render_header(self, width: int, height: int) -> str:
         """Render SVG header with viewBox for responsive scaling."""
-        # Use 100% width to fill container, viewBox handles scaling
+        # Use 100% width without explicit height so the browser derives height
+        # from the viewBox aspect ratio. Setting a fixed height in pixels while
+        # width="100%" causes the content to scale down (preserveAspectRatio meet)
+        # but the SVG element stays the full pixel height, creating blank space
+        # proportional to (1 - container_width / viewBox_width) * height.
         return (
             f'<svg xmlns="http://www.w3.org/2000/svg" '
-            f'width="100%" height="{height}" '
+            f'width="100%" '
             f'viewBox="0 0 {width} {height}" '
             f'preserveAspectRatio="xMinYMin meet" '
             f'style="font-family: {self.style.font_family}; font-size: {self.style.font_size}px;">'

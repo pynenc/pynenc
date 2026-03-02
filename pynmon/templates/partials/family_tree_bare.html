@@ -1,0 +1,7 @@
+{% if family_tree_svg %}
+<div id="ft-svg-wrapper">{{ family_tree_svg | safe }}</div>
+{% else %}
+<span class="text-muted" style="font-size: 12px"
+  >No family tree available.</span
+>
+{% endif %}

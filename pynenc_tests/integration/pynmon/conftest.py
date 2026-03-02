@@ -44,6 +44,7 @@ if TYPE_CHECKING:
 import requests
 import uvicorn
 
+from pynmon.app import _uvicorn_log_config
 from pynmon.app import all_pynenc_instances
 from pynmon.app import app as pynmon_app
 from pynmon.app import pynenc_instance
@@ -150,8 +151,9 @@ def pynmon_server(request: "FixtureRequest") -> "Generator[str, None, None]":
         app=pynmon_app,
         host="127.0.0.1",
         port=port,
-        log_level="error",  # Reduce log noise
-        access_log=False,
+        log_level="info",
+        access_log=True,
+        log_config=_uvicorn_log_config(),
         loop="asyncio",
     )
     server = uvicorn.Server(config)
@@ -211,8 +213,10 @@ def pynmon_server(request: "FixtureRequest") -> "Generator[str, None, None]":
             continue
 
     server_url = f"http://localhost:{port}"
-    print(f"\n🌐 Pynmon server started at: {server_url}")
-    print("   You can access the pynmon interface in your browser!")
+    # Use logger (not print) so messages appear immediately via live log
+    # (pytest buffers print() and only shows it after the test completes)
+    logger.warning(f"\n🌐 Pynmon server started at: {server_url}")
+    logger.warning("   You can access the pynmon interface in your browser!")
 
     # Check if we should keep the server running for debugging
     # Priority: module-level KEEP_ALIVE constant, then environment variable
@@ -222,21 +226,23 @@ def pynmon_server(request: "FixtureRequest") -> "Generator[str, None, None]":
 
     if keep_alive:
         if module_keep_alive == 1:
-            print("   🔒 Module KEEP_ALIVE=1 - server will stay running after tests!")
+            logger.warning(
+                "   🔒 Module KEEP_ALIVE=1 - server will stay running after tests!"
+            )
         else:
-            print(
+            logger.warning(
                 "   🔒 PYNMON_KEEP_ALIVE is set - server will stay running after tests!"
             )
-        print("   Press Ctrl+C to stop the server when done debugging.")
+        logger.warning("   Press Ctrl+C to stop the server when done debugging.")
 
     try:
         yield server_url
     finally:
         # Check if we should keep the server running
         if keep_alive:
-            print(f"\n🔒 Keeping server running at: {server_url}")
-            print("   The server will continue running for debugging.")
-            print("   Press Ctrl+C to stop when done.")
+            logger.warning(f"\n🔒 Keeping server running at: {server_url}")
+            logger.warning("   The server will continue running for debugging.")
+            logger.warning("   Press Ctrl+C to stop when done.")
             try:
                 # Keep the server alive indefinitely
                 while True:

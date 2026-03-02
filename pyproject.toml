@@ -141,6 +141,8 @@ filterwarnings = [
     "ignore:Running in a secondary thread. Signal handling will be skipped.:UserWarning",
     "ignore::pytest.PytestUnhandledThreadExceptionWarning",
 ]
+# TO DEBUG pynmong let logs life in terminal and disable timeout
+# addopts = "-s"  # Disable output capture so logs/prints appear live in terminal
 timeout = 30
 
 [tool.coverage.run]

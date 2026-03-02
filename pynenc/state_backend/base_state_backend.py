@@ -296,6 +296,19 @@ class BaseStateBackend(ABC, Generic[Params, Result]):
         lazy_call: Call = LazyCall.from_dto(self.app, call_dto)
         return DistributedInvocation.from_dto(inv_dto, call=lazy_call)
 
+    @abstractmethod
+    def get_child_invocations(
+        self, parent_invocation_id: "InvocationId"
+    ) -> list["InvocationId"]:
+        """Return IDs of all invocations directly spawned by the given parent.
+
+        Used for family-tree traversal: given a parent invocation ID, find all
+        invocations that recorded it as their ``parent_invocation_id``.
+
+        :param parent_invocation_id: The invocation ID to find children for.
+        :return: List of child invocation IDs (may be empty).
+        """
+
     def add_histories(
         self,
         invocations: list["DistributedInvocation[Params, Result]"],

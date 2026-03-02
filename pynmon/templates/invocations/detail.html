@@ -40,6 +40,18 @@ status_badge %} {% block content %}
             >
               View Task
             </a>
+            <button
+              id="rerun-call-btn"
+              class="btn btn-sm btn-outline-warning pynmon-action-btn ms-2"
+              title="Register a new identical call (new independent invocation)"
+            >
+              <span
+                class="material-icons"
+                style="font-size: 16px; vertical-align: middle"
+                >replay</span
+              >
+              Re-run Call
+            </button>
           </div>
         </div>
         <div class="card-body pynmon-card-body">
@@ -53,6 +65,14 @@ status_badge %} {% block content %}
                   <table class="table pynmon-table">
                     <tbody>
                       <tr>
+                        <th>Invocation ID:</th>
+                        <td>
+                          <code style="font-size: 11px; word-break: break-all"
+                            >{{ invocation.invocation_id }}</code
+                          >
+                        </td>
+                      </tr>
+                      <tr>
                         <th>Status:</th>
                         <td>{{ status_badge(invocation.status.name) }}</td>
                       </tr>
@@ -63,12 +83,13 @@ status_badge %} {% block content %}
                       <tr>
                         <th>Parent Invocation:</th>
                         <td>
-                          {% if invocation.parent_invocation %}
+                          {% if invocation.parent_invocation_id %}
                           <a
-                            href="/invocations/{{ invocation.parent_invocation.invocation_id }}"
+                            href="/invocations/{{ invocation.parent_invocation_id }}"
                           >
-                            {{ invocation.parent_invocation.invocation_id[:8]
-                            }}...
+                            <code style="font-size: 11px; word-break: break-all"
+                              >{{ invocation.parent_invocation_id }}</code
+                            >
                           </a>
                           {% else %}
                           <span class="text-muted">None</span>
@@ -138,6 +159,64 @@ status_badge %} {% block content %}
               </div>
             </div>
           </div>
+
+          {% if workflow %}
+          <div class="row pynmon-row-compact">
+            <div class="col-12">
+              <div class="card pynmon-card">
+                <div class="card-header pynmon-card-header compact-header">
+                  Workflow information
+                </div>
+                <div class="card-body pynmon-card-body">
+                  <table class="table pynmon-table">
+                    <tbody>
+                      <tr>
+                        <th>Workflow Type:</th>
+                        <td>
+                          <a
+                            href="/workflows/{{ workflow.workflow_type | urlencode }}"
+                          >
+                            {{ workflow.workflow_type }}
+                          </a>
+                        </td>
+                      </tr>
+                      <tr>
+                        <th>Workflow ID:</th>
+                        <td>
+                          <a href="/invocations/{{ workflow.workflow_id }}">
+                            <code style="font-size: 11px; word-break: break-all"
+                              >{{ workflow.workflow_id }}</code
+                            >
+                          </a>
+                        </td>
+                      </tr>
+                      {% if workflow.parent_workflow_id %}
+                      <tr>
+                        <th>Parent Workflow:</th>
+                        <td>
+                          <a
+                            href="/invocations/{{ workflow.parent_workflow_id }}"
+                          >
+                            <code style="font-size: 11px; word-break: break-all"
+                              >{{ workflow.parent_workflow_id }}</code
+                            >
+                          </a>
+                        </td>
+                      </tr>
+                      {% endif %}
+                      <tr>
+                        <th>Sub-workflow:</th>
+                        <td>
+                          {{ 'Yes' if workflow.is_subworkflow else 'No' }}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+          {% endif %}
 
           <div class="row pynmon-row-compact">
             <div class="col-md-6">
@@ -336,10 +415,25 @@ status_badge %} {% block content %}
               </div>
             </div>
           </div>
+          <div
+            id="ft-tree-loader"
+            data-focus-id="{{ invocation.invocation_id }}"
+          ></div>
         </div>
       </div>
     </div>
   </div>
+
+  {% include "partials/ft_float_panel.html" %}
+  <script>
+    document.getElementById("ft-float-panel").style.display = "flex";
+    // Restore FT panel state if navigating between detail pages
+    if (window._ftRestoreState) window._ftRestoreState();
+    // Load the family tree (restored expandedIds are preserved by restoreFtState)
+    if (window._ftLoadTree) {
+      window._ftLoadTree("{{ invocation.invocation_id }}");
+    }
+  </script>
 
   {% endblock %} {% block extra_js %}
   <script>
@@ -374,11 +468,12 @@ status_badge %} {% block content %}
             // Format for datetime-local input (YYYY-MM-DDTHH:MM:SS)
             const formatForInput = (date) => date.toISOString().slice(0, 19);
 
-            // Build the timeline URL with custom range
+            // Build the timeline URL with custom range, preserving the selected invocation
             const params = new URLSearchParams();
             params.set("time_range", "custom");
             params.set("start_date", formatForInput(paddedStart));
             params.set("end_date", formatForInput(paddedEnd));
+            params.set("selected", "{{ invocation.invocation_id }}");
 
             // Navigate to timeline
             window.location.href = "/invocations/timeline?" + params.toString();
@@ -386,6 +481,46 @@ status_badge %} {% block content %}
           .catch((error) => {
             console.error("Error fetching history:", error);
             alert("Failed to load invocation history");
+          });
+      });
+
+    // Re-run call functionality
+    document
+      .getElementById("rerun-call-btn")
+      ?.addEventListener("click", function () {
+        if (
+          !confirm(
+            "This will register a brand-new invocation with the same call arguments. " +
+              "The new invocation will be completely independent. Continue?"
+          )
+        )
+          return;
+
+        const btn = this;
+        btn.disabled = true;
+        btn.innerHTML =
+          '<span class="spinner-border spinner-border-sm" role="status"></span> Re-running…';
+
+        fetch("/invocations/{{ invocation.invocation_id }}/rerun", {
+          method: "POST",
+        })
+          .then((r) => r.json())
+          .then((data) => {
+            if (data.success) {
+              // Navigate to the new invocation
+              window.location.href = "/invocations/" + data.new_invocation_id;
+            } else {
+              alert("Failed to re-run: " + data.message);
+              btn.disabled = false;
+              btn.innerHTML =
+                '<span class="material-icons" style="font-size:16px;vertical-align:middle">replay</span> Re-run Call';
+            }
+          })
+          .catch((err) => {
+            alert("Error: " + err);
+            btn.disabled = false;
+            btn.innerHTML =
+              '<span class="material-icons" style="font-size:16px;vertical-align:middle">replay</span> Re-run Call';
           });
       });
   </script>

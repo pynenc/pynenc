@@ -36,12 +36,20 @@ def test_renderer_produces_svg(sample_timeline_data: TimelineData) -> None:
 
 
 def test_renderer_includes_dimensions(sample_timeline_data: TimelineData) -> None:
-    """Test SVG includes correct dimensions."""
+    """Test SVG includes correct dimensions via viewBox (no explicit height attribute).
+
+    The explicit height attribute was removed so that browsers derive the SVG
+    height from the viewBox aspect ratio when width="100%", preventing blank
+    space at the bottom that grew with the number of invocations.
+    """
     renderer = TimelineSVGRenderer()
     svg = renderer.render(sample_timeline_data)
 
-    assert 'width="1000"' in svg
-    assert f'height="{sample_timeline_data.total_height}"' in svg
+    # Width is responsive (100%) and height is absent; dimensions live in viewBox
+    assert 'width="100%"' in svg
+    assert 'height="' not in svg.split(">")[0]  # no height attr in opening tag
+    expected_viewbox = f'viewBox="0 0 {sample_timeline_data.config.width} {sample_timeline_data.total_height}"'
+    assert expected_viewbox in svg
 
 
 def test_renderer_includes_defs(sample_timeline_data: TimelineData) -> None:

@@ -141,7 +141,7 @@ class BaseRunner(ABC):
 
     def on_start(self) -> None:
         """This method is called when the runner starts"""
-        self.app.logger.info(f"Starting runner {self.runner_id}")
+        self.app.logger.info(f"Starting {self.__class__.__name__} {self.runner_id}")
         if threading.current_thread() is threading.main_thread():
             signal.signal(signal.SIGINT, self.stop_runner_loop)
             signal.signal(signal.SIGTERM, self.stop_runner_loop)
@@ -160,10 +160,10 @@ class BaseRunner(ABC):
 
     def on_stop(self) -> None:
         """This method is called when the runner stops"""
-        self.app.logger.info(f"Stopping runner {self.runner_id}")
+        self.app.logger.info(f"STOPPING {self.__class__.__name__} {self.runner_id}...")
         self.running = False
-        self.app.logger.info("Stopping runner...")
         self._on_stop()
+        self.app.logger.info(f"STOPPED  {self.__class__.__name__} {self.runner_id}")
 
     @abstractmethod
     def runner_loop_iteration(self) -> None:
@@ -237,7 +237,7 @@ class BaseRunner(ABC):
         self._shutdown_signum = signum
         reason = classify_signal(signum)
         self.app.logger.warning(
-            f"Received signal {signum=} reason={reason} Stopping runner loop..."
+            f"Received signal {signum=} reason={reason} Stopping {self.__class__.__name__} loop..."
         )
         try:
             self._log_shutdown(signum)

@@ -1,0 +1,640 @@
+<!-- Floating family-tree panel (draggable, resizable, collapsible, zoomable) -->
+<div
+  id="ft-float-panel"
+  style="
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 55vw;
+    z-index: 1050;
+    border-radius: 8px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.18);
+    background: #fff;
+    display: none;
+    flex-direction: column;
+    max-height: 70vh;
+    min-width: 400px;
+    min-height: 60px;
+    overflow: hidden;
+  "
+>
+  <!-- Resize handles (all edges and corners) -->
+  <div
+    data-resize="n"
+    style="
+      position: absolute;
+      top: -3px;
+      left: 8px;
+      right: 8px;
+      height: 6px;
+      cursor: n-resize;
+      z-index: 10;
+    "
+  ></div>
+  <div
+    data-resize="s"
+    style="
+      position: absolute;
+      bottom: -3px;
+      left: 8px;
+      right: 8px;
+      height: 6px;
+      cursor: s-resize;
+      z-index: 10;
+    "
+  ></div>
+  <div
+    data-resize="w"
+    style="
+      position: absolute;
+      left: -3px;
+      top: 8px;
+      bottom: 8px;
+      width: 6px;
+      cursor: w-resize;
+      z-index: 10;
+    "
+  ></div>
+  <div
+    data-resize="e"
+    style="
+      position: absolute;
+      right: -3px;
+      top: 8px;
+      bottom: 8px;
+      width: 6px;
+      cursor: e-resize;
+      z-index: 10;
+    "
+  ></div>
+  <div
+    data-resize="nw"
+    style="
+      position: absolute;
+      top: -4px;
+      left: -4px;
+      width: 12px;
+      height: 12px;
+      cursor: nw-resize;
+      z-index: 11;
+    "
+  ></div>
+  <div
+    data-resize="ne"
+    style="
+      position: absolute;
+      top: -4px;
+      right: -4px;
+      width: 12px;
+      height: 12px;
+      cursor: ne-resize;
+      z-index: 11;
+    "
+  ></div>
+  <div
+    data-resize="sw"
+    style="
+      position: absolute;
+      bottom: -4px;
+      left: -4px;
+      width: 12px;
+      height: 12px;
+      cursor: sw-resize;
+      z-index: 11;
+    "
+  ></div>
+  <div
+    data-resize="se"
+    style="
+      position: absolute;
+      bottom: -4px;
+      right: -4px;
+      width: 12px;
+      height: 12px;
+      cursor: se-resize;
+      z-index: 11;
+    "
+  ></div>
+
+  <div
+    id="ft-float-header"
+    style="
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 12px;
+      background: #f8f9fa;
+      border-bottom: 1px solid #dee2e6;
+      cursor: move;
+      user-select: none;
+      border-radius: 8px 8px 0 0;
+      flex-shrink: 0;
+      gap: 8px;
+    "
+  >
+    <span
+      style="
+        font-size: 13px;
+        font-weight: 600;
+        color: #495057;
+        white-space: nowrap;
+      "
+    >
+      Family Tree
+    </span>
+    <span style="display: inline-flex; align-items: center; gap: 2px">
+      <button
+        id="ft-zoom-out"
+        class="btn btn-sm btn-outline-secondary"
+        style="padding: 0 5px; line-height: 1.3; font-size: 13px"
+        title="Zoom out"
+      >
+        &minus;
+      </button>
+      <span
+        id="ft-zoom-label"
+        style="
+          font-size: 11px;
+          color: #6c757d;
+          min-width: 36px;
+          text-align: center;
+        "
+        >100%</span
+      >
+      <button
+        id="ft-zoom-in"
+        class="btn btn-sm btn-outline-secondary"
+        style="padding: 0 5px; line-height: 1.3; font-size: 13px"
+        title="Zoom in"
+      >
+        &plus;
+      </button>
+    </span>
+    <button
+      id="ft-float-collapse"
+      class="btn btn-sm btn-outline-secondary"
+      style="padding: 0 6px; line-height: 1.4; font-size: 14px"
+      title="Collapse / Expand"
+    >
+      &#x2015;
+    </button>
+  </div>
+  <div id="ft-float-body" style="flex: 1 1 auto; overflow: auto; padding: 0">
+    <span
+      class="text-muted"
+      style="font-size: 12px; padding: 8px; display: inline-block"
+      >Loading hierarchy&hellip;</span
+    >
+  </div>
+</div>
+
+<script>
+  // ── Floating family-tree panel: drag + collapse + zoom + resize ────
+  (function () {
+    const panel = document.getElementById("ft-float-panel");
+    const header = document.getElementById("ft-float-header");
+    const body = document.getElementById("ft-float-body");
+    const colBtn = document.getElementById("ft-float-collapse");
+    const zoomIn = document.getElementById("ft-zoom-in");
+    const zoomOut = document.getElementById("ft-zoom-out");
+    const zoomLbl = document.getElementById("ft-zoom-label");
+    if (!panel || !header) return;
+
+    // ── Zoom (via SVG width/height attributes) ────────────────────────
+    let zoomLevel = 100;
+    let naturalW = 0,
+      naturalH = 0;
+    const ZOOM_STEP = 15,
+      ZOOM_MIN = 25,
+      ZOOM_MAX = 200;
+
+    function pinTopLeft() {
+      // Switch from bottom/right anchoring to top/left so zoom shrinks
+      // downward-right instead of jumping around.
+      if (panel.style.bottom !== "auto" || panel.style.right !== "auto") {
+        const r = panel.getBoundingClientRect();
+        panel.style.left = r.left + "px";
+        panel.style.top = r.top + "px";
+        panel.style.right = "auto";
+        panel.style.bottom = "auto";
+      }
+    }
+
+    function applyZoom() {
+      const svg = body.querySelector("svg");
+      if (!svg) return;
+      // Capture natural size from viewBox on first call
+      if (!naturalW) {
+        const vb = svg.getAttribute("viewBox");
+        if (vb) {
+          const p = vb.split(/[\s,]+/).map(Number);
+          naturalW = p[2];
+          naturalH = p[3];
+        } else {
+          naturalW = parseFloat(svg.getAttribute("width")) || 300;
+          naturalH = parseFloat(svg.getAttribute("height")) || 200;
+        }
+      }
+      const scale = zoomLevel / 100;
+      svg.setAttribute("width", Math.round(naturalW * scale));
+      svg.setAttribute("height", Math.round(naturalH * scale));
+      svg.style.transform = "";
+      zoomLbl.textContent = zoomLevel + "%";
+    }
+
+    function changeZoom(delta) {
+      pinTopLeft();
+      zoomLevel = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoomLevel + delta));
+      applyZoom();
+    }
+
+    zoomIn?.addEventListener("click", () => changeZoom(ZOOM_STEP));
+    zoomOut?.addEventListener("click", () => changeZoom(-ZOOM_STEP));
+
+    // Double-click to zoom toward cursor position
+    body.addEventListener("dblclick", (e) => {
+      e.preventDefault();
+      pinTopLeft();
+      const oldZoom = zoomLevel;
+      zoomLevel = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoomLevel + ZOOM_STEP));
+      if (zoomLevel === oldZoom) return;
+      const br = body.getBoundingClientRect();
+      const curX = e.clientX - br.left + body.scrollLeft;
+      const curY = e.clientY - br.top + body.scrollTop;
+      applyZoom();
+      const ratio = zoomLevel / oldZoom;
+      body.scrollLeft = curX * ratio - (e.clientX - br.left);
+      body.scrollTop = curY * ratio - (e.clientY - br.top);
+    });
+
+    // Ctrl + mouse wheel to zoom toward cursor position
+    body.addEventListener(
+      "wheel",
+      (e) => {
+        if (!e.ctrlKey && !e.metaKey) return;
+        e.preventDefault();
+        pinTopLeft();
+        const oldZoom = zoomLevel;
+        const delta = e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP;
+        zoomLevel = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoomLevel + delta));
+        if (zoomLevel === oldZoom) return;
+        // Point in body-scroll coords under the cursor before zoom
+        const br = body.getBoundingClientRect();
+        const curX = e.clientX - br.left + body.scrollLeft;
+        const curY = e.clientY - br.top + body.scrollTop;
+        // Apply the new zoom
+        applyZoom();
+        // Adjust scroll so the same SVG point stays under cursor
+        const ratio = zoomLevel / oldZoom;
+        body.scrollLeft = curX * ratio - (e.clientX - br.left);
+        body.scrollTop = curY * ratio - (e.clientY - br.top);
+      },
+      { passive: false }
+    );
+
+    // Re-apply zoom whenever body content changes (HTMX swap)
+    const obs = new MutationObserver(() => {
+      naturalW = 0;
+      naturalH = 0;
+      setTimeout(applyZoom, 30);
+    });
+    obs.observe(body, { childList: true, subtree: true });
+
+    // ── Collapse / expand ─────────────────────────────────────────────
+    let collapsed = false;
+    let savedHeight = panel.style.height;
+    let savedWidth = panel.style.width;
+
+    colBtn?.addEventListener("click", () => {
+      collapsed = !collapsed;
+      if (collapsed) {
+        savedHeight = panel.offsetHeight + "px";
+        savedWidth = panel.offsetWidth + "px";
+        body.style.display = "none";
+        header.style.borderBottom = "none";
+        header.style.borderRadius = "8px";
+        panel.style.height = "auto";
+        panel.style.width = "auto";
+        panel.style.minWidth = "0";
+        panel.style.maxHeight = "none";
+        panel
+          .querySelectorAll("[data-resize]")
+          .forEach((h) => (h.style.display = "none"));
+        colBtn.innerHTML = "&#x25A1;";
+      } else {
+        body.style.display = "";
+        header.style.borderBottom = "1px solid #dee2e6";
+        header.style.borderRadius = "8px 8px 0 0";
+        panel.style.height = savedHeight;
+        panel.style.width = savedWidth;
+        panel.style.minWidth = "400px";
+        panel.style.maxHeight = "70vh";
+        panel
+          .querySelectorAll("[data-resize]")
+          .forEach((h) => (h.style.display = ""));
+        colBtn.innerHTML = "&#x2015;";
+      }
+    });
+
+    // ── Drag (mouse) ──────────────────────────────────────────────────
+    let dragging = false,
+      dx = 0,
+      dy = 0;
+    header.addEventListener("mousedown", (e) => {
+      if (e.target.closest("button")) return;
+      dragging = true;
+      dx = e.clientX - panel.getBoundingClientRect().left;
+      dy = e.clientY - panel.getBoundingClientRect().top;
+      panel.style.transition = "none";
+      document.body.style.userSelect = "none";
+    });
+    document.addEventListener("mousemove", (e) => {
+      if (!dragging) return;
+      panel.style.left = e.clientX - dx + "px";
+      panel.style.top = e.clientY - dy + "px";
+      panel.style.right = "auto";
+      panel.style.bottom = "auto";
+    });
+    document.addEventListener("mouseup", () => {
+      if (dragging) {
+        dragging = false;
+        document.body.style.userSelect = "";
+      }
+    });
+
+    // ── Drag (touch) ──────────────────────────────────────────────────
+    header.addEventListener(
+      "touchstart",
+      (e) => {
+        if (e.target.closest("button")) return;
+        const t = e.touches[0];
+        dragging = true;
+        dx = t.clientX - panel.getBoundingClientRect().left;
+        dy = t.clientY - panel.getBoundingClientRect().top;
+      },
+      { passive: true }
+    );
+    document.addEventListener(
+      "touchmove",
+      (e) => {
+        if (!dragging) return;
+        const t = e.touches[0];
+        panel.style.left = t.clientX - dx + "px";
+        panel.style.top = t.clientY - dy + "px";
+        panel.style.right = "auto";
+        panel.style.bottom = "auto";
+      },
+      { passive: true }
+    );
+    document.addEventListener("touchend", () => {
+      dragging = false;
+    });
+
+    // ── Multi-corner resize ───────────────────────────────────────────
+    let resizing = false,
+      resizeDir = "",
+      startX = 0,
+      startY = 0;
+    let startRect = {};
+
+    panel.querySelectorAll("[data-resize]").forEach((handle) => {
+      handle.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        resizing = true;
+        resizeDir = handle.dataset.resize;
+        startX = e.clientX;
+        startY = e.clientY;
+        const r = panel.getBoundingClientRect();
+        startRect = {
+          left: r.left,
+          top: r.top,
+          width: r.width,
+          height: r.height,
+        };
+        document.body.style.userSelect = "none";
+      });
+    });
+
+    document.addEventListener("mousemove", (e) => {
+      if (!resizing) return;
+      const dx = e.clientX - startX,
+        dy = e.clientY - startY;
+      const d = resizeDir;
+      let newL = startRect.left,
+        newT = startRect.top;
+      let newW = startRect.width,
+        newH = startRect.height;
+
+      if (d.includes("e")) newW = Math.max(400, startRect.width + dx);
+      if (d.includes("w")) {
+        newW = Math.max(400, startRect.width - dx);
+        newL = startRect.left + dx;
+      }
+      if (d.includes("s")) newH = Math.max(120, startRect.height + dy);
+      if (d.includes("n")) {
+        newH = Math.max(120, startRect.height - dy);
+        newT = startRect.top + dy;
+      }
+
+      panel.style.width = newW + "px";
+      panel.style.height = newH + "px";
+      panel.style.left = newL + "px";
+      panel.style.top = newT + "px";
+      panel.style.right = "auto";
+      panel.style.bottom = "auto";
+      panel.style.maxHeight = "none";
+    });
+
+    document.addEventListener("mouseup", () => {
+      if (resizing) {
+        resizing = false;
+        document.body.style.userSelect = "";
+      }
+    });
+
+    // ── Tree state tracking ────────────────────────────────────────────
+    let _ftExpandedIds = []; // IDs whose subtrees the user has expanded
+    let _ftCurrentFocusId = null;
+    let _ftLoading = false; // prevent concurrent fetches
+    const FT_STATE_KEY = "ft-panel-state";
+
+    /** Build the endpoint URL including expanded IDs. */
+    function _ftBuildUrl(focusId) {
+      let url =
+        "/invocations/" + encodeURIComponent(focusId) + "/family-tree?bare=1";
+      if (_ftExpandedIds.length) {
+        url += "&expand=" + _ftExpandedIds.map(encodeURIComponent).join(",");
+      }
+      return url;
+    }
+
+    /** Load the family tree into the panel (always from true root). */
+    window._ftLoadTree = function (focusId, expandId) {
+      if (_ftLoading) return;
+      _ftCurrentFocusId = focusId;
+      const isExpansion = !!expandId;
+      // If a specific node is being expanded, add it to the list
+      if (expandId && !_ftExpandedIds.includes(expandId)) {
+        _ftExpandedIds.push(expandId);
+      }
+      // Save scroll position before replacing content on in-place expansions
+      const savedScroll = isExpansion
+        ? { left: body.scrollLeft, top: body.scrollTop }
+        : null;
+      _ftLoading = true;
+      panel.style.display = "flex";
+      // Only show "Loading…" placeholder on initial loads, not expansions
+      if (!isExpansion) {
+        body.innerHTML =
+          '<span class="text-muted" style="font-size:12px;padding:8px;display:inline-block;">Loading hierarchy\u2026</span>';
+      }
+      fetch(_ftBuildUrl(focusId))
+        .then((r) => (r.ok ? r.text() : ""))
+        .then((html) => {
+          body.innerHTML = html;
+          _ftLoading = false;
+          // Restore scroll position for in-place expansions so the view
+          // stays where the user was instead of jumping back to the top.
+          if (savedScroll) {
+            // Apply zoom first (MutationObserver fires async), then restore
+            naturalW = 0;
+            naturalH = 0;
+            applyZoom();
+            body.scrollLeft = savedScroll.left;
+            body.scrollTop = savedScroll.top;
+          }
+          body.dispatchEvent(new Event("ft-tree-loaded"));
+        })
+        .catch(() => {
+          body.innerHTML = "";
+          _ftLoading = false;
+        });
+    };
+
+    /** Reset expanded state (e.g. when switching to a different invocation). */
+    window._ftResetExpanded = function () {
+      _ftExpandedIds = [];
+    };
+
+    // ── Save / restore FT panel state across detail-page navigation ───
+    function saveFtState() {
+      pinTopLeft();
+      const r = panel.getBoundingClientRect();
+      sessionStorage.setItem(
+        FT_STATE_KEY,
+        JSON.stringify({
+          zoom: zoomLevel,
+          scrollLeft: body.scrollLeft,
+          scrollTop: body.scrollTop,
+          left: r.left,
+          top: r.top,
+          width: r.width,
+          height: r.height,
+          expandedIds: _ftExpandedIds,
+          ts: Date.now(),
+        })
+      );
+    }
+
+    function restoreFtState() {
+      const raw = sessionStorage.getItem(FT_STATE_KEY);
+      if (!raw) return;
+      sessionStorage.removeItem(FT_STATE_KEY);
+      try {
+        const s = JSON.parse(raw);
+        if (Date.now() - s.ts > 10000) return;
+        // Restore expanded IDs so the next tree load keeps them
+        _ftExpandedIds = s.expandedIds || [];
+        // Restore panel position and size
+        panel.style.left = s.left + "px";
+        panel.style.top = s.top + "px";
+        panel.style.right = "auto";
+        panel.style.bottom = "auto";
+        panel.style.width = s.width + "px";
+        panel.style.height = s.height + "px";
+        panel.style.maxHeight = "none";
+        // Restore zoom
+        zoomLevel = s.zoom || 100;
+        // After tree is loaded, apply zoom and restore scroll
+        const _savedScroll = { left: s.scrollLeft, top: s.scrollTop };
+        const loadHandler = () => {
+          body.removeEventListener("ft-tree-loaded", loadHandler);
+          setTimeout(() => {
+            naturalW = 0;
+            naturalH = 0;
+            applyZoom();
+            body.scrollLeft = _savedScroll.left;
+            body.scrollTop = _savedScroll.top;
+          }, 50);
+        };
+        body.addEventListener("ft-tree-loaded", loadHandler);
+      } catch (e) {
+        /* ignore bad data */
+      }
+    }
+
+    // ── Centralised FT click handling (all views) ─────────────────────
+    body.addEventListener("click", (e) => {
+      // "Load more" badge: expand subtree in place, never navigate
+      const badge = e.target.closest(".ft-load-more[data-expand-id]");
+      if (badge) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        const expandId = badge.getAttribute("data-expand-id");
+        if (
+          expandId &&
+          _ftCurrentFocusId &&
+          !_ftExpandedIds.includes(expandId)
+        ) {
+          window._ftLoadTree(_ftCurrentFocusId, expandId);
+        }
+        return;
+      }
+
+      // Regular nodes: update page info / selection, never change graph
+      const link = e.target.closest("a.ft-node");
+      if (!link) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const invId = link.getAttribute("data-inv-id");
+      if (!invId) return;
+
+      const isDetailPage =
+        window.location.pathname.startsWith("/invocations/") &&
+        !window.location.pathname.includes("/timeline");
+      if (isDetailPage) {
+        // Navigate to the clicked invocation's detail page, preserving the tree
+        saveFtState();
+        window.location.href = "/invocations/" + invId;
+      } else if (typeof loadInvocationDetails === "function") {
+        // Timeline: update detail panel + cross-highlighting, skip tree reload
+        loadInvocationDetails(invId, { skipTree: true });
+      }
+    });
+
+    // ── Hover: cross-highlight when available ─────────────────────────
+    body.addEventListener("mouseover", (e) => {
+      const node = e.target.closest("[data-inv-id]");
+      if (node && typeof highlightInvocation === "function") {
+        highlightInvocation(node.getAttribute("data-inv-id"));
+      }
+    });
+    body.addEventListener("mouseout", (e) => {
+      const node = e.target.closest("[data-inv-id]");
+      if (!node) return;
+      const id = node.getAttribute("data-inv-id");
+      if (typeof unhighlightInvocation === "function") {
+        if (
+          typeof currentInvocationId !== "undefined" &&
+          id === currentInvocationId
+        )
+          return;
+        unhighlightInvocation(id);
+      }
+    });
+
+    // Expose restore function for detail.html to call on load
+    window._ftRestoreState = restoreFtState;
+  })();
+</script>

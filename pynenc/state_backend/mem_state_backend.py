@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from pynenc.state_backend.base_state_backend import BaseStateBackend
+from pynenc.identifiers.invocation_id import InvocationId as InvId
 from pynenc.identifiers.task_id import TaskId
 from pynenc.types import Params, Result
 
@@ -36,6 +37,7 @@ class MemStateBackend(BaseStateBackend[Params, Result]):
 
     def __init__(self, app: "Pynenc") -> None:
         self._cache: dict[str, tuple[InvocationDTO, CallDTO]] = {}
+        self._parent_to_children: dict[str, list[str]] = defaultdict(list)
         self._runner_contexts: dict[str, RunnerContext] = {}
         self._history: dict[InvocationId, list] = defaultdict(list)
         self._results: dict[InvocationId, str] = {}
@@ -53,6 +55,7 @@ class MemStateBackend(BaseStateBackend[Params, Result]):
     def purge(self) -> None:
         """Clears all stored data"""
         self._cache.clear()
+        self._parent_to_children.clear()
         self._history.clear()
         self._results.clear()
         self._exceptions.clear()
@@ -63,9 +66,19 @@ class MemStateBackend(BaseStateBackend[Params, Result]):
     def _upsert_invocations(
         self, entries: list[tuple["InvocationDTO", "CallDTO"]]
     ) -> None:
-        """Store invocation and call DTO pairs in the memory cache."""
+        """Store invocation and call DTO pairs in the memory cache.
+
+        Also maintains the parent-to-children index for efficient family
+        tree traversal without scanning the entire cache.
+        """
         for inv_dto, call_dto in entries:
             self._cache[inv_dto.invocation_id] = (inv_dto, call_dto)
+            if inv_dto.parent_invocation_id is not None:
+                parent_key = str(inv_dto.parent_invocation_id)
+                child_key = str(inv_dto.invocation_id)
+                children = self._parent_to_children[parent_key]
+                if child_key not in children:
+                    children.append(child_key)
 
     def _get_invocation(
         self, invocation_id: "InvocationId"
@@ -76,6 +89,23 @@ class MemStateBackend(BaseStateBackend[Params, Result]):
         :return: Paired DTOs if found, else None.
         """
         return self._cache.get(invocation_id)
+
+    def get_child_invocations(
+        self, parent_invocation_id: "InvocationId"
+    ) -> list["InvocationId"]:
+        """Return IDs of invocations that name the given ID as their parent.
+
+        Uses the pre-built parent-to-children index instead of scanning the
+        entire cache, providing O(1) lookup per parent.
+
+        :param parent_invocation_id: The parent invocation ID to search for.
+        :return: List of child invocation IDs.
+        """
+        parent_key = str(parent_invocation_id)
+        return [
+            InvId(child_key)
+            for child_key in self._parent_to_children.get(parent_key, [])
+        ]
 
     def _add_histories(
         self,

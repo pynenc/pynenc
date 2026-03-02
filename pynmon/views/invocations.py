@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import time
@@ -58,25 +59,23 @@ async def invocations_list(
     # Calculate offset for pagination
     offset = (page - 1) * limit
 
-    # Use paginated query for efficient data retrieval
-    all_invocation_ids = app.orchestrator.get_invocation_ids_paginated(
-        task_id=task_id,
-        statuses=statuses,
-        limit=limit,
-        offset=offset,
-    )
+    # Offload heavy DB queries to a thread so the event loop stays free
+    def _fetch_invocations() -> tuple[list[DistributedInvocation], int]:
+        ids = app.orchestrator.get_invocation_ids_paginated(
+            task_id=task_id,
+            statuses=statuses,
+            limit=limit,
+            offset=offset,
+        )
+        count = app.orchestrator.count_invocations(
+            task_id=task_id,
+            statuses=statuses,
+        )
+        invocations = [app.state_backend.get_invocation(inv_id) for inv_id in ids]
+        return invocations, count
 
-    # Get total count for pagination info
-    total_count = app.orchestrator.count_invocations(
-        task_id=task_id,
-        statuses=statuses,
-    )
+    all_invocations, total_count = await asyncio.to_thread(_fetch_invocations)
     total_pages = (total_count + limit - 1) // limit if limit > 0 else 1
-
-    # Parse actual invocation objects
-    all_invocations = [
-        app.state_backend.get_invocation(inv_id) for inv_id in all_invocation_ids
-    ]
 
     # Get all possible statuses for filter dropdown
     all_statuses = [status.name.lower() for status in InvocationStatus]
@@ -213,10 +212,11 @@ def _build_svg_timeline(
 @router.get("/timeline", response_class=HTMLResponse)
 async def invocations_timeline(
     request: Request,
-    time_range: str = "1h",
+    time_range: str = "5m",
     start_date: str | None = None,
     end_date: str | None = None,
-    limit: int | None = 500,
+    limit: str
+    | None = "500",  # str so empty string ("No limit") doesn't cause int parse error
     resolution: str = "auto",
 ) -> HTMLResponse:
     """Display a visual SVG timeline of invocations with filters."""
@@ -230,17 +230,20 @@ async def invocations_timeline(
             time_range, start_date, end_date
         )
         resolution_seconds = parse_resolution(resolution)
+        # Empty string means "No limit" from the select; None or empty → unlimited
+        limit_int: int | None = int(limit) if limit and limit.strip() else None
         logger.info(
             f"Using time range: {start_datetime.isoformat()} to {end_datetime.isoformat()}"
         )
 
-        # Build SVG timeline using efficient history iteration
-        svg_content = _build_svg_timeline(
+        # Build SVG timeline using efficient history iteration (offload to thread)
+        svg_content = await asyncio.to_thread(
+            _build_svg_timeline,
             app,
             start_datetime,
             end_datetime,
-            limit=limit,
-            resolution_seconds=resolution_seconds,
+            limit_int,
+            resolution_seconds,
         )
 
         # Get all available task IDs for the dropdown
@@ -260,7 +263,7 @@ async def invocations_timeline(
                     "time_range": time_range,
                     "start_date": start_date or "",
                     "end_date": end_date or "",
-                    "limit": limit,
+                    "limit": limit_int,
                     "resolution": resolution,
                 },
             },
@@ -472,6 +475,13 @@ async def invocation_detail(
 
         formatted_arguments = format_call_arguments(call)
 
+        # Get workflow identity
+        workflow = None
+        try:
+            workflow = invocation.workflow
+        except Exception:
+            logger.debug("No workflow identity for invocation %s", invocation_id)
+
         logger.info(
             f"Rendering invocation detail template in {time.time() - start_time:.2f}s"
         )
@@ -493,6 +503,7 @@ async def invocation_detail(
                 "duration": f"{duration_seconds:.2f} seconds"
                 if duration_seconds is not None
                 else None,
+                "workflow": workflow,
             },
         )
     except InvocationNotFoundError:
@@ -606,13 +617,27 @@ async def invocation_api(
             )
 
         # Create a simplified representation for the API
-        invocation_data = {
+        invocation_data: dict = {
             "invocation_id": invocation.invocation_id,
             "task_id_key": invocation.task.task_id.key,
             "status": invocation.status.name,
             "num_retries": invocation.num_retries,
             "parent_invocation_id": invocation.parent_invocation_id,
         }
+
+        # Add workflow information if available
+        try:
+            wf = invocation.workflow
+            invocation_data["workflow"] = {
+                "workflow_id": str(wf.workflow_id),
+                "workflow_type": str(wf.workflow_type),
+                "parent_workflow_id": str(wf.parent_workflow_id)
+                if wf.parent_workflow_id
+                else None,
+                "is_subworkflow": wf.is_subworkflow,
+            }
+        except Exception:
+            invocation_data["workflow"] = None
 
         return JSONResponse(invocation_data)
     except Exception as e:
@@ -621,6 +646,45 @@ async def invocation_api(
         )
         logger.error(traceback.format_exc())
         return JSONResponse({"error": str(e)}, 500)
+
+
+@router.post("/{invocation_id}/rerun")
+async def rerun_invocation(invocation_id: "InvocationId") -> JSONResponse:
+    """Re-run the same call as a brand-new invocation (unrelated to the original).
+
+    Reads the original invocation's call (task + arguments) and routes a fresh
+    call through the orchestrator, producing a new independent invocation.
+    """
+    app = get_pynenc_instance()
+    logger.info(f"Re-running call for invocation {invocation_id}")
+
+    try:
+        invocation = app.state_backend.get_invocation(invocation_id)
+        call = invocation.call
+        task = invocation.task
+
+        # Route a fresh call through the task (produces a new invocation)
+        new_invocation = await asyncio.to_thread(task._call, call.arguments)
+
+        return JSONResponse(
+            {
+                "success": True,
+                "new_invocation_id": str(new_invocation.invocation_id),
+                "message": "New invocation created successfully.",
+            }
+        )
+    except InvocationNotFoundError:
+        return JSONResponse(
+            {"success": False, "message": f"Invocation {invocation_id} not found."},
+            status_code=404,
+        )
+    except Exception as e:
+        logger.error(f"Error re-running invocation {invocation_id}: {e}")
+        logger.error(traceback.format_exc())
+        return JSONResponse(
+            {"success": False, "message": f"Error: {str(e)}"},
+            status_code=500,
+        )
 
 
 @router.get("/table", response_class=HTMLResponse)
@@ -650,31 +714,32 @@ async def invocations_table(
             except KeyError:
                 continue
 
-    all_invocations = []
+    def _fetch_table_invocations() -> list[InvocationId]:
+        result = []
+        if task_id:
+            if task_id in app.tasks:
+                task = app.tasks[task_id]
+                result = list(
+                    app.orchestrator.get_existing_invocations(
+                        task=task,
+                        statuses=statuses,
+                    )
+                )[:limit]
+        else:
+            for task in app.tasks.values():
+                invocations = list(
+                    app.orchestrator.get_existing_invocations(
+                        task=task,
+                        statuses=statuses,
+                    )
+                )
+                result.extend(invocations)
+                if len(result) >= limit:
+                    result = result[:limit]
+                    break
+        return result
 
-    if task_id:
-        # Get invocations from specific task
-        if task_id in app.tasks:
-            task = app.tasks[task_id]
-            all_invocations = list(
-                app.orchestrator.get_existing_invocations(
-                    task=task,
-                    statuses=statuses,
-                )
-            )[:limit]
-    else:
-        # Get invocations from all tasks
-        for task in app.tasks.values():
-            invocations = list(
-                app.orchestrator.get_existing_invocations(
-                    task=task,
-                    statuses=statuses,
-                )
-            )
-            all_invocations.extend(invocations)
-            if len(all_invocations) >= limit:
-                all_invocations = all_invocations[:limit]
-                break
+    all_invocations = await asyncio.to_thread(_fetch_table_invocations)
 
     return templates.TemplateResponse(
         "invocations/partials/table.html",

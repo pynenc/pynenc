@@ -25,14 +25,83 @@ from fastapi.templating import Jinja2Templates
 
 from pynenc.app import AppInfo, Pynenc
 
-# Configure logging
+
+# Configure logging for pynmon — add our own handler directly so logs appear
+# in ALL runtime contexts (tests, CLI, start_monitor). propagate=False prevents
+# duplication via the root logger.
+def _make_pynmon_handler() -> logging.StreamHandler:
+    """Build a coloured, timestamped handler for pynmon loggers."""
+    try:
+        from uvicorn.logging import DefaultFormatter
+
+        fmt = "%(asctime)s %(levelprefix)s %(name)s: %(message)s"
+        formatter = DefaultFormatter(
+            fmt=fmt, datefmt="%Y-%m-%d %H:%M:%S", use_colors=True
+        )
+    except ImportError:
+        formatter = logging.Formatter(  # type: ignore[assignment]
+            "%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+    handler = logging.StreamHandler()
+    handler.setFormatter(formatter)
+    return handler
+
+
 logger = logging.getLogger("pynmon")
-handler = logging.StreamHandler()
-handler.setFormatter(
-    logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-)
-logger.addHandler(handler)
 logger.setLevel(logging.INFO)
+logger.propagate = False  # don't double-emit via root / uvicorn default handler
+logger.addHandler(_make_pynmon_handler())
+
+
+def _uvicorn_log_config() -> dict:
+    """Return a uvicorn log config with timestamps and colors for uvicorn loggers.
+
+    pynmon.* loggers are handled by the handler added above (not here) so they
+    are not duplicated when uvicorn applies its dict config.
+    """
+    return {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "default": {
+                "()": "uvicorn.logging.DefaultFormatter",
+                "fmt": "%(asctime)s %(levelprefix)s %(message)s",
+                "datefmt": "%Y-%m-%d %H:%M:%S",
+                "use_colors": True,
+            },
+            "access": {
+                "()": "uvicorn.logging.AccessFormatter",
+                "fmt": '%(asctime)s %(levelprefix)s %(client_addr)s - "%(request_line)s" %(status_code)s',
+                "datefmt": "%Y-%m-%d %H:%M:%S",
+                "use_colors": True,
+            },
+        },
+        "handlers": {
+            "default": {
+                "formatter": "default",
+                "class": "logging.StreamHandler",
+                "stream": "ext://sys.stderr",
+            },
+            "access": {
+                "formatter": "access",
+                "class": "logging.StreamHandler",
+                "stream": "ext://sys.stdout",
+            },
+        },
+        "loggers": {
+            "uvicorn": {"handlers": ["default"], "level": "INFO", "propagate": False},
+            "uvicorn.error": {"level": "INFO"},
+            "uvicorn.access": {
+                "handlers": ["access"],
+                "level": "INFO",
+                "propagate": False,
+            },
+            # pynmon.* intentionally excluded — handled by the module-level
+            # handler above which works in all execution contexts.
+        },
+    }
+
 
 # Initialize FastAPI app
 app = FastAPI(title="Pynenc Monitor")
@@ -147,6 +216,7 @@ def setup_routes() -> None:
         broker,
         calls,
         client_data_store,
+        family_tree,
         invocations,
         orchestrator,
         runners,
@@ -160,6 +230,8 @@ def setup_routes() -> None:
     app.include_router(client_data_store.router)
     app.include_router(orchestrator.router)
     app.include_router(runners.router)
+    # family_tree first: its /{id}/family-tree is more specific than /{id}
+    app.include_router(family_tree.router)
     app.include_router(invocations.router)
     app.include_router(tasks.router)
     app.include_router(calls.router)
@@ -203,7 +275,13 @@ def start_monitor(
     setup_routes()
 
     print(f"Starting Pynenc Monitor at http://{host}:{port}")
-    uvicorn.run(app, host=host, port=port)
+    uvicorn.run(
+        app,
+        host=host,
+        port=port,
+        access_log=True,
+        log_config=_uvicorn_log_config(),
+    )
 
 
 def get_pynenc_instance() -> Pynenc:

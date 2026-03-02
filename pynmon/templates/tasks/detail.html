@@ -137,7 +137,7 @@
                         <td>
                           {% if call and call.call_id %}
                           <a
-                            href="/calls?call_id={{ call.call_id|urlencode }}"
+                            href="/calls/?call_id_key={{ call.call_id.key|urlencode }}"
                             class="btn btn-sm btn-primary"
                             >Details</a
                           >

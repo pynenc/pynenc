@@ -87,10 +87,6 @@ def persistent_process_main(
                 continue
             invocation = invocations[0]
             invocation_id = invocation.invocation_id
-            app.logger.info(
-                f"{runner_id} starting invocation:{invocation.invocation_id}"
-            )
-
             try:
                 invocation.run(runner_ctx)
             except Exception:
@@ -250,7 +246,6 @@ class PersistentProcessRunner(BaseRunner):
     def _on_stop(self) -> None:
         """Cleans up all resources when runner stops."""
         try:
-            self.logger.info("Stopping PersistentProcessRunner")
             self._terminate_all_processes()
 
             # Check if manager is initialized
@@ -259,18 +254,15 @@ class PersistentProcessRunner(BaseRunner):
                     self.manager.shutdown()  # type: ignore
                 except Exception as e:
                     self.logger.warning(f"Failed to shutdown manager: {e}")
-
-            self.logger.info("PersistentProcessRunner stopped")
         except Exception as e:
-            self.logger.error(f"Error during runner stop: {e}")
+            self.logger.error(f"Error during {self.__class__.__name__} stop: {e}")
 
     def _on_stop_runner_loop(self) -> None:
         """Handles immediate stop from signal."""
         try:
-            self.logger.info("Stopping PersistentProcessRunner loop due to signal")
             self._terminate_all_processes()
         except Exception as e:
-            self.logger.error(f"Error during runner loop stop: {e}")
+            self.logger.error(f"Error during {self.__class__.__name__} loop stop: {e}")
 
     def runner_loop_iteration(self) -> None:
         """Maintains the configured number of running processes."""

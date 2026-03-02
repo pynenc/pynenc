@@ -79,13 +79,13 @@ def test_colored_formatter_with_context() -> None:
     record.task_id = "test_task"
     record.invocation_id = "test_invocation"
     record.runner_ctx = None
-    record.truncate_log_ids = True
+    record.compact_log_context = True
 
     formatted = formatter.format(record)
 
     # Should include context prefix with task and invocation
-    assert "task:test_task" in formatted
-    assert "inv:test_inv" in formatted  # Adjusted for truncation
+    assert "test_task" in formatted
+    assert "test_inv" in formatted  # Adjusted for truncation
 
 
 def test_colored_formatter_with_runner_context() -> None:
@@ -109,12 +109,12 @@ def test_colored_formatter_with_runner_context() -> None:
     record.task_id = None
     record.invocation_id = None
     record.runner_ctx = runner_ctx
-    record.truncate_log_ids = True
+    record.compact_log_context = True
 
     formatted = formatter.format(record)
 
     # Should include runner context
-    assert "TestRunner(runner_1)" in formatted  # Adjusted for truncation
+    assert "TR(runner_1)" in formatted  # Adjusted for truncation
 
 
 def test_colored_formatter_with_all_context() -> None:
@@ -138,14 +138,14 @@ def test_colored_formatter_with_all_context() -> None:
     record.task_id = "my_task"
     record.invocation_id = "inv_12345678"
     record.runner_ctx = runner_ctx
-    record.truncate_log_ids = True
+    record.compact_log_context = True
 
     formatted = formatter.format(record)
 
     # Should include all context
-    assert "task:my_task" in formatted
-    assert "inv:inv_1234" in formatted  # Adjusted for truncation
-    assert "TestRunner(runner_1)" in formatted
+    assert "my_task" in formatted
+    assert "inv_1234" in formatted  # Adjusted for truncation
+    assert "TR(runner_1)" in formatted
 
 
 def test_colored_formatter_with_task_only() -> None:
@@ -164,11 +164,11 @@ def test_colored_formatter_with_task_only() -> None:
     record.task_id = "task_only"
     record.invocation_id = None
     record.runner_ctx = None
-    record.truncate_log_ids = False
+    record.compact_log_context = False
 
     formatted = formatter.format(record)
 
-    assert "task:task_only" in formatted
+    assert "task_only" in formatted
 
 
 def test_colored_formatter_no_context() -> None:
@@ -269,7 +269,7 @@ def test_pynenc_context_filter_with_invocation(app_instance: "MockPynenc") -> No
         ctx_filter.filter(record)
 
         assert record.invocation_id == invocation.invocation_id
-        assert record.task_id == invocation.task.task_id
+        assert record.task_id == invocation.task.task_id.key
     finally:
         # Reset context
         context.swap_dist_invocation_context(app_instance.app_id, previous)
