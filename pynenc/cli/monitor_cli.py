@@ -22,6 +22,12 @@ def add_monitor_subparser(subparsers: argparse._SubParsersAction) -> None:
     monitor_parser.add_argument(
         "--port", type=int, default=8000, help="Port to bind the server (default: 8000)"
     )
+    monitor_parser.add_argument(
+        "--log-level",
+        default=None,
+        choices=["debug", "info", "warning", "error", "critical"],
+        help="Log level for pynmon (default: info, or PYNMON_LOG_LEVEL env var)",
+    )
     monitor_parser.set_defaults(func=start_monitor_command)
 
 
@@ -65,7 +71,13 @@ def start_monitor_command(args: PynencCLINamespace) -> None:
     print(
         f"Starting monitoring for app: {selected_app.app_id if selected_app else 'None'}"
     )
-    start_monitor(apps=apps, selected_app=selected_app, host=args.host, port=args.port)
+    start_monitor(
+        apps=apps,
+        selected_app=selected_app,
+        host=args.host,
+        port=args.port,
+        log_level=getattr(args, "log_level", None),
+    )
 
 
 def _check_monitor_dependencies() -> bool:

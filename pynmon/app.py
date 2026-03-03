@@ -14,6 +14,7 @@ if sys.version_info >= (3, 13):
     )
 
 import logging
+import os
 import traceback
 from pathlib import Path
 
@@ -26,11 +27,41 @@ from fastapi.templating import Jinja2Templates
 from pynenc.app import AppInfo, Pynenc
 
 
-# Configure logging for pynmon — add our own handler directly so logs appear
-# in ALL runtime contexts (tests, CLI, start_monitor). propagate=False prevents
-# duplication via the root logger.
-def _make_pynmon_handler() -> logging.StreamHandler:
-    """Build a coloured, timestamped handler for pynmon loggers."""
+# Standard library pattern: add NullHandler so that libraries using pynmon
+# don't see "No handlers could be found for logger 'pynmon'" warnings.
+# Actual handler/level configuration happens in configure_logging(), which is
+# called only from the application entry point (start_monitor), not at import time.
+# See: https://docs.python.org/3/howto/logging.html#configuring-logging-for-a-library
+logging.getLogger("pynmon").addHandler(logging.NullHandler())
+
+logger = logging.getLogger("pynmon")
+
+
+def configure_logging(log_level: str = "INFO") -> None:
+    """
+    Configure pynmon logging for application use.
+
+    Should be called once at server startup. Not called at import time so
+    that embedding applications and tests can manage their own logging.
+    Falls back to the PYNMON_LOG_LEVEL env var, then INFO.
+
+    :param str log_level: Desired level ('debug', 'info', 'warning', 'error')
+    """
+    level_name = log_level.upper()
+    level = getattr(logging, level_name, logging.INFO)
+
+    pynmon_logger = logging.getLogger("pynmon")
+    # Remove the NullHandler added at import time
+    pynmon_logger.handlers = [
+        h for h in pynmon_logger.handlers if not isinstance(h, logging.NullHandler)
+    ]
+    pynmon_logger.setLevel(level)
+    pynmon_logger.propagate = False  # don't double-emit via root / uvicorn handler
+    pynmon_logger.addHandler(_make_handler())
+
+
+def _make_handler() -> logging.StreamHandler:
+    """Build a coloured, timestamped stream handler for pynmon loggers."""
     try:
         from uvicorn.logging import DefaultFormatter
 
@@ -46,12 +77,6 @@ def _make_pynmon_handler() -> logging.StreamHandler:
     handler = logging.StreamHandler()
     handler.setFormatter(formatter)
     return handler
-
-
-logger = logging.getLogger("pynmon")
-logger.setLevel(logging.INFO)
-logger.propagate = False  # don't double-emit via root / uvicorn default handler
-logger.addHandler(_make_pynmon_handler())
 
 
 def _uvicorn_log_config() -> dict:
@@ -244,14 +269,20 @@ def start_monitor(
     selected_app: Pynenc | None,
     host: str = "127.0.0.1",
     port: int = 8000,
+    log_level: str | None = None,
 ) -> None:
     """
     Start the monitoring web server for a specific Pynenc app.
 
-    :param app_instance: The Pynenc app instance to monitor
+    :param apps: All available app instances to monitor
+    :param selected_app: The initially active app instance
     :param host: Host to bind to
     :param port: Port to listen on
+    :param log_level: Logging level ('debug', 'info', 'warning', 'error').
+        Falls back to PYNMON_LOG_LEVEL env var, then 'info'.
     """
+    resolved_level = log_level or os.environ.get("PYNMON_LOG_LEVEL") or "info"
+    configure_logging(resolved_level)
 
     global pynenc_instance, all_pynenc_instances
 

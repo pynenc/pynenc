@@ -220,7 +220,7 @@ def test_invocations_list_with_task_filter(app: "Pynenc") -> None:
 
         # Filter by add_task - should only show invocation1
         task_id = add_task.task_id
-        response = client.get(f"/invocations/?task_id_key={task_id.key}")
+        response = client.get(f"/invocations/?task_id={task_id.key}")
 
         assert response.status_code == 200
         content = response.text

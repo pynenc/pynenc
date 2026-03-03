@@ -37,6 +37,18 @@
       </div>
 
       <div class="mb-2">
+        <label for="task_id" class="form-label">Task ID</label>
+        <select class="form-select form-select-sm" id="task_id" name="task_id">
+          <option value="">All Tasks</option>
+          {% for tid in all_task_ids %}
+          <option value="{{ tid }}" {% if tid == current_filters.task_id %}selected{% endif %}>
+            {{ tid }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="mb-2">
         <label for="limit" class="form-label">Limit</label>
         <select class="form-select form-select-sm" id="limit" name="limit">
           <option value="100"   {% if current_filters.limit == 100   %}selected{% endif %}>100</option>

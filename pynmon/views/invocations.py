@@ -37,6 +37,7 @@ class TimelineRequest:
     end_time: datetime
     config: "TimelineConfig"
     limit: int | None
+    task_id: "TaskId | None" = None
 
 
 @dataclass
@@ -47,6 +48,9 @@ class _IterState:
     runner_contexts: dict = field(default_factory=dict)
     invocations_seen: set = field(default_factory=set)
     history_count: int = 0
+    allowed_invocation_ids: set | None = None
+    skipped_by_task_filter: int = 0
+    batch_number: int = 0
 
 
 router = APIRouter(prefix="/invocations", tags=["invocations"])
@@ -57,13 +61,13 @@ logger = logging.getLogger("pynmon.views.invocations")
 async def invocations_list(
     request: Request,
     status: str | None = None,
-    task_id_key: str | None = None,
+    task_id: str | None = None,
     limit: int = 50,
     page: int = 1,
 ) -> HTMLResponse:
     """Display invocations with optional filtering and pagination."""
     app = get_pynenc_instance()
-    task_id = TaskId.from_key(task_id_key) if task_id_key else None
+    parsed_task_id = TaskId.from_key(task_id) if task_id else None
 
     # Convert status to list format for consistent processing
     status_list = None
@@ -85,13 +89,13 @@ async def invocations_list(
     # Offload heavy DB queries to a thread so the event loop stays free
     def _fetch_invocations() -> tuple[list["DistributedInvocation"], int]:
         ids = app.orchestrator.get_invocation_ids_paginated(
-            task_id=task_id,
+            task_id=parsed_task_id,
             statuses=statuses,
             limit=limit,
             offset=offset,
         )
         count = app.orchestrator.count_invocations(
-            task_id=task_id,
+            task_id=parsed_task_id,
             statuses=statuses,
         )
         invocations = [app.state_backend.get_invocation(inv_id) for inv_id in ids]
@@ -170,14 +174,40 @@ def _build_svg_timeline(req: TimelineRequest) -> str:
     :param TimelineRequest req: Grouped parameters
     :return: SVG markup as string
     """
-    state = _IterState(builder=TimelineDataBuilder(config=req.config))
+    state = _IterState(
+        builder=TimelineDataBuilder(config=req.config),
+        allowed_invocation_ids=_load_task_invocation_ids(req),
+    )
     _accumulate_history(req, state)
     logger.info(
         f"Built timeline with {len(state.invocations_seen)} invocations, "
         f"{state.history_count} history entries"
+        + (
+            f", {state.skipped_by_task_filter} skipped by task filter"
+            if state.skipped_by_task_filter
+            else ""
+        )
     )
     data = state.builder.build(start_time=req.start_time, end_time=req.end_time)
     return TimelineSVGRenderer().render(data)
+
+
+def _load_task_invocation_ids(req: TimelineRequest) -> set | None:
+    """
+    Pre-load invocation IDs for a task to enable client-side filtering.
+
+    :param TimelineRequest req: Request with optional task_id
+    :return: Set of invocation IDs if task_id is set, else None (no filter)
+    """
+    if not req.task_id:
+        return None
+    load_start = time.time()
+    ids = set(req.app.orchestrator.get_task_invocation_ids(req.task_id))
+    logger.info(
+        f"Pre-loaded {len(ids)} invocation IDs for task {req.task_id} "
+        f"in {time.time() - load_start:.2f}s"
+    )
+    return ids
 
 
 def _accumulate_history(req: TimelineRequest, state: _IterState) -> None:
@@ -192,6 +222,13 @@ def _accumulate_history(req: TimelineRequest, state: _IterState) -> None:
         end_time=req.end_time,
         batch_size=2000,
     ):
+        state.batch_number += 1
+        if state.batch_number % 5 == 0:
+            logger.debug(
+                f"Processing batch {state.batch_number}: "
+                f"{len(state.invocations_seen)} invocations, "
+                f"{state.history_count} history entries so far"
+            )
         if not _process_batch(batch, req, state):
             break
 
@@ -211,12 +248,18 @@ def _process_batch(batch: list, req: TimelineRequest, state: _IterState) -> bool
 
 def _filter_batch(batch: list, limit: int | None, state: _IterState) -> list:
     """
-    Filter batch entries respecting the invocation limit.
+    Filter batch entries respecting invocation limit and task filter.
 
     :return: Filtered list of history entries
     """
     result = []
     for entry in batch:
+        # Skip entries not matching task filter
+        if state.allowed_invocation_ids is not None:
+            if entry.invocation_id not in state.allowed_invocation_ids:
+                state.skipped_by_task_filter += 1
+                continue
+
         if entry.invocation_id not in state.invocations_seen:
             if limit and len(state.invocations_seen) >= limit:
                 break
@@ -251,6 +294,7 @@ async def invocations_timeline(
     time_range: str = "5m",
     start_date: str | None = None,
     end_date: str | None = None,
+    task_id: str | None = None,
     limit: str
     | None = "500",  # str so empty string ("No limit") doesn't cause int parse error
     resolution: str = "auto",
@@ -268,8 +312,13 @@ async def invocations_timeline(
         resolution_seconds = parse_resolution(resolution)
         # Empty string means "No limit" from the select; None or empty → unlimited
         limit_int: int | None = int(limit) if limit and limit.strip() else None
+
+        parsed_task_id = TaskId.from_key(task_id) if task_id else None
+
         logger.info(
             f"Using time range: {start_datetime.isoformat()} to {end_datetime.isoformat()}"
+            + (f", task_id={parsed_task_id}" if parsed_task_id else "")
+            + f", limit={limit_int}"
         )
 
         # Build SVG timeline using efficient history iteration (offload to thread)
@@ -280,6 +329,7 @@ async def invocations_timeline(
             end_time=end_datetime,
             config=config,
             limit=limit_int,
+            task_id=parsed_task_id,
         )
         svg_content = await asyncio.to_thread(_build_svg_timeline, req)
 
@@ -300,6 +350,7 @@ async def invocations_timeline(
                     "time_range": time_range,
                     "start_date": start_date or "",
                     "end_date": end_date or "",
+                    "task_id": task_id or "",
                     "limit": limit_int,
                     "resolution": resolution,
                 },
@@ -728,13 +779,13 @@ async def rerun_invocation(invocation_id: "InvocationId") -> JSONResponse:
 async def invocations_table(
     request: Request,
     status: str | None = None,
-    task_id_key: str | None = None,
+    task_id: str | None = None,
     limit: int = 50,
 ) -> HTMLResponse:
     """Return just the invocations table for HTMX refresh."""
     # This is essentially the same logic as invocations_list but returns only the table partial
     app = get_pynenc_instance()
-    task_id = TaskId.from_key(task_id_key) if task_id_key else None
+    parsed_task_id = TaskId.from_key(task_id) if task_id else None
 
     # Parse status parameter
     status_list = None
@@ -753,9 +804,9 @@ async def invocations_table(
 
     def _fetch_table_invocations() -> list[InvocationId]:
         result = []
-        if task_id:
-            if task_id in app.tasks:
-                task = app.tasks[task_id]
+        if parsed_task_id:
+            if parsed_task_id in app.tasks:
+                task = app.tasks[parsed_task_id]
                 result = list(
                     app.orchestrator.get_existing_invocations(
                         task=task,
