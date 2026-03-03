@@ -4,11 +4,8 @@ Tests for time axis rendering.
 
 from datetime import UTC, datetime, timedelta
 
-from pynmon.util.svg import (
-    TimelineBounds,
-    TimelineConfig,
-    TimelineSVGRenderer,
-)
+from pynmon.util.svg import TimelineBounds, TimelineConfig
+from pynmon.util.svg.render_axis import _format_tick_label, _tick_positions
 
 
 def test_short_duration_ticks(config: TimelineConfig) -> None:
@@ -17,8 +14,7 @@ def test_short_duration_ticks(config: TimelineConfig) -> None:
     end = start + timedelta(seconds=30)
     bounds = TimelineBounds(start_time=start, end_time=end, config=config)
 
-    renderer = TimelineSVGRenderer()
-    ticks = renderer._calculate_tick_positions(bounds)
+    ticks = _tick_positions(bounds)
 
     assert len(ticks) >= 3
 
@@ -29,8 +25,7 @@ def test_medium_duration_ticks(config: TimelineConfig) -> None:
     end = start + timedelta(minutes=10)
     bounds = TimelineBounds(start_time=start, end_time=end, config=config)
 
-    renderer = TimelineSVGRenderer()
-    ticks = renderer._calculate_tick_positions(bounds)
+    ticks = _tick_positions(bounds)
 
     assert len(ticks) >= 5
     assert len(ticks) <= 20
@@ -42,8 +37,7 @@ def test_long_duration_ticks(config: TimelineConfig) -> None:
     end = start + timedelta(hours=2)
     bounds = TimelineBounds(start_time=start, end_time=end, config=config)
 
-    renderer = TimelineSVGRenderer()
-    ticks = renderer._calculate_tick_positions(bounds)
+    ticks = _tick_positions(bounds)
 
     assert len(ticks) >= 4
     assert len(ticks) <= 10
@@ -55,8 +49,7 @@ def test_time_label_format_short(config: TimelineConfig) -> None:
     end = start + timedelta(seconds=30)
     bounds = TimelineBounds(start_time=start, end_time=end, config=config)
 
-    renderer = TimelineSVGRenderer()
-    label = renderer._format_time_label(start, bounds)
+    label = _format_tick_label(start, bounds)
 
     assert "10:30:15" in label
 
@@ -67,7 +60,6 @@ def test_time_label_format_long(config: TimelineConfig) -> None:
     end = start + timedelta(days=2)
     bounds = TimelineBounds(start_time=start, end_time=end, config=config)
 
-    renderer = TimelineSVGRenderer()
-    label = renderer._format_time_label(start, bounds)
+    label = _format_tick_label(start, bounds)
 
     assert "01/15" in label

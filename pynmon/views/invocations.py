@@ -3,6 +3,7 @@ import json
 import logging
 import time
 import traceback
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
@@ -25,6 +26,28 @@ if TYPE_CHECKING:
     from pynenc.app import Pynenc
     from pynenc.invocation.dist_invocation import DistributedInvocation
     from pynenc.runner.runner_context import RunnerContext
+
+
+@dataclass
+class TimelineRequest:
+    """Grouped parameters for building an SVG timeline."""
+
+    app: "Pynenc"
+    start_time: datetime
+    end_time: datetime
+    config: "TimelineConfig"
+    limit: int | None
+
+
+@dataclass
+class _IterState:
+    """Mutable accumulation state for history iteration."""
+
+    builder: "TimelineDataBuilder"
+    runner_contexts: dict = field(default_factory=dict)
+    invocations_seen: set = field(default_factory=set)
+    history_count: int = 0
+
 
 router = APIRouter(prefix="/invocations", tags=["invocations"])
 logger = logging.getLogger("pynmon.views.invocations")
@@ -60,7 +83,7 @@ async def invocations_list(
     offset = (page - 1) * limit
 
     # Offload heavy DB queries to a thread so the event loop stays free
-    def _fetch_invocations() -> tuple[list[DistributedInvocation], int]:
+    def _fetch_invocations() -> tuple[list["DistributedInvocation"], int]:
         ids = app.orchestrator.get_invocation_ids_paginated(
             task_id=task_id,
             statuses=statuses,
@@ -140,73 +163,86 @@ def _get_tasks_to_check(app: "Pynenc", task_id: "TaskId | None") -> list:
     return list(app.tasks.values())
 
 
-def _build_svg_timeline(
-    app: "Pynenc",
-    start_datetime: datetime,
-    end_datetime: datetime,
-    limit: int | None,
-    resolution_seconds: int | None,
-) -> str:
+def _build_svg_timeline(req: TimelineRequest) -> str:
     """
-    Build SVG timeline using iter_history_in_timerange.
+    Build SVG timeline from a TimelineRequest.
 
-    Uses the new efficient time-range iteration for history entries.
-
-    :param Pynenc app: The Pynenc application instance
-    :param datetime start_datetime: Start of the time range
-    :param datetime end_datetime: End of the time range
-    :param int | None limit: Maximum number of invocations to include
-    :param int | None resolution_seconds: Tick interval in seconds (None for auto)
-    :return: SVG string for the timeline
+    :param TimelineRequest req: Grouped parameters
+    :return: SVG markup as string
     """
-    config = TimelineConfig(resolution_seconds=resolution_seconds)
-    builder = TimelineDataBuilder(config=config)
+    state = _IterState(builder=TimelineDataBuilder(config=req.config))
+    _accumulate_history(req, state)
+    logger.info(
+        f"Built timeline with {len(state.invocations_seen)} invocations, "
+        f"{state.history_count} history entries"
+    )
+    data = state.builder.build(start_time=req.start_time, end_time=req.end_time)
+    return TimelineSVGRenderer().render(data)
 
-    # Count invocations seen to enforce limit
-    invocations_seen: set[str] = set()
-    history_count = 0
 
-    runner_contexts: dict[str, RunnerContext] = {}
-    for batch in app.state_backend.iter_history_in_timerange(
-        start_time=start_datetime,
-        end_time=end_datetime,
-        batch_size=100,
+def _accumulate_history(req: TimelineRequest, state: _IterState) -> None:
+    """
+    Iterate history in batches and accumulate into state.
+
+    :param TimelineRequest req: Request parameters
+    :param _IterState state: Mutable accumulation state
+    """
+    for batch in req.app.state_backend.iter_history_in_timerange(
+        start_time=req.start_time,
+        end_time=req.end_time,
+        batch_size=2000,
     ):
-        # Filter batch by limit
-        filtered_batch = []
-        required_runner_context_ids: set[str] = set()
-        for history in batch:
-            if history.invocation_id not in invocations_seen:
-                if limit and len(invocations_seen) >= limit:
-                    break
-                invocations_seen.add(history.invocation_id)
-            filtered_batch.append(history)
-            if history.runner_context_id not in runner_contexts:
-                required_runner_context_ids.add(history.runner_context_id)
-            history_count += 1
-
-        if required_runner_context_ids:
-            for new_ctx in app.state_backend.get_runner_contexts(
-                list(required_runner_context_ids)
-            ):
-                runner_contexts[new_ctx.runner_id] = new_ctx
-
-        if filtered_batch:
-            builder.add_history_batch(filtered_batch, runner_contexts)
-
-        # Stop if we've hit the limit
-        if limit and len(invocations_seen) >= limit:
+        if not _process_batch(batch, req, state):
             break
 
-    logger.info(
-        f"Built timeline with {len(invocations_seen)} invocations, "
-        f"{history_count} history entries"
-    )
 
-    # Build and render timeline using the full requested time range
-    timeline_data = builder.build(start_time=start_datetime, end_time=end_datetime)
-    renderer = TimelineSVGRenderer()
-    return renderer.render(timeline_data)
+def _process_batch(batch: list, req: TimelineRequest, state: _IterState) -> bool:
+    """
+    Filter, fetch contexts, and add batch to builder.
+
+    :return: False to signal early termination
+    """
+    filtered = _filter_batch(batch, req.limit, state)
+    _fetch_new_runner_contexts(filtered, req.app, state)
+    if filtered:
+        state.builder.add_history_batch(filtered, state.runner_contexts)
+    return not (req.limit and len(state.invocations_seen) >= req.limit)
+
+
+def _filter_batch(batch: list, limit: int | None, state: _IterState) -> list:
+    """
+    Filter batch entries respecting the invocation limit.
+
+    :return: Filtered list of history entries
+    """
+    result = []
+    for entry in batch:
+        if entry.invocation_id not in state.invocations_seen:
+            if limit and len(state.invocations_seen) >= limit:
+                break
+            state.invocations_seen.add(entry.invocation_id)
+        result.append(entry)
+        state.history_count += 1
+    return result
+
+
+def _fetch_new_runner_contexts(batch: list, app: "Pynenc", state: _IterState) -> None:
+    """
+    Fetch and cache any runner contexts not yet in state.
+
+    :param batch: Filtered history entries
+    :param app: Pynenc application instance
+    :param state: Mutable accumulation state
+    """
+    new_ids = [
+        h.runner_context_id
+        for h in batch
+        if h.runner_context_id not in state.runner_contexts
+    ]
+    if not new_ids:
+        return
+    for ctx in app.state_backend.get_runner_contexts(new_ids):
+        state.runner_contexts[ctx.runner_id] = ctx
 
 
 @router.get("/timeline", response_class=HTMLResponse)
@@ -237,14 +273,15 @@ async def invocations_timeline(
         )
 
         # Build SVG timeline using efficient history iteration (offload to thread)
-        svg_content = await asyncio.to_thread(
-            _build_svg_timeline,
-            app,
-            start_datetime,
-            end_datetime,
-            limit_int,
-            resolution_seconds,
+        config = TimelineConfig(resolution_seconds=resolution_seconds)
+        req = TimelineRequest(
+            app=app,
+            start_time=start_datetime,
+            end_time=end_datetime,
+            config=config,
+            limit=limit_int,
         )
+        svg_content = await asyncio.to_thread(_build_svg_timeline, req)
 
         # Get all available task IDs for the dropdown
         all_task_ids = list(app.tasks.keys())

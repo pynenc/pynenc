@@ -56,7 +56,8 @@ def test_bounds_time_to_x_zero_duration() -> None:
     start = datetime(2025, 1, 1, 0, 0, 0, tzinfo=UTC)
     bounds = TimelineBounds(start_time=start, end_time=start)
     x = bounds.time_to_x(start)
-    assert x == 0.0
+    # For zero-duration bounds the x coordinate maps to the left margin
+    assert x == float(bounds.config.left_margin)
 
 
 def test_bounds_duration_to_width(standard_bounds: TimelineBounds) -> None:
