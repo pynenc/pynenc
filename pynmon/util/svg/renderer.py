@@ -7,6 +7,8 @@ TimelineSVGRenderer orchestrates sub-modules:
   - render_elements: bars, segments, points, lines
 """
 
+import logging
+import time as _time
 from dataclasses import dataclass
 
 from pynmon.util.svg.render_axis import render_grid, render_legend, render_time_axis
@@ -23,6 +25,8 @@ from pynmon.util.svg.render_lanes import (
     render_lane_labels,
 )
 from pynmon.util.svg.timeline_data import TimelineData
+
+logger = logging.getLogger("pynmon.util.svg.renderer")
 
 
 @dataclass(frozen=True)
@@ -73,6 +77,7 @@ class TimelineSVGRenderer:
         :param TimelineData data: Complete timeline data
         :return: SVG markup as string
         """
+        t0 = _time.monotonic()
         s = self.style
         parts = [
             self._header(data),
@@ -91,7 +96,14 @@ class TimelineSVGRenderer:
             render_legend(data, s),
             "</svg>",
         ]
-        return "\n".join(parts)
+        svg = "\n".join(parts)
+        logger.debug(
+            f"render: {len(data.lanes)} lanes, {len(data.global_lines)} lines, "
+            f"{sum(len(lane.segments) for lane in data.lanes.values())} segments, "
+            f"{sum(len(lane.points) for lane in data.lanes.values())} points "
+            f"\u2192 {len(svg):,} chars in {_time.monotonic() - t0:.3f}s"
+        )
+        return svg
 
     def _header(self, data: TimelineData) -> str:
         """SVG opening tag with viewBox for responsive scaling."""

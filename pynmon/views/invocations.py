@@ -174,14 +174,16 @@ def _build_svg_timeline(req: TimelineRequest) -> str:
     :param TimelineRequest req: Grouped parameters
     :return: SVG markup as string
     """
+    t0 = time.time()
     state = _IterState(
         builder=TimelineDataBuilder(config=req.config),
         allowed_invocation_ids=_load_task_invocation_ids(req),
     )
     _accumulate_history(req, state)
+    t_hist = time.time()
     logger.info(
-        f"Built timeline with {len(state.invocations_seen)} invocations, "
-        f"{state.history_count} history entries"
+        f"History accumulated: {len(state.invocations_seen)} invocations, "
+        f"{state.history_count} entries in {t_hist - t0:.2f}s"
         + (
             f", {state.skipped_by_task_filter} skipped by task filter"
             if state.skipped_by_task_filter
@@ -189,7 +191,11 @@ def _build_svg_timeline(req: TimelineRequest) -> str:
         )
     )
     data = state.builder.build(start_time=req.start_time, end_time=req.end_time)
-    return TimelineSVGRenderer().render(data)
+    t_build = time.time()
+    logger.info(f"SVG data built in {t_build - t_hist:.2f}s")
+    svg = TimelineSVGRenderer().render(data)
+    logger.info(f"SVG rendered in {time.time() - t_build:.2f}s ({len(svg):,} chars)")
+    return svg
 
 
 def _load_task_invocation_ids(req: TimelineRequest) -> set | None:

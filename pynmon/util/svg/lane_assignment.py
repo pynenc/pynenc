@@ -22,9 +22,14 @@ Algorithm:
 3. Special handling for REGISTERED linked to parent invocation
 """
 
+import bisect
+import logging
+import time as _time
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import NamedTuple
+
+logger = logging.getLogger("pynmon.util.svg.lane_assignment")
 
 
 class TimeInterval(NamedTuple):
@@ -104,25 +109,41 @@ class ElementLaneKey(NamedTuple):
 
 @dataclass
 class LaneOccupancy:
-    """Tracks intervals occupying a lane."""
+    """Tracks non-overlapping intervals using sorted list + bisect for O(log n) checks."""
 
-    intervals: list[TimeInterval] = field(default_factory=list)
+    _starts: list[datetime] = field(default_factory=list)
+    _intervals: list[TimeInterval] = field(default_factory=list)
 
     def can_fit(self, interval: TimeInterval) -> bool:
-        """Check if the interval can fit in this lane without overlap."""
-        return all(not interval.overlaps(existing) for existing in self.intervals)
+        """O(log n) overlap check via binary search."""
+        if not self._intervals:
+            return True
+        pos = bisect.bisect_right(self._starts, interval.start)
+        # Check predecessor (its end might extend into our start)
+        if pos > 0 and self._intervals[pos - 1].overlaps(interval):
+            return False
+        # Check successors until they start at or after our end
+        for i in range(pos, len(self._intervals)):
+            if self._intervals[i].start >= interval.end:
+                break
+            if self._intervals[i].overlaps(interval):
+                return False
+        return True
 
     def can_fit_chain(self, intervals: list[TimeInterval]) -> bool:
-        """Check if all intervals in a chain can fit in this lane."""
-        return all(self.can_fit(interval) for interval in intervals)
+        """Check if all intervals in a chain can fit."""
+        return all(self.can_fit(iv) for iv in intervals)
 
     def add(self, interval: TimeInterval) -> None:
-        """Add an interval to this lane."""
-        self.intervals.append(interval)
+        """Insert interval maintaining sorted order."""
+        pos = bisect.bisect_right(self._starts, interval.start)
+        self._starts.insert(pos, interval.start)
+        self._intervals.insert(pos, interval)
 
     def add_chain(self, intervals: list[TimeInterval]) -> None:
-        """Add all intervals in a chain to this lane."""
-        self.intervals.extend(intervals)
+        """Add all intervals in a chain."""
+        for iv in intervals:
+            self.add(iv)
 
 
 @dataclass
@@ -230,7 +251,8 @@ def assign_lanes(
     :param elements: List of all visual elements
     :return: Mapping of (invocation_id, runner_id, start_time) -> lane index
     """
-    # Group elements by runner
+    t_start = _time.monotonic()
+    # Group elements by runner — O(E) single pass
     by_runner: dict[str, list[VisualElement]] = {}
     for elem in elements:
         by_runner.setdefault(elem.runner_id, []).append(elem)
@@ -238,6 +260,7 @@ def assign_lanes(
     result: dict[ElementLaneKey, int] = {}
 
     for runner_id, runner_elements in by_runner.items():
+        t_runner = _time.monotonic()
         # Build chains of connected elements
         chains = _build_chains(runner_elements)
 
@@ -301,7 +324,16 @@ def assign_lanes(
             inv_lane_at_time.setdefault(elem.invocation_id, []).append(
                 (elem.interval, result[key])
             )
+        logger.debug(
+            f"assign_lanes: runner {runner_id[:7]}… — "
+            f"{len(runner_elements)} elems, {len(chains)} chains, "
+            f"{len(lanes)} sub-lanes in {_time.monotonic() - t_runner:.3f}s"
+        )
 
+    logger.debug(
+        f"assign_lanes total: {len(elements)} elements → {len(result)} keys "
+        f"across {len(by_runner)} runners in {_time.monotonic() - t_start:.3f}s"
+    )
     return result
 
 

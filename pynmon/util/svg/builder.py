@@ -5,6 +5,8 @@ Transforms InvocationHistory batches into TimelineData for rendering.
 Uses clean, focused functions with minimal nesting.
 """
 
+import logging
+import time as _time
 from collections import defaultdict
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, NamedTuple
@@ -29,6 +31,8 @@ from pynmon.util.svg.runner_info import RunnerInfo
 
 if TYPE_CHECKING:
     from pynenc.state_backend.base_state_backend import InvocationHistory
+
+logger = logging.getLogger("pynmon.util.svg.builder")
 
 
 class HistoryEntry(NamedTuple):
@@ -175,12 +179,26 @@ class TimelineDataBuilder:
         actual_start = start_time or self._min_time
         actual_end = end_time or self._max_time
         timeline_data = self._create_timeline_data(actual_start, actual_end)
+        n_inv = len(self._history_by_invocation)
 
+        t0 = _time.monotonic()
         groups_info, child_runners = self._collect_groups_info()
         self._create_lanes(timeline_data, groups_info, child_runners)
+        logger.debug(
+            f"build: {len(timeline_data.lanes)} lanes for {n_inv} invocations "
+            f"in {_time.monotonic() - t0:.3f}s"
+        )
 
+        t1 = _time.monotonic()
         sub_lane_map = self._compute_sub_lanes(actual_end)
+        logger.debug(
+            f"build: sub-lane assignment ({len(sub_lane_map)} keys) "
+            f"in {_time.monotonic() - t1:.3f}s"
+        )
+
+        t2 = _time.monotonic()
         self._build_all_elements(timeline_data, actual_end, sub_lane_map)
+        logger.debug(f"build: elements built in {_time.monotonic() - t2:.3f}s")
 
         return timeline_data
 

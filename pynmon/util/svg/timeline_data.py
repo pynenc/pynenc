@@ -5,6 +5,7 @@ Aggregates bounds, lanes, groups, and configuration. Provides
 factory methods to create or retrieve lanes and groups.
 """
 
+import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -15,6 +16,8 @@ from pynmon.util.svg.status_elements import StatusLine
 
 if TYPE_CHECKING:
     from pynmon.util.svg.runner_info import RunnerInfo
+
+logger = logging.getLogger("pynmon.util.svg.timeline_data")
 
 
 @dataclass
@@ -35,38 +38,70 @@ class TimelineData:
     config: TimelineConfig = field(default_factory=TimelineConfig)
     global_lines: list[StatusLine] = field(default_factory=list)
 
+    def __post_init__(self) -> None:
+        """Initialize lazy caches for O(1) lookups during rendering."""
+        self._sorted_lanes_cache: list[RunnerLane] | None = None
+        self._y_positions_cache: dict[int, int] | None = None
+        self._group_lanes_cache: dict[str, list[RunnerLane]] | None = None
+        self._total_height_cache: int | None = None
+
+    def _invalidate(self) -> None:
+        """Clear all computed caches (called when lanes/groups change)."""
+        self._sorted_lanes_cache = None
+        self._y_positions_cache = None
+        self._group_lanes_cache = None
+        self._total_height_cache = None
+
     def add_global_line(self, line: StatusLine) -> None:
         """Add a line that may span across lanes."""
         self.global_lines.append(line)
 
     def get_sorted_lanes(self) -> list[RunnerLane]:
-        """Lanes sorted by lane_index."""
-        return sorted(self.lanes.values(), key=lambda lane: lane.lane_index)
+        """Lanes sorted by lane_index. Cached after first call."""
+        if self._sorted_lanes_cache is None:
+            self._sorted_lanes_cache = sorted(
+                self.lanes.values(), key=lambda lane: lane.lane_index
+            )
+        return self._sorted_lanes_cache
+
+    def _compute_group_lanes(self) -> dict[str, list[RunnerLane]]:
+        """Build group_id → sorted lanes index. Cached."""
+        if self._group_lanes_cache is None:
+            index: dict[str, list[RunnerLane]] = {}
+            for lane in self.get_sorted_lanes():
+                if lane.group_id:
+                    index.setdefault(lane.group_id, []).append(lane)
+            self._group_lanes_cache = index
+        return self._group_lanes_cache
 
     def get_lanes_for_group(self, group_id: str) -> list[RunnerLane]:
-        """Lanes in a group sorted by lane_index."""
-        return sorted(
-            [lane for lane in self.lanes.values() if lane.group_id == group_id],
-            key=lambda lane: lane.lane_index,
-        )
+        """Lanes in a group sorted by lane_index. O(1) after first call."""
+        return self._compute_group_lanes().get(group_id, [])
 
     def get_sorted_groups(self) -> list[LaneGroup]:
         """Groups sorted by their first lane's position."""
+        group_lanes = self._compute_group_lanes()
         items = []
         for gid, group in self.groups.items():
-            lanes = self.get_lanes_for_group(gid)
+            lanes = group_lanes.get(gid, [])
             idx = min((lane.lane_index for lane in lanes), default=len(self.lanes))
             items.append((idx, group))
         return [g for _, g in sorted(items, key=lambda x: x[0])]
 
+    def _compute_y_positions(self) -> dict[int, int]:
+        """Compute Y positions for all lanes. O(L) total, cached."""
+        if self._y_positions_cache is None:
+            positions: dict[int, int] = {}
+            y = self.config.top_margin
+            for lane in self.get_sorted_lanes():
+                positions[lane.lane_index] = y
+                y += lane.lane_height(self.config) + self.config.lane_padding
+            self._y_positions_cache = positions
+        return self._y_positions_cache
+
     def lane_y_position(self, lane: RunnerLane) -> int:
-        """Y position accounting for variable lane heights above this lane."""
-        y = self.config.top_margin
-        for prev in self.get_sorted_lanes():
-            if prev.lane_index >= lane.lane_index:
-                break
-            y += prev.lane_height(self.config) + self.config.lane_padding
-        return y
+        """Y position for a lane. O(1) via cached lookup."""
+        return self._compute_y_positions().get(lane.lane_index, self.config.top_margin)
 
     def get_group_bounds(self, group_id: str) -> tuple[int, int, int]:
         """Return (y_start, y_end, total_height) for a lane group."""
@@ -79,16 +114,21 @@ class TimelineData:
 
     @property
     def total_height(self) -> int:
-        """Total SVG height including legend space."""
-        lanes = self.get_sorted_lanes()
-        if not lanes:
-            return self.config.top_margin + self.config.lane_height + 70
-        h = self.config.top_margin
-        for i, lane in enumerate(lanes):
-            h += lane.lane_height(self.config)
-            if i < len(lanes) - 1:
-                h += self.config.lane_padding
-        return h + 70  # legend space
+        """Total SVG height including legend space. Cached."""
+        if self._total_height_cache is None:
+            lanes = self.get_sorted_lanes()
+            if not lanes:
+                self._total_height_cache = (
+                    self.config.top_margin + self.config.lane_height + 70
+                )
+            else:
+                h = self.config.top_margin
+                for i, lane in enumerate(lanes):
+                    h += lane.lane_height(self.config)
+                    if i < len(lanes) - 1:
+                        h += self.config.lane_padding
+                self._total_height_cache = h + 70
+        return self._total_height_cache
 
     def get_or_create_group(
         self,
@@ -101,6 +141,7 @@ class TimelineData:
     ) -> LaneGroup:
         """Get existing group or create a new one."""
         if group_id not in self.groups:
+            self._invalidate()
             self.groups[group_id] = LaneGroup(
                 group_id=group_id,
                 hostname=hostname,
@@ -121,6 +162,7 @@ class TimelineData:
     ) -> RunnerLane:
         """Get existing lane or create a new one for the runner."""
         if runner_id not in self.lanes:
+            self._invalidate()
             self.lanes[runner_id] = RunnerLane(
                 runner_id=runner_id,
                 hostname=runner_info.hostname,
