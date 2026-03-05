@@ -22,6 +22,7 @@
     <link href="/static/css/timeline.css" rel="stylesheet" />
     <link href="/static/css/arguments.css" rel="stylesheet" />
     <link href="/static/css/invocations.css" rel="stylesheet" />
+    {% block extra_css %}{% endblock %}
 
     <!-- HTMX for dynamic updates -->
     <script src="https://unpkg.com/htmx.org@1.9.2"></script>
@@ -137,6 +138,15 @@
               >
                 <span class="material-icons">workspaces</span>
                 Workflows
+              </a>
+            </li>
+            <li class="nav-item">
+              <a
+                class="nav-link {{ 'active' if '/log-explorer' in request.url.path }}"
+                href="/log-explorer"
+              >
+                <span class="material-icons">search</span>
+                Log Explorer
               </a>
             </li>
           </ul>

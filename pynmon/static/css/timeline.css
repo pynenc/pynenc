@@ -49,3 +49,33 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* ===== SVG TIMELINE HIGHLIGHT STYLES ===== */
+
+/* Invocation highlight on hover/selection */
+.invocation-highlight rect,
+.invocation-highlight circle {
+  stroke: #0d6efd;
+  stroke-width: 3;
+  filter: drop-shadow(0 0 4px rgba(13, 110, 253, 0.5));
+}
+
+/* Runner lane highlight — applied to lane-bg rects matching a runner_id */
+.lane-bg.runner-highlight {
+  fill: #0d6efd !important;
+  opacity: 0.12 !important;
+}
+
+/* Runner label highlight */
+.runner-label.runner-highlight {
+  font-weight: 700 !important;
+  fill: #0d6efd !important;
+}
+
+/* Cursor for hoverable SVG elements */
+svg [data-invocation-id] {
+  cursor: pointer;
+}
+svg .runner-label {
+  cursor: pointer;
+}

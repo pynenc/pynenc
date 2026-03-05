@@ -111,8 +111,8 @@ class ThreadRunner(BaseRunner):
         self.logger.info(f"Stopping ThreadRunner, joining {len(self.threads)} threads.")
         for thread_info in self.threads.values():
             self.logger.warning(
-                f"Joining thread for invocation {thread_info.invocation.invocation_id} "
-                f"(thread={thread_info.thread.name}, alive={thread_info.thread.is_alive()})"
+                f"Joining thread for invocation:{thread_info.invocation.invocation_id} "
+                f"(thread:{thread_info.thread.name}, alive:{thread_info.thread.is_alive()})"
             )
             if thread_info.thread.is_alive():
                 self._kill_and_reroute(thread_info.invocation.invocation_id)
@@ -170,11 +170,11 @@ class ThreadRunner(BaseRunner):
                 thread.start()
                 self.threads[invocation.invocation_id] = ThreadInfo(thread, invocation)
                 self.logger.debug(
-                    f"Running invocation {invocation.invocation_id} on {thread=}"
+                    f"Running invocation:{invocation.invocation_id} on thread:{thread.name}"
                 )
             except RuntimeError as e:
                 self.logger.error(
-                    f"Failed to start thread for {invocation.invocation_id}: {e}"
+                    f"Failed to start thread for invocation:{invocation.invocation_id}: {e}"
                 )
                 self.app.orchestrator.reroute_invocations(
                     {invocation.invocation_id}, self.runner_context

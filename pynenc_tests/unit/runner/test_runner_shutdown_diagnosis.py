@@ -135,9 +135,9 @@ def test_log_includes_system_info() -> None:
     logger = _make_logger()
     log_runner_shutdown(logger, "TestRunner", "runner-abc", None)
     logged = logger.warning.call_args[0][0]
-    assert "os=" in logged
-    assert "py=" in logged
-    assert "cpus=" in logged
+    assert "os:" in logged
+    assert "py:" in logged
+    assert "cpus:" in logged
 
 
 # ---------------------------------------------------------------------------

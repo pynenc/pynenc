@@ -236,19 +236,27 @@ def _render_connection(
     parent_y: float,
     child_cx: float,
     child_y: float,
+    parent_id: str = "",
+    child_id: str = "",
 ) -> str:
     """Render a Bézier curve connecting parent to child.
 
     Adapts direction based on relative positions: vertical S-curves when
     the child is below, horizontal curves when on the same row.
 
-    :param parent_cx: Parent horizontal centre.
-    :param parent_y: Parent top Y.
-    :param child_cx: Child horizontal centre.
-    :param child_y: Child top Y.
+    :param float parent_cx: Parent horizontal centre.
+    :param float parent_y: Parent top Y.
+    :param float child_cx: Child horizontal centre.
+    :param float child_y: Child top Y.
+    :param str parent_id: Parent invocation ID for hover targeting.
+    :param str child_id: Child invocation ID for hover targeting.
     :return: SVG path element string.
     """
-    stroke = 'fill="none" stroke="#78909c" stroke-width="2" opacity="0.7"'
+    data_attrs = f'data-parent-id="{_esc(parent_id)}" data-child-id="{_esc(child_id)}"'
+    stroke = (
+        f'fill="none" stroke="#78909c" stroke-width="2" opacity="0.7" '
+        f'class="ft-edge" {data_attrs}'
+    )
     dot_r = 3
     parent_bottom = parent_y + _NODE_H
     child_top = child_y
@@ -316,11 +324,19 @@ def _render_node(
     color = _status_color(node.status)
     bg = _status_tint(node.status)
     is_focus = node.invocation_id == focus_id
-    stroke = (
-        f'stroke="{color}" stroke-width="3"'
-        if is_focus
-        else 'stroke="#dee2e6" stroke-width="1"'
-    )
+
+    if is_focus:
+        # Focused node: saturated status colour as fill, dark border
+        bg = color
+        stroke = 'stroke="#212529" stroke-width="3"'
+        text_primary = "#ffffff"
+        text_secondary = "rgba(255,255,255,0.85)"
+        text_muted = "rgba(255,255,255,0.7)"
+    else:
+        text_primary = "#212529"
+        text_secondary = "#495057"
+        text_muted = "#6c757d"
+        stroke = 'stroke="#dee2e6" stroke-width="1"'
 
     href = f"{base_url}/{node.invocation_id}"
     inv_id = _esc(node.invocation_id)
@@ -355,6 +371,7 @@ def _render_node(
     if is_truncated and not is_focus:
         stroke = 'stroke="#90a4ae" stroke-width="1.5" stroke-dasharray="6,3"'
 
+    elapsed_color = text_muted if is_focus else color
     node_markup = (
         f'<a href="{href}" class="ft-node" data-inv-id="{node.invocation_id}" '
         f'data-status="{node.status}">'
@@ -365,16 +382,16 @@ def _render_node(
         f'rx="2" fill="{color}"/>'
         # Line 1: invocation ID (monospace)
         f'<text x="{cx:.1f}" y="{y + 14:.1f}" text-anchor="middle" '
-        f'font-size="9.5" {mono} fill="#495057">{inv_id}</text>'
+        f'font-size="9.5" {mono} fill="{text_secondary}">{inv_id}</text>'
         # Line 2: module.func_name (bold)
         f'<text x="{cx:.1f}" y="{y + 29:.1f}" text-anchor="middle" '
-        f'font-size="11" {sans} fill="#212529" font-weight="600">{mod_func}</text>'
+        f'font-size="11" {sans} fill="{text_primary}" font-weight="600">{mod_func}</text>'
         # Line 3: ISO datetime
         f'<text x="{cx:.1f}" y="{y + 43:.1f}" text-anchor="middle" '
-        f'font-size="9" {sans} fill="#6c757d">{ts_str}</text>'
+        f'font-size="9" {sans} fill="{text_muted}">{ts_str}</text>'
         # Line 4: elapsed time
         f'<text x="{cx:.1f}" y="{y + 56:.1f}" text-anchor="middle" '
-        f'font-size="9" {sans} fill="{color}">{elapsed_str}</text>'
+        f'font-size="9" {sans} fill="{elapsed_color}">{elapsed_str}</text>'
         f"</a>"
     )
 
@@ -421,7 +438,16 @@ def _collect_elements(
         for child in node.children:
             child_cx = x_positions[child.invocation_id]
             child_y = y_positions[child.invocation_id]
-            ctx.edges.append(_render_connection(cx, y, child_cx, child_y))
+            ctx.edges.append(
+                _render_connection(
+                    cx,
+                    y,
+                    child_cx,
+                    child_y,
+                    parent_id=node.invocation_id,
+                    child_id=child.invocation_id,
+                )
+            )
             stack.append(child)
 
 
@@ -465,10 +491,24 @@ def render_family_tree_svg(
     # Nodes first, then edges on top so connections are always visible
     inner = "\n".join(ctx.nodes + ctx.edges)
 
+    # Hover CSS: dim unrelated nodes/edges, brighten related ones
+    hover_css = (
+        "<style>"
+        ".ft-node{transition:opacity .15s}"
+        ".ft-edge{transition:opacity .15s,stroke-width .15s}"
+        "#ft-group.ft-hover .ft-node{opacity:.25}"
+        "#ft-group.ft-hover .ft-edge{opacity:.12}"
+        "#ft-group.ft-hover .ft-node.ft-related{opacity:1}"
+        "#ft-group.ft-hover .ft-edge.ft-related"
+        "{opacity:1;stroke-width:3;stroke:#1976d2}"
+        "</style>"
+    )
+
     return (
         f'<svg id="ft-svg" xmlns="http://www.w3.org/2000/svg" '
         f'width="{svg_w:.0f}" height="{svg_h:.0f}" '
         f'viewBox="0 0 {svg_w:.0f} {svg_h:.0f}" '
         f'style="cursor:grab">'
+        f"{hover_css}"
         f'<g id="ft-group">{inner}</g></svg>'
     )

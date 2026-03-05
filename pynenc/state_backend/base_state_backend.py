@@ -573,6 +573,33 @@ class BaseStateBackend(ABC, Generic[Params, Result]):
         :param RunnerContext runner_context: The context to store
         """
 
+    @abstractmethod
+    def get_matching_runner_contexts(
+        self, partial_id: str
+    ) -> Iterator["RunnerContext"]:
+        """
+        Search for runner contexts whose runner_id contains the partial string.
+
+        Used by the log explorer to find runners from truncated log output.
+
+        :param str partial_id: Partial runner ID to match (prefix or substring)
+        :return: Iterator of matching RunnerContext instances
+        """
+
+    @abstractmethod
+    def get_invocation_ids_by_workflow(
+        self,
+        workflow_id: str | None = None,
+        workflow_type_key: str | None = None,
+    ) -> Iterator["InvocationId"]:
+        """
+        Retrieve invocation IDs filtered by workflow criteria.
+
+        :param str | None workflow_id: Exact workflow ID to match
+        :param str | None workflow_type_key: Workflow type key to match
+        :return: Iterator of matching invocation IDs
+        """
+
     def store_runner_context(self, runner_context: "RunnerContext") -> None:
         """
         Store a runner context.

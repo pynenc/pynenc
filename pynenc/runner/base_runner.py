@@ -141,7 +141,9 @@ class BaseRunner(ABC):
 
     def on_start(self) -> None:
         """This method is called when the runner starts"""
-        self.app.logger.info(f"Starting {self.__class__.__name__} {self.runner_id}")
+        self.app.logger.info(
+            f"Starting {self.__class__.__name__} runner:{self.runner_id}"
+        )
         if threading.current_thread() is threading.main_thread():
             signal.signal(signal.SIGINT, self.stop_runner_loop)
             signal.signal(signal.SIGTERM, self.stop_runner_loop)
@@ -160,10 +162,14 @@ class BaseRunner(ABC):
 
     def on_stop(self) -> None:
         """This method is called when the runner stops"""
-        self.app.logger.info(f"STOPPING {self.__class__.__name__} {self.runner_id}...")
+        self.app.logger.info(
+            f"STOPPING {self.__class__.__name__} runner:{self.runner_id}..."
+        )
         self.running = False
         self._on_stop()
-        self.app.logger.info(f"STOPPED  {self.__class__.__name__} {self.runner_id}")
+        self.app.logger.info(
+            f"STOPPED  {self.__class__.__name__} runner:{self.runner_id}"
+        )
 
     @abstractmethod
     def runner_loop_iteration(self) -> None:
@@ -196,19 +202,19 @@ class BaseRunner(ABC):
                 invocation_id, InvocationStatus.KILLED, ctx
             )
             self.app.orchestrator.reroute_invocations({invocation_id}, ctx)
-            self.logger.info(f"Rerouted invocation {invocation_id} after kill")
+            self.logger.info(f"Rerouted invocation:{invocation_id} after kill")
         except InvocationStatusTransitionError as e:
             if e.from_status and e.from_status.is_final():
                 self.logger.debug(
-                    f"Invocation {invocation_id} already in final status, no rerouting needed"
+                    f"invocation:{invocation_id} already in final status, no rerouting needed"
                 )
             else:
                 self.logger.warning(
-                    f"Could not reroute invocation {invocation_id}: {e}"
+                    f"Could not reroute invocation:{invocation_id}: {e}"
                 )
         except InvocationStatusError as e:
             self.logger.warning(
-                f"Not possible to set invocation {invocation_id} to KILLED and reroute: {e}"
+                f"Not possible to set invocation:{invocation_id} to KILLED and reroute: {e}"
             )
 
     def _log_shutdown(self, signum: int | None) -> None:
@@ -237,7 +243,7 @@ class BaseRunner(ABC):
         self._shutdown_signum = signum
         reason = classify_signal(signum)
         self.app.logger.warning(
-            f"Received signal {signum=} reason={reason} Stopping {self.__class__.__name__} loop..."
+            f"Received signal:{signum} reason:{reason} Stopping {self.__class__.__name__} loop..."
         )
         try:
             self._log_shutdown(signum)
@@ -295,7 +301,7 @@ class BaseRunner(ABC):
             # running from outside this runner (user instantiate an app with this runner class,
             # but ask for an invocation result outside of the runner processes)
             self.app.logger.debug(
-                f"Waiting for {result_invocation_ids=} from outside this runner"
+                f"Waiting for invocations:{result_invocation_ids} from outside this runner"
             )
             time.sleep(self.conf.invocation_wait_results_sleep_time_sec)
             return
@@ -313,7 +319,7 @@ class BaseRunner(ABC):
             # running from outside this runner (user instantiate an app with this runner class,
             # but ask for an invocation result outside of the runner processes)
             self.logger.debug(
-                f"Async Waiting for {result_invocation_ids=} from outside this runner"
+                f"Async Waiting for invocations:{result_invocation_ids} from outside this runner"
             )
             await asyncio.sleep(self.conf.invocation_wait_results_sleep_time_sec)
             return
@@ -361,7 +367,7 @@ class BaseRunner(ABC):
                 return
             start_time = datetime.now(UTC)
             self.app.logger.info(
-                f"Runner {self.runner_id} executing atomic global services"
+                f"runner:{self.runner_id} executing atomic global services"
             )
             self.app.trigger.trigger_loop_iteration()
         except PynencError as e:
@@ -407,9 +413,11 @@ class BaseRunner(ABC):
                 self.runner_loop_iteration()
                 time.sleep(self.conf.runner_loop_sleep_time_sec)
         except KeyboardInterrupt:
-            self.app.logger.warning("KeyboardInterrupt received. Stopping runner...")
+            self.app.logger.warning(
+                f"KeyboardInterrupt received. Stopping runner:{self.runner_id}..."
+            )
         except Exception as e:
-            self.app.logger.exception(f"Exception in runner loop: {e}")
+            self.app.logger.exception(f"Exception in runner:{self.runner_id} loop: {e}")
             raise e
         finally:
             self.on_stop()

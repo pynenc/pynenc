@@ -66,6 +66,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Progressive tree expansion with "load more" badges for large trees
   - Cross-highlighting between timeline and family tree on selection
 
+- **Pynmon Log Explorer**:
+
+  - Added a page to analyze pynenc logs and add context to them.
+  - Check for runners, invocations and tasks and add links to the details pages.
+  - Added a small timeline of the logs, including all the invocations, runners during the logs period.
+
 - **Logging**:
 
   - Enhanced Pynmon logging with colored timestamps and uvicorn integration
@@ -253,6 +259,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Added regression tests for empty and non-empty serialized arguments round-trips in invocation storage
   - Guards against plugins that incorrectly handle missing `arguments` field (e.g., MongoDB plugin KeyError bug)
   - Ensures all state backend implementations properly preserve task arguments on store and retrieve
+
+- **Log Explorer Improvements**:
+
+  - Fixed HTML corruption in bracket-linked runner IDs by preventing regex matches inside HTML attributes
+  - Added `data-runner-id` attributes to runner chips for consistent hover-based lane highlighting across all timeline views
+  - Redesigned REFERENCES panel as compact entity cards grouped by invocation/runner with status badges and detail labels
+  - Added batch fetching of extra invocation details from message body entity refs for complete status/task information
+  - Fixed SVG mini-timeline to use native pixel width (2000px) instead of responsive scaling, matching main timeline aspect ratio
+  - Added task ID display in invocation detail panel when clicking SVG invocation bars
 
 - **Updated Documentation**
 

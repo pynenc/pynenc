@@ -32,6 +32,22 @@
                             </select>
                         </div>
                         <div class="mb-3">
+                            <label for="workflow_type" class="form-label">Workflow Type</label>
+                            <select name="workflow_type" id="workflow_type" class="form-select">
+                                <option value="">All Workflow Types</option>
+                                {% for wt in all_workflow_types %}
+                                <option value="{{ wt }}" {% if wt == current_filters.workflow_type %}selected{% endif %}>
+                                    {{ wt }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="workflow_id" class="form-label">Workflow ID</label>
+                            <input type="text" class="form-control" id="workflow_id" name="workflow_id"
+                                value="{{ current_filters.workflow_id }}" placeholder="Partial or full ID">
+                        </div>
+                        <div class="mb-3">
                             <label for="limit" class="form-label">Limit</label>
                             <input type="number" class="form-control" id="limit" name="limit"
                                 value="{{ current_filters.limit }}">
@@ -138,19 +154,19 @@
                             </div>
                             <ul class="pagination pagination-sm mb-0">
                                 <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
-                                    <a class="page-link" href="?status={{ current_filters.status[0] if current_filters.status else '' }}&task_id={{ current_filters.task_id }}&limit={{ pagination.limit }}&page=1">First</a>
+                                    <a class="page-link" href="?status={{ current_filters.status[0] if current_filters.status else '' }}&task_id={{ current_filters.task_id }}&workflow_id={{ current_filters.workflow_id }}&workflow_type={{ current_filters.workflow_type }}&limit={{ pagination.limit }}&page=1">First</a>
                                 </li>
                                 <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
-                                    <a class="page-link" href="?status={{ current_filters.status[0] if current_filters.status else '' }}&task_id={{ current_filters.task_id }}&limit={{ pagination.limit }}&page={{ pagination.page - 1 }}">Previous</a>
+                                    <a class="page-link" href="?status={{ current_filters.status[0] if current_filters.status else '' }}&task_id={{ current_filters.task_id }}&workflow_id={{ current_filters.workflow_id }}&workflow_type={{ current_filters.workflow_type }}&limit={{ pagination.limit }}&page={{ pagination.page - 1 }}">Previous</a>
                                 </li>
                                 <li class="page-item active">
                                     <span class="page-link">{{ pagination.page }}</span>
                                 </li>
                                 <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
-                                    <a class="page-link" href="?status={{ current_filters.status[0] if current_filters.status else '' }}&task_id={{ current_filters.task_id }}&limit={{ pagination.limit }}&page={{ pagination.page + 1 }}">Next</a>
+                                    <a class="page-link" href="?status={{ current_filters.status[0] if current_filters.status else '' }}&task_id={{ current_filters.task_id }}&workflow_id={{ current_filters.workflow_id }}&workflow_type={{ current_filters.workflow_type }}&limit={{ pagination.limit }}&page={{ pagination.page + 1 }}">Next</a>
                                 </li>
                                 <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
-                                    <a class="page-link" href="?status={{ current_filters.status[0] if current_filters.status else '' }}&task_id={{ current_filters.task_id }}&limit={{ pagination.limit }}&page={{ pagination.total_pages }}">Last</a>
+                                    <a class="page-link" href="?status={{ current_filters.status[0] if current_filters.status else '' }}&task_id={{ current_filters.task_id }}&workflow_id={{ current_filters.workflow_id }}&workflow_type={{ current_filters.workflow_type }}&limit={{ pagination.limit }}&page={{ pagination.total_pages }}">Last</a>
                                 </li>
                             </ul>
                         </nav>

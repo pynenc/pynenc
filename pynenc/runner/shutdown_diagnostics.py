@@ -93,19 +93,19 @@ def log_runner_shutdown(
 
     sys_data = _system_info()
     sys_parts = [
-        f"os={sys_data['platform']}",
-        f"py={sys_data['python']}",
-        f"cpus={sys_data['cpu_count']}",
+        f"os:{sys_data['platform']}",
+        f"py:{sys_data['python']}",
+        f"cpus:{sys_data['cpu_count']}",
     ]
     if "load_avg" in sys_data:
-        sys_parts.append(f"load={sys_data['load_avg']}")
+        sys_parts.append(f"load:{sys_data['load_avg']}")
     if "mem_rss_mb" in sys_data:
-        sys_parts.append(f"rss={sys_data['mem_rss_mb']}MB")
+        sys_parts.append(f"rss:{sys_data['mem_rss_mb']}MB")
 
     lines = [
         "=" * 60,
         f"RUNNER SHUTDOWN {'[OOM DETECTED] ' if is_oom else ''}DIAGNOSTICS",
-        f"  runner={runner_cls}({runner_id[:8]}) pid={os.getpid()} signal={signum} reason={reason}",
+        f"  runner:{runner_cls}({runner_id[:8]}) pid:{os.getpid()} signal:{signum} reason:{reason}",
         f"  sys: {' | '.join(sys_parts)}",
     ]
 
@@ -113,15 +113,15 @@ def log_runner_shutdown(
         lines.append(f"  processes ({len(processes)}):")
         for rid, (proc, inv_id) in processes.items():
             state = "ALIVE" if proc.is_alive() else "DEAD"
-            inv = f" inv={inv_id}" if inv_id else ""
-            lines.append(f"    {state} pid={proc.pid} id={rid[:8]}{inv}")
+            inv = f" invocation:{inv_id}" if inv_id else ""
+            lines.append(f"    {state} pid:{proc.pid} worker:{rid[:8]}{inv}")
 
     if threads:
         lines.append(f"  threads ({len(threads)}):")
         for key, (thread, inv_id) in threads.items():
             state = "ALIVE" if thread.is_alive() else "DEAD"
-            inv = f" inv={inv_id}" if inv_id else ""
-            lines.append(f"    {state} name={thread.name} key={key[:8]}{inv}")
+            inv = f" invocation:{inv_id}" if inv_id else ""
+            lines.append(f"    {state} thread:{thread.name} worker:{key[:8]}{inv}")
 
     if waiting_inv_ids:
         lines.append(

@@ -60,7 +60,7 @@ def thread_runner_process_main(
     # Replace the MultiThreadRunner with ThreadRunner in this process
     context.set_runner_context(app.app_id, runner_ctx)
     runner._on_start()
-    app.logger.info(f"ThreadRunner process {child_runner_id} started")
+    app.logger.info(f"ThreadRunner process worker:{child_runner_id} started")
 
     def _handle_signal(signum: int, frame: Any) -> None:
         runner._log_shutdown(signum)
@@ -80,12 +80,12 @@ def thread_runner_process_main(
                 time.time(), active_count, state
             )
             app.logger.debug(
-                f"Process {child_runner_id}: {active_count} active threads, state={state}"
+                f"worker:{child_runner_id}: {active_count} active threads, state:{state}"
             )
             runner.runner_loop_iteration()
     except KeyboardInterrupt:
         app.logger.warning(
-            f"ThreadRunner process {child_runner_id} interrupted, shutting down"
+            f"ThreadRunner process worker:{child_runner_id} interrupted, shutting down"
         )
     finally:
         runner._on_stop()
@@ -189,7 +189,7 @@ class MultiThreadRunner(BaseRunner):
             time.time(), 0, ProcessState.IDLE
         )
         self.logger.info(
-            f"Spawned ThreadRunner process {child_runner_id} with pid {p.pid}"
+            f"Spawned ThreadRunner process worker:{child_runner_id} pid:{p.pid}"
         )
 
     def _on_stop(self) -> None:
@@ -199,7 +199,7 @@ class MultiThreadRunner(BaseRunner):
             if proc.is_alive():
                 proc.terminate()
                 proc.join()
-                self.logger.info(f"Terminated process {runner_id}")
+                self.logger.info(f"Terminated process worker:{runner_id}")
         self.manager.shutdown()  # type: ignore
         self.logger.info("MultiThreadRunner stopped")
 
@@ -212,7 +212,9 @@ class MultiThreadRunner(BaseRunner):
         try:
             self.shared_status.pop(key, None)
         except (EOFError, BrokenPipeError):
-            self.logger.debug(f"Manager already stopped while removing state for {key}")
+            self.logger.debug(
+                f"Manager already stopped while removing state for worker:{key}"
+            )
 
     def _on_stop_runner_loop(self) -> None:
         """Internal method called after receiving a signal to stop the runner loop."""
@@ -226,11 +228,11 @@ class MultiThreadRunner(BaseRunner):
                         self.child_runner_ids.pop(runner_id, None)
                         self._safe_remove_shared_state(runner_id)
                         self.logger.info(
-                            f"Terminated process {runner_id} during loop stop"
+                            f"Terminated process worker:{runner_id} during loop stop"
                         )
                 except AssertionError:
                     self.logger.info(
-                        f"Skipping process {runner_id} termination - not a child process"
+                        f"Skipping process worker:{runner_id} termination - not a child process"
                     )
         self.logger.info("MultiThreadRunner loop stopped")
 
@@ -244,7 +246,7 @@ class MultiThreadRunner(BaseRunner):
             for runner_id in dead_ids:
                 self.child_runner_ids.pop(runner_id, None)
                 self._safe_remove_shared_state(runner_id)
-                self.logger.info(f"Cleaned up dead process {runner_id}")
+                self.logger.info(f"Cleaned up dead process worker:{runner_id}")
 
     def _scale_up_processes(self) -> None:
         """Spawn new processes based on enforce_max_processes setting and pending tasks."""
@@ -285,7 +287,9 @@ class MultiThreadRunner(BaseRunner):
                 continue
             if status.is_idle(now, self.conf.idle_timeout_process_sec):
                 idle_time = now - status.last_update
-                self.logger.info(f"Process {runner_id} {idle_time=} sec, terminating.")
+                self.logger.info(
+                    f"worker:{runner_id} idle_time:{idle_time} sec, terminating."
+                )
                 proc.terminate()
                 proc.join()
                 ids_to_remove.append(runner_id)

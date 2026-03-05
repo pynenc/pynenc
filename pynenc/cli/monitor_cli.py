@@ -45,7 +45,7 @@ def start_monitor_command(args: PynencCLINamespace) -> None:
     if not _check_monitor_dependencies():
         print(
             "Monitor dependencies not installed. Please install with: "
-            "poetry install --with monitor"
+            "pip install pynenc[monitor]"
         )
         sys.exit(1)
 

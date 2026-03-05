@@ -44,6 +44,10 @@ class HistoryEntry(NamedTuple):
     registered_by_inv_id: str | None
 
 
+_EXTERNAL_CLS = "ExternalRunner"
+_COLLAPSED_EXTERNAL_ID = "__collapsed_external_runners__"
+
+
 class TimelineDataBuilder:
     """
     Builds TimelineData from InvocationHistory batches.
@@ -64,15 +68,18 @@ class TimelineDataBuilder:
         self,
         config: TimelineConfig | None = None,
         color_scheme: ColorScheme | None = None,
+        collapse_external: bool = True,
     ) -> None:
         """
         Initialize the builder.
 
         :param TimelineConfig | None config: Configuration for rendering
         :param ColorScheme | None color_scheme: Color scheme for runner colors
+        :param bool collapse_external: Collapse standalone external runners into one lane
         """
         self.config = config or TimelineConfig()
         self.color_scheme = color_scheme or ColorScheme()
+        self.collapse_external = collapse_external
 
         # Track time bounds
         self._min_time: datetime | None = None
@@ -109,12 +116,31 @@ class TimelineDataBuilder:
     ) -> None:
         """Process a single history entry."""
         runner_info = RunnerInfo.from_context(runner_context)
+        runner_info = self._maybe_collapse_external(runner_info)
         if not self._is_valid_entry(history, runner_info):
             return
 
         self._update_time_bounds(history.timestamp)
         self._track_runner(runner_info)
         self._store_history_entry(history, runner_info)
+
+    def _maybe_collapse_external(self, info: RunnerInfo) -> RunnerInfo:
+        """Collapse standalone external runners into one shared lane.
+
+        :param RunnerInfo info: Original runner info
+        :return: Remapped info if collapsible, otherwise unchanged
+        """
+        if not self.collapse_external:
+            return info
+        if _EXTERNAL_CLS not in info.runner_cls or info.has_parent:
+            return info
+        return RunnerInfo(
+            runner_cls=info.runner_cls,
+            runner_id=_COLLAPSED_EXTERNAL_ID,
+            hostname="(collapsed)",
+            pid=0,
+            thread_id=0,
+        )
 
     def _is_valid_entry(
         self, history: "InvocationHistory", runner_info: RunnerInfo

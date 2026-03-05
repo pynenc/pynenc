@@ -1,91 +1,208 @@
 # Configuration System
 
-Pynenc's configuration system is designed for high flexibility and modularity, supporting a variety of sources and formats for configuration data. This system is particularly suited for distributed systems where configuration might vary across different environments or components.
+Reference for all Pynenc configuration options, sources, and resolution order.
 
 ## Configuration Sources
 
-The configuration values can be determined from various sources, with the following priority (from highest to lowest):
+Configuration values resolve from these sources in priority order (highest first):
 
-1. Direct assignment in the config instance (not recommended)
-2. Environment variables
-3. Configuration file path specified by environment variables
-4. Configuration file path (YAML, TOML, JSON)
-5. `pyproject.toml`
-6. Default values specified in the `ConfigField`
-
-## Hierarchical Configuration
-
-Pynenc supports a hierarchical configuration system, allowing for nested configuration classes. This feature enables specifying configuration at different levels, from general to specific.
-
-**Example**:
-
-```{code-block} python
-   class ConfigGrandpa(ConfigBase):
-       test_field = ConfigField("grandpa_value")
-
-   class ConfigParent(ConfigGrandpa):
-       test_field = ConfigField("parent_value")
-
-   class ConfigChild(ConfigParent):
-       test_field = ConfigField("child_value")
-```
-
-In `pyproject.toml`, configurations can be specified at different levels:
-
-```toml
-   [tool.pynenc]
-   test_field = "toml_value"
-
-   [tool.pynenc.grandpa]
-   test_field = "toml_grandpa_value"
-
-   [tool.pynenc.parent]
-   test_field = "toml_parent_value"
-
-   [tool.pynenc.child]
-   test_field = "toml_child_value"
-```
-
-The most specific (child) configuration will take precedence over more general (parent/grandpa) configurations and the default.
+1. **Direct assignment** in the config instance
+2. **Environment variables** (`PYNENC__FIELD_NAME` or `PYNENC__CLASS__FIELD_NAME`)
+3. **Configuration file** specified by `PYNENC__FILEPATH` environment variable
+4. **Configuration file** path passed to `Pynenc(config_filepath=...)` (YAML, TOML, or JSON)
+5. **`pyproject.toml`** under `[tool.pynenc]`
+6. **Default values** defined in the `ConfigField`
 
 ## Environment Variables
 
-Environment variables can be used to override configuration values. They follow two naming conventions:
+Two naming conventions are supported:
 
-1. `PYNENC__<CONFIG_CLASS_NAME>__<FIELD_NAME>` for setting values specific to a configuration class.
-2. `PYNENC__<FIELD_NAME>` for default values that apply across all configuration classes.
+```bash
+# Default for all config classes
+PYNENC__FIELD_NAME="value"
 
-**Example**:
-
-```shell
-   # Specific to a configuration class
-   export PYNENC__CONFIGCHILD__TEST_FIELD="env_child_value"
-
-   # Default value for all configuration classes
-   export PYNENC__TEST_FIELD="env_default_value"
+# Specific to a config class
+PYNENC__CONFIGPYNENC__FIELD_NAME="value"
 ```
 
-In the first example, `test_field` in `ConfigChild` is overridden with "env_child_value". In the second example, `test_field` is set to "env_default_value" for any configuration class that does not have a more specific value defined.
+The specific form takes precedence over the default form.
 
-## Type Casting in ConfigField
+## Configuration Files
 
-`ConfigField` ensures that the type of the configuration value is preserved. Values from files or environment variables are cast to the specified type, and an exception is raised if casting is not possible.
+### `pyproject.toml`
 
-## Specifying Configuration File Path
+```toml
+[tool.pynenc]
+app_id = "my_application"
+orchestrator_cls = "RedisOrchestrator"
+broker_cls = "RedisBroker"
+state_backend_cls = "RedisStateBackend"
+runner_cls = "MultiThreadRunner"
+serializer_cls = "JsonPickleSerializer"
 
-A specific configuration file can be indicated using the `PYNENC__FILEPATH` environment variable. Additionally, a file exclusive to a particular `ConfigBase` instance can be specified, e.g., `PYNENC__SOMECONFIG__FILEPATH` for `SomeConfig`.
+[tool.pynenc.orchestrator]
+max_pending_seconds = 300
+
+[tool.pynenc.runner]
+min_threads = 2
+max_threads = 8
+
+[tool.pynenc.task]
+running_concurrency = "task"
+```
+
+### YAML
+
+```yaml
+app_id: my_application
+orchestrator_cls: RedisOrchestrator
+
+orchestrator:
+  max_pending_seconds: 300
+
+runner:
+  min_threads: 4
+  max_threads: 16
+```
+
+Load with:
+
+```python
+from pynenc import Pynenc
+app = Pynenc(config_filepath="/path/to/pynenc.yaml")
+```
+
+### JSON
+
+```json
+{
+  "app_id": "my_application",
+  "orchestrator_cls": "RedisOrchestrator"
+}
+```
+
+## ConfigPynenc Fields
+
+Main application configuration (`pynenc.conf.config_pynenc.ConfigPynenc`).
+
+| Field                                   | Type    | Default                  | Description                                                     |
+| --------------------------------------- | ------- | ------------------------ | --------------------------------------------------------------- |
+| `app_id`                                | `str`   | `"pynenc"`               | Application identifier                                          |
+| `orchestrator_cls`                      | `str`   | `"MemOrchestrator"`      | Orchestrator implementation class name                          |
+| `trigger_cls`                           | `str`   | `"MemTrigger"`           | Trigger implementation class name                               |
+| `broker_cls`                            | `str`   | `"MemBroker"`            | Broker implementation class name                                |
+| `state_backend_cls`                     | `str`   | `"MemStateBackend"`      | State backend implementation class name                         |
+| `serializer_cls`                        | `str`   | `"JsonPickleSerializer"` | Serializer implementation class name                            |
+| `client_data_store_cls`                 | `str`   | `"MemClientDataStore"`   | Client data store implementation class name                     |
+| `runner_cls`                            | `str`   | `"DummyRunner"`          | Runner implementation class name                                |
+| `trigger_task_modules`                  | `set`   | `set()`                  | Modules containing trigger-dependent tasks                      |
+| `dev_mode_force_sync_tasks`             | `bool`  | `False`                  | Execute tasks synchronously in calling thread                   |
+| `logging_level`                         | `str`   | `"info"`                 | Logging level (`debug`, `info`, `warning`, `error`, `critical`) |
+| `print_arguments`                       | `bool`  | `True`                   | Print task arguments in log messages                            |
+| `truncate_arguments_length`             | `int`   | `32`                     | Maximum printed argument length                                 |
+| `argument_print_mode`                   | `str`   | `"TRUNCATED"`            | Argument display mode: `FULL`, `KEYS`, `TRUNCATED`, `HIDDEN`    |
+| `cached_status_time`                    | `float` | `0.1`                    | Invocation status cache TTL (seconds)                           |
+| `compact_log_context`                   | `bool`  | `True`                   | Truncate IDs in log context for readability                     |
+| `atomic_service_interval_minutes`       | `float` | `5.0`                    | Cycle interval for atomic recovery services                     |
+| `atomic_service_spread_margin_minutes`  | `float` | `1.0`                    | Safety margin for time-slot allocation                          |
+| `atomic_service_check_interval_minutes` | `float` | `0.5`                    | Runner check interval for atomic services                       |
+| `recover_pending_invocations_cron`      | `str`   | `"*/5 * * * *"`          | Cron expression for pending invocation recovery                 |
+| `max_pending_seconds`                   | `float` | `5.0`                    | Maximum time an invocation can remain PENDING                   |
+| `recover_running_invocations_cron`      | `str`   | `"*/15 * * * *"`         | Cron expression for running invocation recovery                 |
+| `runner_considered_dead_after_minutes`  | `float` | `10.0`                   | Heartbeat timeout before runner is considered dead              |
+
+## ConfigTask Fields
+
+Per-task configuration (`pynenc.conf.config_task.ConfigTask`). Configurable globally or per-task.
+
+| Field                            | Type    | Default         | Description                                                               |
+| -------------------------------- | ------- | --------------- | ------------------------------------------------------------------------- |
+| `parallel_batch_size`            | `int`   | `100`           | Batch size for `task.parallelize()` routing                               |
+| `retry_for`                      | `tuple` | `(RetryError,)` | Exception types that trigger a retry                                      |
+| `max_retries`                    | `int`   | `0`             | Maximum retry attempts (0 = no retries)                                   |
+| `running_concurrency`            | `str`   | `"DISABLED"`    | Runtime concurrency control: `DISABLED`, `TASK`, `ARGUMENTS`, `KEYS`      |
+| `registration_concurrency`       | `str`   | `"DISABLED"`    | Registration concurrency control: `DISABLED`, `TASK`, `ARGUMENTS`, `KEYS` |
+| `key_arguments`                  | `tuple` | `()`            | Arguments used for `KEYS` concurrency checks                              |
+| `on_diff_non_key_args_raise`     | `bool`  | `False`         | Raise error when non-key arguments differ in concurrency check            |
+| `call_result_cache`              | `bool`  | `False`         | Cache results by call arguments                                           |
+| `disable_cache_args`             | `tuple` | `()`            | Arguments to exclude from cache key                                       |
+| `force_new_workflow`             | `bool`  | `False`         | Always create a new workflow context                                      |
+| `reroute_on_concurrency_control` | `bool`  | `False`         | Reroute blocked tasks instead of marking final                            |
+
+### Per-Task Configuration
+
+Override settings for specific tasks using environment variables or config files:
+
+**Environment variables**:
+
+```bash
+# Global task setting
+PYNENC__CONFIGTASK__MAX_RETRIES="3"
+
+# Task-specific (module#task separator)
+PYNENC__CONFIGTASK__MYMODULE#MY_TASK__MAX_RETRIES="5"
+```
 
 ```{note}
-   The configuration system is designed to be easily extendable, allowing users to create custom configuration classes that inherit from `ConfigBase`. This flexibility facilitates the modification of specific parts of the configuration as necessary for each system, including plugin-specific configurations.
+Use `#` (not `__`) to separate the module name from the task name in environment variables.
 ```
+
+**Configuration files**:
+
+```yaml
+task:
+  max_retries: 3
+  mymodule.my_task:
+    max_retries: 5
+```
+
+**Task decorator**:
+
+```python
+@app.task(max_retries=5, running_concurrency="task")
+def my_task(x: int) -> int:
+    return x * 2
+```
+
+## ConfigRunner Fields
+
+Base runner configuration (`pynenc.conf.config_runner.ConfigRunner`).
+
+| Field                                    | Type    | Default | Description                               |
+| ---------------------------------------- | ------- | ------- | ----------------------------------------- |
+| `invocation_wait_results_sleep_time_sec` | `float` | `0.1`   | Sleep time between result polling checks  |
+| `runner_loop_sleep_time_sec`             | `float` | `0.1`   | Sleep time between runner loop iterations |
+| `min_parallel_slots`                     | `int`   | `1`     | Minimum parallel execution slots          |
+
+### ThreadRunner Configuration
+
+| Field         | Type  | Default | Description                                |
+| ------------- | ----- | ------- | ------------------------------------------ |
+| `min_threads` | `int` | `1`     | Minimum thread pool size                   |
+| `max_threads` | `int` | `0`     | Maximum thread pool size (`0` = CPU count) |
+
+### MultiThreadRunner Configuration
+
+| Field                      | Type   | Default | Description                                        |
+| -------------------------- | ------ | ------- | -------------------------------------------------- |
+| `min_threads`              | `int`  | `1`     | Threads per child process                          |
+| `max_threads`              | `int`  | `1`     | Threads per child process                          |
+| `min_processes`            | `int`  | `1`     | Minimum worker processes                           |
+| `max_processes`            | `int`  | `0`     | Maximum worker processes (`0` = CPU count)         |
+| `idle_timeout_process_sec` | `int`  | `4`     | Seconds idle before a process is terminated        |
+| `enforce_max_processes`    | `bool` | `True`  | Always maintain `max_processes` regardless of load |
+
+### PersistentProcessRunner Configuration
+
+| Field           | Type  | Default   | Description                           |
+| --------------- | ----- | --------- | ------------------------------------- |
+| `num_processes` | `int` | CPU count | Number of persistent worker processes |
 
 ## Plugin Configuration
 
-With Pynenc's plugin architecture, you can configure backend-specific settings for different plugins:
+Backend plugins add their own configuration sections. For example:
 
-### Redis Plugin Configuration
-
-When using the `pynenc-redis` plugin:
+### Redis Plugin
 
 ```toml
 [tool.pynenc.redis]
@@ -94,9 +211,7 @@ redis_port = 6379
 redis_db = 0
 ```
 
-### MongoDB Plugin Configuration
-
-When using the `pynenc-mongodb` plugin:
+### MongoDB Plugin
 
 ```toml
 [tool.pynenc.mongodb]
@@ -104,139 +219,17 @@ connection_string = "mongodb://localhost:27017"
 database_name = "pynenc"
 ```
 
-## Multi-Inheritance Support
+## Hierarchical Resolution
 
-Pynenc's configuration system supports multiple inheritance, allowing for the combination of configurations from different parent classes. This feature is particularly useful when different components of the system share common configuration options.
-
-**Example**:
-
-```python
-
-   class ConfigOrchestrator(ConfigBase):
-       ...
-
-   class ConfigOrchestratorRedis(ConfigOrchestrator, ConfigRedis):
-       ...
-```
-
-In this example, `ConfigOrchestratorRedis` combines the default configurations of both `ConfigOrchestrator` and `ConfigRedis`.
-
-## Task-Specific Configuration
-
-The `ConfigTask` class provides specialized configurations for tasks within the distributed system. It allows defining configurations globally for all tasks, or on a per-task basis using environment variables, configuration files, or decorators.
-
-1. **Global vs. Task-Specific Settings**: Global settings apply to all tasks, while task-specific settings override the global ones for the specified task.
-
-2. **Setting via Environment Variables**:
-
-   - Global setting: `PYNENC__CONFIGTASK__<FIELD_NAME>`
-   - Task-specific setting: `PYNENC__CONFIGTASK__<TASK_NAME>__<FIELD_NAME>`
-
-   **Example**:
-
-   ```shell
-      export PYNENC__CONFIGTASK__PARALLEL_BATCH_SIZE="2"
-      export PYNENC__CONFIGTASK__MY_MODULE#MY_TASK__PARALLEL_BATCH_SIZE="3"
-   ```
-
-   ```{note}
-      The separator between the module name and the task name is `#`, not `__`. For instance, use `MY_MODULE#MY_TASK__AUTO_PARALLEL` to specify the task-specific setting.
-   ```
-
-3. **Setting via Configuration File**:
-
-   Task configurations can also be set using YAML, JSON, or TOML files. The structure allows for both global and task-specific configurations.
-
-   **Example**:
-
-   ```yaml
-   task:
-     parallel_batch_size: 4
-     max_retries: 10
-     module_name.task_name:
-       max_retries: 5
-   ```
-
-   ```python
-      config = ConfigTask(task_id="module_name.my_task", config_filepath="path/to/config.yaml")
-   ```
-
-## Configuring Argument Display
-
-Pynenc provides flexible configuration options for controlling how task arguments are displayed in logs. This is particularly useful for managing log verbosity and protecting sensitive information.
-
-```python
-from pynenc import Pynenc
-import pandas as pd
-
-app = Pynenc()
-
-@app.task
-def process_data(df: pd.DataFrame, threshold: float = 0.5) -> float:
-    return df['value'].mean()
-
-# Arguments will be displayed according to configuration
-result = process_data(large_df, threshold=0.75)
-```
-
-### Configuration Options
-
-Configure argument display in your `pyproject.toml`:
+Pynenc supports hierarchical configuration classes with inheritance. The most specific (child) configuration takes precedence:
 
 ```toml
 [tool.pynenc]
-# Enable/disable argument printing
-print_arguments = true
+test_field = "default"
 
-# Maximum length for argument values (0 for no truncation)
-truncate_arguments_length = 32
-
-# Display mode: "FULL", "KEYS", "TRUNCATED", or "HIDDEN"
-argument_print_mode = "TRUNCATED"
+[tool.pynenc.child]
+test_field = "child_override"
 ```
 
-### Display Modes
-
-Different modes produce different output formats:
-
-```python
-# FULL mode - Complete argument values
-# args(df=   col1  col2
-# 0    1    2
-# 1    3    4, threshold=0.75)
-
-# KEYS mode - Only argument names
-# args(df, threshold)
-
-# TRUNCATED mode - Truncated values
-# args(df=   col1  col2..., threshold=0.75)
-
-# HIDDEN mode
-# <arguments hidden>
-```
-
-This configuration helps balance logging verbosity with security and performance concerns.
-
-## Broker Configuration
-
-The broker component can be configured to optimize message queue performance and resource usage:
-
-```toml
-[tool.pynenc.broker]
-# Maximum time to block waiting for messages (in seconds)
-queue_timeout_sec = 0.1  # Default: 100ms
-```
-
-This timeout controls how long the broker waits for new messages using Redis BLPOP command, balancing between:
-
-- Immediate task processing (lower values)
-- Reduced CPU usage (higher values)
-- Runner responsiveness to other operations
-
-## Extending Configuration
-
-Users can extend the configuration system by creating custom configuration classes that inherit from `ConfigBase`. This flexibility allows for the easy modification of specific parts of the configuration as necessary for each system.
-
-```{note}
-   The configuration system ensures that the same configuration field is not defined in multiple parent classes, preventing conflicts and ensuring deterministic behavior.
-```
+See {doc}`../overview` for how configuration fits within the architecture.
+See {doc}`../reference/builder` for programmatic configuration with `PynencBuilder`.

@@ -391,7 +391,7 @@ def validate_ownership(
     attempted_owner: str | None = runner_id
 
     if current_def.requires_ownership and runner_id != current_record.runner_id:
-        msg = f"Status requires ownership by '{current_record.runner_id}'"
+        msg = f"Status requires ownership by runner:'{current_record.runner_id}'"
     elif new_def.acquires_ownership and not runner_id:
         msg = f"Status {new_status} requires a runner_id to acquire ownership"
         attempted_owner = None

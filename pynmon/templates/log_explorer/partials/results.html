@@ -1,0 +1,45 @@
+{% if runner_contexts %}
+<div class="table-responsive">
+  <table class="table table-hover mb-0">
+    <thead>
+      <tr>
+        <th>Runner ID</th>
+        <th>Runner Class</th>
+        <th>Hostname</th>
+        <th>PID</th>
+        <th>Thread</th>
+        <th>Parent Runner</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for ctx in runner_contexts %}
+      <tr>
+        <td><code class="text-primary">{{ ctx.runner_id or 'N/A' }}</code></td>
+        <td>{{ ctx.runner_cls or 'N/A' }}</td>
+        <td>{{ ctx.hostname or 'N/A' }}</td>
+        <td>{{ ctx.pid or 'N/A' }}</td>
+        <td>{{ ctx.thread_id or 'N/A' }}</td>
+        <td>
+          {% if ctx.parent_runner_id %}
+          <code>{{ ctx.parent_runner_id }}</code>
+          <small class="text-muted d-block"
+            >{{ ctx.parent_runner_cls or '' }}</small
+          >
+          {% else %}
+          <span class="text-muted">—</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% elif query %}
+<div class="alert alert-info m-3">
+  No runner contexts found matching "{{ query }}".
+</div>
+{% else %}
+<div class="alert alert-secondary m-3">
+  Enter a partial runner ID to search.
+</div>
+{% endif %}

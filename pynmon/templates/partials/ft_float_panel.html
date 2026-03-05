@@ -189,6 +189,44 @@
 </div>
 
 <script>
+  /** Attach hover-highlighting to family-tree SVG nodes and edges. */
+  window._initFtHover = function (root) {
+    var group = root.querySelector("#ft-group");
+    if (!group) return;
+    root.querySelectorAll(".ft-node").forEach(function (node) {
+      node.addEventListener("mouseenter", function () {
+        var id = node.getAttribute("data-inv-id");
+        if (!id) return;
+        group.classList.add("ft-hover");
+        node.classList.add("ft-related");
+        group.querySelectorAll(".ft-edge").forEach(function (e) {
+          if (
+            e.getAttribute("data-parent-id") === id ||
+            e.getAttribute("data-child-id") === id
+          ) {
+            e.classList.add("ft-related");
+            var otherId =
+              e.getAttribute("data-parent-id") === id
+                ? e.getAttribute("data-child-id")
+                : e.getAttribute("data-parent-id");
+            var other = group.querySelector(
+              '.ft-node[data-inv-id="' + otherId + '"]'
+            );
+            if (other) other.classList.add("ft-related");
+          }
+        });
+      });
+      node.addEventListener("mouseleave", function () {
+        group.classList.remove("ft-hover");
+        group.querySelectorAll(".ft-related").forEach(function (el) {
+          el.classList.remove("ft-related");
+        });
+      });
+    });
+  };
+</script>
+
+<script>
   // ── Floating family-tree panel: drag + collapse + zoom + resize ────
   (function () {
     const panel = document.getElementById("ft-float-panel");
@@ -505,6 +543,9 @@
             body.scrollTop = savedScroll.top;
           }
           body.dispatchEvent(new Event("ft-tree-loaded"));
+          // Init hover highlighting for the newly loaded SVG
+          var ftSvg = body.querySelector("#ft-svg");
+          if (ftSvg && window._initFtHover) window._initFtHover(ftSvg);
         })
         .catch(() => {
           body.innerHTML = "";

@@ -667,6 +667,47 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
             cur.close()
         return contexts
 
+    def get_matching_runner_contexts(
+        self, partial_id: str
+    ) -> Iterator["RunnerContext"]:
+        """Search runner contexts by partial ID match."""
+        with sqlite_conn(self.sqlite_db_path) as conn:
+            cur = conn.execute(
+                f"""SELECT runner_id, runner_cls, parent_ctx_id, pid, hostname, thread_id
+                FROM {Tables.RUNNER_CONTEXTS}
+                WHERE runner_id LIKE ?""",
+                (f"%{partial_id}%",),
+            )
+            rows = cur.fetchall()
+            cur.close()
+        for row in rows:
+            yield self._parse_runner_context_row(row)
+
+    def get_invocation_ids_by_workflow(
+        self,
+        workflow_id: str | None = None,
+        workflow_type_key: str | None = None,
+    ) -> Iterator["InvocationId"]:
+        """Retrieve invocation IDs filtered by workflow criteria."""
+        clauses: list[str] = []
+        params: list[str] = []
+        if workflow_id:
+            clauses.append("workflow_id = ?")
+            params.append(workflow_id)
+        if workflow_type_key:
+            clauses.append("workflow_type_key = ?")
+            params.append(workflow_type_key)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        with sqlite_conn(self.sqlite_db_path) as conn:
+            cur = conn.execute(
+                f"SELECT invocation_id FROM {Tables.INVOCATIONS} {where}",
+                tuple(params),
+            )
+            rows = cur.fetchall()
+            cur.close()
+        for (inv_id,) in rows:
+            yield InvocationId(inv_id)
+
     def purge(self) -> None:
         """Clear all state backend data"""
         delete_tables_with_prefix(self.sqlite_db_path, "state_backend")

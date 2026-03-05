@@ -236,9 +236,9 @@ class Task(Generic[Params, Result]):
         if task_id in app._tasks:
             return app._tasks[task_id]
         app.logger.warning(
-            f"_get_from_task_id returns a non-Task function {function} for {task_id=}"
+            f"_get_from_task_id returns a non-Task function {function} for task:{task_id}"
         )
-        raise ValueError(f"Cannot resolve Task from {task_id=}")
+        raise ValueError(f"Cannot resolve Task from task:{task_id}")
 
     @cached_property
     def retriable_exceptions(self) -> tuple[type[Exception], ...]:
@@ -365,7 +365,7 @@ class Task(Generic[Params, Result]):
         print(list(invocation_group.results))  # [len("huge_string") + i for i in range(3)]
         ```
         """
-        self.app.logger.info(f"parallelizing {self.task_id}")
+        self.app.logger.info(f"parallelizing task:{self.task_id}")
 
         # Convert param_iter to a list to allow multiple iterations and length checking
         param_list = list(param_iter)

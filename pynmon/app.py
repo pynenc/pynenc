@@ -243,6 +243,7 @@ def setup_routes() -> None:
         client_data_store,
         family_tree,
         invocations,
+        log_explorer,
         orchestrator,
         runners,
         state_backend,
@@ -262,6 +263,7 @@ def setup_routes() -> None:
     app.include_router(calls.router)
     app.include_router(state_backend.router)
     app.include_router(workflows.router)
+    app.include_router(log_explorer.router)
 
 
 def start_monitor(

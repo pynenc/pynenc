@@ -1,0 +1,123 @@
+{# ── Single log line card — called in a loop by index.html ─────────── #} {%
+from "partials/status_badge.html" import status_badge %} {% set p = la.parsed %}
+
+<div
+  class="card pynmon-card log-line-card{% if p.level %} level-{{ p.level|lower }}{% endif %}"
+>
+  {# Header row: timestamp + level + bracket context #}
+  <div class="log-raw">{{ _render_log_html(la)|safe }}</div>
+
+  {# Compact reference chips #} {% if p.is_valid %}
+  <div class="line-refs">
+    {# Bracket runners #} {% for rm in la.runner_matches %} {% if rm.contexts %}
+    {% for ctx in rm.contexts %}
+    <a
+      href="/runners/{{ ctx.runner_id }}"
+      class="ref-chip chip-runner"
+      data-runner-id="{{ ctx.runner_id }}"
+      title="Runner {{ ctx.runner_id }}"
+    >
+      <span class="material-icons">memory</span>
+      {{ rm.parsed.cls_abbr }}({{ rm.parsed.partial_id }})
+    </a>
+    {% endfor %} {% else %}
+    <span class="ref-chip chip-runner" title="No match found">
+      <span class="material-icons">memory</span>
+      {{ rm.parsed.cls_abbr }}({{ rm.parsed.partial_id }})
+    </span>
+    {% endif %} {% endfor %} {# Bracket invocation + timeline link #} {% if
+    p.invocation_id %} {% set inv_d = analysis.ref_details.get('invocation:' ~
+    p.invocation_id, {}) if analysis else {} %}
+    <a
+      href="/invocations/{{ p.invocation_id }}"
+      class="ref-chip chip-invocation"
+      data-invocation-id="{{ p.invocation_id }}"
+      title="Invocation: {{ p.invocation_id }}"
+    >
+      <span class="material-icons">info</span>
+      inv:{{ p.invocation_id[:8] }}… {% if inv_d.status %}<span
+        class="ref-badge ref-badge-{{ inv_d.status|lower }}"
+        >{{ inv_d.status }}</span
+      >{% endif %}
+    </a>
+    <a
+      href="/invocations/timeline?{{ la.invocation_timeline_qs }}"
+      class="ref-chip chip-invocation"
+      data-invocation-id="{{ p.invocation_id }}"
+      title="Timeline zoom"
+    >
+      <span class="material-icons">timeline</span>
+    </a>
+    {% endif %} {# Bracket task #} {% if p.task_key %}
+    <a
+      href="/tasks/{{ p.task_key }}"
+      class="ref-chip chip-task"
+      title="Task page"
+    >
+      <span class="material-icons">task</span>
+      {{ p.task_key }}
+    </a>
+    {% endif %} {# Extra entity refs from message body — invocations get
+    timeline link too #} {% for ref in la.extra_entity_refs %} {% if ref.kind in
+    ('invocation', 'parent-invocation', 'child-invocation', 'new-invocation') %}
+    {% set ref_d = analysis.ref_details.get('invocation:' ~ ref.value, {}) if
+    analysis else {} %}
+    <a
+      href="/invocations/{{ ref.value }}"
+      class="ref-chip chip-invocation"
+      data-invocation-id="{{ ref.value }}"
+      title="{{ ref.kind|replace('-', ' ')|title }}: {{ ref.value }}"
+    >
+      <span class="material-icons">info</span>
+      {{ ref.kind|replace('-', ' ')|title }}: {{ ref.value[:8] }}… {% if
+      ref_d.status %}<span class="ref-badge ref-badge-{{ ref_d.status|lower }}"
+        >{{ ref_d.status }}</span
+      >{% endif %}
+    </a>
+    <a
+      href="/invocations/timeline?{{ la.timeline_qs }}&selected={{ ref.value }}"
+      class="ref-chip chip-invocation"
+      data-invocation-id="{{ ref.value }}"
+      title="Timeline"
+    >
+      <span class="material-icons">timeline</span>
+    </a>
+    {% elif ref.kind in ('runner', 'worker', 'current-owner-runner',
+    'attempted-owner-runner') %} {% set runner_label =
+    ref.kind|replace('-runner', '')|replace('-', ' ')|title %}
+    <a
+      href="/runners/{{ ref.value }}"
+      class="ref-chip chip-runner"
+      data-runner-id="{{ ref.value }}"
+      title="{{ runner_label }}: {{ ref.value }}"
+    >
+      <span class="material-icons">memory</span>
+      {{ runner_label }}: {{ ref.value[:8] }}…
+    </a>
+    {% elif ref.kind == 'task' %}
+    <a
+      href="/tasks/{{ ref.value }}"
+      class="ref-chip chip-task"
+      title="Task: {{ ref.value }}"
+    >
+      <span class="material-icons">task</span>
+      {{ ref.value }}
+    </a>
+    {% elif ref.kind in ('workflow', 'sub-workflow', 'parent-workflow') %}
+    <a
+      href="/workflows/runs"
+      class="ref-chip chip-workflow"
+      title="{{ ref.kind|replace('-', ' ')|title }}: {{ ref.value }}"
+    >
+      <span class="material-icons">account_tree</span>
+      {{ ref.kind|replace('-', ' ')|title }}: {{ ref.value[:8] }}…
+    </a>
+    {% else %}
+    <span class="ref-chip" title="{{ ref.kind }}: {{ ref.value }}">
+      {{ ref.kind }}: {{ ref.value[:12] }}{% if ref.value|length > 12 %}…{%
+      endif %}
+    </span>
+    {% endif %} {% endfor %}
+  </div>
+  {% endif %}
+</div>

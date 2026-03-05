@@ -92,18 +92,20 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             workflow = WorkflowIdentity.new_workflow(
                 invocation_id=new_invocation_id, task_id=call.task.task_id
             )
-            call.app.logger.info(f"Creating a new main {workflow=}")
+            call.app.logger.info(f"Creating a new main workflow:{workflow.workflow_id}")
         elif call.task.conf.force_new_workflow:
             workflow = WorkflowIdentity.new_subworkflow(
                 invocation_id=new_invocation_id,
                 task_id=call.task.task_id,
                 parent_workflow_id=parent_invocation.workflow.workflow_id,
             )
-            call.app.logger.info(f"Creating a new sub-workflow {workflow=}")
+            call.app.logger.info(
+                f"Creating a new sub-workflow:{workflow.workflow_id} from parent-workflow:{parent_invocation.workflow.workflow_id}"
+            )
         else:
             workflow = parent_invocation.workflow
             call.app.logger.debug(
-                f"Inheriting workflow from parent {workflow=} for {new_invocation_id=}"
+                f"Inheriting workflow from parent-workflow:{workflow.workflow_id} for new-invocation:{new_invocation_id}"
             )
         return cls(
             call=call,
@@ -333,27 +335,31 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             self.app.orchestrator.set_invocation_result(self, result, runner_ctx)
         except WorkflowPauseError as ex:
             self.task.logger.warning(
-                f"Workflow pause requested but not implemented yet: {ex.reason}"
+                f"invocation:{self.invocation_id} Workflow pause requested but not implemented yet: {ex.reason}"
             )
         except self.task.retriable_exceptions as ex:
             if self.num_retries >= self.task.conf.max_retries:
-                self.app.logger.exception("Invocation MAX-RETRY")
+                self.app.logger.exception(f"invocation:{self.invocation_id} MAX-RETRY")
                 self.app.orchestrator.set_invocation_exception(self, ex, runner_ctx)
                 raise ex
             self.app.orchestrator.set_invocation_retry(
                 self.invocation_id, ex, runner_ctx
             )
-            self.task.logger.warning(f"Invocation WILL-RETRY {ex=}")
+            self.task.logger.warning(
+                f"invocation:{self.invocation_id} WILL-RETRY exception:{ex}"
+            )
         except exceptions.InvocationStatusTransitionError as ex:
             # Expected race condition: another runner already picked up this invocation
             self.task.logger.warning(
-                f"Status transition conflict (another runner took ownership): {ex}"
+                f"invocation:{self.invocation_id} status transition conflict (another runner took ownership): {ex}"
             )
         except exceptions.InvocationStatusOwnershipError as ex:
             # Expected race condition: we lost ownership to another runner
-            self.task.logger.warning(f"Lost ownership to another runner: {ex}")
+            self.task.logger.warning(
+                f"invocation:{self.invocation_id} lost ownership to another runner: {ex}"
+            )
         except Exception as ex:
-            self.app.logger.exception("Invocation EXCEPTION")
+            self.app.logger.exception(f"invocation:{self.invocation_id} EXCEPTION")
             self.app.orchestrator.set_invocation_exception(self, ex, runner_ctx)
             raise ex
         finally:
@@ -382,7 +388,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             for the task to complete.
         ```
         """
-        self.app.logger.debug(f"ini waiting for invocation {self.invocation_id} result")
+        self.app.logger.debug(f"ini waiting for invocation:{self.invocation_id} result")
         if not self.status.is_final():
             self.app.orchestrator.waiting_for_results(
                 self.parent_invocation_id, [self.invocation_id]
@@ -394,7 +400,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
                 [self.invocation_id],
                 context.get_runner_args(),
             )
-        self.app.logger.debug(f"end waiting for invocation {self.invocation_id} result")
+        self.app.logger.debug(f"end waiting for invocation:{self.invocation_id} result")
         return self.get_final_result()
 
     async def async_result(self) -> Result:
@@ -561,7 +567,7 @@ class ReusedInvocation(DistributedInvocation):
     ) -> None:
         """ReusedInvocation cannot be run directly, it's just a wrapper around an existing invocation."""
         self.app.logger.error(
-            f"Attempted to run a ReusedInvocation, with {runner_ctx=} {runner_args=}."
+            f"Attempted to run a ReusedInvocation, with runner_ctx:{runner_ctx} runner_args:{runner_args}."
         )
         raise NotImplementedError(
             "ReusedInvocation cannot be run directly, it's just a wrapper around an existing invocation"

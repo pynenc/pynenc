@@ -16,4 +16,10 @@
     </div>
   </div>
 </div>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    var svg = document.getElementById("ft-svg");
+    if (svg && window._initFtHover) window._initFtHover(svg);
+  });
+</script>
 {% endif %}

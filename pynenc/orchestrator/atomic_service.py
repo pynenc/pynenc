@@ -112,7 +112,7 @@ def validate_execution_time(
     if execution_duration > allocated_slot_size:
         logger.warning(
             f"Atomic service execution overran time slot! "
-            f"Runner: {runner_id}, "
+            f"runner:{runner_id}, "
             f"Execution: {execution_duration:.2f}s, "
             f"Allocated: {allocated_slot_size:.2f}s, "
             f"Overrun: {execution_duration - allocated_slot_size:.2f}s. "
@@ -122,7 +122,7 @@ def validate_execution_time(
     elif execution_duration > (allocated_slot_size * 0.8):
         logger.info(
             f"Atomic service execution approaching time slot limit. "
-            f"Runner: {runner_id}, "
+            f"runner:{runner_id}, "
             f"Execution: {execution_duration:.2f}s, "
             f"Allocated: {allocated_slot_size:.2f}s, "
             f"Usage: {(execution_duration / allocated_slot_size * 100):.1f}%"

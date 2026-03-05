@@ -43,7 +43,8 @@ def test_exception_handling_in_run_method() -> None:
 
         assert exception_message in str(exc_info.value)
         log_output = log_buffer.getvalue()
-        assert f"Exception in runner loop: {exception_message}" in log_output
+        assert "Exception in runner" in log_output
+        assert exception_message in log_output
 
 
 def test_keyboard_interrupt_handling_in_run_method() -> None:
@@ -51,7 +52,8 @@ def test_keyboard_interrupt_handling_in_run_method() -> None:
         mock_base_app.runner.runner_loop_iteration.side_effect = KeyboardInterrupt
         mock_base_app.runner.run()
         log_output = log_buffer.getvalue()
-        assert "KeyboardInterrupt received. Stopping runner..." in log_output
+        assert "KeyboardInterrupt received" in log_output
+        assert "Stopping runner" in log_output
 
 
 def test_dummy_runner() -> None:
@@ -94,7 +96,7 @@ async def test_dummy_runner_async_waiting_for_result() -> None:
         await runner.async_waiting_for_results(None, [])  # type: ignore
 
         log_output = log_buffer.getvalue()
-        assert "Async Waiting for result_invocation_ids=" in log_output
+        assert "Async Waiting for" in log_output
         assert "from outside this runner" in log_output
 
 

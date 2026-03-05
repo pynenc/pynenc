@@ -18,7 +18,8 @@ def test_invocation_not_found_error_with_message() -> None:
     invocation_id = "test_invocation_id"
     custom_message = "Custom error message"
     error = InvocationNotFoundError(invocation_id, message=custom_message)
-    assert str(error) == f"InvocationNotFoundError({invocation_id}): {custom_message}"
+    assert invocation_id in str(error)
+    assert custom_message in str(error)
     assert error.message == custom_message
 
 

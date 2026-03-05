@@ -1,105 +1,94 @@
 # Contributing to Pynenc
 
-Thank you for your interest in contributing to Pynenc! At this moment, the project is in its initial development phase and is not yet open for external contributions. We are diligently working towards a Minimum Viable Product (MVP) and establishing a stable foundation.
-
-Once the project reaches a stage where community contributions can be integrated, this guide will be updated with detailed instructions on the contribution process. For now, we invite you to watch the repository for updates and participate in issue discussions.
-
-We appreciate your understanding and look forward to your contributions in the future!
-
-Best regards,
-The Pynenc Team
+Set up your development environment and contribute to Pynenc.
 
 ```{toctree}
 :hidden:
 :maxdepth: 2
-:caption: Detailed Use Cases
+:caption: Contributing
 
 ./docs
 ```
 
 ## Setting Up the Development Environment
 
-To contribute to Pynenc once it's open for contributions, follow these typical steps to set up your development environment:
-
-1. **Fork the Repository**: Start by forking the Pynenc repository (https://github.com/pynenc/pynenc) on GitHub to your own account.
-
-2. **Clone the Fork**: Clone your fork to your local machine.
+1. **Fork and Clone**:
 
    ```bash
-      git clone https://github.com/pynenc/pynenc.git
-      cd pynenc
+   git clone https://github.com/<your-username>/pynenc.git
+   cd pynenc
    ```
 
-3. **Install Docker**: Make sure you have Docker installed on your system as it may be used for running services such as databases or other dependencies.
+2. **Install UV**: Pynenc uses [UV](https://github.com/astral-sh/uv) for dependency management. Install it following the [UV installation guide](https://docs.astral.sh/uv/getting-started/installation/).
 
-   - Docker Installation: Visit https://docs.docker.com/get-docker/
-
-4. **Install Poetry**: Pynenc uses Poetry for dependency management. Install Poetry using the recommended method from the official documentation at https://python-poetry.org/docs/#installation.
-
-5. **Set Up the Project**: Inside the project directory, set up your local development environment using Poetry. This will install all dependencies, including those needed for development.
+3. **Install Dependencies**: Install all dependencies including development and documentation extras:
 
    ```bash
-      poetry install
+   uv sync --all-extras
    ```
 
-6. **Install Pre-commit Hooks**: After installing all dependencies, set up pre-commit hooks in your local repository. This ensures that code quality checks are automatically performed before each commit.
+4. **Install Pre-commit Hooks**: Set up automatic code quality checks:
 
    ```bash
-      poetry run pre-commit install
+   uv run pre-commit install
    ```
 
-7. **Activate the Virtual Environment**: Use Poetry to activate the virtual environment.
+5. **Install Docker** (optional): Required for running integration tests with Redis, MongoDB, or RabbitMQ backends. Visit https://docs.docker.com/get-docker/.
 
-   ```bash
-      poetry shell
-   ```
-
-8. **Start Development**: You are now ready to start development. Make changes, commit them, and push them to your fork.
+6. **Start Development**: Make changes, commit, and push to your fork.
 
    ```{attention}
-   The python docstrings will be render by Myst and autodoc2, use markdown to document it and any Myst formatting allowed:
-   For examples check the [MyST syntax cheat sheet](https://jupyterbook.org/en/stable/reference/cheatsheet.html),
-   [Roles and Directives](https://myst-parser.readthedocs.io/en/latest/syntax/roles-and-directives.html)
-   and the complete directives references at [Myst docs](https://mystmd.org/guide/directives)
+   Python docstrings are rendered by MyST and autodoc2. Use Markdown formatting in docstrings.
+   See the [MyST syntax cheat sheet](https://jupyterbook.org/en/stable/reference/cheatsheet.html)
+   and [Roles and Directives](https://myst-parser.readthedocs.io/en/latest/syntax/roles-and-directives.html).
    ```
 
-9. **Creating Pull Requests**: Once the project is open for contributions, you will be able to create pull requests from your fork to the main Pynenc repository.
+## Running Tests
 
-10. **Set Up Pre-commit Hooks**: To ensure code quality and consistency, set up pre-commit hooks in your local environment. These hooks will automatically check your commits for issues like formatting errors.
+Run tests using Makefile targets or UV directly:
+
+- **Unit tests**:
+
+  ```bash
+  make test-unit
+  ```
+
+- **Integration tests**:
+
+  ```bash
+  make test-integration
+  ```
+
+- **All tests with combined coverage**:
+
+  ```bash
+  make test
+  ```
+
+- **Run tests directly**:
+
+  ```bash
+  uv run pytest pynenc_tests/unit
+  uv run pytest pynenc_tests/integration
+  ```
+
+## Checking Coverage
+
+Generate coverage reports after running tests:
 
 ```bash
-   poetry run pre-commit install
+uv run coverage run -m pytest pynenc_tests/
+uv run coverage report
+uv run coverage html
 ```
 
-## Running Tests and Checking Coverage
+Open `htmlcov/index.html` in a browser to view the detailed HTML report.
 
-Pynenc aims to maintain a high standard of code quality, which includes thorough testing and maintaining good test coverage. Here’s how you can run tests and check coverage:
+Maintain or improve test coverage with your contributions. Add tests for new code and bug fixes.
 
-1. **Running Tests**: After setting up your development environment, you can run the tests to ensure everything is working as expected.
+## Creating Pull Requests
 
-   ```bash
-      poetry run pytest
-   ```
-
-   This command will execute all the tests in the `tests` directory.
-
-2. **Checking Test Coverage**: To check how much of the code is covered by tests, use the `coverage` tool.
-
-   - First, run the tests with coverage tracking:
-     ```bash
-        poetry run coverage run -m pytest
-     ```
-   - Then, generate a coverage report. There are two ways to view the coverage report:
-
-     - For a summary in the console, use:
-       ```bash
-          poetry run coverage report
-       ```
-     - For a more detailed HTML report, use:
-       ```bash
-          poetry run coverage html
-       ```
-
-     This will generate a report in the `htmlcov` directory. You can open `htmlcov/index.html` in a web browser to view it.
-
-Please aim to maintain or improve the test coverage with your contributions. It’s recommended to add tests for any new code or when fixing bugs.
+1. Create a feature branch from `main`
+2. Make your changes with clear, atomic commits following [conventional commit](https://www.conventionalcommits.org/) format
+3. Ensure all tests pass: `make test`
+4. Push to your fork and open a pull request

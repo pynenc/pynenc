@@ -632,3 +632,76 @@ def test_store_and_get_runner_context(app_instance: "Pynenc") -> None:
     backend.store_runner_context(ctx)
     # We get back the same context we stored
     assert ctx == backend.get_runner_context(runner_id)
+
+
+def test_get_matching_runner_contexts_should_return_matches(
+    app_instance: "Pynenc",
+) -> None:
+    """Test that get_matching_runner_contexts returns contexts matching a partial ID."""
+    backend = app_instance.state_backend
+    ctx_a = RunnerContext(runner_cls="RunnerA", runner_id="runner-alpha-001")
+    ctx_b = RunnerContext(runner_cls="RunnerB", runner_id="runner-beta-002")
+    ctx_c = RunnerContext(runner_cls="RunnerA", runner_id="runner-alpha-003")
+
+    backend.store_runner_context(ctx_a)
+    backend.store_runner_context(ctx_b)
+    backend.store_runner_context(ctx_c)
+
+    # Match partial substring "alpha"
+    matches = list(backend.get_matching_runner_contexts("alpha"))
+    matched_ids = {m.runner_id for m in matches}
+    assert matched_ids == {"runner-alpha-001", "runner-alpha-003"}
+
+    # Match partial substring "beta"
+    matches = list(backend.get_matching_runner_contexts("beta"))
+    assert len(matches) == 1
+    assert matches[0].runner_id == "runner-beta-002"
+
+    # No match
+    matches = list(backend.get_matching_runner_contexts("gamma"))
+    assert matches == []
+
+
+def test_get_invocation_ids_by_workflow_should_filter_by_workflow_id(
+    app_instance: "Pynenc",
+) -> None:
+    """Test filtering invocations by workflow_id."""
+    backend = app_instance.state_backend
+    dummy_task.app = app_instance
+
+    inv1: DistributedInvocation = dummy_task()  # type: ignore
+    inv2: DistributedInvocation = dummy_task()  # type: ignore
+
+    # Query by the first invocation's workflow_id
+    wf_id_str = str(inv1.workflow.workflow_id)
+    result = list(backend.get_invocation_ids_by_workflow(workflow_id=wf_id_str))
+    result_strs = {str(r) for r in result}
+    assert str(inv1.invocation_id) in result_strs
+    # Second invocation has a different workflow, should not match
+    assert str(inv2.invocation_id) not in result_strs
+
+
+def test_get_invocation_ids_by_workflow_should_filter_by_type(
+    app_instance: "Pynenc",
+) -> None:
+    """Test filtering invocations by workflow_type_key."""
+    backend = app_instance.state_backend
+    dummy_task.app = app_instance
+    dummy_task_with_args.app = app_instance
+
+    inv1: DistributedInvocation = dummy_task()  # type: ignore
+
+    # Filter by dummy_task's task_id key as workflow_type
+    wt_key = str(inv1.workflow.workflow_type)
+    result = list(backend.get_invocation_ids_by_workflow(workflow_type_key=wt_key))
+    result_strs = {str(r) for r in result}
+    assert str(inv1.invocation_id) in result_strs
+
+
+def test_get_invocation_ids_by_workflow_should_return_empty_when_no_match(
+    app_instance: "Pynenc",
+) -> None:
+    """Test that non-matching filters return empty."""
+    backend = app_instance.state_backend
+    result = list(backend.get_invocation_ids_by_workflow(workflow_id="nonexistent-id"))
+    assert result == []

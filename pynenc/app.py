@@ -81,7 +81,7 @@ class Pynenc:
         self._deferred_trigger_tasks: dict[TaskId, list[TriggerBuilder]] = defaultdict(
             list
         )
-        self.logger.info(f"Initialized Pynenc app with id {self.app_id}")
+        self.logger.info(f"Initialized Pynenc app:{self.app_id}")
         load_all_plugins()
 
     @classmethod
@@ -148,7 +148,7 @@ class Pynenc:
         for task_id, triggers in self._deferred_trigger_tasks.items():
             task = self.get_task(task_id)
             self.trigger.register_task_triggers(task, triggers)
-            self.logger.info(f"  - Registered {task_id.key} triggers")
+            self.logger.info(f"  - Registered task:{task_id.key} triggers")
         self._deferred_trigger_tasks.clear()
 
     @property

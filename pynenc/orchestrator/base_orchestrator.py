@@ -385,7 +385,7 @@ class BaseOrchestrator(ABC):
         """
         if not result_invocation_ids:
             self.app.logger.warning(
-                f"Unnecessary call to waiting_for_results, {caller_invocation_id=} is not waiting for any results"
+                f"Unnecessary call to waiting_for_results, invocation:{caller_invocation_id} is not waiting for any results"
             )
             return
         if self.app.orchestrator.conf.blocking_control and caller_invocation_id:
@@ -438,7 +438,7 @@ class BaseOrchestrator(ABC):
             self.set_up_invocation_auto_purge(invocation_id)
         self.app.state_backend.add_history(invocation_id, new_status_record, runner_ctx)
         self.app.trigger.report_tasks_status([invocation_id], status)
-        self.app.logger.info(f"invocation {invocation_id} status {status.value}")
+        self.app.logger.info(f"invocation:{invocation_id} status:{status.value}")
 
     def set_invocation_result(
         self,
@@ -569,7 +569,7 @@ class BaseOrchestrator(ABC):
         if not running_invocation:
             return True
         invocation.task.logger.error(
-            f"{invocation.invocation_id=} cannot run because {running_invocation} is already in {statuses} status"
+            f"invocation:{invocation.invocation_id} cannot run because invocation:{running_invocation} is already in status:{statuses}"
         )
         return False
 
@@ -609,7 +609,7 @@ class BaseOrchestrator(ABC):
             except InvocationStatusError as ex:
                 # Race condition: another worker claimed it between our status check and transition
                 self.app.logger.debug(
-                    f"Could not set blocking invocation {blocking_invocation_id} to PENDING: {ex}"
+                    f"Could not set blocking invocation:{blocking_invocation_id} to PENDING: {ex}"
                 )
                 continue
 
@@ -664,7 +664,7 @@ class BaseOrchestrator(ABC):
                             yield invocation
                         except InvocationStatusError as ex:
                             self.app.logger.warning(
-                                f"Could not set invocation {invocation_id} to PENDING: {ex}"
+                                f"Could not set invocation:{invocation_id} to PENDING: {ex}"
                             )
                             continue
             else:
@@ -738,7 +738,7 @@ class BaseOrchestrator(ABC):
             task_key = invocation.call.task.task_id.key
             inv_id = invocation.invocation_id
             self.app.logger.info(
-                f"NEW Invocation {task_key}:{inv_id} REGISTERED and ROUTED"
+                f"NEW task:{task_key} invocation:{inv_id} REGISTERED and ROUTED"
             )
 
     def _route_new_call_invocation(
@@ -748,7 +748,7 @@ class BaseOrchestrator(ABC):
         Routes a new call invocation within the distributed task system.
 
         This method creates and routes a new `DistributedInvocation` for the provided call.
-        It is primarily used when the task does not have single invocation options set.mems
+        It is primarily used when the task does not have single invocation options set.
 
         :param Call[Params, Result] call: The task call to be routed.
         :return: The newly created `DistributedInvocation` for the call.
@@ -762,7 +762,7 @@ class BaseOrchestrator(ABC):
             or call.task.conf.running_concurrency != ConcurrencyControlType.DISABLED
         ):
             self.index_arguments_for_concurrency_control(new_invocation)
-        self.app.logger.info(f"invocation {new_invocation.invocation_id} ROUTED")
+        self.app.logger.info(f"invocation:{new_invocation.invocation_id} ROUTED")
         return new_invocation
 
     def route_call(self, call: "Call") -> "DistributedInvocation":
@@ -826,13 +826,13 @@ class BaseOrchestrator(ABC):
         invocation = self.app.state_backend.get_invocation(invocation_id)
         if not invocation:
             call.task.logger.warning(
-                f"Invocation {invocation_id} not found in state backend for call {call}, routing new invocation"
+                f"invocation:{invocation_id} not found in state backend for call {call}, routing new invocation"
             )
             return self._route_new_call_invocation(call)
 
         if invocation.call.call_id == call.call_id:
             call.task.logger.debug(
-                f"Reusing invocation {invocation.invocation_id} for call {call}"
+                f"Reusing invocation:{invocation.invocation_id} for call {call}"
             )
             return ReusedInvocation(invocation)
         if call.task.conf.on_diff_non_key_args_raise:

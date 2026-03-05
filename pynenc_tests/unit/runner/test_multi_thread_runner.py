@@ -355,7 +355,7 @@ def test_safe_remove_shared_state_handles_errors(
 
             # Verify error was logged
             mock_debug.assert_called_once_with(
-                "Manager already stopped while removing state for test-key"
+                "Manager already stopped while removing state for worker:test-key"
             )
 
         # Verify pop was attempted

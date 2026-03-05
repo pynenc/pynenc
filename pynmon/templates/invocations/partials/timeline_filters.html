@@ -61,6 +61,40 @@
         </select>
       </div>
 
+      <div class="mb-2">
+        <label for="workflow_type" class="form-label">Workflow Type</label>
+        <select class="form-select form-select-sm" id="workflow_type" name="workflow_type">
+          <option value="">All Workflow Types</option>
+          {% for wt in all_workflow_types %}
+          <option value="{{ wt }}" {% if wt == current_filters.workflow_type %}selected{% endif %}>
+            {{ wt }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="mb-2">
+        <label for="workflow_id" class="form-label">Workflow ID</label>
+        <input type="text" class="form-control form-control-sm" id="workflow_id" name="workflow_id"
+               value="{{ current_filters.workflow_id }}" placeholder="Partial or full ID">
+      </div>
+
+      <div class="mb-2 form-check">
+        <input type="hidden" id="collapse_external_hidden" name="collapse_external" value="0">
+        <input class="form-check-input" type="checkbox" id="collapse_external"
+               {% if current_filters.collapse_external %}checked{% endif %}
+               onchange="document.getElementById('collapse_external_hidden').value = this.checked ? '1' : '0'">
+        <label class="form-check-label" for="collapse_external">Collapse External Runners</label>
+      </div>
+      <script>
+        // Sync hidden field with checkbox on page load
+        (function(){
+          var chk = document.getElementById('collapse_external');
+          var hid = document.getElementById('collapse_external_hidden');
+          if (chk && hid) hid.value = chk.checked ? '1' : '0';
+        })();
+      </script>
+
       <button type="submit" class="btn btn-primary btn-sm w-100">Apply Filters & Refresh</button>
     </form>
     <button type="button" class="btn btn-outline-secondary btn-sm w-100 mt-2" onclick="window.location.reload();">

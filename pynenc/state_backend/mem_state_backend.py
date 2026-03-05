@@ -351,3 +351,25 @@ class MemStateBackend(BaseStateBackend[Params, Result]):
             for runner_id in runner_ids
             if runner_id in self._runner_contexts
         ]
+
+    def get_matching_runner_contexts(
+        self, partial_id: str
+    ) -> Iterator["RunnerContext"]:
+        """Search runner contexts by partial ID match."""
+        for rid, ctx in self._runner_contexts.items():
+            if partial_id in rid:
+                yield ctx
+
+    def get_invocation_ids_by_workflow(
+        self,
+        workflow_id: str | None = None,
+        workflow_type_key: str | None = None,
+    ) -> Iterator["InvocationId"]:
+        """Retrieve invocation IDs filtered by workflow criteria."""
+        for _inv_id, (inv_dto, _call_dto) in self._cache.items():
+            wf = inv_dto.workflow
+            if workflow_id and str(wf.workflow_id) != workflow_id:
+                continue
+            if workflow_type_key and wf.workflow_type.key != workflow_type_key:
+                continue
+            yield inv_dto.invocation_id

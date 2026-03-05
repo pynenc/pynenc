@@ -104,7 +104,7 @@ class BaseTrigger(ABC):
                 )
         else:
             self.app.logger.debug(
-                f"Condition {condition.condition_id} already registered, skipping."
+                f"condition:{condition.condition_id} already registered, skipping."
             )
 
     @abstractmethod
@@ -137,7 +137,7 @@ class BaseTrigger(ABC):
             self._register_source_task_condition(task_id, condition_id)
         else:
             self.app.logger.debug(
-                f"Condition {condition_id} already registered for source task {task_id}, skipping."
+                f"condition:{condition_id} already registered for task:{task_id}, skipping."
             )
 
     @abstractmethod
@@ -545,7 +545,7 @@ class BaseTrigger(ABC):
         else:
             # Another process beat us to it
             self.app.logger.info(
-                f"Cron condition {condition_id} was triggered by another process."
+                f"Cron condition:{condition_id} was triggered by another process."
             )
             # Update our cache with the latest value
             fresh_last_execution = self.get_last_cron_execution(condition_id)
@@ -662,7 +662,7 @@ class BaseTrigger(ABC):
         if not task:
             raise ValueError(f"Task {task_id} not found")
         invocation = task._call(Arguments(kwargs=arguments or {}))
-        self.app.logger.info(f"Triggered task {task_id} with arguments {arguments}")
+        self.app.logger.info(f"Triggered task:{task_id} with arguments {arguments}")
         return invocation
 
     def purge(self) -> None:

@@ -1,0 +1,121 @@
+{# ── References panel — compact entity cards, one per entity ─────────── #} {%
+set inv_refs = analysis.all_entity_refs|selectattr('kind', 'in',
+['invocation','parent-invocation','child-invocation','new-invocation'])|list %}
+{% set runner_refs = analysis.all_entity_refs|selectattr('kind', 'in',
+['runner','worker'])|list %} {% set task_refs =
+analysis.all_entity_refs|selectattr('kind', 'equalto', 'task')|list %} {% set
+wf_refs = analysis.all_entity_refs|selectattr('kind', 'in',
+['workflow','sub-workflow','parent-workflow'])|list %} {% set details =
+analysis.ref_details or {} %}
+
+<div class="card pynmon-card all-refs-panel">
+  <div class="card-body py-2 px-3">
+    {# ── Invocations ── #} {% if inv_refs %}
+    <div class="refs-section mb-2">
+      <div class="refs-section-title">
+        <span class="material-icons">info</span>
+        Invocations ({{ inv_refs|length }})
+      </div>
+      <div class="refs-card-grid">
+        {% for ref in inv_refs %} {% set d = details.get('invocation:' ~
+        ref.value, {}) %}
+        <div
+          class="ref-entity-card ref-card-inv"
+          data-invocation-id="{{ ref.value }}"
+        >
+          <div class="ref-card-header">
+            <a
+              href="/invocations/{{ ref.value }}"
+              class="ref-card-id-link"
+              title="{{ ref.value }}"
+              >{{ ref.value[:12] }}&hellip;</a
+            >
+            {% if d.status %}
+            <span class="ref-badge ref-badge-{{ d.status|lower }}"
+              >{{ d.status }}</span
+            >
+            {% endif %}
+            <a
+              href="/invocations/timeline?{{ analysis.timeline_qs }}&selected={{ ref.value }}"
+              class="ref-card-action ms-auto"
+              title="Open in timeline"
+            >
+              <span class="material-icons">timeline</span>
+            </a>
+          </div>
+          {% if d.task %}
+          <div class="ref-card-detail" title="{{ d.task }}">{{ d.task }}</div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %} {# ── Runners / Workers ── #} {% if runner_refs %}
+    <div class="refs-section mb-2">
+      <div class="refs-section-title">
+        <span class="material-icons">memory</span>
+        Runners ({{ runner_refs|length }})
+      </div>
+      <div class="refs-card-grid">
+        {% for ref in runner_refs %} {% set d = details.get('runner:' ~
+        ref.value, {}) %}
+        <div
+          class="ref-entity-card ref-card-runner"
+          data-runner-id="{{ ref.value }}"
+        >
+          <div class="ref-card-header">
+            <a
+              href="/runners/{{ ref.value }}"
+              class="ref-card-id-link"
+              title="{{ ref.value }}"
+              >{{ ref.value[:12] }}&hellip;</a
+            >
+          </div>
+          {% if d.cls %}
+          <div class="ref-card-detail ref-card-cls">{{ d.cls }}</div>
+          {% endif %} {% if d.hostname %}
+          <div class="ref-card-detail ref-card-host">{{ d.hostname }}</div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %} {# ── Tasks ── #} {% if task_refs %}
+    <div class="refs-section mb-2">
+      <div class="refs-section-title">
+        <span class="material-icons">task</span>
+        Tasks ({{ task_refs|length }})
+      </div>
+      <div class="d-flex flex-wrap gap-1">
+        {% for ref in task_refs %}
+        <a
+          href="/tasks/{{ ref.value }}"
+          class="ref-link ref-link-task"
+          title="Task: {{ ref.value }}"
+        >
+          {{ ref.value }}
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %} {# ── Workflows ── #} {% if wf_refs %}
+    <div class="refs-section">
+      <div class="refs-section-title">
+        <span class="material-icons">account_tree</span>
+        Workflows ({{ wf_refs|length }})
+      </div>
+      <div class="d-flex flex-wrap gap-1">
+        {% for ref in wf_refs %}
+        <a
+          href="/workflows/runs"
+          class="ref-link ref-link-wf"
+          title="{{ ref.kind|replace('-',' ')|title }}: {{ ref.value }}"
+        >
+          {{ ref.value[:12] }}&hellip;
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>

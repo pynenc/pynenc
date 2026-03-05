@@ -4,6 +4,9 @@ This module provides logging configuration, formatters, and context-aware loggin
 The formatter reads execution context from pynenc.context module (single source of truth)
 and formats IDs according to configuration.
 
+Timestamps include the local timezone offset (e.g. ``2026-03-05 07:56:07.476+01:00``)
+so monitoring tools can correctly convert to UTC regardless of the logging host's timezone.
+
 Key components:
 - ColoredFormatter: Adds ANSI colors and context prefixes to log output
 - PynencContextFilter: Injects context into log records from pynenc.context
@@ -11,6 +14,7 @@ Key components:
 """
 
 import logging
+import time as _time
 from typing import TYPE_CHECKING, Literal
 
 from pynenc import context
@@ -110,6 +114,20 @@ class ColoredFormatter(logging.Formatter):
         """
         super().__init__(fmt=fmt, datefmt=datefmt, style=style, validate=validate)
 
+    def formatTime(self, record: "LogRecord", datefmt: str | None = None) -> str:
+        """Format timestamp with milliseconds and local timezone offset.
+
+        Produces e.g. ``2026-03-05 07:56:07.476+01:00`` so monitoring tools
+        can accurately convert across timezones.
+
+        :param LogRecord record: The log record to format
+        :param str | None datefmt: Ignored — always uses ISO-ish format
+        :return: Formatted timestamp string with TZ offset
+        """
+        ct = self.converter(record.created)
+        base = _time.strftime("%Y-%m-%d %H:%M:%S", ct)
+        return f"{base}.{int(record.msecs):03d}{_format_tz_offset(ct)}"
+
     def format(self, record: "LogRecord") -> str:
         """
         Format the log record with colors and context prefix.
@@ -135,10 +153,9 @@ class ColoredFormatter(logging.Formatter):
         if context_display := self._format_runner_ctx_display(runner_ctx, truncate_ids):
             prefix = context_display
 
-        # Add invocation context if available
+        # Add invocation context if available (never truncated for searchability)
         if invocation_id:
-            inv_display = self._maybe_truncate(invocation_id, truncate_ids)
-            prefix += inv_display
+            prefix += invocation_id
 
         # Add task context if available
         if task_id:
@@ -235,6 +252,28 @@ class ColoredFormatter(logging.Formatter):
         return "".join(char for char in class_name if char.isupper())
 
 
+class _TzFormatter(logging.Formatter):
+    """Plain-text formatter that includes timezone offset in timestamps."""
+
+    def formatTime(self, record: "LogRecord", datefmt: str | None = None) -> str:
+        """Format timestamp with msecs and timezone, matching ColoredFormatter."""
+        ct = self.converter(record.created)
+        base = _time.strftime("%Y-%m-%d %H:%M:%S", ct)
+        return f"{base}.{int(record.msecs):03d}{_format_tz_offset(ct)}"
+
+
+def _format_tz_offset(ct: _time.struct_time) -> str:
+    """Format timezone offset as ±HH:MM from struct_time.
+
+    :param time.struct_time ct: Converted time struct
+    :return: Offset string like '+01:00' or '' if unavailable
+    """
+    tz = _time.strftime("%z", ct)
+    if len(tz) >= 5:
+        return f"{tz[:3]}:{tz[3:]}"
+    return ""
+
+
 def create_logger(app: "Pynenc", use_colors: bool = True) -> logging.Logger:
     """
     Creates a logger for the specified app with timestamps and optional colored output.
@@ -254,16 +293,14 @@ def create_logger(app: "Pynenc", use_colors: bool = True) -> logging.Logger:
     # Create handler
     handler = logging.StreamHandler()
 
-    # Create formatter with timestamp
+    # Timestamp includes msecs + TZ offset via custom formatTime
     if use_colors:
         formatter: logging.Formatter = ColoredFormatter(
-            fmt="%(asctime)s.%(msecs)03d %(levelname)s %(name)s %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
+            fmt="%(asctime)s %(levelname)s %(name)s %(message)s",
         )
     else:
-        formatter = logging.Formatter(
-            fmt="%(asctime)s.%(msecs)03d %(levelname)-8s %(name)s %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
+        formatter = _TzFormatter(
+            fmt="%(asctime)s %(levelname)-8s %(name)s %(message)s",
         )
 
     # Set formatter to handler

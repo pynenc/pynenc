@@ -65,12 +65,12 @@ def persistent_process_main(
     context.set_runner_context(app.app_id, runner_ctx)
 
     # Log after context is set so it shows the correct runner info
-    app.logger.info(f"Persistent process worker started with PID {os.getpid()}")
+    app.logger.info(f"Persistent process worker started with pid:{os.getpid()}")
 
     def handle_terminate(signum: int, frame: Any) -> None:
-        inv_info = f" (active invocation: {invocation_id})" if invocation_id else ""
+        inv_info = f" (active invocation:{invocation_id})" if invocation_id else ""
         app.logger.warning(
-            f"Process {runner_id} received signal {signum}{inv_info}, stopping"
+            f"worker:{runner_id} received signal:{signum}{inv_info}, stopping"
         )
         stop_event.set()
         # Raising KeyboardInterrupt interrupts any blocking call in invocation.run()
@@ -90,21 +90,21 @@ def persistent_process_main(
             try:
                 invocation.run(runner_ctx)
             except Exception:
-                app.logger.exception(f"Error executing invocation {invocation_id}")
+                app.logger.exception(f"Error executing invocation:{invocation_id}")
             # Do NOT clear invocation_id here: the outer finally needs it to attempt
             # rerouting if stop_event was set while run() was in progress. If the
             # invocation already reached a final status the reroute attempt is a no-op.
     except KeyboardInterrupt:
-        app.logger.info(f"Process {runner_id} received KeyboardInterrupt, exiting")
+        app.logger.info(f"worker:{runner_id} received KeyboardInterrupt, exiting")
     except Exception as e:
-        app.logger.exception(f"Process {runner_id} error: {e}")
+        app.logger.exception(f"worker:{runner_id} error: {e}")
     finally:
         if invocation_id:
             app.logger.warning(
-                f"Process {runner_id} shutting down with active invocation {invocation_id}, rerouting"
+                f"worker:{runner_id} shutting down with active invocation:{invocation_id}, rerouting"
             )
             app.runner._kill_and_reroute(invocation_id, runner_ctx=runner_ctx)
-        app.logger.info(f"Process {runner_id} shutting down")
+        app.logger.info(f"worker:{runner_id} shutting down")
 
 
 class PersistentProcessRunner(BaseRunner):
@@ -205,15 +205,15 @@ class PersistentProcessRunner(BaseRunner):
         try:
             p.start()
             if p.pid is None:
-                self.logger.error("Failed to start process: PID is None")
+                self.logger.error("Failed to start process: pid:None")
                 return None
             self.child_runner_ids[child_runner_id] = p
             self.logger.info(
-                f"Spawned persistent process: pid={p.pid}, runner_id={child_runner_id}"
+                f"Spawned persistent process: pid:{p.pid}, worker:{child_runner_id}"
             )
         except Exception as e:
             self.logger.error(
-                f"Failed to spawn process for runner_id={child_runner_id}: {e}"
+                f"Failed to spawn process for worker:{child_runner_id}: {e}"
             )
             raise
         return child_runner_id
@@ -235,13 +235,13 @@ class PersistentProcessRunner(BaseRunner):
                     process.join(timeout=5)
                     if process.is_alive():
                         self.logger.warning(
-                            f"Process {runner_id} did not terminate, forcing kill"
+                            f"worker:{runner_id} did not terminate, forcing kill"
                         )
                         process.kill()
                     self.child_runner_ids.pop(runner_id, None)
-                    self.logger.debug(f"Terminated process {runner_id}")
+                    self.logger.debug(f"Terminated worker:{runner_id}")
             except Exception as e:
-                self.logger.warning(f"Error terminating process {runner_id}: {e}")
+                self.logger.warning(f"Error terminating worker:{runner_id}: {e}")
 
     def _on_stop(self) -> None:
         """Cleans up all resources when runner stops."""
@@ -271,7 +271,7 @@ class PersistentProcessRunner(BaseRunner):
             rid for rid, proc in self.child_runner_ids.items() if not proc.is_alive()
         ]
         for rid in dead_runner_ids:
-            self.logger.warning(f"Detected dead child runner_id={rid}, cleaning up")
+            self.logger.warning(f"Detected dead child worker:{rid}, cleaning up")
             self.child_runner_ids.pop(rid, None)
 
         current_count = len(self.child_runner_ids)

@@ -37,6 +37,23 @@
     highlightInvocation(invocationId, false);
   }
 
+  // ── Runner highlight helpers ─────────────────────────────────────────
+  // Highlight / unhighlight all lane backgrounds and labels for a runner.
+
+  function highlightRunner(runnerId, on = true) {
+    const container = document.getElementById("timeline-container");
+    if (!container) return;
+    container
+      .querySelectorAll(`[data-runner-id="${runnerId}"]`)
+      .forEach((el) => {
+        el.classList.toggle("runner-highlight", on);
+      });
+  }
+
+  function unhighlightRunner(runnerId) {
+    highlightRunner(runnerId, false);
+  }
+
   // Zoom timeline to invocation time range, preserving selected invocation in URL
   function zoomToInvocation(historyData, invocationId) {
     if (!historyData || historyData.length === 0) return;
@@ -62,16 +79,15 @@
 
   function buildRunnerHtml(h) {
     if (!h.runner_cls) return '<span class="text-muted">-</span>';
+    const rid = h.runner_id || "";
 
-    let html = `<div style="margin-bottom:4px;">
+    let html = `<div class="timeline-runner-info" data-runner-id="${rid}" style="margin-bottom:4px;">
       <span class="badge bg-primary" style="font-size:9px;">${
         h.runner_cls
       }</span>
-      <a href="/runners/${
-        h.runner_id || ""
-      }" class="text-decoration-none" title="View runner details">
+      <a href="/runners/${rid}" class="text-decoration-none" title="View runner details">
         <code style="font-size:9px;background:#e9ecef;padding:1px 3px;border-radius:2px;color:#0d6efd;">${
-          h.runner_id || "N/A"
+          rid || "N/A"
         }</code>
       </a></div>
       <div style="font-size:9px;color:#6c757d;margin-left:4px;">`;
@@ -83,7 +99,9 @@
 
     if (!h.parent_runner_id) return html;
 
-    html += `<div style="margin-top:4px;padding-top:4px;border-top:1px dashed #dee2e6;">
+    html += `<div class="timeline-runner-info" data-runner-id="${
+      h.parent_runner_id
+    }" style="margin-top:4px;padding-top:4px;border-top:1px dashed #dee2e6;">
       <span style="font-size:9px;color:#6c757d;">↳ Parent:</span>
       <span class="badge bg-secondary" style="font-size:9px;">${
         h.parent_runner_cls || "Unknown"
@@ -315,7 +333,27 @@
           if (id !== currentInvocationId) unhighlightInvocation(id);
         }
       });
+
+      // Runner label hover → highlight entire lane
+      container.addEventListener("mouseover", (e) => {
+        const rl = e.target.closest(".runner-label[data-runner-id]");
+        if (rl) highlightRunner(rl.getAttribute("data-runner-id"));
+      });
+      container.addEventListener("mouseout", (e) => {
+        const rl = e.target.closest(".runner-label[data-runner-id]");
+        if (rl) unhighlightRunner(rl.getAttribute("data-runner-id"));
+      });
     }
+
+    // Runner context info hover in detail panel → highlight SVG lane
+    document.addEventListener("mouseover", (e) => {
+      const ri = e.target.closest(".timeline-runner-info[data-runner-id]");
+      if (ri) highlightRunner(ri.getAttribute("data-runner-id"));
+    });
+    document.addEventListener("mouseout", (e) => {
+      const ri = e.target.closest(".timeline-runner-info[data-runner-id]");
+      if (ri) unhighlightRunner(ri.getAttribute("data-runner-id"));
+    });
 
     // Re-open selected invocation if carried via URL (e.g. after zoom or from detail page)
     const selected = new URLSearchParams(location.search).get("selected");

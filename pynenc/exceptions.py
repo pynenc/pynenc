@@ -210,9 +210,9 @@ class InvocationError(PynencError):
 
     def __str__(self) -> str:
         if self.message:
-            return f"InvocationError({self.invocation_id}): {self.message}"
+            return f"InvocationError(invocation:{self.invocation_id}): {self.message}"
         else:
-            return f"InvocationError({self.invocation_id})"
+            return f"InvocationError(invocation:{self.invocation_id})"
 
     def _to_json_dict(self) -> dict[str, Any]:
         return {"invocation_id": self.invocation_id, "message": self.message}
@@ -235,7 +235,7 @@ class InvocationNotFoundError(StateBackendError):
 
     def __str__(self) -> str:
         if self.message:
-            return f"InvocationNotFoundError({self.invocation_id}): {self.message}"
+            return f"InvocationNotFoundError(invocation:{self.invocation_id}): {self.message}"
         else:
             return f"InvocationNotFoundError({self.invocation_id})"
 
@@ -312,10 +312,10 @@ class InvocationStatusRaceConditionError(InvocationStatusError):
     def __str__(self) -> str:
         return (
             f"InvocationStatusRaceConditionError("
-            f"invocation_id={self.invocation_id}, "
-            f"previous={self.previous_status_record.status}, "
-            f"expected={self.expected_status_record.status}, "
-            f"actual={self.actual_status_record.status})"
+            f"invocation:{self.invocation_id}, "
+            f"previous:{self.previous_status_record.status}, "
+            f"expected:{self.expected_status_record.status}, "
+            f"actual:{self.actual_status_record.status})"
         )
 
     def _to_json_dict(self) -> dict[str, Any]:
@@ -386,9 +386,9 @@ class InvocationStatusTransitionError(InvocationStatusError):
     def __str__(self) -> str:
         return (
             f"InvocationStatusTransitionError("
-            f"from_status={self.from_status}, "
-            f"to_status={self.to_status}, "
-            f"allowed_statuses={list(self.allowed_statuses)})"
+            f"from_status:{self.from_status}, "
+            f"to_status:{self.to_status}, "
+            f"allowed_statuses:{list(self.allowed_statuses)})"
         )
 
     def _to_json_dict(self) -> dict[str, Any]:
@@ -449,11 +449,11 @@ class InvocationStatusOwnershipError(InvocationStatusError):
     def __str__(self) -> str:
         return (
             f"InvocationStatusOwnershipError("
-            f"from_status={self.from_status}, "
-            f"to_status={self.to_status}, "
-            f"current_owner={self.current_owner}, "
-            f"attempted_owner={self.attempted_owner}, "
-            f"reason={self.reason})"
+            f"from_status:{self.from_status}, "
+            f"to_status:{self.to_status}, "
+            f"current-owner-runner:{self.current_owner}, "
+            f"attempted-owner-runner:{self.attempted_owner}, "
+            f"reason:{self.reason})"
         )
 
     def _to_json_dict(self) -> dict[str, Any]:

@@ -73,22 +73,24 @@ class ConcurrentInvocation(BaseInvocation[Params, Result]):
             return self._cached_result
         previous_invocation_context = context.sync_inv_context.get(self.app.app_id)
         try:
-            self.task.logger.info(f"Sync Invocation {self.invocation_id} started")
+            self.task.logger.info(f"Sync invocation:{self.invocation_id} started")
             self._status = InvocationStatus.RUNNING
             context.sync_inv_context[self.app.app_id] = self
             result = run_task_sync(self.task.func, **self.arguments.kwargs)
             self._status = InvocationStatus.SUCCESS
-            self.task.logger.info(f"Sync Invocation {self.invocation_id} finished")
+            self.task.logger.info(f"Sync invocation:{self.invocation_id} finished")
             # Cache the result to avoid re-execution on subsequent calls
             return self._cache_and_return_result(result)
         except self.task.retriable_exceptions as exc:
             if self._num_retries >= self.task.conf.max_retries:
-                self.task.logger.exception("Max retries reached")
+                self.task.logger.exception(
+                    f"invocation:{self.invocation_id} Max retries reached"
+                )
                 self._status = InvocationStatus.FAILED
                 raise exc
             self._status = InvocationStatus.RETRY
             self._num_retries += 1
-            self.task.logger.warning("Retrying invocation")
+            self.task.logger.warning(f"Retrying invocation:{self.invocation_id}")
             return self.result
         except Exception as exc:
             self._status = InvocationStatus.FAILED

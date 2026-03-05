@@ -285,6 +285,7 @@ status_badge %} {% block content %}
                         {% if entry.runner_context_summary %}
                         <div
                           class="timeline-runner-info"
+                          data-runner-id="{{ entry.runner_id }}"
                           style="
                             font-size: 11px;
                             margin-top: 6px;

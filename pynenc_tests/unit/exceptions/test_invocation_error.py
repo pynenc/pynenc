@@ -7,7 +7,7 @@ def test_invocation_error_without_message() -> None:
     """
     invocation_id = "test_invocation_id"
     error = InvocationError(invocation_id)
-    assert str(error) == f"InvocationError({invocation_id})"
+    assert invocation_id in str(error)
     assert error.message is None
 
 
@@ -18,7 +18,8 @@ def test_invocation_error_with_message() -> None:
     invocation_id = "test_invocation_id"
     custom_message = "Custom error message"
     error = InvocationError(invocation_id, message=custom_message)
-    assert str(error) == f"InvocationError({invocation_id}): {custom_message}"
+    assert invocation_id in str(error)
+    assert custom_message in str(error)
     assert error.message == custom_message
 
 

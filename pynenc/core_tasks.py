@@ -86,7 +86,7 @@ def recover_pending_invocations() -> None:
     # Recover PENDING invocations that exceeded timeout
     for invocation_id in app.orchestrator.get_pending_invocations_for_recovery():
         invocations_to_reroute.add(invocation_id)
-        app.logger.info(f"Recovering timed-out pending invocation {invocation_id}")
+        app.logger.info(f"Recovering timed-out pending invocation:{invocation_id}")
         app.orchestrator.set_invocation_status(
             invocation_id, InvocationStatus.PENDING_RECOVERY, runner_ctx
         )
@@ -105,7 +105,7 @@ def recover_running_invocations() -> None:
     for invocation_id in app.orchestrator.get_running_invocations_for_recovery():
         invocations_to_reroute.add(invocation_id)
         app.logger.info(
-            f"Recovering running invocation {invocation_id} from inactive runner"
+            f"Recovering running invocation:{invocation_id} from inactive runner"
         )
         app.orchestrator.set_invocation_status(
             invocation_id, InvocationStatus.RUNNING_RECOVERY, runner_ctx

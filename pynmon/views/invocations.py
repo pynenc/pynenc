@@ -38,6 +38,8 @@ class TimelineRequest:
     config: "TimelineConfig"
     limit: int | None
     task_id: "TaskId | None" = None
+    workflow_inv_ids: set[str] | None = None
+    collapse_external: bool = True
 
 
 @dataclass
@@ -62,6 +64,8 @@ async def invocations_list(
     request: Request,
     status: str | None = None,
     task_id: str | None = None,
+    workflow_id: str | None = None,
+    workflow_type: str | None = None,
     limit: int = 50,
     page: int = 1,
 ) -> HTMLResponse:
@@ -86,6 +90,9 @@ async def invocations_list(
     # Calculate offset for pagination
     offset = (page - 1) * limit
 
+    # Pre-load workflow-filtered invocation IDs if workflow filters active
+    workflow_inv_ids = _load_workflow_invocation_ids(app, workflow_id, workflow_type)
+
     # Offload heavy DB queries to a thread so the event loop stays free
     def _fetch_invocations() -> tuple[list["DistributedInvocation"], int]:
         ids = app.orchestrator.get_invocation_ids_paginated(
@@ -94,6 +101,9 @@ async def invocations_list(
             limit=limit,
             offset=offset,
         )
+        # Apply workflow filter if active
+        if workflow_inv_ids is not None:
+            ids = [i for i in ids if str(i) in workflow_inv_ids]
         count = app.orchestrator.count_invocations(
             task_id=parsed_task_id,
             statuses=statuses,
@@ -110,6 +120,11 @@ async def invocations_list(
     # Get all available task IDs for the dropdown
     all_task_ids = list(app.tasks.keys())
 
+    # Get all workflow types for the dropdown
+    all_workflow_types = await asyncio.to_thread(
+        lambda: [str(wt) for wt in app.state_backend.get_all_workflow_types()]
+    )
+
     return templates.TemplateResponse(
         "invocations/list.html",
         {
@@ -119,9 +134,12 @@ async def invocations_list(
             "invocations": all_invocations,
             "all_statuses": all_statuses,
             "all_task_ids": all_task_ids,
+            "all_workflow_types": all_workflow_types,
             "current_filters": {
                 "status": status_list or [],
                 "task_id": task_id or "",
+                "workflow_id": workflow_id or "",
+                "workflow_type": workflow_type or "",
                 "limit": limit,
             },
             "pagination": {
@@ -167,6 +185,44 @@ def _get_tasks_to_check(app: "Pynenc", task_id: "TaskId | None") -> list:
     return list(app.tasks.values())
 
 
+def _load_workflow_invocation_ids(
+    app: "Pynenc",
+    workflow_id: str | None,
+    workflow_type: str | None,
+) -> set[str] | None:
+    """Pre-load invocation IDs matching workflow filters.
+
+    :param Pynenc app: The Pynenc application instance
+    :param str | None workflow_id: Workflow ID to filter by
+    :param str | None workflow_type: Workflow type key to filter by
+    :return: Set of matching invocation ID strings, or None if no filter
+    """
+    if not workflow_id and not workflow_type:
+        return None
+    ids = app.state_backend.get_invocation_ids_by_workflow(
+        workflow_id=workflow_id,
+        workflow_type_key=workflow_type,
+    )
+    return {str(i) for i in ids}
+
+
+def _merge_allowed_ids(
+    task_ids: set | None,
+    workflow_ids: set[str] | None,
+) -> set | None:
+    """Intersect task and workflow ID sets (None means "all").
+
+    :param set | None task_ids: IDs from task filter, or None for all
+    :param set[str] | None workflow_ids: IDs from workflow filter, or None for all
+    :return: Intersection of non-None sets, or None if both are None
+    """
+    if task_ids is None:
+        return workflow_ids
+    if workflow_ids is None:
+        return task_ids
+    return task_ids & workflow_ids
+
+
 def _build_svg_timeline(req: TimelineRequest) -> str:
     """
     Build SVG timeline from a TimelineRequest.
@@ -175,9 +231,14 @@ def _build_svg_timeline(req: TimelineRequest) -> str:
     :return: SVG markup as string
     """
     t0 = time.time()
+    task_ids = _load_task_invocation_ids(req)
+    allowed = _merge_allowed_ids(task_ids, req.workflow_inv_ids)
     state = _IterState(
-        builder=TimelineDataBuilder(config=req.config),
-        allowed_invocation_ids=_load_task_invocation_ids(req),
+        builder=TimelineDataBuilder(
+            config=req.config,
+            collapse_external=req.collapse_external,
+        ),
+        allowed_invocation_ids=allowed,
     )
     _accumulate_history(req, state)
     t_hist = time.time()
@@ -301,9 +362,12 @@ async def invocations_timeline(
     start_date: str | None = None,
     end_date: str | None = None,
     task_id: str | None = None,
+    workflow_id: str | None = None,
+    workflow_type: str | None = None,
     limit: str
     | None = "500",  # str so empty string ("No limit") doesn't cause int parse error
     resolution: str = "auto",
+    collapse_external: str = "1",  # "0" disables collapsing; default on
 ) -> HTMLResponse:
     """Display a visual SVG timeline of invocations with filters."""
     app = get_pynenc_instance()
@@ -327,6 +391,11 @@ async def invocations_timeline(
             + f", limit={limit_int}"
         )
 
+        # Pre-load workflow-filtered invocation IDs
+        workflow_inv_ids = _load_workflow_invocation_ids(
+            app, workflow_id, workflow_type
+        )
+
         # Build SVG timeline using efficient history iteration (offload to thread)
         config = TimelineConfig(resolution_seconds=resolution_seconds)
         req = TimelineRequest(
@@ -336,11 +405,18 @@ async def invocations_timeline(
             config=config,
             limit=limit_int,
             task_id=parsed_task_id,
+            workflow_inv_ids=workflow_inv_ids,
+            collapse_external=collapse_external != "0",
         )
         svg_content = await asyncio.to_thread(_build_svg_timeline, req)
 
         # Get all available task IDs for the dropdown
         all_task_ids = list(app.tasks.keys())
+
+        # Get all workflow types for the dropdown
+        all_workflow_types = await asyncio.to_thread(
+            lambda: [str(wt) for wt in app.state_backend.get_all_workflow_types()]
+        )
 
         return templates.TemplateResponse(
             "invocations/timeline.html",
@@ -350,6 +426,7 @@ async def invocations_timeline(
                 "app_id": app.app_id,
                 "svg_content": svg_content,
                 "all_task_ids": all_task_ids,
+                "all_workflow_types": all_workflow_types,
                 "start_datetime": start_datetime,
                 "end_datetime": end_datetime,
                 "current_filters": {
@@ -357,8 +434,11 @@ async def invocations_timeline(
                     "start_date": start_date or "",
                     "end_date": end_date or "",
                     "task_id": task_id or "",
+                    "workflow_id": workflow_id or "",
+                    "workflow_type": workflow_type or "",
                     "limit": limit_int,
                     "resolution": resolution,
+                    "collapse_external": collapse_external != "0",
                 },
             },
         )

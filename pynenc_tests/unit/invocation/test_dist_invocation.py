@@ -64,7 +64,7 @@ def test_max_retries() -> None:
     with capture_logs(app.logger) as log_buffer:
         with pytest.raises(RetryError):
             invocation.run(RunnerContext.from_runner(app.runner))  # type: ignore
-        assert "Invocation MAX-RETRY" in log_buffer.getvalue()
+        assert "MAX-RETRY" in log_buffer.getvalue()
 
 
 def test_reroute_on_running_control() -> None:

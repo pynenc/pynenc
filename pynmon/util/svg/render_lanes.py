@@ -27,11 +27,14 @@ def render_group_headers(data: "TimelineData", style: "SVGStyle") -> str:
         y_start, _, _ = data.get_group_bounds(group.group_id)
         color = lanes[0].color if lanes else "#6c757d"
         header_y = y_start + 12
+        rid = escape(group.runner_id)
         parts += [
             f'  <text x="14" y="{header_y}" fill="{color}" font-weight="600" '
-            f'font-size="{style.font_size}px">{escape(group.header_label)}</text>',
+            f'font-size="{style.font_size}px" data-runner-id="{rid}" '
+            f'class="runner-label">{escape(group.header_label)}</text>',
             f'  <text x="14" y="{header_y + 12}" fill="{style.text_color}" '
-            f'font-size="{style.font_size - 3}px">{escape(group.details_line)}</text>',
+            f'font-size="{style.font_size - 3}px" data-runner-id="{rid}" '
+            f'class="runner-label">{escape(group.details_line)}</text>',
         ]
     return "\n".join(parts)
 
@@ -44,10 +47,13 @@ def render_lane_backgrounds(data: "TimelineData", style: "SVGStyle") -> str:
         y = data.lane_y_position(lane)
         h = lane.lane_height(config)
         opacity = 0.08 if lane.lane_index % 2 == 0 else 0.15
+        rid = escape(lane.runner_id)
         parts += [
-            f'  <rect x="0" y="{y}" width="{config.width}" height="{h}" fill="#ffffff"/>',
+            f'  <rect x="0" y="{y}" width="{config.width}" height="{h}" fill="#ffffff"'
+            f' data-runner-id="{rid}" class="lane-bg"/>',
             f'  <rect x="0" y="{y}" width="{config.width}" height="{h}" '
-            f'fill="{lane.color}" opacity="{opacity}"/>',
+            f'fill="{lane.color}" opacity="{opacity}"'
+            f' data-runner-id="{rid}" class="lane-bg"/>',
         ]
     return "\n".join(parts)
 
@@ -73,29 +79,36 @@ def render_lane_labels(data: "TimelineData", style: "SVGStyle") -> str:
 def _lane_label_parts(lane, y, group, data, style) -> list[str]:  # type: ignore[no-untyped-def]
     """Return SVG text elements for one lane label."""
     fs = style.font_size
+    rid = escape(lane.runner_id)
     if lane.is_group_header:
         return [
             f'  <text x="8" y="{y - 4}" fill="{style.label_color}" font-weight="600" '
-            f'font-size="{fs}px"><tspan>{escape(lane.label)}</tspan></text>',
+            f'font-size="{fs}px" data-runner-id="{rid}" '
+            f'class="runner-label"><tspan>{escape(lane.label)}</tspan></text>',
             f'  <text x="8" y="{y + 8}" fill="{style.text_color}" opacity="0.7" '
-            f'font-size="{fs - 2}px">{escape(lane.details_line)}</text>',
+            f'font-size="{fs - 2}px" data-runner-id="{rid}" '
+            f'class="runner-label">{escape(lane.details_line)}</text>',
         ]
     if lane.is_child_lane and group:
         child_label = f"{lane.runner_cls}({lane.display_runner_id})"
         diff = lane.format_child_details(group.hostname, group.pid, group.thread_id)
         parts = [
             f'  <text x="20" y="{y - 4}" fill="{style.label_color}" font-weight="400" '
-            f'font-size="{fs - 1}px"><tspan>{escape(child_label)}</tspan></text>',
+            f'font-size="{fs - 1}px" data-runner-id="{rid}" '
+            f'class="runner-label"><tspan>{escape(child_label)}</tspan></text>',
         ]
         if diff:
             parts.append(
                 f'  <text x="24" y="{y + 8}" fill="{style.text_color}" opacity="0.7" '
-                f'font-size="{fs - 2}px">{escape(diff.strip(" ()"))}</text>'
+                f'font-size="{fs - 2}px" data-runner-id="{rid}" '
+                f'class="runner-label">{escape(diff.strip(" ()"))}</text>'
             )
         return parts
     return [
         f'  <text x="8" y="{y - 4}" fill="{style.label_color}" font-weight="500" '
-        f'font-size="{fs}px"><tspan>{escape(lane.label)}</tspan></text>',
+        f'font-size="{fs}px" data-runner-id="{rid}" '
+        f'class="runner-label"><tspan>{escape(lane.label)}</tspan></text>',
         f'  <text x="8" y="{y + 8}" fill="{style.text_color}" opacity="0.7" '
-        f'font-size="{fs - 2}px">{escape(lane.details_line)}</text>',
+        f'font-size="{fs - 2}px" data-runner-id="{rid}" '
+        f'class="runner-label">{escape(lane.details_line)}</text>',
     ]
