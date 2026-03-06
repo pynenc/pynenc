@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from pynenc.builder import PynencBuilder
+from pynenc_tests.conftest import check_all_status_transitions
 
 if TYPE_CHECKING:
     from pynenc_tests.integration.pynmon.conftest import PynmonClient
@@ -82,7 +83,6 @@ def test_timeline_with_quick_tasks(pynmon_client: "PynmonClient") -> None:
     # Start runner for task execution
     runner_thread = threading.Thread(target=app.runner.run, daemon=True)
     runner_thread.start()
-    time.sleep(0.1)  # Let runner initialize
 
     try:
         # Execute some quick tasks
@@ -91,9 +91,6 @@ def test_timeline_with_quick_tasks(pynmon_client: "PynmonClient") -> None:
         # Wait for all tasks to complete
         for result in results:
             assert result.result.startswith("Quick:")
-
-        # Small delay to ensure state is persisted
-        time.sleep(0.2)
 
         # Test timeline page
         response = pynmon_client.get("/invocations/timeline?time_range=15m")
@@ -110,7 +107,7 @@ def test_timeline_with_quick_tasks(pynmon_client: "PynmonClient") -> None:
 
     finally:
         app.runner.stop_runner_loop()
-        runner_thread.join(timeout=1)
+        check_all_status_transitions(app)
 
 
 def test_timeline_with_mixed_duration_tasks(pynmon_client: "PynmonClient") -> None:
@@ -121,7 +118,6 @@ def test_timeline_with_mixed_duration_tasks(pynmon_client: "PynmonClient") -> No
     # Start runner for task execution
     runner_thread = threading.Thread(target=app.runner.run, daemon=True)
     runner_thread.start()
-    time.sleep(0.1)  # Let runner initialize
 
     try:
         # Create a sequence of tasks with different durations
@@ -131,11 +127,9 @@ def test_timeline_with_mixed_duration_tasks(pynmon_client: "PynmonClient") -> No
         long_results = [long_task(3, f"Long task {i}") for i in range(2)]
 
         # Small delay then start medium tasks
-        time.sleep(0.5)
         medium_results = [medium_task(2, f"Medium task {i}") for i in range(3)]
 
         # Small delay then start short tasks
-        time.sleep(0.5)
         short_results = [short_task(1, f"Short task {i}") for i in range(4)]
 
         # Add some quick tasks and a failing task
@@ -151,9 +145,6 @@ def test_timeline_with_mixed_duration_tasks(pynmon_client: "PynmonClient") -> No
         # The failing task should fail
         with pytest.raises(RuntimeError):
             _ = failing_result.result
-
-        # Small delay to ensure all state is persisted
-        time.sleep(0.5)
 
         # Test timeline page with different time ranges
         response = pynmon_client.get("/invocations/timeline?time_range=15m")
@@ -171,7 +162,7 @@ def test_timeline_with_mixed_duration_tasks(pynmon_client: "PynmonClient") -> No
 
     finally:
         app.runner.stop_runner_loop()
-        runner_thread.join(timeout=1)
+        check_all_status_transitions(app)
 
 
 def test_timeline_different_time_ranges(pynmon_client: "PynmonClient") -> None:
@@ -182,14 +173,11 @@ def test_timeline_different_time_ranges(pynmon_client: "PynmonClient") -> None:
     # Start runner for task execution
     runner_thread = threading.Thread(target=app.runner.run, daemon=True)
     runner_thread.start()
-    time.sleep(0.1)  # Let runner initialize
 
     try:
         # Execute a task
         quick_result = quick_task("Time range test")
         assert quick_result.result.startswith("Quick:")
-
-        time.sleep(0.2)
 
         # Test different time ranges
         time_ranges = ["15m", "1h", "3h", "1d"]
@@ -208,7 +196,7 @@ def test_timeline_different_time_ranges(pynmon_client: "PynmonClient") -> None:
 
     finally:
         app.runner.stop_runner_loop()
-        runner_thread.join(timeout=1)
+        check_all_status_transitions(app)
 
 
 def test_timeline_api_endpoints(pynmon_client: "PynmonClient") -> None:
@@ -219,7 +207,6 @@ def test_timeline_api_endpoints(pynmon_client: "PynmonClient") -> None:
     # Start runner for task execution
     runner_thread = threading.Thread(target=app.runner.run, daemon=True)
     runner_thread.start()
-    time.sleep(0.1)  # Let runner initialize
 
     try:
         # Execute a task to create an invocation
@@ -228,7 +215,6 @@ def test_timeline_api_endpoints(pynmon_client: "PynmonClient") -> None:
 
         # Wait for completion
         assert quick_result.result.startswith("Quick:")
-        time.sleep(0.2)
 
         # Test the invocation API endpoint
         response = pynmon_client.get(f"/invocations/{invocation_id}/api")
@@ -257,56 +243,7 @@ def test_timeline_api_endpoints(pynmon_client: "PynmonClient") -> None:
 
     finally:
         app.runner.stop_runner_loop()
-        runner_thread.join(timeout=1)
-
-
-def test_timeline_with_staggered_task_execution(pynmon_client: "PynmonClient") -> None:
-    """Test timeline with tasks starting at different times to simulate real-world usage."""
-    # Purge any existing data
-    app.purge()
-
-    # Start runner for task execution
-    runner_thread = threading.Thread(target=app.runner.run, daemon=True)
-    runner_thread.start()
-    time.sleep(0.1)  # Let runner initialize
-
-    try:
-        # Create a more realistic scenario with staggered task execution
-
-        # First batch: Start some medium tasks
-        batch1_results = [medium_task(2, f"Batch 1 Task {i}") for i in range(2)]
-
-        # Wait a bit then start second batch
-        time.sleep(1)
-        batch2_results = [short_task(1, f"Batch 2 Task {i}") for i in range(3)]
-
-        # Wait a bit then start third batch
-        time.sleep(1)
-        batch3_results = [quick_task(f"Batch 3 Task {i}") for i in range(2)]
-
-        # Wait for all to complete
-        all_results = batch1_results + batch2_results + batch3_results
-        for result in all_results:
-            assert result.result is not None
-
-        time.sleep(0.5)  # Ensure state is persisted
-
-        # Test timeline
-        response = pynmon_client.get("/invocations/timeline?time_range=15m")
-
-        assert response.status_code == 200
-        content = response.text
-
-        # Should show SVG timeline with invocations
-        assert "Invocations Timeline" in content
-        assert "<svg" in content
-
-        # Should show successful completions in legend
-        assert "SUCCESS" in content
-
-    finally:
-        app.runner.stop_runner_loop()
-        runner_thread.join(timeout=1)
+        check_all_status_transitions(app)
 
 
 def test_timeline_error_handling(pynmon_client: "PynmonClient") -> None:

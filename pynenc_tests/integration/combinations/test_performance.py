@@ -1,13 +1,14 @@
 import multiprocessing
 import threading
 from dataclasses import dataclass
-from time import perf_counter, sleep
+from time import perf_counter
 from typing import TYPE_CHECKING, NamedTuple
 
 import pytest
 
 from pynenc import Task
 from pynenc.runner.process_runner import ProcessRunner
+from pynenc_tests.conftest import check_all_status_transitions
 from pynenc_tests.util import create_test_logger
 
 if TYPE_CHECKING:
@@ -114,8 +115,7 @@ def run_performance_test(
     total_time = perf_counter() - start_time
 
     app.runner.stop_runner_loop()
-    sleep(0.5)
-    thread.join(timeout=5)
+    check_all_status_transitions(app)
 
     results = PerformanceResults(
         individual_times,

@@ -2,6 +2,7 @@ import threading
 
 import pytest
 
+from pynenc_tests.conftest import check_all_status_transitions
 from pynenc_tests.integration.direct_task.tasks_direct import (
     app,
     async_add,
@@ -27,7 +28,7 @@ def test_direct_task_sync_execution() -> None:
     assert result == 5, f"Expected 5, got {result}"
 
     app.runner.stop_runner_loop()
-    runner_thread.join(timeout=5)
+    check_all_status_transitions(app)
 
 
 @pytest.mark.asyncio
@@ -45,7 +46,7 @@ async def test_direct_task_async_execution() -> None:
     assert result == 5, f"Expected 5, got {result}"
 
     app.runner.stop_runner_loop()
-    runner_thread.join(timeout=5)
+    check_all_status_transitions(app)
 
 
 def test_direct_task_sync_exception() -> None:
@@ -61,7 +62,7 @@ def test_direct_task_sync_exception() -> None:
         sync_fail()
 
     app.runner.stop_runner_loop()
-    runner_thread.join(timeout=5)
+    check_all_status_transitions(app)
 
 
 @pytest.mark.asyncio
@@ -78,7 +79,7 @@ async def test_direct_task_async_exception() -> None:
         await async_fail()
 
     app.runner.stop_runner_loop()
-    runner_thread.join(timeout=5)
+    check_all_status_transitions(app)
 
 
 def test_direct_task_sync_parallel() -> None:
@@ -95,7 +96,7 @@ def test_direct_task_sync_parallel() -> None:
     assert result == 9, f"Expected 9, got {result}"
 
     app.runner.stop_runner_loop()
-    runner_thread.join(timeout=5)
+    check_all_status_transitions(app)
 
 
 @pytest.mark.asyncio
@@ -115,4 +116,4 @@ async def test_direct_task_async_parallel() -> None:
     assert result == 9, f"Expected 9, got {result}"
 
     app.runner.stop_runner_loop()
-    runner_thread.join(timeout=5)
+    check_all_status_transitions(app)

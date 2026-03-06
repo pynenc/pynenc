@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta, UTC
-from time import sleep
 from typing import TYPE_CHECKING
 
 import pytest
@@ -172,13 +171,11 @@ def test_add_and_get_ordered_histories(app_instance: "Pynenc") -> None:
         status_record=InvocationStatusRecord(status=InvocationStatus.REGISTERED),
         runner_context_id=runner_context_id,
     )
-    sleep(0.01)
     hist2 = InvocationHistory(
         invocation_id=invocation_id,
         status_record=InvocationStatusRecord(status=InvocationStatus.RUNNING),
         runner_context_id=runner_context_id,
     )
-    sleep(0.01)
     hist3 = InvocationHistory(
         invocation_id=invocation_id,
         status_record=InvocationStatusRecord(status=InvocationStatus.FAILED),
@@ -191,7 +188,6 @@ def test_add_and_get_ordered_histories(app_instance: "Pynenc") -> None:
 
     histories = backend.get_history(invocation_id)
     if len(histories) != 3:
-        sleep(0.1)  # add history run async in a thread
         histories = backend.get_history(invocation_id)
         assert len(histories) == 3
     assert [hist.status_record for hist in histories] == [

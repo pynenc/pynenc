@@ -273,3 +273,21 @@ def task_async_sleep(app: Pynenc) -> "Task":
 def task_process_large_shared_arg(app: Pynenc) -> "Task":
     replace_tasks_app(app)
     return tasks.process_large_shared_arg
+
+
+@pytest.fixture(scope="function")
+def task_grandparent_task(app: Pynenc) -> "Task":
+    replace_tasks_app(app)
+    return tasks.grandparent_task
+
+
+@pytest.fixture(scope="function")
+def task_parent_task(app: Pynenc) -> "Task":
+    replace_tasks_app(app)
+    return tasks.parent_task
+
+
+@pytest.fixture(scope="function")
+def task_child_task(app: Pynenc) -> "Task":
+    replace_tasks_app(app)
+    return tasks.child_task

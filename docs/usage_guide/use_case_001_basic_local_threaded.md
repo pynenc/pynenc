@@ -61,7 +61,6 @@ def run_add_on_thread() -> None:
     thread = threading.Thread(target=run_in_thread, daemon=True)
     thread.start()
     invocation = tasks.add(1, 2)
-    thread.join()
 ```
 
 This function runs the add task on a separate thread, illustrating basic parallel processing within a single process.

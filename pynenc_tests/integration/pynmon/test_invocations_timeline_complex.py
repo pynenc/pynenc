@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 from pynenc.builder import PynencBuilder
 from pynenc.runner.thread_runner import ThreadRunner
+from pynenc_tests.conftest import check_all_status_transitions
 
 if TYPE_CHECKING:
     from pynenc_tests.integration.pynmon.conftest import PynmonClient
@@ -78,13 +79,10 @@ def test_complex_timeline(pynmon_client: "PynmonClient") -> None:
         runner_thread = threading.Thread(target=runner.run, daemon=True)
         runner_thread.start()
         runner_threads.append(runner_thread)
-    time.sleep(0.05)
     try:
         # Trigger different grandparent tasks
         invs_0 = grandparent_task.parallelize([("familyA", 2), ("familyB", 3)])
-        time.sleep(0.02)
         invs_1 = grandparent_task.parallelize([("familyC", 4), ("familyD", 1)])
-        time.sleep(0.02)
         inv_2 = grandparent_task("familyE", 2)
 
         # wait for all to complete
@@ -105,5 +103,4 @@ def test_complex_timeline(pynmon_client: "PynmonClient") -> None:
         # Stop all runner instances
         for runner in runners:
             runner.stop_runner_loop()
-        for runner_thread in runner_threads:
-            runner_thread.join(timeout=1)
+        check_all_status_transitions(app)

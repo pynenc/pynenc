@@ -2,7 +2,6 @@
 
 import re
 import threading
-import time
 from typing import TYPE_CHECKING
 
 from pynenc.builder import PynencBuilder
@@ -38,14 +37,11 @@ def test_invocations_pagination(pynmon_client: "PynmonClient") -> None:
 
     runner_thread = threading.Thread(target=app.runner.run, daemon=True)
     runner_thread.start()
-    time.sleep(0.1)
-
     try:
         # Create 6 invocations
         invocations = [simple_task(i) for i in range(6)]
         for inv in invocations:
             _ = inv.result  # Wait for completion
-        time.sleep(0.1)
 
         # Get page 1 (limit=3)
         response1 = pynmon_client.get("/invocations/?limit=3&page=1")
@@ -68,4 +64,3 @@ def test_invocations_pagination(pynmon_client: "PynmonClient") -> None:
 
     finally:
         app.runner.stop_runner_loop()
-        runner_thread.join(timeout=1)

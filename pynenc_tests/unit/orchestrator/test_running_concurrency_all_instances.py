@@ -103,7 +103,6 @@ def test_running_concurrency(app_fixture: "Pynenc") -> None:
 
     # stop the runner
     app_fixture.runner.stop_runner_loop()
-    thread.join()
 
 
 def test_basic_running_concurrency_check(app_fixture: "Pynenc") -> None:
@@ -175,4 +174,3 @@ def test_running_concurrency_no_reroute(app_fixture: "Pynenc") -> None:
 
     # Stop the runner
     app_fixture.runner.stop_runner_loop()
-    thread.join()

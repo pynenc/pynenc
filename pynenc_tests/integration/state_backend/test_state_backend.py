@@ -1,6 +1,5 @@
 import inspect
 from datetime import UTC, datetime
-from time import sleep
 from typing import TYPE_CHECKING
 
 import pytest
@@ -46,8 +45,6 @@ def test_store_invocation(invocation: "DistributedInvocation[Params, Result]") -
     """Test that it will store and retrieve an invocation"""
     app = invocation.app
     app.state_backend.upsert_invocations([invocation])
-    # upsert invocation is not blocking, so we need to wait for the async operation
-    sleep(0.1)
     retrieved_invocation = app.state_backend.get_invocation(invocation.invocation_id)
     assert invocation == retrieved_invocation
 
@@ -64,7 +61,6 @@ def test_store_invocation_with_no_arguments_preserves_empty_serialized_arguments
     dummy.app = app_instance
     inv = DistributedInvocation.isolated(Call(dummy))
     app_instance.state_backend.upsert_invocations([inv])
-    sleep(0.1)
 
     retrieved = app_instance.state_backend.get_invocation(inv.invocation_id)
 
@@ -86,7 +82,6 @@ def test_store_invocation_with_arguments_preserves_serialized_arguments(
     args = Arguments(kwargs={"a": 1, "b": 2})
     inv = DistributedInvocation.isolated(Call(dummy_with_args, arguments=args))
     app_instance.state_backend.upsert_invocations([inv])
-    sleep(0.1)
 
     retrieved = app_instance.state_backend.get_invocation(inv.invocation_id)
 

@@ -8,7 +8,6 @@ hierarchies and execution histories.
 """
 
 import threading
-import time
 from typing import TYPE_CHECKING, Any
 
 from pynenc.builder import PynencBuilder
@@ -79,9 +78,6 @@ def process_user_data(user_data: dict[str, Any]) -> dict[str, Any]:
     profile_id = process_user_data.wf.uuid()
     processing_timestamp = process_user_data.wf.utc_now()
 
-    # Simulate processing delay
-    time.sleep(0.1)
-
     # Store processing data in workflow
     process_user_data.wf.set_data("profile_id", profile_id)
     process_user_data.wf.set_data("processed_at", processing_timestamp.isoformat())
@@ -145,7 +141,6 @@ def analyze_data_batch(batch_data: list[dict[str, Any]]) -> dict[str, Any]:
     for item in batch_data:
         if "value" in item and isinstance(item["value"], int | float):
             processed_items += 1
-        time.sleep(0.02)  # Small delay per item
 
     analysis_end = analyze_data_batch.wf.utc_now()
     processing_time = (analysis_end - analysis_start).total_seconds()
@@ -360,9 +355,6 @@ def test_hierarchical_workflow_execution(pynmon_client: "PynmonClient") -> None:
         assert "user_profile" in result
         assert "report" in result
 
-        # Give time for workflow data to be stored
-        time.sleep(0.3)
-
         # Test workflow discovery in pynmon
         response = pynmon_client.get("/workflows/")
         assert response.status_code == 200
@@ -383,7 +375,6 @@ def test_hierarchical_workflow_execution(pynmon_client: "PynmonClient") -> None:
 
     finally:
         app.runner.stop_runner_loop()
-        runner_thread.join(timeout=2)
 
 
 def test_multiple_workflow_types_with_hierarchies(
@@ -417,8 +408,6 @@ def test_multiple_workflow_types_with_hierarchies(
         assert user_result["status"] == "completed"
         assert analysis_result["status"] == "completed"
 
-        time.sleep(0.3)
-
         # Test that both workflow types are discoverable
         response = pynmon_client.get("/workflows/")
         assert response.status_code == 200
@@ -448,7 +437,6 @@ def test_multiple_workflow_types_with_hierarchies(
 
     finally:
         app.runner.stop_runner_loop()
-        runner_thread.join(timeout=2)
 
 
 def test_rapid_workflow_execution_stress(pynmon_client: "PynmonClient") -> None:
@@ -490,8 +478,6 @@ def test_rapid_workflow_execution_stress(pynmon_client: "PynmonClient") -> None:
             assert result["status"] == "completed"
             results.append(result)
 
-        time.sleep(0.5)  # Extra time for rapid execution data to settle
-
         # Test that all workflows are tracked
         response = pynmon_client.get("/workflows/runs")
         assert response.status_code == 200
@@ -527,7 +513,6 @@ def test_rapid_workflow_execution_stress(pynmon_client: "PynmonClient") -> None:
 
     finally:
         app.runner.stop_runner_loop()
-        runner_thread.join(timeout=3)
 
 
 def test_workflow_with_validation_failure(pynmon_client: "PynmonClient") -> None:
@@ -559,8 +544,6 @@ def test_workflow_with_validation_failure(pynmon_client: "PynmonClient") -> None
         assert "error" in result
         assert "workflow_id" in result
 
-        time.sleep(0.3)
-
         # Test that failed workflow is still discoverable in pynmon
         response = pynmon_client.get("/workflows/")
         assert response.status_code == 200
@@ -581,7 +564,6 @@ def test_workflow_with_validation_failure(pynmon_client: "PynmonClient") -> None
 
     finally:
         app.runner.stop_runner_loop()
-        runner_thread.join(timeout=2)
 
 
 def test_deterministic_workflow_behavior(pynmon_client: "PynmonClient") -> None:
@@ -612,8 +594,6 @@ def test_deterministic_workflow_behavior(pynmon_client: "PynmonClient") -> None:
             assert result["status"] == "completed"
             results.append(result)
 
-        time.sleep(0.3)
-
         # Verify each workflow has a unique workflow_id
         workflow_ids = [result["workflow_id"] for result in results]
         assert len(set(workflow_ids)) == 3, "Each workflow should have unique ID"
@@ -640,4 +620,3 @@ def test_deterministic_workflow_behavior(pynmon_client: "PynmonClient") -> None:
 
     finally:
         app.runner.stop_runner_loop()
-        runner_thread.join(timeout=2)

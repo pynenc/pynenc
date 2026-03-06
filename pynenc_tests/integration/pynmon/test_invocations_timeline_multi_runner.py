@@ -32,6 +32,9 @@ from pynenc.runner.multi_thread_runner import MultiThreadRunner
 from pynenc.runner.process_runner import ProcessRunner
 from pynenc.runner.persistent_process_runner import PersistentProcessRunner
 
+from pynenc_tests.conftest import check_all_status_transitions
+
+
 if TYPE_CHECKING:
     from pynenc_tests.integration.pynmon.conftest import PynmonClient
 
@@ -174,14 +177,10 @@ def test_multi_runner_timeline(
         runner_thread.start()
         runner_threads.append(runner_thread)
 
-    time.sleep(0.1)  # Let runners initialize
-
     try:
         # Trigger different grandparent tasks using the primary app instance
         invs_0 = grandparent_task.parallelize([("familyA", 2), ("familyB", 3)])
-        time.sleep(0.1)  # Stagger start times
         invs_1 = grandparent_task.parallelize([("familyC", 4), ("familyD", 1)])
-        time.sleep(0.2)
         inv_2 = grandparent_task("familyE", 2)
 
         # Wait for all to complete
@@ -202,5 +201,6 @@ def test_multi_runner_timeline(
         # Stop all runner instances
         for runner in runners:
             runner.stop_runner_loop()
-        for runner_thread in runner_threads:
-            runner_thread.join(timeout=1)
+
+    # Validate all status transitions are legal
+    check_all_status_transitions(app)

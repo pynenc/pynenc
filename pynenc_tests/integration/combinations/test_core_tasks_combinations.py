@@ -15,6 +15,7 @@ from pynenc import Task
 from pynenc.call import Call
 from pynenc.invocation import DistributedInvocation, InvocationStatus
 from pynenc.runner.runner_context import RunnerContext
+from pynenc_tests.conftest import check_all_status_transitions
 
 
 @pytest.fixture
@@ -81,7 +82,7 @@ def test_recover_pending_invocations(
         ]
 
         app.runner.stop_runner_loop()
-        thread.join()
+        check_all_status_transitions(app)
 
 
 def test_recover_running_invocations(
@@ -131,4 +132,4 @@ def test_recover_running_invocations(
         ]
 
         app.runner.stop_runner_loop()
-        thread.join()
+        check_all_status_transitions(app)

@@ -6,6 +6,7 @@ Key components:
 - runner: Fixture to run app.runner in a thread
 - temp_sqlite_db_path: Fixture for temporary SQLite DB
 - app_instance: Parametrized fixture for memory/sqlite backends
+- check_all_status_transitions: Helper to assert no invalid status transitions in history
 """
 
 import os
@@ -36,6 +37,54 @@ if TYPE_CHECKING:
 
 
 logger: Logger = create_test_logger("conftest")
+
+
+def check_all_status_transitions(app: Pynenc) -> None:
+    """
+    Validate that every recorded status transition for all invocations is allowed
+    by the state machine defined in ``pynenc.invocation.status``.
+
+    Iterates all invocations stored in the orchestrator, loads their history from
+    the state backend, sorts entries by timestamp, and asserts that each consecutive
+    pair constitutes a valid transition.  Any violations are collected and reported
+    together so the full picture is visible in a single failure.
+
+    :param Pynenc app: The app instance whose history to validate.
+    :raises AssertionError: If one or more invalid status transitions are found.
+    """
+    from pynenc.invocation.status import validate_transition
+    from pynenc.exceptions import InvocationStatusTransitionError
+
+    violations: list[str] = []
+    batch_size = 100
+    offset = 0
+    total = app.orchestrator.count_invocations()
+
+    while offset < total:
+        inv_ids = app.orchestrator.get_invocation_ids_paginated(
+            limit=batch_size, offset=offset
+        )
+        for inv_id in inv_ids:
+            history = app.state_backend.get_history(inv_id)
+            sorted_history = sorted(history, key=lambda h: h.timestamp)
+            for i in range(1, len(sorted_history)):
+                from_status = sorted_history[i - 1].status_record.status
+                to_status = sorted_history[i].status_record.status
+                try:
+                    validate_transition(from_status, to_status)
+                except InvocationStatusTransitionError as exc:
+                    ts = sorted_history[i].timestamp.isoformat()
+                    violations.append(
+                        f"  invocation {inv_id}: {from_status} -> {to_status}"
+                        f" at {ts} — {exc}"
+                    )
+        offset += batch_size
+
+    if violations:
+        joined = "\n".join(violations)
+        raise AssertionError(
+            f"Found {len(violations)} invalid status transition(s):\n{joined}"
+        )
 
 
 def patch_abstract_methods(cls: type) -> type:
@@ -157,7 +206,7 @@ def runner(request: "FixtureRequest") -> Generator[None, None, None]:
 
     app.logger.info("Stopping runner thread...")
     app.runner.stop_runner_loop()
-    runner_thread.join(timeout=1)
+    # runner_thread.join()
     logger.info("Thread join completed")
 
     logger.info("Purging app data...")

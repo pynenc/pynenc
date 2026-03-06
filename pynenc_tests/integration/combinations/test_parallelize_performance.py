@@ -20,6 +20,7 @@ import psutil
 import pytest
 
 from pynenc import Task
+from pynenc_tests.conftest import check_all_status_transitions
 
 if TYPE_CHECKING:
     from pynenc import Pynenc
@@ -190,6 +191,7 @@ def test_distributed_cpu_work_performance(task_distribute_cpu_work: Task) -> Non
     # Cleanup
     app.runner.stop_runner_loop()
     runner_thread.join(timeout=1)
+    check_all_status_transitions(app)
     # if runner_thread.is_alive():
     #     pytest.fail("Runner thread did not terminate within 5 seconds")
 

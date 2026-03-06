@@ -6,7 +6,6 @@ and real Pynenc app integration.
 """
 
 import threading
-import time
 from typing import TYPE_CHECKING
 from urllib.parse import quote
 
@@ -53,7 +52,6 @@ def test_call_detail_with_query_parameter(pynmon_client: "PynmonClient") -> None
     # Start runner for task execution
     runner_thread = threading.Thread(target=app.runner.run, daemon=True)
     runner_thread.start()
-    time.sleep(0.1)  # Let runner initialize
 
     try:
         # Execute a task to create a call
@@ -62,7 +60,6 @@ def test_call_detail_with_query_parameter(pynmon_client: "PynmonClient") -> None
 
         # Wait for completion
         assert result.result == "Hello, Integration Test!"
-        time.sleep(0.2)  # Ensure state is persisted
 
         # Test call detail via query parameter
         response = pynmon_client.get(
@@ -86,7 +83,6 @@ def test_call_detail_with_query_parameter(pynmon_client: "PynmonClient") -> None
 
     finally:
         app.runner.stop_runner_loop()
-        runner_thread.join(timeout=1)
 
 
 def test_call_detail_with_path_parameter(pynmon_client: "PynmonClient") -> None:
@@ -101,7 +97,6 @@ def test_call_detail_with_path_parameter(pynmon_client: "PynmonClient") -> None:
     # Start runner for task execution
     runner_thread = threading.Thread(target=app.runner.run, daemon=True)
     runner_thread.start()
-    time.sleep(0.1)  # Let runner initialize
 
     try:
         # Execute a task with different arguments to create a unique call
@@ -110,7 +105,6 @@ def test_call_detail_with_path_parameter(pynmon_client: "PynmonClient") -> None:
 
         # Wait for completion
         assert result.result == 100
-        time.sleep(0.2)  # Ensure state is persisted
 
         # Test call detail via path parameter
         response = pynmon_client.get(f"/calls/{quote(call_id.key, safe='')}")
@@ -131,7 +125,6 @@ def test_call_detail_with_path_parameter(pynmon_client: "PynmonClient") -> None:
 
     finally:
         app.runner.stop_runner_loop()
-        runner_thread.join(timeout=1)
 
 
 def test_call_detail_displays_arguments_correctly(
@@ -148,7 +141,6 @@ def test_call_detail_displays_arguments_correctly(
     # Start runner for task execution
     runner_thread = threading.Thread(target=app.runner.run, daemon=True)
     runner_thread.start()
-    time.sleep(0.1)  # Let runner initialize
 
     try:
         # Execute a task with multiple arguments
@@ -156,7 +148,6 @@ def test_call_detail_displays_arguments_correctly(
         call_id = result.call.call_id
 
         # Wait for completion        assert result.result == 63
-        time.sleep(0.2)  # Ensure state is persisted
 
         # Test call detail
         response = pynmon_client.get(f"/calls/{quote(call_id.key, safe='')}")
@@ -179,7 +170,6 @@ def test_call_detail_displays_arguments_correctly(
 
     finally:
         app.runner.stop_runner_loop()
-        runner_thread.join(timeout=1)
 
 
 def test_call_detail_shows_task_information(pynmon_client: "PynmonClient") -> None:
@@ -194,7 +184,6 @@ def test_call_detail_shows_task_information(pynmon_client: "PynmonClient") -> No
     # Start runner for task execution
     runner_thread = threading.Thread(target=app.runner.run, daemon=True)
     runner_thread.start()
-    time.sleep(0.1)  # Let runner initialize
 
     try:
         # Execute a task
@@ -202,7 +191,6 @@ def test_call_detail_shows_task_information(pynmon_client: "PynmonClient") -> No
         call_id = result.call.call_id
 
         # Wait for completion        assert result.result == "Hello, Task Info Test!"
-        time.sleep(0.2)  # Ensure state is persisted
 
         # Test call detail
         response = pynmon_client.get(f"/calls/{quote(call_id.key, safe='')}")
@@ -223,7 +211,6 @@ def test_call_detail_shows_task_information(pynmon_client: "PynmonClient") -> No
 
     finally:
         app.runner.stop_runner_loop()
-        runner_thread.join(timeout=1)
 
 
 def test_call_detail_shows_invocations(pynmon_client: "PynmonClient") -> None:
@@ -238,7 +225,6 @@ def test_call_detail_shows_invocations(pynmon_client: "PynmonClient") -> None:
     # Start runner for task execution
     runner_thread = threading.Thread(target=app.runner.run, daemon=True)
     runner_thread.start()
-    time.sleep(0.1)  # Let runner initialize
 
     try:
         # Execute a task
@@ -246,7 +232,6 @@ def test_call_detail_shows_invocations(pynmon_client: "PynmonClient") -> None:
         call_id = result.call.call_id
 
         # Wait for completion        assert result.result == 579
-        time.sleep(0.2)  # Ensure state is persisted
 
         # Test call detail
         response = pynmon_client.get(f"/calls/{quote(call_id.key, safe='')}")
@@ -269,7 +254,6 @@ def test_call_detail_shows_invocations(pynmon_client: "PynmonClient") -> None:
 
     finally:
         app.runner.stop_runner_loop()
-        runner_thread.join(timeout=1)
 
 
 def test_call_detail_missing_call_id_parameter(pynmon_client: "PynmonClient") -> None:
@@ -353,7 +337,6 @@ def test_call_detail_with_multiple_executions(pynmon_client: "PynmonClient") -> 
     # Start runner for task execution
     runner_thread = threading.Thread(target=app.runner.run, daemon=True)
     runner_thread.start()
-    time.sleep(0.1)  # Let runner initialize
 
     try:
         # Execute the same task multiple times with different arguments
@@ -369,7 +352,6 @@ def test_call_detail_with_multiple_executions(pynmon_client: "PynmonClient") -> 
         assert result1.result == "Hello, First!"
         assert result2.result == "Hello, Second!"
         assert result3.result == "Hello, Third!"
-        time.sleep(0.2)  # Ensure state is persisted
 
         # Each call should have a different ID
         assert call_id1 != call_id2
@@ -396,7 +378,6 @@ def test_call_detail_with_multiple_executions(pynmon_client: "PynmonClient") -> 
 
     finally:
         app.runner.stop_runner_loop()
-        runner_thread.join(timeout=1)
 
 
 def test_call_detail_navigation_links(pynmon_client: "PynmonClient") -> None:
@@ -411,7 +392,6 @@ def test_call_detail_navigation_links(pynmon_client: "PynmonClient") -> None:
     # Start runner for task execution
     runner_thread = threading.Thread(target=app.runner.run, daemon=True)
     runner_thread.start()
-    time.sleep(0.1)  # Let runner initialize
 
     try:
         # Execute a task
@@ -419,7 +399,6 @@ def test_call_detail_navigation_links(pynmon_client: "PynmonClient") -> None:
         call_id = result.call.call_id
 
         # Wait for completion        assert result.result == 143
-        time.sleep(0.2)  # Ensure state is persisted
 
         # Test call detail
         response = pynmon_client.get(f"/calls/{quote(call_id.key, safe='')}")
@@ -438,4 +417,3 @@ def test_call_detail_navigation_links(pynmon_client: "PynmonClient") -> None:
 
     finally:
         app.runner.stop_runner_loop()
-        runner_thread.join(timeout=1)

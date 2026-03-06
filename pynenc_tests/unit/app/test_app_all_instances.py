@@ -67,7 +67,6 @@ def test_thread_execution(app: Pynenc) -> None:
     thread.start()
     assert invocation.result == 3
     app.runner.stop_runner_loop()
-    thread.join()
 
 
 def test_raise_exception(app: Pynenc) -> None:
@@ -82,7 +81,6 @@ def test_raise_exception(app: Pynenc) -> None:
     with pytest.raises(ValueError):
         _ = invocation.result
     app.runner.stop_runner_loop()
-    thread.join()
 
 
 def test_sub_invocation_dependency(app: Pynenc) -> None:
@@ -95,7 +93,6 @@ def test_sub_invocation_dependency(app: Pynenc) -> None:
     thread.start()
     assert get_upper().result == "EXAMPLE"
     app.runner.stop_runner_loop()
-    thread.join()
 
 
 def test_run_retry(app: Pynenc) -> None:

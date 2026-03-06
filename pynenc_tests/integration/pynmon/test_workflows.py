@@ -6,7 +6,6 @@ verifying workflow discovery and display capabilities.
 """
 
 import threading
-import time
 from typing import TYPE_CHECKING
 
 from pynenc.builder import PynencBuilder
@@ -37,9 +36,6 @@ def simple_workflow_task() -> dict[str, str]:
     simple_workflow_task.wf.set_data("test_key", "test_value")
     simple_workflow_task.wf.set_data("step", "completed")
 
-    # Add a small delay to make the workflow visible in timeline
-    time.sleep(0.1)
-
     return {"workflow_id": workflow_id, "status": "completed"}
 
 
@@ -58,7 +54,6 @@ def data_processing_workflow(batch_size: int) -> dict[str, str | int]:
     for step in range(3):
         step_id = data_processing_workflow.wf.uuid()
         data_processing_workflow.wf.set_data(f"step_{step}_id", step_id)
-        time.sleep(0.05)  # Small delay between steps
 
     data_processing_workflow.wf.set_data(
         "end_time", data_processing_workflow.wf.utc_now().isoformat()
@@ -87,9 +82,6 @@ def test_workflow_discovery_basic(pynmon_client: "PynmonClient") -> None:
         assert result is not None
         assert "workflow_id" in result
 
-        # Give some time for the workflow to be stored
-        time.sleep(0.2)
-
         # Test that workflows are discoverable via pynmon workflow views
         response = pynmon_client.get("/workflows/")
         assert response.status_code == 200
@@ -111,7 +103,6 @@ def test_workflow_discovery_basic(pynmon_client: "PynmonClient") -> None:
 
     finally:
         app.runner.stop_runner_loop()
-        runner_thread.join(timeout=1)
 
 
 def test_multiple_workflow_types(pynmon_client: "PynmonClient") -> None:
@@ -136,8 +127,6 @@ def test_multiple_workflow_types(pynmon_client: "PynmonClient") -> None:
 
         assert result1 is not None
         assert result2 is not None
-
-        time.sleep(0.2)
 
         # Test that both workflow types are discoverable via pynmon workflow views
         response = pynmon_client.get("/workflows/")
@@ -168,7 +157,6 @@ def test_multiple_workflow_types(pynmon_client: "PynmonClient") -> None:
 
     finally:
         app.runner.stop_runner_loop()
-        runner_thread.join(timeout=1)
 
 
 def test_workflow_execution_multiple_instances(pynmon_client: "PynmonClient") -> None:
@@ -196,8 +184,6 @@ def test_workflow_execution_multiple_instances(pynmon_client: "PynmonClient") ->
             assert "workflow_id" in result
             assert "batch_size" in result
 
-        time.sleep(0.3)
-
         # Test that all instances are tracked via pynmon workflow views
         response = pynmon_client.get(
             f"/workflows/{data_processing_workflow.task_id.key}"
@@ -220,7 +206,6 @@ def test_workflow_execution_multiple_instances(pynmon_client: "PynmonClient") ->
 
     finally:
         app.runner.stop_runner_loop()
-        runner_thread.join(timeout=1)
 
 
 def test_workflow_detail_view_error_reproduction(pynmon_client: "PynmonClient") -> None:
@@ -248,9 +233,6 @@ def test_workflow_detail_view_error_reproduction(pynmon_client: "PynmonClient") 
         assert result is not None
         assert "workflow_id" in result
         workflow_id = result["workflow_id"]
-
-        # Give some time for the workflow to be stored
-        time.sleep(0.2)
 
         # Test the workflow list page first (this should work)
         print("Testing workflow list page...")
@@ -298,4 +280,3 @@ def test_workflow_detail_view_error_reproduction(pynmon_client: "PynmonClient") 
 
     finally:
         app.runner.stop_runner_loop()
-        runner_thread.join(timeout=1)

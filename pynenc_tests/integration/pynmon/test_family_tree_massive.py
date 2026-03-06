@@ -27,6 +27,7 @@ import pytest
 
 from pynenc.builder import PynencBuilder
 from pynenc.runner.persistent_process_runner import PersistentProcessRunner
+from pynenc_tests.conftest import check_all_status_transitions
 
 if TYPE_CHECKING:
     from pynenc_tests.integration.pynmon.conftest import PynmonClient
@@ -215,8 +216,6 @@ def test_massive_family_tree_should_truncate_beyond_limits(
     runner_thread = threading.Thread(target=runner.run, daemon=True)
     runner_thread.start()
 
-    time.sleep(0.5)  # Let runner initialise
-
     # Tree params — deep and wide enough to blow past default limits.
     # depth=10, children=2 => up to 1023 nodes (binary tree)
     max_depth = 10
@@ -312,4 +311,4 @@ def test_massive_family_tree_should_truncate_beyond_limits(
         assert response.status_code == 200
     finally:
         runner.stop_runner_loop()
-        runner_thread.join(timeout=10)
+        check_all_status_transitions(app)

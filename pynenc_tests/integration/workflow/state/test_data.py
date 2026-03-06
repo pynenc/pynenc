@@ -9,6 +9,8 @@ different state backend implementations.
 import threading
 from typing import TYPE_CHECKING
 
+from pynenc_tests.conftest import check_all_status_transitions
+
 if TYPE_CHECKING:
     from pynenc.task import Task
 
@@ -46,7 +48,7 @@ def test_workflow_data_basic(workflow_data_test_runner: "Task") -> None:
     )
 
     app.runner.stop_runner_loop()
-    thread.join()
+    check_all_status_transitions(app)
 
 
 def test_workflow_data_persistence(multi_counter_workflow: "Task") -> None:
@@ -73,7 +75,7 @@ def test_workflow_data_persistence(multi_counter_workflow: "Task") -> None:
     assert results["third"] == 3, "Third counter increment should be 3"
 
     app.runner.stop_runner_loop()
-    thread.join()
+    check_all_status_transitions(app)
 
 
 def test_workflow_data_isolation(isolated_workflow_test: "Task") -> None:
@@ -124,7 +126,7 @@ def test_workflow_data_isolation(isolated_workflow_test: "Task") -> None:
     assert third_result["counter"] == 1, "Each workflow starts with fresh counter"
 
     app.runner.stop_runner_loop()
-    thread.join()
+    check_all_status_transitions(app)
 
 
 def test_single_counter_workflow(counter_workflow: "Task") -> None:
@@ -144,7 +146,7 @@ def test_single_counter_workflow(counter_workflow: "Task") -> None:
     thread.start()
     assert first_invocation.result == 1
     app.runner.stop_runner_loop()
-    thread.join()
+    check_all_status_transitions(app)
 
     # Second call creates another new workflow
     def run_in_thread2() -> None:
@@ -156,3 +158,4 @@ def test_single_counter_workflow(counter_workflow: "Task") -> None:
     assert second_invocation.result == 1  # Starts fresh in new workflow
     app.runner.stop_runner_loop()
     thread2.join()
+    check_all_status_transitions(app)

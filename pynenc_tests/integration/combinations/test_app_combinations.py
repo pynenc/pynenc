@@ -9,6 +9,7 @@ import pytest
 
 from pynenc import Task
 from pynenc.invocation import DistributedInvocation, InvocationStatus
+from pynenc_tests.conftest import check_all_status_transitions
 
 
 def test_task_execution(task_sum: Task) -> None:
@@ -29,7 +30,7 @@ def test_task_execution(task_sum: Task) -> None:
         f"Task took too long to execute {elapsed=} >= {time_limit=}"
     )
     app.runner.stop_runner_loop()
-    thread.join()
+    check_all_status_transitions(app)
 
 
 def test_task_retry(task_retry_once: Task) -> None:
@@ -44,7 +45,7 @@ def test_task_retry(task_retry_once: Task) -> None:
     thread.start()
     assert invocation.result == 1
     app.runner.stop_runner_loop()
-    thread.join()
+    check_all_status_transitions(app)
 
 
 def test_task_running_concurrency(task_sleep: Task) -> None:
@@ -133,7 +134,7 @@ def test_task_running_concurrency(task_sleep: Task) -> None:
     #####################################################################################
 
     app.runner.stop_runner_loop()
-    thread.join()
+    check_all_status_transitions(app)
 
 
 def test_parallel_execution(task_sum: Task) -> None:
@@ -151,7 +152,7 @@ def test_parallel_execution(task_sum: Task) -> None:
     thread.start()
     assert Counter([3, 7, 11]) == Counter(invocation_group.results)
     app.runner.stop_runner_loop()
-    thread.join()
+    check_all_status_transitions(app)
 
 
 def test_raise_exception(task_raise_exception: Task) -> None:
@@ -168,7 +169,7 @@ def test_raise_exception(task_raise_exception: Task) -> None:
     with pytest.raises(ValueError):
         _ = invocation.result
     app.runner.stop_runner_loop()
-    thread.join()
+    check_all_status_transitions(app)
 
 
 def test_sub_invocation_dependency(task_get_upper: Task) -> None:
@@ -183,7 +184,7 @@ def test_sub_invocation_dependency(task_get_upper: Task) -> None:
     thread.start()
     assert task_get_upper().result == "EXAMPLE"
     app.runner.stop_runner_loop()
-    thread.join()
+    check_all_status_transitions(app)
 
 
 def test_single_run(task_sum: Task) -> None:
@@ -203,14 +204,14 @@ def test_single_run(task_sum: Task) -> None:
         1 for h in history if h.status_record.status == InvocationStatus.RUNNING
     ), f"Invocation ran more than once: {history}"
     app.runner.stop_runner_loop()
-    thread.join()
+    check_all_status_transitions(app)
 
 
 def test_runner_kills_and_reroutes_running_invocation_on_stop(task_sleep: Task) -> None:
     """Test that stopping the runner while a task runs marks it KILLED then REROUTED.
 
     MultiThreadRunner delegates work to child processes that each have their own
-    signal handlers. When _on_stop sends SIGTERM to a child, the child's thread.join()
+    signal handlers. When _on_stop sends SIGTERM to a child, the child's thread.join(0)
     call can itself be interrupted by the signal handler raising KeyboardInterrupt,
     preventing _kill_and_reroute from running. MultiThreadRunner is covered by
     test_runner_reroutes_on_real_os_signal instead.
@@ -245,6 +246,7 @@ def test_runner_kills_and_reroutes_running_invocation_on_stop(task_sleep: Task) 
     assert InvocationStatus.RUNNING in statuses
     assert InvocationStatus.KILLED in statuses
     assert InvocationStatus.REROUTED in statuses
+    check_all_status_transitions(app)
 
 
 def _subprocess_runner_main() -> None:
@@ -351,6 +353,6 @@ def test_very_large_invocation_storage(task_process_large_shared_arg: Task) -> N
     # Ensure the invocation completes and returns a start timestamp (float)
     result = invocation.result
     assert isinstance(result, float)
+    check_all_status_transitions(app)
 
     app.runner.stop_runner_loop()
-    thread.join()

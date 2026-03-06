@@ -9,6 +9,7 @@ from pynenc import Task
 from pynenc.arguments import ArgumentPrintMode
 from pynenc.runner import ThreadRunner
 from pynenc.identifiers.task_id import TaskId
+from pynenc_tests.conftest import check_all_status_transitions
 from pynenc_tests.util import create_test_logger
 
 if TYPE_CHECKING:
@@ -37,9 +38,6 @@ def test_batch_parallelization_overhead(task_process_large_shared_arg: Task) -> 
     runner_thread = threading.Thread(target=lambda: app.runner.run(), daemon=True)
     runner_thread.start()
 
-    # Give the runner time to start up and spawn processes
-    time.sleep(0.5)
-
     # Run batch with cache disabled
     num_tasks = 3
     batch_results_no_cache = batch_process_shared_data(
@@ -62,6 +60,7 @@ def test_batch_parallelization_overhead(task_process_large_shared_arg: Task) -> 
     runner_thread.join(timeout=5)
     if runner_thread.is_alive():
         pytest.fail("Runner thread did not terminate within 5 seconds")
+    check_all_status_transitions(app)
 
     logger.info("Batch with cache ENABLED:")
     for i, e in enumerate(batch_elapsed_cache):
@@ -141,6 +140,7 @@ def test_client_data_effect_on_task_start(task_process_large_shared_arg: Task) -
     runner_thread.join(timeout=5)
     if runner_thread.is_alive():
         pytest.fail("Runner thread did not terminate within 5 seconds")
+    check_all_status_transitions(app)
 
     logger.info(f"No cache,    first run: elapsed={elapsed1:.3f} seconds")
     logger.info(f"No cache,   second run: elapsed={elapsed2:.3f} seconds")

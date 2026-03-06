@@ -1,5 +1,4 @@
 import threading
-import time
 from typing import TYPE_CHECKING
 from urllib.parse import quote
 
@@ -35,7 +34,6 @@ def test_invocation_history(pynmon_client: "PynmonClient") -> None:
     # Start runner for task execution
     runner_thread = threading.Thread(target=app.runner.run, daemon=True)
     runner_thread.start()
-    time.sleep(0.1)  # Let runner initialize
 
     try:
         # Execute a task to create a call
@@ -44,7 +42,6 @@ def test_invocation_history(pynmon_client: "PynmonClient") -> None:
 
         # Wait for completion
         assert invocation.result == "Hello, Integration Test!"
-        time.sleep(0.2)  # Ensure state is persisted
 
         # Test call detail via query parameter
         response = pynmon_client.get(f"/invocations/{quote(invocation_id)}")
@@ -71,7 +68,6 @@ def test_invocation_history(pynmon_client: "PynmonClient") -> None:
             assert str(runner_context.pid) in content
     finally:
         app.runner.stop_runner_loop()
-        runner_thread.join(timeout=1)
 
 
 def test_runner_timeline(pynmon_client: "PynmonClient") -> None:
@@ -82,7 +78,6 @@ def test_runner_timeline(pynmon_client: "PynmonClient") -> None:
     # Start runner for task execution
     runner_thread = threading.Thread(target=app.runner.run, daemon=True)
     runner_thread.start()
-    time.sleep(0.1)  # Let runner initialize
 
     try:
         # Execute a task to create a call
@@ -91,7 +86,6 @@ def test_runner_timeline(pynmon_client: "PynmonClient") -> None:
 
         # Wait for completion
         assert invocation.result == "Hello, Timeline Test!"
-        time.sleep(0.2)  # Ensure state is persisted
 
         # Request timeline history API
         response = pynmon_client.get(f"/invocations/{quote(invocation_id)}/history")
@@ -105,4 +99,3 @@ def test_runner_timeline(pynmon_client: "PynmonClient") -> None:
         # Check that runner IDs are in the API response
     finally:
         app.runner.stop_runner_loop()
-        runner_thread.join(timeout=1)

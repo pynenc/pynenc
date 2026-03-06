@@ -9,6 +9,8 @@ These tests focus on high-level functionality rather than detailed unit behavior
 import threading
 from typing import TYPE_CHECKING
 
+from pynenc_tests.conftest import check_all_status_transitions
+
 if TYPE_CHECKING:
     from pynenc.task import Task
 
@@ -36,7 +38,7 @@ def test_basic_deterministic_functionality(
 
     results = invocation.result
     app.runner.stop_runner_loop()
-    thread.join()
+    check_all_status_transitions(app)
 
     # Verify basic functionality works
     assert results["values_count"] == 5, "Should generate exactly 5 values"
@@ -63,7 +65,7 @@ def test_time_deterministic_functionality(deterministic_time_workflow: "Task") -
 
     results = invocation.result
     app.runner.stop_runner_loop()
-    thread.join()
+    check_all_status_transitions(app)
 
     # Verify basic time functionality works
     assert results["timestamps_count"] == 3, "Should generate exactly 3 timestamps"
@@ -90,7 +92,7 @@ def test_uuid_deterministic_functionality(deterministic_uuid_workflow: "Task") -
 
     results = invocation.result
     app.runner.stop_runner_loop()
-    thread.join()
+    check_all_status_transitions(app)
 
     # Verify basic UUID functionality works
     assert results["uuids_count"] == 4, "Should generate exactly 4 UUIDs"
@@ -117,7 +119,7 @@ def test_mixed_deterministic_operations(deterministic_mixed_workflow: "Task") ->
 
     results = invocation.result
     app.runner.stop_runner_loop()
-    thread.join()
+    check_all_status_transitions(app)
 
     # Verify mixed operations work correctly
     assert "random1" in results and "random2" in results, (
@@ -163,7 +165,7 @@ def test_workflow_isolation_across_backends(
     results2 = invocation2.result
 
     app.runner.stop_runner_loop()
-    thread.join()
+    check_all_status_transitions(app)
 
     # Different workflows should produce different sequences regardless of backend
     assert results1["random_values"] != results2["random_values"], (
@@ -203,7 +205,7 @@ def test_state_backend_value_storage(deterministic_mixed_workflow: "Task") -> No
 
     _results = invocation.result
     app.runner.stop_runner_loop()
-    thread.join()
+    check_all_status_transitions(app)
 
     # Debug: Check what's actually stored in the state backend
     workflow_identity = invocation.workflow
@@ -262,7 +264,7 @@ def test_cross_backend_storage_compatibility(
 
     _results = invocation.result
     app.runner.stop_runner_loop()
-    thread.join()
+    check_all_status_transitions(app)
 
     # Test that storage and retrieval operations work
     workflow_identity = invocation.workflow

@@ -8,6 +8,7 @@ import threading
 
 from pynenc import Task
 from pynenc import context
+from pynenc_tests.conftest import check_all_status_transitions
 
 
 def test_status_owner_match_a_runner_id(task_sum: Task) -> None:
@@ -50,4 +51,4 @@ def test_status_owner_match_a_runner_id(task_sum: Task) -> None:
             )
 
     app.runner.stop_runner_loop()
-    thread.join()
+    check_all_status_transitions(app)

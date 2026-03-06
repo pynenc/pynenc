@@ -10,6 +10,7 @@ import threading
 from typing import TYPE_CHECKING
 
 from pynenc.builder import PynencBuilder
+from pynenc_tests.conftest import check_all_status_transitions
 
 if TYPE_CHECKING:
     pass
@@ -68,7 +69,7 @@ def test_get_all_workflows_single_workflow() -> None:
     finally:
         # Stop the runner
         app.runner.stop_runner_loop()
-        runner_thread.join(timeout=1)
+        check_all_status_transitions(app)
 
 
 def test_get_all_workflows_multiple_workflows() -> None:
@@ -104,7 +105,7 @@ def test_get_all_workflows_multiple_workflows() -> None:
     finally:
         # Stop the runner
         app.runner.stop_runner_loop()
-        runner_thread.join(timeout=1)
+        check_all_status_transitions(app)
 
 
 def test_get_all_workflow_runs() -> None:
@@ -150,7 +151,7 @@ def test_get_all_workflow_runs() -> None:
     finally:
         # Stop the runner
         app.runner.stop_runner_loop()
-        runner_thread.join(timeout=1)
+        check_all_status_transitions(app)
 
 
 def test_workflow_runs() -> None:
@@ -188,4 +189,4 @@ def test_workflow_runs() -> None:
 
     finally:
         app.runner.stop_runner_loop()
-        runner_thread.join(timeout=1)
+        check_all_status_transitions(app)

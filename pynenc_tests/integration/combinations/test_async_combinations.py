@@ -5,6 +5,7 @@ from time import time
 import pytest
 
 from pynenc import Pynenc, Task
+from pynenc_tests.conftest import check_all_status_transitions
 
 
 def run_runner_in_thread(app: Pynenc) -> threading.Thread:
@@ -21,18 +22,18 @@ def run_runner_in_thread(app: Pynenc) -> threading.Thread:
 @pytest.mark.asyncio
 async def test_async_task_execution(task_async_add: Task) -> None:
     """Test execution of an async task"""
-    thread = run_runner_in_thread(task_async_add.app)
+    run_runner_in_thread(task_async_add.app)
     invocation = task_async_add(3, 5)
     result = await invocation.async_result()
     assert result == 8
     task_async_add.app.runner.stop_runner_loop()
-    thread.join()
+    check_all_status_transitions(task_async_add.app)
 
 
 @pytest.mark.asyncio
 async def test_async_task_waiting(task_async_sleep: Task) -> None:
     """Test an async task that sleeps for a while before completing"""
-    thread = run_runner_in_thread(task_async_sleep.app)
+    run_runner_in_thread(task_async_sleep.app)
     sleep_time = 0.1
     start_time = time()
     invocation = task_async_sleep(sleep_time)
@@ -41,47 +42,47 @@ async def test_async_task_waiting(task_async_sleep: Task) -> None:
     assert result is True
     assert elapsed_time >= sleep_time
     task_async_sleep.app.runner.stop_runner_loop()
-    thread.join()
+    check_all_status_transitions(task_async_sleep.app)
 
 
 @pytest.mark.asyncio
 async def test_async_task_failure(task_async_fail: Task) -> None:
     """Test an async task that raises an exception"""
-    thread = run_runner_in_thread(task_async_fail.app)
+    run_runner_in_thread(task_async_fail.app)
     invocation = task_async_fail()
     with pytest.raises(ValueError, match="Intentional error"):
         await invocation.async_result()
     task_async_fail.app.runner.stop_runner_loop()
-    thread.join()
+    check_all_status_transitions(task_async_fail.app)
 
 
 @pytest.mark.asyncio
 async def test_async_task_dependency(task_async_get_upper: Task) -> None:
     """Test an async task that depends on another async task's result"""
-    thread = run_runner_in_thread(task_async_get_upper.app)
+    run_runner_in_thread(task_async_get_upper.app)
     invocation = task_async_get_upper()
     result = await invocation.async_result()
     assert result == "EXAMPLE"
     task_async_get_upper.app.runner.stop_runner_loop()
-    thread.join()
+    check_all_status_transitions(task_async_get_upper.app)
 
 
 @pytest.mark.asyncio
 async def test_async_task_cycle_detection(task_async_get_text: Task) -> None:
     """Test that an async task does not create a cycle"""
-    thread = run_runner_in_thread(task_async_get_text.app)
+    run_runner_in_thread(task_async_get_text.app)
     invocation = task_async_get_text()
     result = await invocation.async_result()
     assert result == "example"
     task_async_get_text.app.runner.stop_runner_loop()
-    thread.join()
+    check_all_status_transitions(task_async_get_text.app)
 
 
 @pytest.mark.asyncio
 async def test_async_group(task_async_add: Task) -> None:
     """Test the parallel execution functionality using async tasks"""
     app = task_async_add.app
-    thread = run_runner_in_thread(app)
+    run_runner_in_thread(app)
 
     # Create parallel invocations
     invocation_group = task_async_add.parallelize(
@@ -96,4 +97,4 @@ async def test_async_group(task_async_add: Task) -> None:
 
     # Stop the runner
     app.runner.stop_runner_loop()
-    thread.join()
+    check_all_status_transitions(app)

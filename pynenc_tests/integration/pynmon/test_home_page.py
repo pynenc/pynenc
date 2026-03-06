@@ -125,12 +125,9 @@ def test_home_page_with_active_tasks(pynmon_client: "PynmonClient") -> None:
     """
     # Start the runner in a separate thread to process tasks
     import threading
-    import time
 
     runner_thread = threading.Thread(target=app.runner.run, daemon=True)
     runner_thread.start()
-    time.sleep(0.2)  # Wait for runner to initialize
-    app.logger.info("Runner thread started for test")
 
     try:
         # Execute tasks to populate the system with data
@@ -144,8 +141,6 @@ def test_home_page_with_active_tasks(pynmon_client: "PynmonClient") -> None:
         # Stop the runner and clean up
         app.logger.info("Stopping runner thread...")
         app.runner.stop_runner_loop()
-        runner_thread.join(timeout=1)
-        app.logger.info("Runner cleanup completed")
 
     # Test the home page
     response = pynmon_client.get("/")

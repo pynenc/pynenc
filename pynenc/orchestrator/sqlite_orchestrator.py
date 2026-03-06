@@ -414,14 +414,26 @@ class SQLiteOrchestrator(BaseOrchestrator):
         status: InvocationStatus,
         runner_id: str | None = None,
     ) -> InvocationStatusRecord:
-        """Set the status of an invocation by ID."""
+        """Atomically read, validate, and write invocation status.
+
+        Uses ``BEGIN IMMEDIATE`` to acquire a write lock before reading so that
+        no two processes can concurrently observe the same "from" status, compute
+        independent (valid) transitions, and both commit — which would produce
+        duplicate history records and could allow forbidden status regressions
+        (e.g. RUNNING → PENDING) to slip through.
+        """
         with sqlite_conn(self.sqlite_db_path) as conn:
+            # Acquire write lock immediately so the read-validate-write is
+            # truly atomic across all concurrent SQLite connections.
+            conn.execute("BEGIN IMMEDIATE")
             cursor = conn.execute(
                 f"SELECT status, status_runner_id, status_timestamp FROM {Tables.INVOCATIONS} WHERE invocation_id = ?",
                 (invocation_id,),
             )
             row = cursor.fetchone()
             if not row:
+                # Raising here lets the context manager's __exit__ rollback the
+                # IMMEDIATE transaction automatically.
                 raise KeyError(f"Invocation ID {invocation_id} not found")
             prev_status_record = InvocationStatusRecord(
                 InvocationStatus(row[0]), row[1], row[2]

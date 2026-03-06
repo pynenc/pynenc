@@ -31,6 +31,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from pynenc.builder import PynencBuilder
+from pynenc_tests.conftest import check_all_status_transitions
 from pynenc.runner.persistent_process_runner import PersistentProcessRunner
 
 if TYPE_CHECKING:
@@ -326,4 +327,4 @@ def test_deep_family_tree(
         assert svg_w > 0 and svg_h > 0, "SVG dimensions must be positive"
     finally:
         runner.stop_runner_loop()
-        runner_thread.join(timeout=5)
+        check_all_status_transitions(app)
