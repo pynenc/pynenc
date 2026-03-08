@@ -54,10 +54,13 @@ def test_status_transitions(
 
     check_all_status_transitions(app)
 
-    # Signal runners to stop and terminate workers immediately
+    # Signal runners to stop and terminate workers, then wait for them to exit
     app.runner.stop_runner_loop()
     for w in processes:
         if isinstance(w, multiprocessing.Process):
             w.terminate()
+    for w in processes:
+        if isinstance(w, multiprocessing.Process):
+            w.join(timeout=10)
 
     check_all_status_transitions(app)

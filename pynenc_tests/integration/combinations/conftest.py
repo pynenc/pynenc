@@ -1,4 +1,5 @@
 import logging
+import multiprocessing
 from collections.abc import Generator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -181,9 +182,14 @@ def app(app_combination_instance: Pynenc) -> Generator[Pynenc, None, None]:
         )
 
     try:
-        app_combination_instance.purge()
+        # Gracefully terminate and join any remaining multiprocessing children
+        # spawned by process-based runners before brute-force cleanup.
+        for child in multiprocessing.active_children():
+            child.terminate()
+        for child in multiprocessing.active_children():
+            child.join(timeout=5)
     except Exception as e:
-        logging.warning("Compatibility fixture failed to purge app after test: %s", e)
+        logging.warning("Compatibility fixture failed to join active children: %s", e)
 
     try:
         _cleanup_multiprocessing_children()
@@ -192,6 +198,11 @@ def app(app_combination_instance: Pynenc) -> Generator[Pynenc, None, None]:
             "Compatibility fixture failed to cleanup multiprocessing children after test: %s",
             e,
         )
+
+    try:
+        app_combination_instance.purge()
+    except Exception as e:
+        logging.warning("Compatibility fixture failed to purge app after test: %s", e)
 
 
 def replace_tasks_app(app: Pynenc) -> None:

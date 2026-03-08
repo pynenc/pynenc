@@ -112,12 +112,13 @@ def test_task_runner_logs_full_ids(app_no_truncate: "Pynenc") -> None:
     # Get all log lines (outside context to ensure buffer is complete)
     log_lines = log_buffer.getvalue().splitlines()
     in_task_log: str | None = None
+    runner_id = app.runner.runner_id
     runner_log: str | None = None
 
     for line in log_lines:
         if "(in task log)" in line:
             in_task_log = line
-        elif "[runner" in line.lower() or "ThreadRunner" in line:
+        elif runner_id in line:
             runner_log = line
 
     # Check that in-task logs contains task and FULL invocation ids
@@ -127,5 +128,7 @@ def test_task_runner_logs_full_ids(app_no_truncate: "Pynenc") -> None:
     assert invocation.invocation_id in in_task_log
 
     # Check that logs in the runner contains the FULL runner id
-    assert runner_log is not None, "Runner log message not found"
-    assert app.runner.runner_id in runner_log
+    assert runner_log is not None, (
+        f"Runner log with runner_id={runner_id} not found in captured logs"
+    )
+    assert runner_id in runner_log
