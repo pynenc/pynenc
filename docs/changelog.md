@@ -76,6 +76,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
   - Enhanced Pynmon logging with colored timestamps and uvicorn integration
   - Shortened context logs with ID truncation and compacted class names when `compact_log_context` is enabled
+  - Added `log_use_colors`, `log_stream`, and `log_format` config options to control ANSI colours, output stream, and structured JSON output.
 
 - **Pynmon UI Enhancements**:
 
@@ -90,6 +91,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
   - Enhanced builder test coverage with comprehensive unit tests
   - Added validation for enum synchronization between builder and configuration classes
+  - Added `PynencBuilder.logging()`, `logging_colors()`, `logging_stream()`, and `logging_format()` methods for configuring logging options via the builder.
   - Added robust plugin method chaining and cleanup mechanisms
 
 - **Enhanced Invocation History and Context Tracking**:

@@ -3,7 +3,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from pynenc.util.log import create_logger  # Replace with your actual module path
+from pynenc.conf.config_pynenc import LogFormat
+from pynenc.util.log import create_logger
 
 
 @pytest.fixture
@@ -11,6 +12,9 @@ def mock_app() -> MagicMock:
     app = MagicMock()
     app.app_id = "test_app"
     app.conf.logging_level = "info"
+    app.conf.log_use_colors = None
+    app.conf.log_stream = "stderr"
+    app.conf.log_format = LogFormat.TEXT
     return app
 
 

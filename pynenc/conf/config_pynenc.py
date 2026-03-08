@@ -25,6 +25,26 @@ class ArgumentPrintMode(StrEnum):
     HIDDEN = auto()
 
 
+class LogFormat(StrEnum):
+    """
+    Controls the log output format.
+
+    :cvar TEXT:
+        Human-readable text output (default). Includes optional ANSI colors
+        for terminal environments and context prefixes with runner/invocation info.
+    :cvar JSON:
+        Structured JSON output for container and cloud environments.
+        Each log record is emitted as a single JSON object per line with structured
+        fields (severity, timestamp, logger, message, runner/invocation context).
+        Compatible with Google Cloud Logging, AWS CloudWatch, Datadog, and other
+        log aggregators. Includes a ``text`` field with the human-readable
+        representation for pynmon log explorer compatibility.
+    """
+
+    TEXT = auto()
+    JSON = auto()
+
+
 class ConfigPynenc(ConfigPynencBase):
     """
     Main configuration for the Pynenc app.
@@ -79,6 +99,19 @@ class ConfigPynenc(ConfigPynencBase):
     :cvar bool compact_log_context:
         If True, truncates IDs (first 7 chars) and compacts class names (e.g., PPR for
         PersistentProcessRunner) for shorter log output. Default True.
+    :cvar bool log_use_colors:
+        Controls ANSI color output in logs. True forces colors on, False disables
+        them. Auto-detection follows the convention used by uvicorn, click, and rich. Default True.
+    :cvar str log_stream:
+        Output stream for the log handler: "stderr" (default, Python convention)
+        or "stdout". Container log collectors (GKE, CloudWatch) typically classify
+        all stderr output as ERROR severity, so "stdout" is recommended for
+        containerized deployments.
+    :cvar LogFormat log_format:
+        Log output format: TEXT (human-readable, default) or JSON (structured).
+        JSON format emits one JSON object per line with severity, timestamp, logger,
+        message, and context fields as top-level keys. Recommended for container and
+        cloud environments where log aggregators parse structured output.
 
     =============================
     Atomic Global Services
@@ -145,6 +178,9 @@ class ConfigPynenc(ConfigPynencBase):
     argument_print_mode = ConfigField(ArgumentPrintMode.TRUNCATED)
     cached_status_time = ConfigField(0.1)
     compact_log_context = ConfigField(True)
+    log_use_colors = ConfigField(True)
+    log_stream = ConfigField("stderr")
+    log_format = ConfigField(LogFormat.TEXT)
 
     # Atomic Global Services Configuration
     atomic_service_interval_minutes = ConfigField(5.0)

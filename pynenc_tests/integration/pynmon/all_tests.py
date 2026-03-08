@@ -12,6 +12,7 @@ from pynenc_tests.integration.pynmon.test_invocations_pagination import *
 from pynenc_tests.integration.pynmon.test_invocations_timeline import *
 from pynenc_tests.integration.pynmon.test_invocations_timeline_complex import *
 from pynenc_tests.integration.pynmon.test_invocations_timeline_multi_runner import *
+from pynenc_tests.integration.pynmon.test_log_explorer_formats import *
 from pynenc_tests.integration.pynmon.test_sub_workflows import *
 from pynenc_tests.integration.pynmon.test_task_details import *
 from pynenc_tests.integration.pynmon.test_tasks_list import *

@@ -24,6 +24,7 @@ Structured entity references in message body (convention):
     workflow:UUID  sub-workflow:UUID  parent-workflow:UUID
 """
 
+import json
 import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -138,15 +139,22 @@ def parse_log_line(log_line: str) -> ParsedLogLine:
     """Parse a pynenc log line and extract its context components.
 
     Strips ANSI escape codes before parsing so coloured terminal output
-    can be pasted directly.  Also extracts structured entity references
-    like ``invocation:UUID`` from the message body.
+    can be pasted directly.  Also handles JSON log lines (from JsonFormatter)
+    by extracting the ``text`` field and parsing it as a standard text line.
+    Extracts structured entity references like ``invocation:UUID`` from the
+    message body.
 
-    :param str log_line: Raw log line (may contain ANSI colour codes)
+    :param str log_line: Raw log line (may contain ANSI colour codes or JSON)
     :return: ParsedLogLine with runners, invocation_id, task_key, timestamp,
              and entity_refs populated
     """
     raw = log_line.strip()
-    clean = _strip_ansi(raw)
+    # Handle JSON log lines by extracting the human-readable text field
+    if json_text := _try_extract_json_text(raw):
+        raw = json_text
+        clean = json_text
+    else:
+        clean = _strip_ansi(raw)
     timestamp = _extract_timestamp(clean)
     level = _extract_level(clean)
     bracket = _extract_bracket(clean)
@@ -184,6 +192,26 @@ def _split_log_entries(text: str) -> list[str]:
 
 
 # ── parsing helpers ────────────────────────────────────────────────────────────
+def _try_extract_json_text(line: str) -> str | None:
+    """Try to parse a JSON log line and extract its text field.
+
+    When pynenc is configured with JSON log format (JsonFormatter), each line
+    is a JSON object containing a ``text`` field with the human-readable log
+    representation that pynmon can parse normally.
+
+    :param str line: Raw log line that might be JSON
+    :return: The text field value if JSON with text key, None otherwise
+    """
+    stripped = line.strip()
+    if not stripped.startswith("{"):
+        return None
+    try:
+        obj = json.loads(stripped)
+        return obj.get("text")
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+
 def _strip_ansi(text: str) -> str:
     return _ANSI_RE.sub("", text)
 

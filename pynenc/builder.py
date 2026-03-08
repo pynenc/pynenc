@@ -444,11 +444,42 @@ class PynencBuilder:
         self._config["dev_mode_force_sync_tasks"] = force_sync_tasks
         return self
 
+    def logging(
+        self,
+        level: str | None = None,
+        *,
+        stream: str | None = None,
+        colors: bool | None = None,
+        fmt: str | None = None,
+    ) -> "PynencBuilder":
+        """
+        Configure all logging options in a single call.
+
+        Each parameter is optional — only non-``None`` values are applied,
+        so you can mix this with the individual ``logging_*`` methods freely.
+
+        :param str | None level: Log level — ``"debug"``, ``"info"``, ``"warning"``, ``"error"``, ``"critical"``
+        :param str | None stream: Output stream — ``"stdout"`` or ``"stderr"``
+        :param bool | None colors: ``True`` force, ``False`` disable, ``None`` auto-detect
+        :param str | None fmt: Log format — ``"text"`` or ``"json"``
+        :return: The builder instance for method chaining
+        :raises ValueError: If any provided value is invalid
+        """
+        if level is not None:
+            self.logging_level(level)
+        if stream is not None:
+            self.logging_stream(stream)
+        if colors is not None:
+            self.logging_colors(colors)
+        if fmt is not None:
+            self.logging_format(fmt)
+        return self
+
     def logging_level(self, level: str) -> "PynencBuilder":
         """
         Set the logging level for the application.
 
-        :param str level: The logging level ("debug", "info", "warning", "error", "critical")
+        :param str level: Log level — ``"debug"``, ``"info"``, ``"warning"``, ``"error"``, ``"critical"``
         :return: The builder instance for method chaining
         :raises ValueError: If an invalid logging level is provided
         """
@@ -456,9 +487,70 @@ class PynencBuilder:
         _VALID_LOG_LEVELS = ["debug", "info", "warning", "error", "critical"]
         if level not in _VALID_LOG_LEVELS:
             raise ValueError(
-                f"Invalid logging level: {level}. Valid options are: {', '.join(_VALID_LOG_LEVELS)}"
+                f"Invalid logging level: {level!r}. Valid options are: {', '.join(_VALID_LOG_LEVELS)}"
             )
         self._config["logging_level"] = level
+        return self
+
+    def logging_colors(self, use_colors: bool | None = None) -> "PynencBuilder":
+        """
+        Control ANSI colour output in logs.
+
+        Pass ``True`` to force colours, ``False`` to disable them, or ``None``
+        (the default) to let pynenc auto-detect based on whether the log stream
+        is an interactive TTY.  Set to ``False`` when running in containers or
+        CI environments that do not support ANSI escape codes.
+
+        :param bool | None use_colors: True to force colours, False to disable, None for auto-detect
+        :return: The builder instance for method chaining
+        """
+        self._config["log_use_colors"] = use_colors
+        return self
+
+    def logging_stream(self, stream: str) -> "PynencBuilder":
+        """
+        Set which output stream log messages are written to.
+
+        Use ``"stdout"`` when deploying in containers (e.g. Kubernetes / GKE)
+        so that log lines are not misclassified as errors by the container
+        runtime's default stderr-to-ERROR mapping.
+
+        :param str stream: Output stream — ``"stdout"`` or ``"stderr"``
+        :return: The builder instance for method chaining
+        :raises ValueError: If an invalid stream name is provided
+        """
+        valid = ("stdout", "stderr")
+        if stream not in valid:
+            raise ValueError(
+                f"Invalid log stream: {stream!r}. Valid options are: {', '.join(valid)}"
+            )
+        self._config["log_stream"] = stream
+        return self
+
+    def logging_format(self, fmt: str) -> "PynencBuilder":
+        """
+        Set the log output format.
+
+        ``"text"`` (default) emits human-readable lines compatible with
+        pynmon Log Explorer.  ``"json"`` emits structured JSON objects — ideal
+        for log-aggregation pipelines such as GCP Cloud Logging, Datadog, or
+        the ELK stack.  The ``text`` field in the JSON payload preserves the
+        human-readable representation so pynmon can still parse JSON logs.
+
+        :param str fmt: Log format — ``"text"`` or ``"json"``
+        :return: The builder instance for method chaining
+        :raises ValueError: If an invalid format name is provided
+        """
+        from pynenc.conf.config_pynenc import LogFormat
+
+        fmt_lower = fmt.lower()
+        try:
+            self._config["log_format"] = LogFormat(fmt_lower)
+        except ValueError as ex:
+            valid = [f.value for f in LogFormat]
+            raise ValueError(
+                f"Invalid log format: {fmt!r}. Valid options are: {', '.join(valid)}"
+            ) from ex
         return self
 
     def runner_tuning(

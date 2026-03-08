@@ -1,10 +1,22 @@
+import json
 import logging
+import sys
+from io import StringIO
 from unittest.mock import MagicMock
 
 
 from pynenc import context
+from pynenc.conf.config_pynenc import LogFormat
 from pynenc.runner.runner_context import RunnerContext
-from pynenc.util.log import ColoredFormatter, Colors, PynencContextFilter, create_logger
+from pynenc.util.log import (
+    ColoredFormatter,
+    Colors,
+    JsonFormatter,
+    PlainTextFormatter,
+    PynencContextFilter,
+    _auto_detect_colors,
+    create_logger,
+)
 from pynenc_tests.conftest import MockPynenc
 
 mock_app = MockPynenc()
@@ -273,3 +285,272 @@ def test_pynenc_context_filter_with_invocation(app_instance: "MockPynenc") -> No
     finally:
         # Reset context
         context.swap_dist_invocation_context(app_instance.app_id, previous)
+
+
+# ── TTY auto-detection tests ──────────────────────────────────────────────────
+
+
+def test_auto_detect_colors_tty() -> None:
+    """Test that auto-detect enables colors for TTY streams."""
+    stream = MagicMock()
+    stream.isatty.return_value = True
+    assert _auto_detect_colors(stream) is True
+
+
+def test_auto_detect_colors_non_tty() -> None:
+    """Test that auto-detect disables colors for non-TTY streams."""
+    stream = MagicMock()
+    stream.isatty.return_value = False
+    assert _auto_detect_colors(stream) is False
+
+
+def test_auto_detect_colors_no_isatty() -> None:
+    """Test that auto-detect disables colors when isatty is absent."""
+    stream = object()  # no isatty attribute
+    assert _auto_detect_colors(stream) is False
+
+
+# ── PlainTextFormatter tests ──────────────────────────────────────────────────
+
+
+def test_plain_text_formatter_includes_context_prefix() -> None:
+    """Test that PlainTextFormatter adds [prefix] to messages."""
+    formatter = PlainTextFormatter(
+        fmt="%(asctime)s %(levelname)-8s %(name)s %(message)s",
+    )
+    record = logging.LogRecord(
+        name="test_logger",
+        level=logging.INFO,
+        pathname="test.py",
+        lineno=1,
+        msg="Test message",
+        args=(),
+        exc_info=None,
+    )
+    record.task_id = "my.task"
+    record.invocation_id = "inv_12345678"
+    record.runner_ctx = None
+    record.compact_log_context = True
+
+    formatted = formatter.format(record)
+
+    assert "[inv_12345678:my.task]" in formatted
+    assert "Test message" in formatted
+    # No ANSI codes
+    assert "\033[" not in formatted
+
+
+def test_plain_text_formatter_no_context() -> None:
+    """Test that PlainTextFormatter works without context."""
+    formatter = PlainTextFormatter(
+        fmt="%(asctime)s %(levelname)-8s %(name)s %(message)s",
+    )
+    record = logging.LogRecord(
+        name="test_logger",
+        level=logging.INFO,
+        pathname="test.py",
+        lineno=1,
+        msg="No context message",
+        args=(),
+        exc_info=None,
+    )
+    record.task_id = None
+    record.invocation_id = None
+    record.runner_ctx = None
+
+    formatted = formatter.format(record)
+
+    assert "No context message" in formatted
+    assert "[" not in formatted.split("No context")[0].split("INFO")[1]
+
+
+# ── JsonFormatter tests ───────────────────────────────────────────────────────
+
+
+def test_json_formatter_produces_valid_json() -> None:
+    """Test that JsonFormatter emits a parseable JSON line."""
+    formatter = JsonFormatter()
+    record = logging.LogRecord(
+        name="pynenc.test",
+        level=logging.INFO,
+        pathname="test.py",
+        lineno=1,
+        msg="Test message",
+        args=(),
+        exc_info=None,
+    )
+    record.task_id = None
+    record.invocation_id = None
+    record.runner_ctx = None
+    record.compact_log_context = True
+
+    formatted = formatter.format(record)
+    parsed = json.loads(formatted)
+
+    assert parsed["severity"] == "INFO"
+    assert parsed["logger"] == "pynenc.test"
+    assert parsed["message"] == "Test message"
+    assert "timestamp" in parsed
+    assert "text" in parsed
+
+
+def test_json_formatter_includes_context_fields() -> None:
+    """Test that JsonFormatter includes structured runner/invocation context."""
+    formatter = JsonFormatter()
+    record = logging.LogRecord(
+        name="pynenc.test",
+        level=logging.WARNING,
+        pathname="test.py",
+        lineno=1,
+        msg="Context message",
+        args=(),
+        exc_info=None,
+    )
+    runner_ctx = RunnerContext(
+        runner_cls="PersistentProcessRunner",
+        runner_id="abc12345-6789-0000-0000-000000000000",
+    )
+    record.task_id = "my_module.my_func"
+    record.invocation_id = "def45678-1234-0000-0000-000000000000"
+    record.runner_ctx = runner_ctx
+    record.compact_log_context = True
+
+    formatted = formatter.format(record)
+    parsed = json.loads(formatted)
+
+    assert parsed["runner_class"] == "PersistentProcessRunner"
+    assert parsed["runner_id"] == "abc12345-6789-0000-0000-000000000000"
+    assert parsed["invocation_id"] == "def45678-1234-0000-0000-000000000000"
+    assert parsed["task_id"] == "my_module.my_func"
+    assert parsed["severity"] == "WARNING"
+
+
+def test_json_formatter_text_field_matches_plaintext() -> None:
+    """Test that the JSON text field contains the same format as PlainTextFormatter."""
+    formatter = JsonFormatter()
+    record = logging.LogRecord(
+        name="pynenc.test",
+        level=logging.INFO,
+        pathname="test.py",
+        lineno=1,
+        msg="Test message",
+        args=(),
+        exc_info=None,
+    )
+    record.task_id = "module.func"
+    record.invocation_id = "inv_uuid_12345678"
+    record.runner_ctx = None
+    record.compact_log_context = True
+
+    formatted = formatter.format(record)
+    parsed = json.loads(formatted)
+
+    # The text field should have the bracket prefix
+    assert "[inv_uuid_12345678:module.func]" in parsed["text"]
+    assert "Test message" in parsed["text"]
+
+
+def test_json_formatter_excludes_none_context() -> None:
+    """Test that JSON output omits context keys when no context is present."""
+    formatter = JsonFormatter()
+    record = logging.LogRecord(
+        name="pynenc.test",
+        level=logging.INFO,
+        pathname="test.py",
+        lineno=1,
+        msg="Simple message",
+        args=(),
+        exc_info=None,
+    )
+    record.task_id = None
+    record.invocation_id = None
+    record.runner_ctx = None
+    record.compact_log_context = True
+
+    formatted = formatter.format(record)
+    parsed = json.loads(formatted)
+
+    assert "runner_class" not in parsed
+    assert "invocation_id" not in parsed
+    assert "task_id" not in parsed
+
+
+def test_json_formatter_includes_exception() -> None:
+    """Test that JsonFormatter includes exception information."""
+    formatter = JsonFormatter()
+    try:
+        raise ValueError("test error")
+    except ValueError:
+        import sys
+
+        exc_info = sys.exc_info()
+
+    record = logging.LogRecord(
+        name="pynenc.test",
+        level=logging.ERROR,
+        pathname="test.py",
+        lineno=1,
+        msg="Error occurred",
+        args=(),
+        exc_info=exc_info,
+    )
+    record.task_id = None
+    record.invocation_id = None
+    record.runner_ctx = None
+    record.compact_log_context = True
+
+    formatted = formatter.format(record)
+    parsed = json.loads(formatted)
+
+    assert "exception" in parsed
+    assert "ValueError: test error" in parsed["exception"]
+
+
+# ── create_logger configuration tests ─────────────────────────────────────────
+
+
+def test_create_logger_explicit_colors_false() -> None:
+    """Test that create_logger with use_colors=False uses PlainTextFormatter."""
+    app = MockPynenc()
+    logger = create_logger(app, use_colors=False)
+    assert isinstance(logger.handlers[0].formatter, PlainTextFormatter)
+
+
+def test_create_logger_explicit_colors_true() -> None:
+    """Test that create_logger with use_colors=True uses ColoredFormatter."""
+    app = MockPynenc()
+    logger = create_logger(app, use_colors=True)
+    assert isinstance(logger.handlers[0].formatter, ColoredFormatter)
+
+
+def test_create_logger_json_format() -> None:
+    """Test that create_logger with log_format=JSON uses JsonFormatter."""
+    app = MockPynenc()
+    logger = create_logger(app, log_format=LogFormat.JSON)
+    assert isinstance(logger.handlers[0].formatter, JsonFormatter)
+
+
+def test_create_logger_stdout_stream() -> None:
+    """Test that create_logger writes to stdout when configured."""
+    app = MockPynenc()
+    logger = create_logger(app, stream=sys.stdout)
+    handler = logger.handlers[0]
+    # mypy: handler is Handler, but only StreamHandler has .stream
+    assert isinstance(handler, logging.StreamHandler)
+    assert handler.stream is sys.stdout
+
+
+def test_create_logger_auto_detect_non_tty() -> None:
+    """Test that create_logger uses PlainTextFormatter when use_colors=False."""
+    app = MockPynenc()
+    non_tty = StringIO()  # StringIO has no isatty
+    logger = create_logger(app, stream=non_tty, use_colors=False)
+    assert isinstance(logger.handlers[0].formatter, PlainTextFormatter)
+
+
+def test_create_logger_config_overrides() -> None:
+    """Test that config values drive formatter and stream selection."""
+    app = MockPynenc()
+    app.conf.log_format = LogFormat.JSON
+    logger = create_logger(app)
+    assert isinstance(logger.handlers[0].formatter, JsonFormatter)
