@@ -65,6 +65,9 @@ class BaseRunner(ABC):
         self._shutdown_signum: int | None = None
         self._runner_cache = runner_cache
         self._runner_context = runner_context or RunnerContext(self.__class__.__name__)
+        # Signalled when on_stop() completes so callers can wait for the run() loop to fully exit
+        self._run_stopped = threading.Event()
+        self._run_stopped.set()  # initially not running, so already "stopped"
 
         # Set app relationship last, after all attributes are initialized
         self.app = app
@@ -154,6 +157,7 @@ class BaseRunner(ABC):
             )
         self.init_trigger_tasks_modules()
         self.running = True
+        self._run_stopped.clear()  # run() is starting; mark as not-yet-stopped
         self._on_start()
 
     @abstractmethod
@@ -170,6 +174,17 @@ class BaseRunner(ABC):
         self.app.logger.info(
             f"STOPPED  {self.__class__.__name__} runner:{self.runner_id}"
         )
+        self._run_stopped.set()  # signal that run() has fully exited
+
+    def wait_until_stopped(self, timeout: float = 2.0) -> bool:
+        """Block until the runner's run() loop has fully exited.
+
+        Safe to call even if run() was never started (returns immediately).
+
+        :param float timeout: Maximum seconds to wait.
+        :return: True if stopped within the timeout, False otherwise.
+        """
+        return self._run_stopped.wait(timeout=timeout)
 
     @abstractmethod
     def runner_loop_iteration(self) -> None:

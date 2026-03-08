@@ -162,6 +162,25 @@ def app(app_combination_instance: Pynenc) -> Generator[Pynenc, None, None]:
     yield app_combination_instance
 
     try:
+        # Signal the runner to stop (idempotent if already stopped by the test)
+        app_combination_instance.runner.stop_runner_loop()
+    except Exception as e:
+        logging.warning("Compatibility fixture failed to stop runner after test: %s", e)
+
+    try:
+        # Wait for the runner's run() loop to fully exit before dropping tables.
+        # Without this, background threads may still be mid-iteration and hit
+        # 'no such table' after purge() drops the schema.
+        if not app_combination_instance.runner.wait_until_stopped(timeout=3.0):
+            logging.warning(
+                "Runner did not stop within timeout; proceeding with purge anyway"
+            )
+    except Exception as e:
+        logging.warning(
+            "Compatibility fixture failed while waiting for runner stop: %s", e
+        )
+
+    try:
         app_combination_instance.purge()
     except Exception as e:
         logging.warning("Compatibility fixture failed to purge app after test: %s", e)
