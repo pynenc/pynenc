@@ -75,6 +75,16 @@ class BaseRunner(ABC):
 
         self._last_atomic_service_check_time = 0.0
 
+    def __getstate__(self) -> dict:
+        state = self.__dict__.copy()
+        state.pop("_run_stopped", None)
+        return state
+
+    def __setstate__(self, state: dict) -> None:
+        self.__dict__.update(state)
+        self._run_stopped = threading.Event()
+        self._run_stopped.set()
+
     @property
     def logger(self) -> Logger:
         return self.app.logger
