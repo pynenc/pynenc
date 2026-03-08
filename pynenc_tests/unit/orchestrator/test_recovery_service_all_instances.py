@@ -11,6 +11,7 @@ Key components tested:
 
 from typing import TYPE_CHECKING
 from time import sleep
+from unittest.mock import patch
 
 from pynenc.invocation import InvocationStatus
 from pynenc.runner.runner_context import RunnerContext
@@ -134,7 +135,7 @@ def test_should_run_atomic_service_multiple_runners(app_instance: "Pynenc") -> N
     original_interval = app_instance.conf.atomic_service_interval_minutes
     original_margin = app_instance.conf.atomic_service_spread_margin_minutes
     # Use larger interval and smaller margin so each runner gets a distinct time slot
-    # With 3 runners, 60s interval, 1s margin: each gets ~19s slot
+    # With 3 runners, 60s interval, ~1s margin: each gets ~19s slot
     app_instance.conf.atomic_service_interval_minutes = 1.0
     app_instance.conf.atomic_service_spread_margin_minutes = 0.016  # ~1 second
 
@@ -155,11 +156,16 @@ def test_should_run_atomic_service_multiple_runners(app_instance: "Pynenc") -> N
             [runner3.runner_id], can_run_atomic_service=True
         )
 
-        results = [
-            app_instance.orchestrator.should_run_atomic_service(runner1),
-            app_instance.orchestrator.should_run_atomic_service(runner2),
-            app_instance.orchestrator.should_run_atomic_service(runner3),
-        ]
+        # Patch time() to a fixed value so the test is not clock-sensitive.
+        # With 3 runners and a 60s interval, slots are [0,19s), [20,39s), [40,59s).
+        # Setting time=0 (i.e. 0 % 60 == 0) lands inside runner1's slot so exactly
+        # one runner returns True regardless of when the test runs.
+        with patch("pynenc.orchestrator.base_orchestrator.time", return_value=0.0):
+            results = [
+                app_instance.orchestrator.should_run_atomic_service(runner1),
+                app_instance.orchestrator.should_run_atomic_service(runner2),
+                app_instance.orchestrator.should_run_atomic_service(runner3),
+            ]
 
         # Only one runner should be scheduled at any given time
         assert sum(results) == 1
