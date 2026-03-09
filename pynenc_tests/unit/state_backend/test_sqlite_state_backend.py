@@ -2,7 +2,7 @@ import sqlite3
 
 import pytest
 
-from pynenc import Pynenc, PynencBuilder
+from pynenc import PynencBuilder
 from pynenc.identifiers.invocation_id import InvocationId
 from pynenc.state_backend.sqlite_state_backend import SQLiteStateBackend
 from pynenc.identifiers.task_id import TaskId
@@ -14,7 +14,12 @@ def test_workflow_purge(temp_sqlite_db_path: str) -> None:
     """
     Test that purge removes all data from SQLiteStateBackend tables.
     """
-    app = PynencBuilder().sqlite(sqlite_db_path=temp_sqlite_db_path).build()
+    app = (
+        PynencBuilder()
+        .app_id("test_workflow_purge")
+        .sqlite(sqlite_db_path=temp_sqlite_db_path)
+        .build()
+    )
     # Force initialization of state backend
     # It lazily registers the app info on first time backend is instantiated
     _ = app.state_backend
@@ -62,7 +67,12 @@ def test_all_tables_prefix(temp_sqlite_db_path: str) -> None:
     """
     Test that all tables in the SQLiteStateBackend have the correct prefix.
     """
-    app = Pynenc(config_values={"sqlite_db_path": temp_sqlite_db_path})
+    app = (
+        PynencBuilder()
+        .app_id("test-all-tables-prefix")
+        .sqlite(sqlite_db_path=temp_sqlite_db_path)
+        .build()
+    )
     SQLiteStateBackend(app)
 
     with sqlite3.connect(temp_sqlite_db_path) as conn:

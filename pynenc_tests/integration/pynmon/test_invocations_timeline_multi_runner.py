@@ -9,11 +9,6 @@ Key components:
 - Multi-runner concurrent execution testing
 - Hierarchical task invocation patterns (grandparent -> parent -> child)
 - Timeline visualization verification
-
-IMPORTANT: This test uses PynencBuilder().sqlite() to configure the app
-WITHOUT setting environment variables at module import time. Environment
-variables are ONLY set during test execution for child processes and
-cleaned up immediately after to prevent pollution of other tests.
 """
 
 import os
@@ -83,47 +78,6 @@ def child_task(family_id: str) -> None:
     time.sleep(0.02)
 
 
-# List of env vars needed for child processes
-_ENV_VARS = [
-    "PYNENC__SQLITE_DB_PATH",
-    "PYNENC__ORCHESTRATOR_CLS",
-    "PYNENC__BROKER_CLS",
-    "PYNENC__STATE_BACKEND_CLS",
-    "PYNENC__ARG_CACHE_CLS",
-]
-
-
-@pytest.fixture
-def sqlite_env_for_child_processes() -> Generator[None, None, None]:
-    """
-    Set environment variables ONLY during test execution for child processes.
-
-    ProcessRunner and PersistentProcessRunner spawn child processes that
-    need to create their own Pynenc app instances. They read configuration
-    from environment variables.
-
-    This fixture sets the env vars at test start and cleans them up after.
-    """
-    # Store original values
-    original_values = {key: os.environ.get(key) for key in _ENV_VARS}
-
-    # Set env vars for child processes
-    os.environ["PYNENC__SQLITE_DB_PATH"] = _temp_db_path
-    os.environ["PYNENC__ORCHESTRATOR_CLS"] = "SQLiteOrchestrator"
-    os.environ["PYNENC__BROKER_CLS"] = "SQLiteBroker"
-    os.environ["PYNENC__STATE_BACKEND_CLS"] = "SQLiteStateBackend"
-    os.environ["PYNENC__ARG_CACHE_CLS"] = "SQLiteArgCache"
-
-    yield
-
-    # Restore original values immediately after test
-    for key, original_value in original_values.items():
-        if original_value is None:
-            os.environ.pop(key, None)
-        else:
-            os.environ[key] = original_value
-
-
 @pytest.fixture(scope="module", autouse=True)
 def cleanup_temp_db() -> Generator[None, None, None]:
     """Clean up temp database file after all tests in module complete."""
@@ -136,10 +90,7 @@ def cleanup_temp_db() -> Generator[None, None, None]:
             pass
 
 
-def test_multi_runner_timeline(
-    pynmon_client: "PynmonClient",
-    sqlite_env_for_child_processes: None,
-) -> None:
+def test_multi_runner_timeline(pynmon_client: "PynmonClient") -> None:
     """
     Test the complex timeline with multiple concurrent runners.
 

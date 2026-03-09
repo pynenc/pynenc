@@ -153,29 +153,3 @@ def process_large_shared_arg(large_data: str) -> float:
         f"INI process_large_shared_arg invocation_id={process_large_shared_arg.invocation.invocation_id}"
     )
     return start_time
-
-
-@mock_app.task
-def grandparent_task(family_id: str, num_children: int) -> None:
-    """A task that triggers parent tasks."""
-    grandparent_task.logger.info(f"Starting grandparent task {family_id}")
-    invs = parent_task.parallelize(
-        [(f"{family_id}-parent-{i}", num_children) for i in range(num_children)]
-    )
-    _ = list(invs.results)
-
-
-@mock_app.task
-def parent_task(family_id: str, num_children: int) -> None:
-    """A task that acts as a parent in invocation hierarchy."""
-    parent_task.logger.info(f"Starting parent task {family_id}")
-    invs = child_task.parallelize(
-        [(f"{family_id}-child-{i}",) for i in range(num_children)]
-    )
-    _ = list(invs.results)
-
-
-@mock_app.task
-def child_task(family_id: str) -> None:
-    """A task that acts as a child in invocation hierarchy."""
-    child_task.logger.info(f"Starting child task {family_id}")

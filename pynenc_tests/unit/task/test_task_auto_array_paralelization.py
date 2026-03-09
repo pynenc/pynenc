@@ -2,7 +2,7 @@ from typing import Any
 
 import pytest
 
-from pynenc import Pynenc
+from pynenc import Pynenc, PynencBuilder
 from pynenc.call import PreSerializedCall
 from pynenc.conf.config_task import ConcurrencyControlType
 from pynenc.invocation import (
@@ -54,9 +54,7 @@ def test_conc_invocation_group(app: Pynenc) -> None:
     """
     Test that the Task will return a SyncResult if dev_mode_force_sync_tasks=True
     """
-    add.app = Pynenc(
-        config_values={"dev_mode_force_sync_tasks": True}
-    )  # re-instantiate the app, config os.environ is cached
+    add.app = PynencBuilder().dev_mode().app_id("test_conc_invocation_group").build()
     # app.conf.dev_mode_force_sync_tasks = True
     invocation_group = add.parallelize([(1, 1), add.args(1, 2), {"x": 2, "y": 3}])
     assert isinstance(invocation_group, ConcurrentInvocationGroup)

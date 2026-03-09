@@ -384,11 +384,12 @@ class InvocationStatusTransitionError(InvocationStatusError):
         )
 
     def __str__(self) -> str:
+        allowed = ", ".join(f"status:{s.value}" for s in sorted(self.allowed_statuses))
         return (
             f"InvocationStatusTransitionError("
             f"from_status:{self.from_status}, "
             f"to_status:{self.to_status}, "
-            f"allowed_statuses:{list(self.allowed_statuses)})"
+            f"allowed_statuses:[{allowed}])"
         )
 
     def _to_json_dict(self) -> dict[str, Any]:

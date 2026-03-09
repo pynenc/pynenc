@@ -13,7 +13,7 @@ from pynenc.invocation import (
 from pynenc.runner.runner_context import RunnerContext
 from pynenc_tests.conftest import MockPynenc
 
-mock_base_app = MockPynenc(app_id="tests/unit/orchestrator/test_base_orchestrator.py")
+mock_base_app = MockPynenc.with_id("tests/unit/orchestrator/test_base_orchestrator.py")
 
 
 @mock_base_app.task

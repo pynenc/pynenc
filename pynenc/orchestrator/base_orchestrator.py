@@ -600,16 +600,16 @@ class BaseOrchestrator(ABC):
             )
             if not self.is_candidate_to_run_by_concurrency_control(blocking_invocation):
                 continue
-            blocking_invocation_ids.add(blocking_invocation_id)
             try:
                 self.set_invocation_status(
                     blocking_invocation_id, InvocationStatus.PENDING, runner_ctx
                 )
+                blocking_invocation_ids.add(blocking_invocation_id)
                 yield blocking_invocation_id
             except InvocationStatusError as ex:
                 # Race condition: another worker claimed it between our status check and transition
                 self.app.logger.debug(
-                    f"Could not set blocking invocation:{blocking_invocation_id} to PENDING: {ex}"
+                    f"Could not set blocking invocation:{blocking_invocation_id} to status:pending: {ex}"
                 )
                 continue
 
@@ -664,7 +664,7 @@ class BaseOrchestrator(ABC):
                             yield invocation
                         except InvocationStatusError as ex:
                             self.app.logger.warning(
-                                f"Could not set invocation:{invocation_id} to PENDING: {ex}"
+                                f"Could not set invocation:{invocation_id} to status:pending: {ex}"
                             )
                             continue
             else:

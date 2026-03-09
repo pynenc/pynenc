@@ -1,37 +1,111 @@
 {% extends "base.html" %} {% block content %}
-<div class="row">
-  <div class="col-12">
-    <div class="card">
-      <div
-        class="card-header d-flex justify-content-between align-items-center"
-      >
-        <span>State Backend Information</span>
+<div class="container-fluid">
+  <!-- Type Banner -->
+  <div class="row mb-3">
+    <div class="col-12">
+      <div class="info-card">
+        <h6 class="section-title">State Backend Type</h6>
+        <p class="mb-0 fw-semibold">{{ state_backend_info.type }}</p>
       </div>
-      <div class="card-body">
-        <h6>State Backend Type: {{ state_backend_info.type }}</h6>
+    </div>
+  </div>
 
-        <div class="row mt-3">
-          <div class="col-md-6">
-            <div class="card">
-              <div class="card-header">Configuration</div>
-              <div class="card-body">
-                <ul class="list-group">
-                  <li class="list-group-item">
-                    <span>Type:</span> {{ state_backend_info.type }}
-                  </li>
-                </ul>
-              </div>
-            </div>
+  <div class="row g-3">
+    <!-- What it stores -->
+    <div class="col-md-6">
+      <div class="metric-card h-100">
+        <h6 class="section-title">Stored Data</h6>
+        <p class="text-muted small mb-3">
+          The state backend persists all invocation-related data:
+        </p>
+        <div class="metric-grid">
+          <div class="metric-item">
+            <span class="metric-label">Invocation Records</span>
+            <span class="material-icons text-muted" style="font-size: 18px"
+              >assignment</span
+            >
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">Status History</span>
+            <span class="material-icons text-muted" style="font-size: 18px"
+              >history</span
+            >
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">Results &amp; Exceptions</span>
+            <span class="material-icons text-muted" style="font-size: 18px"
+              >check_circle</span
+            >
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">Runner Contexts</span>
+            <span class="material-icons text-muted" style="font-size: 18px"
+              >devices</span
+            >
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">Workflow State</span>
+            <span class="material-icons text-muted" style="font-size: 18px"
+              >workspaces</span
+            >
           </div>
         </div>
+      </div>
+    </div>
 
-        <div class="mt-3 d-flex justify-content-center">
+    <!-- Related Components -->
+    <div class="col-md-6">
+      <div class="metric-card h-100">
+        <h6 class="section-title">Related Components</h6>
+        <div class="metric-grid">
+          <div class="metric-item">
+            <span class="metric-label">Serializer</span>
+            <span class="badge bg-info">{{ extra_info.serializer_type }}</span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">Runner</span>
+            <span class="badge bg-info">{{ extra_info.runner_type }}</span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">Application</span>
+            <span class="badge bg-info">{{ extra_info.app_id }}</span>
+          </div>
+        </div>
+        <p class="text-muted small mt-3 mb-0">
+          The state backend is the authoritative source for invocation history,
+          results, and runner contexts. The orchestrator manages live status;
+          the state backend preserves the full lifecycle record.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Danger Zone -->
+  <div class="row mt-4">
+    <div class="col-12">
+      <div class="card border-danger">
+        <div class="card-header text-danger">
+          <span class="material-icons align-middle me-1" style="font-size: 18px"
+            >warning</span
+          >
+          Danger Zone
+        </div>
+        <div class="card-body">
+          <p class="text-muted small mb-2">
+            Permanently delete all invocation records, history, results, and
+            runner contexts.
+          </p>
           <button
-            class="btn btn-danger"
+            class="btn btn-danger btn-sm"
             hx-post="/state-backend/purge"
             hx-confirm="This will purge all state data in the backend. This operation cannot be undone! Continue?"
             hx-swap="outerHTML"
           >
+            <span
+              class="material-icons align-middle me-1"
+              style="font-size: 16px"
+              >delete_forever</span
+            >
             Purge State Backend
           </button>
         </div>

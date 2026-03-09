@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from pynenc import Pynenc
 
 # Module level app and task setup
-mock_app = MockPynenc(app_id="test-orchestrator-app")
+mock_app = MockPynenc()
 
 
 @mock_app.task
@@ -46,7 +46,6 @@ def another_task(msg: str) -> str:
 def app_orchestrator(request: "FixtureRequest", app_instance: "Pynenc") -> "Pynenc":
     """Fixture providing a configured Pynenc app for orchestrator tests."""
     app = app_instance
-    app._app_id = mock_app.app_id
     app._tasks = mock_app._tasks
     sample_task.app = app
     another_task.app = app
@@ -74,7 +73,6 @@ def test_orchestrator_overview_shows_info(app_orchestrator: "Pynenc") -> None:
         assert "text/html" in response.headers["content-type"]
 
         content = response.text
-        assert "test-orchestrator-app" in content
         assert app_orchestrator.orchestrator.__class__.__name__ in content
 
 

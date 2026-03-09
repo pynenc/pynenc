@@ -35,8 +35,6 @@ if TYPE_CHECKING:
 # Debug configuration - Set to 1 to keep server alive for browser debugging
 KEEP_ALIVE = 0
 
-APP_ID = "test-pynmon-family-tree-massive"
-
 # Create temp database file at module load (but DO NOT set env vars)
 _temp_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
 _temp_db_path = _temp_db.name
@@ -53,7 +51,7 @@ app = (
         runner_loop_sleep_time_sec=0.01,
         invocation_wait_results_sleep_time_sec=0.01,
     )
-    .app_id(APP_ID)
+    .app_id("test-pynmon-family-tree-massive")
     .build()
 )
 
@@ -152,41 +150,6 @@ def check_result(
     return _spawn_chain(depth, max_depth, children_per_level, sleep_ms, seed)
 
 
-# Environment variables needed by child processes
-_ENV_VARS = [
-    "PYNENC__SQLITE_DB_PATH",
-    "PYNENC__ORCHESTRATOR_CLS",
-    "PYNENC__BROKER_CLS",
-    "PYNENC__STATE_BACKEND_CLS",
-    "PYNENC__ARG_CACHE_CLS",
-]
-
-
-@pytest.fixture
-def sqlite_env_for_child_processes() -> Generator[None, None, None]:
-    """Set environment variables for PersistentProcessRunner child processes.
-
-    PersistentProcessRunner spawns child processes that create their own
-    Pynenc app instances from environment variables.  This fixture sets those
-    env vars at test start and restores original values afterwards.
-    """
-    original_values = {key: os.environ.get(key) for key in _ENV_VARS}
-
-    os.environ["PYNENC__SQLITE_DB_PATH"] = _temp_db_path
-    os.environ["PYNENC__ORCHESTRATOR_CLS"] = "SQLiteOrchestrator"
-    os.environ["PYNENC__BROKER_CLS"] = "SQLiteBroker"
-    os.environ["PYNENC__STATE_BACKEND_CLS"] = "SQLiteStateBackend"
-    os.environ["PYNENC__ARG_CACHE_CLS"] = "SQLiteArgCache"
-
-    yield
-
-    for key, original_value in original_values.items():
-        if original_value is None:
-            os.environ.pop(key, None)
-        else:
-            os.environ[key] = original_value
-
-
 @pytest.fixture(scope="module", autouse=True)
 def cleanup_temp_db() -> Generator[None, None, None]:
     """Clean up temp database file after all tests in module complete."""
@@ -200,7 +163,6 @@ def cleanup_temp_db() -> Generator[None, None, None]:
 
 def test_massive_family_tree_should_truncate_beyond_limits(
     pynmon_client: "PynmonClient",
-    sqlite_env_for_child_processes: None,
 ) -> None:
     """Generate a massive tree and verify truncation indicators appear.
 

@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from pynenc import Pynenc
 
 # Module level app setup
-mock_app = MockPynenc(app_id="test-client-data-store-app")
+mock_app = MockPynenc()
 
 
 @mock_app.task
@@ -40,7 +40,6 @@ def cache_task(data: str) -> str:
 def app_client_data(request: "FixtureRequest", app_instance: "Pynenc") -> "Pynenc":
     """Fixture providing a configured Pynenc app for arg cache tests."""
     app = app_instance
-    app._app_id = mock_app.app_id
     app._tasks = mock_app._tasks
     cache_task.app = app
     app.purge()
@@ -68,7 +67,6 @@ def test_client_data_overview_shows_info(app_client_data: "Pynenc") -> None:
         assert "text/html" in response.headers["content-type"]
 
         content = response.text
-        assert "test-client-data-store-app" in content
         assert app_client_data.client_data_store.__class__.__name__ in content
 
 
@@ -87,7 +85,7 @@ def test_client_data_overview_shows_config(app_client_data: "Pynenc") -> None:
         content = response.text
 
         # Should show configuration info (template uses human-readable labels)
-        assert "Minimum Size to Cache" in content or "Local Cache Size" in content
+        assert "Min Size to Externalize" in content or "Local LRU Cache" in content
 
 
 def test_client_data_overview_handles_error() -> None:

@@ -63,6 +63,75 @@
           </div>
         </div>
       </div>
+
+      <!-- Recovery & Atomic Services -->
+      <div class="metric-card mt-3">
+        <h6 class="section-title">Recovery &amp; Atomic Services</h6>
+        <div class="metric-grid">
+          <div class="metric-item">
+            <span class="metric-label">Atomic Svc Interval</span>
+            <span class="badge bg-info"
+              >{{ recovery_info.atomic_service_interval }}m</span
+            >
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">Spread Margin</span>
+            <span class="badge bg-info"
+              >{{ recovery_info.atomic_service_spread_margin }}m</span
+            >
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">Check Interval</span>
+            <span class="badge bg-info"
+              >{{ recovery_info.atomic_service_check_interval }}m</span
+            >
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">Recover Pending</span>
+            <span
+              class="d-inline-flex flex-column align-items-end"
+              style="line-height: 1.1"
+            >
+              <span class="text-muted" style="font-size: 9px"
+                >{{ recovery_info.recover_pending_human }}</span
+              >
+              <span
+                class="badge bg-info"
+                style="font-family: monospace; font-size: 10px"
+                >{{ recovery_info.recover_pending_cron }}</span
+              >
+            </span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">Max Pending</span>
+            <span class="badge bg-info"
+              >{{ recovery_info.max_pending_seconds }}s</span
+            >
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">Recover Running</span>
+            <span
+              class="d-inline-flex flex-column align-items-end"
+              style="line-height: 1.1"
+            >
+              <span class="text-muted" style="font-size: 9px"
+                >{{ recovery_info.recover_running_human }}</span
+              >
+              <span
+                class="badge bg-info"
+                style="font-family: monospace; font-size: 10px"
+                >{{ recovery_info.recover_running_cron }}</span
+              >
+            </span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">Runner Dead After</span>
+            <span class="badge bg-info"
+              >{{ recovery_info.runner_dead_after_minutes }}m</span
+            >
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Stats Section -->

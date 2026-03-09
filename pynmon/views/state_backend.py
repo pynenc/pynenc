@@ -24,6 +24,13 @@ async def state_backend_view(request: Request) -> HTMLResponse:
             "type": app.state_backend.__class__.__name__,
         }
 
+        # Additional context: serializer type and runner info
+        extra_info = {
+            "serializer_type": app.serializer.__class__.__name__,
+            "runner_type": app.runner.__class__.__name__,
+            "app_id": app.app_id,
+        }
+
         logger.info(
             f"Rendering state backend template in {time.time() - start_time:.2f}s"
         )
@@ -34,6 +41,7 @@ async def state_backend_view(request: Request) -> HTMLResponse:
                 "title": "State Backend Monitor",
                 "app_id": app.app_id,
                 "state_backend_info": state_backend_info,
+                "extra_info": extra_info,
             },
         )
     except Exception as e:

@@ -1,9 +1,9 @@
 import asyncio
 from collections.abc import Callable, Iterable
 from collections import defaultdict
-from functools import cached_property, wraps
+from functools import wraps
 from logging import Logger
-from typing import TYPE_CHECKING, Any, Optional, Union, overload
+from typing import TYPE_CHECKING, Any, ClassVar, Optional, Union, overload
 
 from pynenc import context
 from pynenc.app_info import AppInfo
@@ -47,14 +47,56 @@ if TYPE_CHECKING:
     AggregateFunc = Callable[[Iterable[Result]], Result]
 
 
+def _new_pynenc(
+    cls: "type[Pynenc]",
+    config_values: "dict[str, Any] | None",
+    config_filepath: "str | None",
+) -> "Pynenc":
+    """Module-level pickle reconstructor that forwards config to Pynenc.__new__.
+
+    Pickle calls ``__new__`` with no arguments by default, which breaks the
+    multiton lookup (config_values=None → app_id defaults to 'pynenc'). This
+    helper is returned by ``__reduce__`` so pickle calls it instead, ensuring
+    ``__new__`` receives the real config_values.
+
+    The instance is pre-registered in ``_instances`` and minimally initialised
+    so that module-level ``Pynenc()`` calls triggered during state
+    deserialisation (``Task.__setstate__`` → ``importlib.import_module``)
+    reuse this instance instead of creating a second one with a freshly
+    generated temp DB path.
+    """
+    instance = cls.__new__(cls, config_values, config_filepath)
+    # Only bootstrap genuinely new instances — __new__ may have returned an
+    # already-initialised multiton.
+    if not hasattr(instance, "_initialised"):
+        # Minimal init so __init__ is skipped on multiton re-encounter and
+        # lazy properties don't raise AttributeError.
+        instance._initialised = True
+        instance._config_values = config_values
+        instance._config_filepath = config_filepath
+        instance.reporting = None
+        instance._runner_instance = None
+        instance._tasks = {}
+        instance._deferred_trigger_tasks = defaultdict(list)
+        instance._reset_cached_components()
+        # Register early — *before* pickle deserialises the state dict whose
+        # Task objects may trigger module re-import.
+        # Use ConfigPynenc to resolve app_id consistently (it may come from
+        # config_values, config_filepath, or defaults).
+        resolved = ConfigPynenc(
+            config_values=config_values, config_filepath=config_filepath
+        )
+        cls._instances[resolved.app_id] = instance
+    return instance
+
+
 class Pynenc:
     """
     The main class of the Pynenc library that creates an application object.
 
-    :param str | None app_id:
-        The id of the application.
     :param dict[str, Any] | None config_values:
-        A dictionary of configuration values.
+        A dictionary of configuration values. Use ``{"app_id": "my_app"}``
+        to set the application identifier.
     :param str | None config_filepath:
         A path to a configuration file.
 
@@ -66,22 +108,44 @@ class Pynenc:
     ```
     """
 
+    # Multiton registry: at most one instance per app_id in a process.
+    # Populated by __setstate__ when a parent app is unpickled in a child
+    # process, and consulted by __new__ so that module-level re-construction
+    # returns the same (already-configured) instance.
+    _instances: ClassVar[dict[str, "Pynenc"]] = {}
+
+    def __new__(
+        cls,
+        config_values: dict[str, Any] | None = None,
+        config_filepath: str | None = None,
+    ) -> "Pynenc":
+        """Return existing instance for this app_id if one was registered by __setstate__."""
+        if cls._instances:
+            resolved = ConfigPynenc(
+                config_values=config_values, config_filepath=config_filepath
+            )
+            if existing := cls._instances.get(resolved.app_id):
+                return existing
+        return super().__new__(cls)
+
     def __init__(
         self,
-        app_id: str | None = None,
         config_values: dict[str, Any] | None = None,
         config_filepath: str | None = None,
     ) -> None:
-        self._app_id = app_id
-        self.config_values = config_values
-        self.config_filepath = config_filepath
+        # Skip re-initialisation when __new__ returned a cached instance
+        if hasattr(self, "_initialised"):
+            return
+        self._initialised = True
+        self._config_values = config_values
+        self._config_filepath = config_filepath
         self.reporting = None
         self._runner_instance: BaseRunner | None = None
         self._tasks: dict[TaskId, Task] = {}
         self._deferred_trigger_tasks: dict[TaskId, list[TriggerBuilder]] = defaultdict(
             list
         )
-        self.logger.info(f"Initialized Pynenc app:{self.app_id}")
+        self._reset_cached_components()
         load_all_plugins()
 
     @classmethod
@@ -96,9 +160,10 @@ class Pynenc:
 
         if app := create_app_from_info(app_info):
             return app
+        config_values = dict(app_info.config_values) if app_info.config_values else {}
+        config_values["app_id"] = app_info.app_id
         return cls(
-            app_id=app_info.app_id,
-            config_values=app_info.config_values,
+            config_values=config_values,
             config_filepath=app_info.config_filepath,
         )
 
@@ -152,8 +217,24 @@ class Pynenc:
         self._deferred_trigger_tasks.clear()
 
     @property
+    def config_values(self) -> dict[str, Any] | None:
+        return self._config_values
+
+    @config_values.setter
+    def config_values(self, value: dict[str, Any] | None) -> None:
+        self._config_values = value
+
+    @property
+    def config_filepath(self) -> str | None:
+        return self._config_filepath
+
+    @config_filepath.setter
+    def config_filepath(self, value: str | None) -> None:
+        self._config_filepath = value
+
+    @property
     def app_id(self) -> str:
-        return self._app_id or self.conf.app_id
+        return self.conf.app_id
 
     @property
     def tasks(self) -> dict["TaskId", Task]:
@@ -177,11 +258,22 @@ class Pynenc:
             self._tasks[task_id] = Task.from_id(self, task_id)
         return self._tasks[task_id]
 
+    def __reduce__(self) -> tuple:
+        """Control pickle reconstruction so __new__ receives config_values.
+
+        Without this, pickle calls ``Pynenc.__new__(Pynenc)`` with no args,
+        causing the multiton to fall back to the default app_id ('pynenc') and
+        return a stale instance for same-process roundtrips.
+        """
+        return (
+            _new_pynenc,
+            (type(self), self.config_values, self.config_filepath),
+            self.__getstate__(),
+        )
+
     def __getstate__(self) -> dict:
         """Return the serializable state of the app for pickling or multiprocessing."""
-        # Return state as a dictionary and a secondary value as a tuple
         return {
-            "app_id": self.app_id,
             "config_values": self.config_values,
             "config_filepath": self.config_filepath,
             "reporting": self.reporting,
@@ -189,53 +281,101 @@ class Pynenc:
         }
 
     def __setstate__(self, state: dict) -> None:
-        """Restore the app state after unpickling or process spawn."""
-        # Restore instance attributes
-        self._app_id = state["app_id"]
-        object.__setattr__(self, "_app_id", self._app_id)
-        self.config_values = state["config_values"]
-        self.config_filepath = state["config_filepath"]
+        """Restore the app state and register in the multiton.
+
+        When a child process (spawned via ``multiprocessing``) unpickles the
+        parent's app, this registers the instance so that subsequent
+        ``Pynenc(config_values={"app_id": ...})`` calls (e.g. during module
+        re-import) return the same already-configured instance.
+        """
+        self._initialised = True
+        self._config_values = state["config_values"]
+        self._config_filepath = state["config_filepath"]
         self.reporting = state["reporting"]
         self._tasks = state.get("tasks", {})
         self._deferred_trigger_tasks = defaultdict(list)
         self._runner_instance = None
-        load_all_plugins()  # Ensure plugins are loaded in subprocess
-
-    @cached_property
-    def conf(self) -> ConfigPynenc:
-        return ConfigPynenc(
-            config_values=self.config_values, config_filepath=self.config_filepath
+        self._reset_cached_components()
+        load_all_plugins()
+        # Register so module-level Pynenc() with the same app_id reuses this instance.
+        # Use ConfigPynenc to resolve app_id consistently (may come from
+        # config_values, config_filepath, or environment variables).
+        resolved = ConfigPynenc(
+            config_values=self._config_values,
+            config_filepath=self._config_filepath,
         )
+        type(self)._instances[resolved.app_id] = self
 
-    @cached_property
+    def _reset_cached_components(self) -> None:
+        """Reset all lazily-initialised components so they are re-created on next access."""
+        self._conf: ConfigPynenc | None = None
+        self._logger: Logger | None = None
+        self._orchestrator: BaseOrchestrator | None = None
+        self._trigger: BaseTrigger | None = None
+        self._broker: BaseBroker | None = None
+        self._state_backend: BaseStateBackend | None = None
+        self._serializer: BaseSerializer | None = None
+        self._client_data_store: BaseClientDataStore | None = None
+
+    @property
+    def conf(self) -> ConfigPynenc:
+        if self._conf is None:
+            self._conf = ConfigPynenc(
+                config_values=self.config_values, config_filepath=self.config_filepath
+            )
+        return self._conf
+
+    @property
     def logger(self) -> Logger:
-        return create_logger(self)
+        if self._logger is None:
+            self._logger = create_logger(self)
+        return self._logger
 
-    @cached_property
+    @property
     def orchestrator(self) -> BaseOrchestrator:
-        return get_subclass(BaseOrchestrator, self.conf.orchestrator_cls)(self)  # type: ignore # mypy issue #4717
+        if self._orchestrator is None:
+            self._orchestrator = get_subclass(
+                BaseOrchestrator,  # type: ignore[type-abstract]
+                self.conf.orchestrator_cls,
+            )(self)
+        return self._orchestrator
 
-    @cached_property
+    @property
     def trigger(self) -> BaseTrigger:
-        return get_subclass(BaseTrigger, self.conf.trigger_cls)(self)  # type: ignore # mypy issue #4717
+        if self._trigger is None:
+            self._trigger = get_subclass(BaseTrigger, self.conf.trigger_cls)(self)  # type: ignore # mypy issue #4717
+        return self._trigger
 
-    @cached_property
+    @property
     def broker(self) -> BaseBroker:
-        return get_subclass(BaseBroker, self.conf.broker_cls)(self)  # type: ignore # mypy issue #4717
+        if self._broker is None:
+            self._broker = get_subclass(BaseBroker, self.conf.broker_cls)(self)  # type: ignore # mypy issue #4717
+        return self._broker
 
-    @cached_property
+    @property
     def state_backend(self) -> BaseStateBackend:
-        backend = get_subclass(BaseStateBackend, self.conf.state_backend_cls)(self)  # type: ignore # mypy issue #4717
-        backend.store_app_info(AppInfo.from_app(self))
-        return backend
+        if self._state_backend is None:
+            self._state_backend = get_subclass(
+                BaseStateBackend,  # type: ignore[type-abstract]
+                self.conf.state_backend_cls,
+            )(self)
+            self._state_backend.store_app_info(AppInfo.from_app(self))
+        return self._state_backend
 
-    @cached_property
+    @property
     def serializer(self) -> BaseSerializer:
-        return get_subclass(BaseSerializer, self.conf.serializer_cls)()  # type: ignore # mypy issue #4717
+        if self._serializer is None:
+            self._serializer = get_subclass(BaseSerializer, self.conf.serializer_cls)()  # type: ignore # mypy issue #4717
+        return self._serializer
 
-    @cached_property
+    @property
     def client_data_store(self) -> BaseClientDataStore:
-        return get_subclass(BaseClientDataStore, self.conf.client_data_store_cls)(self)  # type: ignore # mypy issue #4717
+        if self._client_data_store is None:
+            self._client_data_store = get_subclass(
+                BaseClientDataStore,  # type: ignore[type-abstract]
+                self.conf.client_data_store_cls,
+            )(self)
+        return self._client_data_store
 
     @property
     def runner(self) -> BaseRunner:

@@ -11,7 +11,7 @@ from pynenc_tests.conftest import MockPynenc
 if TYPE_CHECKING:
     from _pytest.fixtures import FixtureRequest
 
-mock_all = MockPynenc(app_id="unit.test_mem_app")
+mock_all = MockPynenc.with_id("unit.test_mem_app")
 
 
 @mock_all.task
@@ -120,15 +120,12 @@ def test_pynenc_getstate_setstate() -> None:
     """
     Test the serialization and deserialization of the Pynenc instance via __getstate__ and __setstate__.
     """
-    app = Pynenc(
-        app_id="test_app",
-        config_values={"runner_cls": "ThreadRunner"},
-    )
+    config = {"app_id": "test_app", "runner_cls": "ThreadRunner"}
+    app = Pynenc(config_values=config)
 
     state = app.__getstate__()
     expected_state = {
-        "app_id": "test_app",
-        "config_values": {"runner_cls": "ThreadRunner"},
+        "config_values": {"app_id": "test_app", "runner_cls": "ThreadRunner"},
         "config_filepath": None,
         "reporting": None,
         "tasks": {},
@@ -140,6 +137,6 @@ def test_pynenc_getstate_setstate() -> None:
     new_app.__setstate__(state)
 
     assert new_app.app_id == "test_app"
-    assert new_app.config_values == {"runner_cls": "ThreadRunner"}
+    assert new_app.config_values == {"app_id": "test_app", "runner_cls": "ThreadRunner"}
     assert new_app._runner_instance is None  # should reset runner instance
     assert new_app._tasks == {}  # should reset tasks

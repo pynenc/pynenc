@@ -69,6 +69,38 @@ def _enrich_runner_info(
     }
 
 
+def _collect_runner_config(app: "Pynenc") -> dict[str, str | int | float]:
+    """Collect runner configuration for display."""
+    runner = app.runner
+    conf = runner.conf
+    runner_type = type(runner).__name__
+
+    info: dict[str, str | int | float] = {
+        "runner_type": runner_type,
+        "wait_results_sleep_sec": conf.invocation_wait_results_sleep_time_sec,
+        "loop_sleep_sec": conf.runner_loop_sleep_time_sec,
+        "min_parallel_slots": conf.min_parallel_slots,
+    }
+
+    # Thread-runner-specific fields
+    if hasattr(conf, "min_threads"):
+        info["min_threads"] = conf.min_threads
+        info["max_threads"] = conf.max_threads or "cpu_count"
+
+    # Multi-thread-runner-specific fields
+    if hasattr(conf, "min_processes"):
+        info["min_processes"] = conf.min_processes
+        info["max_processes"] = conf.max_processes or "cpu_count"
+        info["idle_timeout_sec"] = conf.idle_timeout_process_sec
+        info["enforce_max"] = conf.enforce_max_processes
+
+    # Persistent-process-runner-specific fields
+    if hasattr(conf, "num_processes"):
+        info["num_processes"] = conf.num_processes or "cpu_count"
+
+    return info
+
+
 @router.get("/", response_class=HTMLResponse)
 async def runners_view(request: Request) -> HTMLResponse:
     """Display active runners and heartbeat information."""
@@ -91,6 +123,8 @@ async def runners_view(request: Request) -> HTMLResponse:
         1 for r in active_runners if r.last_service_start is not None
     )
 
+    runner_config = _collect_runner_config(app)
+
     return templates.TemplateResponse(
         "runners/overview.html",
         {
@@ -103,6 +137,7 @@ async def runners_view(request: Request) -> HTMLResponse:
             "runners_with_history": runners_with_history,
             "heartbeat_timeout_minutes": app.conf.runner_considered_dead_after_minutes,
             "atomic_service_check_interval_minutes": app.conf.atomic_service_check_interval_minutes,
+            "runner_config": runner_config,
         },
     )
 

@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from pynenc import Pynenc
 
 # Module level app setup
-mock_app = MockPynenc(app_id="test-runners-app")
+mock_app = MockPynenc()
 
 
 @mock_app.task
@@ -42,7 +42,6 @@ def sample_task(x: int) -> int:
 def app_runners(request: "FixtureRequest", app_instance: "Pynenc") -> "Pynenc":
     """Fixture providing a configured Pynenc app for runners tests."""
     app = app_instance
-    app._app_id = mock_app.app_id
     app._tasks = mock_app._tasks
     sample_task.app = app
     app.purge()
@@ -125,7 +124,6 @@ def test_runners_overview_shows_active_runners(
         assert "text/html" in response.headers["content-type"]
 
         content = response.text
-        assert "test-runners-app" in content
         assert "Active Runners" in content
         assert "runner-1" in content or "ThreadRunner" in content
 

@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from pynenc import Pynenc
 
 # Module level app and task setup
-mock_app = MockPynenc(app_id="test-broker-app")
+mock_app = MockPynenc()
 
 
 @mock_app.task
@@ -46,7 +46,6 @@ def task_two(duration: int) -> str:
 @pytest.fixture
 def app_broker(request: "FixtureRequest", app_instance: "Pynenc") -> "Pynenc":
     app = app_instance
-    app._app_id = mock_app.app_id
     app._tasks = mock_app._tasks
     task_one.app = app
     task_two.app = app
@@ -70,7 +69,6 @@ def test_broker_overview_shows_broker_info(app_broker: "Pynenc") -> None:
 
         # Check that broker info is in the response
         content = response.text
-        assert "test-broker-app" in content
         assert "BaseBroker" not in content
         assert app_broker.broker.__class__.__name__ in content
 

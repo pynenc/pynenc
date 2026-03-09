@@ -74,32 +74,36 @@
   ────────────────────────────────────────────── #}
   <div class="row mb-3">
     <div class="col-12">
-      <div class="d-flex justify-content-between align-items-center mb-2">
-        <h6
-          class="text-muted fw-semibold text-uppercase mb-0"
-          style="font-size: 11px; letter-spacing: 0.05em"
-        >
-          Parsed Log Lines
-          <span class="badge bg-secondary ms-1" style="font-size: 10px"
-            >{{ analysis.lines|length }}</span
-          >
-        </h6>
-        <a
-          href="/invocations/timeline?{{ analysis.timeline_qs }}"
-          class="btn btn-sm btn-outline-primary pynmon-action-btn"
-          title="Open timeline spanning all log timestamps"
-        >
-          <span
-            class="material-icons"
-            style="font-size: 13px; vertical-align: middle"
-            >timeline</span
-          >
-          Timeline
-        </a>
-      </div>
+      <div class="card" style="background: #fff; border: 1px solid #dee2e6">
+        <div class="card-body py-3 px-3">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <h6
+              class="text-muted fw-semibold text-uppercase mb-0"
+              style="font-size: 11px; letter-spacing: 0.05em"
+            >
+              Parsed Log Lines
+              <span class="badge bg-secondary ms-1" style="font-size: 10px"
+                >{{ analysis.lines|length }}</span
+              >
+            </h6>
+            <a
+              href="/invocations/timeline?{{ analysis.timeline_qs }}"
+              class="btn btn-sm btn-outline-primary pynmon-action-btn"
+              title="Open timeline spanning all log timestamps"
+            >
+              <span
+                class="material-icons"
+                style="font-size: 13px; vertical-align: middle"
+                >timeline</span
+              >
+              Timeline
+            </a>
+          </div>
 
-      {% for la in analysis.lines %} {% include
-      "log_explorer/partials/line_card.html" %} {% endfor %}
+          {% for la in analysis.lines %} {% include
+          "log_explorer/partials/line_card.html" %} {% endfor %}
+        </div>
+      </div>
     </div>
   </div>
 
@@ -206,5 +210,16 @@
   })();
 </script>
 
-{% if analysis and analysis.svg_content %} {% include
-"log_explorer/partials/log_explorer_scripts.html" %} {% endif %} {% endblock %}
+{% if analysis and analysis.svg_content %} {# Emit invocation→task mapping for
+JS task highlighting in SVG #}
+<script>
+  window.__invTaskMap = {
+    {% for key, detail in analysis.ref_details.items() %}
+    {% if key.startswith('invocation:') and detail.get('task') %}
+    "{{ key[11:] }}": "{{ detail['task'] }}",
+    {% endif %}
+    {% endfor %}
+  };
+</script>
+{% include "log_explorer/partials/log_explorer_scripts.html" %} {% endif %} {%
+endblock %}

@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from pynenc import Pynenc
 
 # Module level app setup
-mock_app = MockPynenc(app_id="test-state-backend-app")
+mock_app = MockPynenc()
 
 
 @mock_app.task
@@ -40,7 +40,6 @@ def state_task(value: int) -> int:
 def app_state_backend(request: "FixtureRequest", app_instance: "Pynenc") -> "Pynenc":
     """Fixture providing a configured Pynenc app for state backend tests."""
     app = app_instance
-    app._app_id = mock_app.app_id
     app._tasks = mock_app._tasks
     state_task.app = app
     app.purge()
@@ -67,7 +66,7 @@ def test_state_backend_overview_shows_info(app_state_backend: "Pynenc") -> None:
         assert "text/html" in response.headers["content-type"]
 
         content = response.text
-        assert "test-state-backend-app" in content
+        assert app_state_backend.app_id in content
         assert app_state_backend.state_backend.__class__.__name__ in content
 
 

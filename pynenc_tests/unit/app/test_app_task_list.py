@@ -1,9 +1,9 @@
 import pytest
 
-from pynenc import Pynenc
+from pynenc import PynencBuilder, Pynenc
 from pynenc.identifiers.task_id import TaskId
 
-app = Pynenc(app_id="task_registry_test")
+app = PynencBuilder().app_id("task_registry_test").build()
 
 
 # Define and register tasks
@@ -32,7 +32,7 @@ def test_task_registry() -> None:
         app.get_task(TaskId("unexisting_module", "imaginary_function"))
 
 
-app_ser = Pynenc(app_id="serialization_test")
+app_ser = PynencBuilder().app_id("serialization_test").build()
 
 
 @app_ser.task

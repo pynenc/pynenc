@@ -5,6 +5,7 @@ from pynenc import Pynenc
 
 # Create a real Pynenc app instance for direct_task tests
 config = {
+    "app_id": "test_direct_task_integration",
     # "serializer_cls": "JsonSerializer",
     "runner_cls": "ThreadRunner",
     "blocking_control": False,
@@ -12,7 +13,7 @@ config = {
     # "invocation_wait_results_sleep_time_sec": 0.01,
     # "logging_level": "info",
 }
-app = Pynenc(app_id="test_direct_task_integration", config_values=config)
+app = Pynenc(config_values=config)
 
 
 @app.direct_task

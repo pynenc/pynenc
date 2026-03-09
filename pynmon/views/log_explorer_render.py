@@ -10,11 +10,13 @@ Key components:
 """
 
 import re
+from dataclasses import dataclass
 from html import escape
 from typing import TYPE_CHECKING
 from collections.abc import Callable
 
 from pynmon.app import templates
+from pynmon.util.status_colors import STATUS_COLORS, get_hex_color
 
 if TYPE_CHECKING:
     from pynmon.views.log_explorer import LineAnalysis
@@ -64,8 +66,23 @@ _HEADER_MSG_RE = re.compile(
     re.DOTALL,
 )
 
+# Status tokens in message text for colorization (not links, just coloured spans)
+_STATUS_TOKEN_RE = re.compile(
+    r"((?:from_status|to_status|status):([A-Za-z_]+))"
+    r"|(InvocationStatus\.([A-Za-z_]+))"
+)
+_KNOWN_STATUSES = frozenset(STATUS_COLORS)
+
 
 # ── public helpers ─────────────────────────────────────────────────────────────
+
+
+@dataclass
+class LogParts:
+    """Separated header and message HTML for two-column log display."""
+
+    header: str
+    message: str
 
 
 def entity_link_url(kind: str, value: str) -> str:
@@ -101,13 +118,25 @@ def render_log_html(la: "LineAnalysis") -> str:
     :param LineAnalysis la: The analysed log line
     :return: Safe HTML string for embedding in the template
     """
+    parts = render_log_parts(la)
+    if not parts.header and not parts.message:
+        return ""
+    return f'{parts.header}<div class="log-msg-text">{parts.message}</div>'
+
+
+def render_log_parts(la: "LineAnalysis") -> LogParts:
+    """Return header and message as separate HTML strings for 2-column layout.
+
+    :param LineAnalysis la: The analysed log line
+    :return: LogParts with header and message HTML
+    """
     raw = la.parsed.raw
     if not raw:
-        return ""
+        return LogParts(header="", message="")
     header_raw, msg_raw = _split_header_message(raw)
     header_html = _render_header(header_raw, la.runner_id_map)
     msg_html = _render_message(msg_raw)
-    return f'{header_html}<div class="log-msg-text">{msg_html}</div>'
+    return LogParts(header=header_html, message=msg_html)
 
 
 # ── internal rendering steps ───────────────────────────────────────────────────
@@ -134,11 +163,12 @@ def _render_header(header: str, rid_map: dict[str, str] | None = None) -> str:
 
 
 def _render_message(msg: str) -> str:
-    """Escape and linkify the message body."""
+    """Escape, linkify entities, and colorize status tokens in the message body."""
     if not msg:
         return ""
     safe = escape(msg)
-    return _linkify_entities(safe)
+    safe = _linkify_entities(safe)
+    return _colorize_statuses(safe)
 
 
 def _colourize_level(html: str) -> str:
@@ -209,6 +239,7 @@ def _bracket_link_task(content: str) -> str:
         key = tm.group(1)
         return (
             f':<a href="/tasks/{key}" class="bracket-link bracket-task"'
+            f' data-task-key="{key}"'
             f' title="Task: {key}">{key}</a>'
         )
 
@@ -260,6 +291,8 @@ def _entity_replacer(m: re.Match[str]) -> str:
             "new-invocation",
         ):
             data_attr = f' data-invocation-id="{escape(value)}"'
+        elif kind == "task":
+            data_attr = f' data-task-key="{escape(value)}"'
         else:
             data_attr = ""
         return (
@@ -275,5 +308,34 @@ def _dim_timestamp(html: str) -> str:
     return _TS_RE.sub(r'<span class="log-ts">\1</span>', html)
 
 
+def _colorize_statuses(html: str) -> str:
+    """Wrap status tokens with coloured spans using the timeline status palette.
+
+    Matches patterns like ``status:RUNNING``, ``from_status:PENDING``,
+    ``to_status:SUCCESS``, and ``InvocationStatus.FAILED`` and wraps them
+    in a ``<span>`` whose colour matches the unified STATUS_COLORS dict.
+
+    :param str html: Pre-escaped HTML message text
+    :return: HTML with status tokens wrapped in coloured spans
+    """
+
+    def _repl(m: re.Match[str]) -> str:
+        if m.group(1):
+            full_token, status_name = m.group(1), m.group(2)
+        else:
+            full_token, status_name = m.group(3), m.group(4)
+        if status_name.upper() in _KNOWN_STATUSES:
+            hex_color = get_hex_color(status_name)
+            return (
+                f'<span class="status-token"'
+                f' style="color:{hex_color};"'
+                f' title="{status_name.upper()}">{full_token}</span>'
+            )
+        return full_token
+
+    return _sub_outside_tags(_STATUS_TOKEN_RE, _repl, html)
+
+
 # ── Jinja2 registration ───────────────────────────────────────────────────────
 templates.env.globals["_render_log_html"] = render_log_html
+templates.env.globals["_render_log_parts"] = render_log_parts

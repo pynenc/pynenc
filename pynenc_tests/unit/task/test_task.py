@@ -4,12 +4,12 @@ from unittest.mock import patch
 
 import pytest
 
-from pynenc import Pynenc, Task
+from pynenc import PynencBuilder, Task, Pynenc
 from pynenc.conf.config_task import ConfigTask
 from pynenc.exceptions import RetryError
 from pynenc.invocation import ConcurrentInvocation, DistributedInvocation
 
-app = Pynenc(app_id="test_task")
+app = PynencBuilder().app_id("unit_task_test_task").build()
 
 
 @app.task
@@ -45,9 +45,8 @@ def test_sync_run_with_dev_mode_force_conc_invocation() -> None:
     with patch.dict(os.environ, {"PYNENC__DEV_MODE_FORCE_SYNC_TASKS": "True"}):
         add.app = Pynenc()  # re-instantiate the app, config os.environ is cached
         invocation = add(1, 2)
-
-    assert isinstance(invocation, ConcurrentInvocation)
-    assert invocation.result == 3
+        assert isinstance(invocation, ConcurrentInvocation)
+        assert invocation.result == 3
 
 
 def test_aconc_invocation() -> None:
@@ -97,7 +96,7 @@ def test_sync_run_retry() -> None:
     Test that the Task will retry once for synchronous invocation
     """
     with patch.dict(os.environ, {"PYNENC__DEV_MODE_FORCE_SYNC_TASKS": "True"}):
-        retry_once.app = Pynenc(app_id="test_sync_run_retry")
+        retry_once.app = Pynenc(config_values={"app_id": "test_sync_run_retry"})
         invocation = retry_once()
 
     assert isinstance(invocation, ConcurrentInvocation)
@@ -129,7 +128,7 @@ def another_task() -> None:
 
 def test_retriable_exceptions() -> None:
     """Test that the task will contain RetryError by default as a retriable exception"""
-    local_app = Pynenc(app_id="test_retriable_exceptions")
+    local_app = Pynenc(config_values={"app_id": "test_retriable_exceptions"})
     task = local_app.task(another_task)
     task.conf.retry_for = ()
     assert task.retriable_exceptions == (RetryError,)

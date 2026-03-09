@@ -12,9 +12,9 @@ Key components:
 - helper_wrapped_func: A function wrapped in a StatusBase-like object (has pynenc_task attr)
 """
 
-from pynenc import Pynenc, Task
+from pynenc import PynencBuilder, Task
 
-helper_app = Pynenc(app_id="helper_module")
+helper_app = PynencBuilder().app_id("helper_module").build()
 
 
 @helper_app.task

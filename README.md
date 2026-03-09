@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://pynenc.org/assets/img/avatar-icon.png" alt="Pynenc" width="300">
+  <img src="https://pynenc.org/assets/img/pynenc_logo_.png" alt="Pynenc" width="300">
 </p>
 <h1 align="center">Pynenc</h1>
 <p align="center">
@@ -126,9 +126,9 @@ See the [Changelog](https://docs.pynenc.org/changelog.html) for the complete lis
   - **Task Integration**: Integration with existing Pynenc tasks using `force_new_workflow` decorator option.
   - **Failure Recovery**: Workflows can resume from exact points of failure with identical replay behavior.
 
-- **Automatic Task Prioritization**: Pynenc prioritizes tasks by simply counting the number of dependencies each task has. The task with the most dependencies is selected first.
+- **Automatic Task Prioritization**: The broker prioritizes tasks by counting how many other tasks depend on them. The task blocking the most others is selected first.
 
-- **Automatic Task Pausing**: Pynenc pauses tasks that are waiting for other tasks to complete. So those with higher priority (has more dependent task waiting for them) can run instead, instead of blocking a runner and preventing deadlocks.
+- **Automatic Task Pausing**: Tasks waiting for dependencies are paused, freeing their runner slots. Higher-priority tasks (those with more dependents waiting) run instead, preventing thread-pool exhaustion and deadlocks.
 
 - **Direct Task Execution**: Use `@app.direct_task` for tasks that return results directly instead of invocations.
 

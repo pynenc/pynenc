@@ -19,7 +19,9 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from pynenc import PynencBuilder
-from pynmon.app import app as pynmon_app
+from pynmon.app import app as pynmon_app, setup_routes
+
+setup_routes()
 
 if TYPE_CHECKING:
     from pynenc import Pynenc
@@ -27,10 +29,11 @@ if TYPE_CHECKING:
 
 def test_home_displays_app_info(app_instance: "Pynenc") -> None:
     """Test that home page displays basic app information."""
-    # Patch pynmon to use our test app
-    with patch("pynmon.app.get_active_app", return_value=app_instance):
+    # Patch in both app module (middleware) and home view (route handler)
+    with patch("pynmon.views.home.get_active_app", return_value=app_instance):
         with patch(
-            "pynmon.app.get_all_apps", return_value={app_instance.app_id: app_instance}
+            "pynmon.views.home.get_all_apps",
+            return_value={app_instance.app_id: app_instance},
         ):
             client = TestClient(pynmon_app)
             response = client.get("/")
@@ -57,9 +60,9 @@ def test_home_displays_multiple_apps() -> None:
 
     all_apps = {"app-one": app1, "app-two": app2}
 
-    # Patch pynmon to use our test apps
-    with patch("pynmon.app.get_active_app", return_value=app1):
-        with patch("pynmon.app.get_all_apps", return_value=all_apps):
+    # Patch in both app module (middleware) and home view (route handler)
+    with patch("pynmon.views.home.get_active_app", return_value=app1):
+        with patch("pynmon.views.home.get_all_apps", return_value=all_apps):
             client = TestClient(pynmon_app)
             response = client.get("/")
 

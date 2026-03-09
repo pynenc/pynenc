@@ -3,10 +3,10 @@ from collections.abc import Iterable, Sequence
 
 import pytest
 
-from pynenc import Pynenc
+from pynenc import PynencBuilder
 
 # Create a test app instance
-app = Pynenc(app_id="test_direct_task")
+app = PynencBuilder().app_id("test_direct_task").build()
 # Forcing SYNC TASKs, only interested in testing the decorator
 app.conf.dev_mode_force_sync_tasks = True
 

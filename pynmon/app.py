@@ -20,7 +20,7 @@ from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -162,30 +162,16 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
     )
 
 
-@app.get("/", response_class=HTMLResponse)
-async def root(request: Request) -> HTMLResponse:
-    """Root endpoint, shows the dashboard."""
-    active_app = get_active_app()
-    all_apps = get_all_apps()
-    if not all_apps or not active_app:
-        return templates.TemplateResponse(
-            "critical_error.html",
-            {
-                "request": request,
-                "title": "No App Configured",
-                "message": "No Pynenc application is configured for monitoring.",
-            },
-        )
+# The dashboard route is provided by pynmon.views.home.router (registered
+# in setup_routes).  Only a minimal guard is kept here for the edge case
+# where no app is configured at all.
 
-    return templates.TemplateResponse(
-        "base.html",
-        {
-            "request": request,
-            "title": "Pynenc Monitor Dashboard",
-            "app_id": active_app.app_id,
-            "all_apps": list(all_apps.keys()),
-        },
-    )
+
+@app.get("/health", response_class=JSONResponse)
+async def health_check() -> JSONResponse:
+    """Lightweight health endpoint."""
+    active = get_active_app() if get_all_apps() else None
+    return JSONResponse({"status": "ok", "app": active.app_id if active else None})
 
 
 @app.get("/switch-app/{app_id}")
@@ -242,6 +228,7 @@ def setup_routes() -> None:
         calls,
         client_data_store,
         family_tree,
+        home,
         invocations,
         log_explorer,
         orchestrator,
@@ -251,7 +238,8 @@ def setup_routes() -> None:
         workflows,
     )
 
-    # Register the routes
+    # Register the routes — home first so "/" is the dashboard
+    app.include_router(home.router)
     app.include_router(broker.router)
     app.include_router(client_data_store.router)
     app.include_router(orchestrator.router)

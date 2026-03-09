@@ -33,7 +33,7 @@ if TYPE_CHECKING:
     from pynenc import Pynenc
 
 # Module level app and task setup
-mock_app = MockPynenc(app_id="test-invocations-app")
+mock_app = MockPynenc()
 
 
 @mock_app.task
@@ -51,7 +51,6 @@ def multiply_task(a: int, b: int) -> int:
 @pytest.fixture
 def app(request: "FixtureRequest", app_instance: "Pynenc") -> "Pynenc":
     app = app_instance
-    app._app_id = mock_app.app_id
     app._tasks = mock_app._tasks
     add_task.app = app
     multiply_task.app = app

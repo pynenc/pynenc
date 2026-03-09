@@ -135,11 +135,13 @@
     if (apiData?.parent_invocation_id) {
       const pid = apiData.parent_invocation_id;
       html += `<tr><th>Parent Invocation</th>
-        <td><code style="font-size:11px;cursor:pointer;" class="invocation-link"
+        <td><a href="/invocations/${pid}" class="invocation-link text-decoration-none"
               data-invocation-id="${pid}"
+              style="color:#0d6efd;cursor:pointer;"
               onmouseenter="highlightInvocation('${pid}')"
               onmouseleave="unhighlightInvocation('${pid}')"
-              onclick="loadInvocationDetails('${pid}')">${pid}</code></td></tr>`;
+              onclick="event.preventDefault();loadInvocationDetails('${pid}')">
+          <code style="font-size:11px;color:inherit;">${pid}</code></a></td></tr>`;
     }
 
     if (apiData?.workflow) {

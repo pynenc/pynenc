@@ -340,16 +340,23 @@ def _render_node(
 
     href = f"{base_url}/{node.invocation_id}"
     inv_id = _esc(node.invocation_id)
-    mod_func = f"{_esc(node.module_name)}.{_esc(node.func_name)}"
+    module_name = _esc(node.module_name)
+    func_name = _esc(node.func_name)
     max_chars = _NODE_W // 7
-    if len(mod_func) > max_chars:
-        mod_func = mod_func[: max_chars - 1] + "\u2026"
+    if len(module_name) > max_chars:
+        module_name = module_name[: max_chars - 1] + "\u2026"
+    if len(func_name) > max_chars:
+        func_name = func_name[: max_chars - 1] + "\u2026"
     ts_str = (
         node.created_at.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3] if node.created_at else ""
     )
     elapsed_str = _format_elapsed(getattr(node, "elapsed_seconds", None))
     if elapsed_str:
         elapsed_str = f"\u23f1 {elapsed_str}"
+    # Merge datetime + elapsed into a single line
+    time_line = ts_str
+    if elapsed_str:
+        time_line = f"{ts_str}  {elapsed_str}" if ts_str else elapsed_str
 
     sans = "font-family='-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif'"
     mono = "font-family='SFMono-Regular,Menlo,Monaco,Consolas,monospace'"
@@ -371,7 +378,6 @@ def _render_node(
     if is_truncated and not is_focus:
         stroke = 'stroke="#90a4ae" stroke-width="1.5" stroke-dasharray="6,3"'
 
-    elapsed_color = text_muted if is_focus else color
     node_markup = (
         f'<a href="{href}" class="ft-node" data-inv-id="{node.invocation_id}" '
         f'data-status="{node.status}">'
@@ -383,15 +389,15 @@ def _render_node(
         # Line 1: invocation ID (monospace)
         f'<text x="{cx:.1f}" y="{y + 14:.1f}" text-anchor="middle" '
         f'font-size="9.5" {mono} fill="{text_secondary}">{inv_id}</text>'
-        # Line 2: module.func_name (bold)
-        f'<text x="{cx:.1f}" y="{y + 29:.1f}" text-anchor="middle" '
-        f'font-size="11" {sans} fill="{text_primary}" font-weight="600">{mod_func}</text>'
-        # Line 3: ISO datetime
-        f'<text x="{cx:.1f}" y="{y + 43:.1f}" text-anchor="middle" '
-        f'font-size="9" {sans} fill="{text_muted}">{ts_str}</text>'
-        # Line 4: elapsed time
-        f'<text x="{cx:.1f}" y="{y + 56:.1f}" text-anchor="middle" '
-        f'font-size="9" {sans} fill="{elapsed_color}">{elapsed_str}</text>'
+        # Line 2: module name
+        f'<text x="{cx:.1f}" y="{y + 28:.1f}" text-anchor="middle" '
+        f'font-size="9" {sans} fill="{text_muted}">{module_name}</text>'
+        # Line 3: function name (bold)
+        f'<text x="{cx:.1f}" y="{y + 41:.1f}" text-anchor="middle" '
+        f'font-size="11" {sans} fill="{text_primary}" font-weight="600">{func_name}</text>'
+        # Line 4: datetime + elapsed (collapsed)
+        f'<text x="{cx:.1f}" y="{y + 55:.1f}" text-anchor="middle" '
+        f'font-size="9" {sans} fill="{text_muted}">{time_line}</text>'
         f"</a>"
     )
 

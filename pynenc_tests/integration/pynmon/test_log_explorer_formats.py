@@ -12,6 +12,7 @@ Key components:
 """
 
 import io
+import logging
 import threading
 import urllib.parse
 from typing import TYPE_CHECKING
@@ -19,7 +20,6 @@ from typing import TYPE_CHECKING
 import pytest
 
 from pynenc.builder import PynencBuilder
-from pynenc.util.log import create_logger
 
 from pynmon.util.log_parser import parse_log_lines
 
@@ -154,9 +154,16 @@ _IDS = [t.app.app_id for t in _TASKS]
 
 
 def _run_and_capture(task_fn: "Task") -> tuple[str, str]:
-    """Run *task_fn*, capture logs into a StringIO buffer, return (log_text, invocation_id)."""
+    """Run *task_fn* and return (log_text, invocation_id) in pynenc's log format."""
     buf = io.StringIO()
-    create_logger(task_fn.app, stream=buf)
+    # Redirect the app's existing handler stream to buf, preserving the
+    # configured formatter (text/json/colors) so parse_log_lines works.
+    stream_handlers = [
+        h for h in task_fn.app.logger.handlers if isinstance(h, logging.StreamHandler)
+    ]
+    original_streams = [(h, h.stream) for h in stream_handlers]
+    for handler in stream_handlers:
+        handler.setStream(buf)
 
     runner_thread = threading.Thread(target=task_fn.app.runner.run, daemon=True)
     runner_thread.start()
@@ -166,6 +173,9 @@ def _run_and_capture(task_fn: "Task") -> tuple[str, str]:
         invocation_id = inv.invocation_id
     finally:
         task_fn.app.runner.stop_runner_loop()
+        runner_thread.join(timeout=5)
+        for handler, original_stream in original_streams:
+            handler.setStream(original_stream)
     return buf.getvalue(), invocation_id
 
 
@@ -176,6 +186,7 @@ def test_log_parser_extracts_context(task_fn: "Task") -> None:
     label = task_fn.app.app_id
     log_text, invocation_id = _run_and_capture(task_fn)
     assert log_text, f"No log output for {label}"
+    assert invocation_id in log_text, f"Invocation ID not in logs for {label}"
 
     parsed = parse_log_lines(log_text)
     valid = [p for p in parsed if p.is_valid]

@@ -5,6 +5,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 from pynenc.invocation.status import InvocationStatus
 from pynmon.app import get_pynenc_instance, templates
+from pynmon.util.formatting import cron_to_human
 
 router = APIRouter(prefix="/orchestrator", tags=["orchestrator"])
 
@@ -38,6 +39,23 @@ async def orchestrator_view(request: Request) -> HTMLResponse:
         "auto_purge_hours": app.orchestrator.conf.auto_final_invocation_purge_hours,
     }
 
+    # Get app-level recovery / atomic service config (lightweight reads)
+    recovery_info = {
+        "atomic_service_interval": app.conf.atomic_service_interval_minutes,
+        "atomic_service_spread_margin": app.conf.atomic_service_spread_margin_minutes,
+        "atomic_service_check_interval": app.conf.atomic_service_check_interval_minutes,
+        "recover_pending_cron": app.conf.recover_pending_invocations_cron,
+        "recover_pending_human": cron_to_human(
+            app.conf.recover_pending_invocations_cron
+        ),
+        "max_pending_seconds": app.conf.max_pending_seconds,
+        "recover_running_cron": app.conf.recover_running_invocations_cron,
+        "recover_running_human": cron_to_human(
+            app.conf.recover_running_invocations_cron
+        ),
+        "runner_dead_after_minutes": app.conf.runner_considered_dead_after_minutes,
+    }
+
     # Offload heavy iteration to a thread so the event loop stays free
     status_counts = await asyncio.to_thread(_collect_status_counts, app)
 
@@ -56,6 +74,7 @@ async def orchestrator_view(request: Request) -> HTMLResponse:
             "title": "Orchestrator Monitor",
             "app_id": app.app_id,
             "orchestrator_info": orchestrator_info,
+            "recovery_info": recovery_info,
             "blocking_invocations": blocking_invocations,
             "status_counts": status_counts,
             "active_runners": active_runners,

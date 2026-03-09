@@ -24,6 +24,10 @@ async def client_data_view(request: Request) -> HTMLResponse:
             "type": app.client_data_store.__class__.__name__,
             "min_size_to_cache": app.client_data_store.conf.min_size_to_cache,
             "local_cache_size": app.client_data_store.conf.local_cache_size,
+            "max_size_to_cache": app.client_data_store.conf.max_size_to_cache,
+            "warn_threshold": app.client_data_store.conf.warn_threshold,
+            "compression_enabled": app.client_data_store.conf.compression_enabled,
+            "disabled": app.client_data_store.conf.disable_client_data_store,
         }
 
         logger.info(

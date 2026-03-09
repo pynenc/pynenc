@@ -36,6 +36,7 @@ STATUS_COLORS: dict[str, str] = {
     "PENDING": "#f39c12",  # Orange - waiting to run
     "PENDING_RECOVERY": "#e67e22",  # Dark orange - timeout recovery
     "RUNNING": "#3498db",  # Blue - active
+    "RUNNING_RECOVERY": "#e67e22",  # Dark orange - runner recovery
     "PAUSED": "#1abc9c",  # Teal - paused
     "RESUMED": "#2980b9",  # Dark blue - resumed
     "KILLED": "#c0392b",  # Dark red - killed
@@ -85,6 +86,7 @@ STATUS_BOOTSTRAP_CLASSES: dict[str, str] = {
     "PENDING": "warning",
     "PENDING_RECOVERY": "warning",
     "RUNNING": "info",
+    "RUNNING_RECOVERY": "warning",
     "PAUSED": "primary",
     "RESUMED": "info",
     "KILLED": "danger",
@@ -181,6 +183,7 @@ const STATUS_COLORS = {
   'PENDING': '#f39c12',
   'PENDING_RECOVERY': '#e67e22',
   'RUNNING': '#3498db',
+  'RUNNING_RECOVERY': '#e67e22',
   'PAUSED': '#1abc9c',
   'RESUMED': '#2980b9',
   'KILLED': '#c0392b',
@@ -197,6 +200,7 @@ const STATUS_BOOTSTRAP_CLASSES = {
   'PENDING': 'warning',
   'PENDING_RECOVERY': 'warning',
   'RUNNING': 'info',
+  'RUNNING_RECOVERY': 'warning',
   'PAUSED': 'primary',
   'RESUMED': 'info',
   'KILLED': 'danger',

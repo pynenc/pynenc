@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from pynenc.types import Params, Result
 
 
-mock_base_app = MockPynenc(app_id="pynenc_tests/unit/runner/test_base_runner.py")
+mock_base_app = MockPynenc.with_id("pynenc_tests/unit/runner/test_base_runner.py")
 
 
 def dummy() -> None: ...

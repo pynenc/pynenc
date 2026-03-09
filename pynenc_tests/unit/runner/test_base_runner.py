@@ -10,7 +10,7 @@ from pynenc.runner.base_runner import DummyRunner
 from pynenc_tests.conftest import MockPynenc
 from pynenc_tests.util import capture_logs
 
-mock_base_app = MockPynenc(app_id="pynenc_tests/unit/runner/test_base_runner.py")
+mock_base_app = MockPynenc.with_id("pynenc_tests/unit/runner/test_base_runner.py")
 
 
 def test_run() -> None:

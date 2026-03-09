@@ -1,24 +1,24 @@
 /* ===== PYNMON CORE DESIGN SYSTEM ===== */
 
-/* Design System Variables */
+/* Design System Variables – palette derived from the Pynenc logo */
 :root {
-  /* Navigation Menu (Dark Theme) */
-  --nav-bg: #2c3e50;
-  --nav-bg-secondary: #34495e;
-  --nav-active: #3498db;
-  --nav-hover: #4a5c6b;
-  --nav-text-primary: #ecf0f1;
-  --nav-text-secondary: #bdc3c7;
-  --nav-brand: #3498db;
+  /* Navigation Menu (Dark Warm Theme) */
+  --nav-bg: #3b2320;
+  --nav-bg-secondary: #4a2e2a;
+  --nav-active: #d05030;
+  --nav-hover: #5a3a35;
+  --nav-text-primary: #f0ebe8;
+  --nav-text-secondary: #c4a89e;
+  --nav-brand: #d05030;
 
   /* Main Content (Light Theme) */
-  --content-bg: #f8f9fa;
+  --content-bg: #faf8f6;
   --card-bg: #ffffff;
-  --border-color: #dee2e6;
-  --table-border: #e9ecef;
-  --text-primary: #212529;
-  --text-secondary: #6c757d;
-  --text-muted: #adb5bd;
+  --border-color: #e0d6d0;
+  --table-border: #ede6e1;
+  --text-primary: #2c1a14;
+  --text-secondary: #6b5147;
+  --text-muted: #a89288;
 
   /* Status Colors */
   --error-red: #dc3545;
@@ -50,6 +50,15 @@ body {
   color: var(--nav-brand) !important;
   font-weight: 600;
   font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.navbar-logo {
+  height: 22px;
+  width: auto;
+  opacity: 0.9;
 }
 
 .navbar-nav .nav-link {
@@ -72,7 +81,7 @@ body {
 .navbar-nav .nav-link.active {
   background-color: var(--nav-hover);
   color: var(--nav-text-primary) !important;
-  border-left: 2px solid var(--nav-text-secondary);
+  border-left: 2px solid var(--nav-active);
   padding-left: 0.9rem;
 }
 
@@ -80,6 +89,10 @@ body {
   font-size: 18px;
   margin-right: 0.5rem;
   color: var(--nav-text-secondary);
+}
+
+.navbar-nav .nav-link.active .material-icons {
+  color: var(--nav-active);
 }
 
 /* App Dropdown */
@@ -339,11 +352,11 @@ body {
 }
 
 .info-card {
-  background: #f8f9fa;
+  background: #faf8f6;
   border: 1px solid var(--border-color);
   border-radius: 6px;
   padding: 1rem;
-  border-left: 3px solid #17a2b8;
+  border-left: 3px solid var(--nav-active);
 }
 
 .section-title {
@@ -486,10 +499,10 @@ body {
 }
 
 .clickable-code {
-  background: #f8f9fa;
+  background: #faf5f2;
   padding: 0.125rem 0.375rem;
   border-radius: 0.25rem;
-  color: #0d6efd;
+  color: #c04020;
   text-decoration: none;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
   font-size: 0.875em;
@@ -497,8 +510,8 @@ body {
 }
 
 .clickable-code:hover {
-  background: #e9ecef;
-  color: #0a58ca;
+  background: #ede1db;
+  color: #902000;
 }
 
 .pynmon-action-btn {
@@ -687,4 +700,23 @@ code {
 
 .htmx-request .htmx-hide-on-request {
   display: none;
+}
+
+/* ===== SUBTLE BRAND ACCENT ===== */
+/* Soft warm orange tint across the content background */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: rgba(208, 80, 48, 0.018);
+}
+
+/* Ensure main content sits above the body pseudo-element */
+body > nav,
+body > .container,
+body > #pynmon-loading {
+  position: relative;
+  z-index: 1;
 }

@@ -45,7 +45,7 @@ def test_serialized_arguments_with_caching(call: Call) -> None:
     # Setup
     call.app.config_values = None
     call.app.config_filepath = None
-    call.app.client_data_store = MemClientDataStore(call.app)
+    call.app.client_data_store = MemClientDataStore(call.app)  # type: ignore[misc]
 
     # Create arguments of different sizes
     call.arguments.kwargs = {

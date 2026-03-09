@@ -1,7 +1,7 @@
 from pynenc import Pynenc
 
-config = {"runner_cls": "ThreadRunner"}
-app = Pynenc(app_id="test_workflow_identity", config_values=config)
+config = {"app_id": "test_workflow_identity", "runner_cls": "ThreadRunner"}
+app = Pynenc(config_values=config)
 
 
 @app.task

@@ -4,11 +4,11 @@ from typing import Any
 
 import pytest
 
-from pynenc import Pynenc
+from pynenc import PynencBuilder
 from pynenc.invocation.dist_invocation import DistributedInvocation, InvocationStatus
 from pynenc.runner.thread_runner import ThreadRunner
 
-app = Pynenc(config_values={"runner_cls": "ThreadRunner"})
+app = PynencBuilder().thread_runner().app_id("test-thread-runner").build()
 
 
 @app.task
@@ -39,7 +39,7 @@ class DummyInvocation:
 # This test forces thread creation to fail and checks that reroute_invocations is called.
 def test_reroute_on_thread_start_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     # Create a Pynenc instance and get its runner (which is a ThreadRunner)
-    app = Pynenc(config_values={"runner_cls": "ThreadRunner"})
+    app = PynencBuilder().thread_runner().app_id("test-thread-runner").build()
     runner: ThreadRunner = app.runner  # type: ignore
     runner._on_start()  # initialize runner internals
 

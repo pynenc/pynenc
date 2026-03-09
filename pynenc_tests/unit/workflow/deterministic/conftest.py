@@ -26,13 +26,14 @@ def add_task_func(a: int, b: int) -> int:
 def app() -> Pynenc:
     """Create a test app with real memory state backend and thread runner."""
     config = {
+        "app_id": "test_deterministic",
         "runner_cls": "ThreadRunner",
         "state_backend_cls": "MemStateBackend",
         "broker_cls": "MemBroker",
         "orchestrator_cls": "MemOrchestrator",
         "client_data_store_cls": "MemClientDataStore",
     }
-    app = Pynenc(app_id="test_deterministic", config_values=config)
+    app = Pynenc(config_values=config)
     app.purge()
     return app
 

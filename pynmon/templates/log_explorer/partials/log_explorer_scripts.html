@@ -21,12 +21,16 @@ detail panel on click. #}
       if (el) highlightInvocation(el.dataset.invocationId, true);
       const rl = e.target.closest(".runner-label[data-runner-id]");
       if (rl) highlightRunner(rl.getAttribute("data-runner-id"), true);
+      const tl = e.target.closest("[data-task-key]");
+      if (tl) highlightTask(tl.getAttribute("data-task-key"), true);
     });
     svgContainer.addEventListener("mouseout", function (e) {
       const el = e.target.closest("[data-invocation-id]");
       if (el) highlightInvocation(el.dataset.invocationId, false);
       const rl = e.target.closest(".runner-label[data-runner-id]");
       if (rl) highlightRunner(rl.getAttribute("data-runner-id"), false);
+      const tl = e.target.closest("[data-task-key]");
+      if (tl) highlightTask(tl.getAttribute("data-task-key"), false);
     });
 
     // ── Cross-highlight: ref chips ↔ SVG ──────────────────────────────
@@ -50,6 +54,16 @@ detail panel on click. #}
       });
       chip.addEventListener("mouseleave", function () {
         highlightRunner(chip.dataset.runnerId, false);
+      });
+    });
+
+    document.querySelectorAll("[data-task-key]").forEach(function (chip) {
+      if (svgContainer.contains(chip)) return;
+      chip.addEventListener("mouseenter", function () {
+        highlightTask(chip.dataset.taskKey, true);
+      });
+      chip.addEventListener("mouseleave", function () {
+        highlightTask(chip.dataset.taskKey, false);
       });
     });
 
@@ -80,6 +94,42 @@ detail panel on click. #}
       // Highlight all chips with this runner_id
       document
         .querySelectorAll('[data-runner-id="' + runnerId + '"]')
+        .forEach(function (el) {
+          if (svgContainer.contains(el)) return;
+          on
+            ? el.classList.add("cross-highlight")
+            : el.classList.remove("cross-highlight");
+        });
+    }
+
+    function highlightTask(taskKey, on) {
+      if (!taskKey) return;
+      var taskMap = window.__invTaskMap || {};
+      // Highlight SVG elements whose invocation maps to this task
+      svgContainer
+        .querySelectorAll("[data-invocation-id]")
+        .forEach(function (el) {
+          var invId =
+            el.dataset.invocationId || el.getAttribute("data-invocation-id");
+          if (taskMap[invId] === taskKey) {
+            var g = el.closest("g") || el;
+            on
+              ? g.classList.add("invocation-highlight")
+              : g.classList.remove("invocation-highlight");
+          }
+        });
+      // Highlight SVG elements with matching task-key directly
+      svgContainer
+        .querySelectorAll('[data-task-key="' + taskKey + '"]')
+        .forEach(function (el) {
+          var g = el.closest("g") || el;
+          on
+            ? g.classList.add("invocation-highlight")
+            : g.classList.remove("invocation-highlight");
+        });
+      // Highlight all chips/links with this task-key outside SVG
+      document
+        .querySelectorAll('[data-task-key="' + taskKey + '"]')
         .forEach(function (el) {
           if (svgContainer.contains(el)) return;
           on

@@ -43,13 +43,14 @@ def test_from_id_should_resolve_dynamically_registered_task() -> None:
     The task IS registered in app._tasks via the app.task() call.
     """
     config = {
+        "app_id": "test_get_tasks",
         "runner_cls": "ThreadRunner",
         "state_backend_cls": "MemStateBackend",
         "broker_cls": "MemBroker",
         "orchestrator_cls": "MemOrchestrator",
         "client_data_store_cls": "MemClientDataStore",
     }
-    app = Pynenc(app_id="test_get_tasks", config_values=config)
+    app = Pynenc(config_values=config)
     task = app.task(add_func)
 
     # from_id should resolve the task from app._tasks
@@ -66,13 +67,14 @@ def test_from_id_should_resolve_module_level_task_from_different_app() -> None:
     by importing the module and finding the Task.
     """
     config = {
+        "app_id": "test_get_tasks_module",
         "runner_cls": "ThreadRunner",
         "state_backend_cls": "MemStateBackend",
         "broker_cls": "MemBroker",
         "orchestrator_cls": "MemOrchestrator",
         "client_data_store_cls": "MemClientDataStore",
     }
-    new_app = Pynenc(app_id="test_resolve_task", config_values=config)
+    new_app = Pynenc(config_values=config)
 
     # Task defined in the helper module with @helper_app.task
     task_id = TaskId("pynenc_tests.unit.task.tasks_get_tasks", "helper_task_func")
@@ -96,13 +98,14 @@ def test_from_id_should_resolve_module_level_direct_task_from_different_app() ->
     a non-Task object (like celery_app.tasks.StatusBase).
     """
     config = {
+        "app_id": "test_get_tasks_direct",
         "runner_cls": "ThreadRunner",
         "state_backend_cls": "MemStateBackend",
         "broker_cls": "MemBroker",
         "orchestrator_cls": "MemOrchestrator",
         "client_data_store_cls": "MemClientDataStore",
     }
-    new_app = Pynenc(app_id="test_resolve_direct", config_values=config)
+    new_app = Pynenc(config_values=config)
 
     # Task defined in the helper module with @helper_app.direct_task
     task_id = TaskId("pynenc_tests.unit.task.tasks_get_tasks", "helper_direct_func")
@@ -123,13 +126,14 @@ def test_from_id_should_resolve_pynenc_task_wrapper() -> None:
     and bind it to the requesting app.
     """
     config = {
+        "app_id": "test_get_tasks_wrapper",
         "runner_cls": "ThreadRunner",
         "state_backend_cls": "MemStateBackend",
         "broker_cls": "MemBroker",
         "orchestrator_cls": "MemOrchestrator",
         "client_data_store_cls": "MemClientDataStore",
     }
-    new_app = Pynenc(app_id="test_resolve_wrapper", config_values=config)
+    new_app = Pynenc(config_values=config)
 
     # The helper module attribute "helper_wrapped_func" is a _TaskWrapper,
     # not a Task.  Its .pynenc_task attribute IS a Task.

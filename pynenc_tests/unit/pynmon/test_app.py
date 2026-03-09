@@ -26,6 +26,7 @@ from pynmon.app import (
     get_active_app,
     get_pynenc_instance,
     hydrate_app_instances,
+    setup_routes,
     start_monitor,
 )
 
@@ -83,17 +84,17 @@ def test_global_exception_handler() -> None:
 
 def test_root_no_apps_configured() -> None:
     """Test root endpoint when no apps are configured."""
-    # Use function patching instead of module attribute patching
+    setup_routes()
+    # Patch in both modules: home.py (route handler) uses its own imports
     with patch(
-        "pynmon.app.get_active_app",
-        side_effect=HTTPException(status_code=500, detail="No app"),
+        "pynmon.views.home.get_active_app",
+        return_value=None,
     ):
-        with patch("pynmon.app.get_all_apps", return_value={}):
+        with patch("pynmon.views.home.get_all_apps", return_value={}):
             client = TestClient(pynmon_app, raise_server_exceptions=False)
             response = client.get("/")
 
-            # The endpoint catches HTTPException from get_active_app
-            # and shows critical_error template
+            # The endpoint shows critical_error template when no apps
             assert response.status_code in (200, 500)
 
 

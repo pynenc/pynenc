@@ -5,10 +5,10 @@ from pynenc.runner.thread_runner import ThreadRunner
 
 def test_runner_context() -> None:
     # app with ProcRunner
-    app = Pynenc("common_id")
+    app = Pynenc({"app_id": "common_id"})
     proc_runner = ProcessRunner(app)
     # other_app with ThreadRunner
-    other_app = Pynenc("common_id")
+    other_app = Pynenc({"app_id": "common_id"})
     thread_runner = ThreadRunner(other_app)
     assert app.runner == proc_runner  # type: ignore
     assert app.runner != thread_runner  # type: ignore

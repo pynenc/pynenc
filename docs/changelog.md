@@ -131,6 +131,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
   - Implemented retry logic in SQLite connection handling to improve reliability and handle transient connection issues.
 
+- **Multiton Pattern for Cross-Process App Consistency**:
+
+  - Introduced `Pynenc._instances: ClassVar[dict[str, Pynenc]]` multiton registry to ensure a single app instance per `app_id` within each process.
+  - Added `_new_pynenc` as the pickle reconstructor: pre-registers the instance in `_instances` and performs minimal initialisation _before_ returning to pickle for state deserialisation, preventing module re-imports from creating a second instance with a different configuration.
+  - `__setstate__` re-registers the fully restored instance via `ConfigPynenc` resolution so the multiton entry is always up-to-date after unpickling.
+
 - **Migration from Poetry to UV**:
 
   - **BREAKING CHANGE**: The project has migrated from Poetry to [UV](https://github.com/astral-sh/uv) for dependency management, versioning, and builds.
@@ -201,6 +207,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **Simplified MockPynenc for Testing**:
 
   - Streamlined `MockPynenc` by removing manual definitions and automatically mocking only the abstract methods of Pynenc base classes, improving test maintainability and reducing boilerplate.
+  - Component properties (`orchestrator`, `broker`, `state_backend`, `client_data_store`, `trigger`, `serializer`) are overridden in `MockPynenc` to return `Any`, allowing tests to call `.return_value`, `.side_effect`, and `.assert_called_*` without `# type: ignore` noise.
+
+- **Lazy Property Initialization for App Components**:
+
+  - Replaced `@cached_property` with explicit `@property` backed by private `_field: Type | None` attributes for all app components (`orchestrator`, `broker`, `state_backend`, `serializer`, `client_data_store`, `trigger`, `runner`).
+  - Added `_reset_cached_components()` to clear all component references atomically, called on construction and after pickle restoration, simplifying test isolation and multiton semantics.
+
+- **Consistent `ConfigPynenc` Resolution in Pickle Methods**:
+
+  - `__reduce__`, `__getstate__`, and `__setstate__` no longer inject `app_id` manually into `config_values`; `ConfigPynenc` is the single source of truth, resolving `app_id` from `config_values`, `config_filepath`, or environment variables consistently throughout the pickle round-trip.
 
 - **Add Pr validation, fix release drafter, improve release workflow**
 
@@ -249,6 +265,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Centralized multiprocessing start method configuration in a shared utility module.
   - Ensured all runners (`MultiThreadRunner`, `ProcessRunner`, `PersistentProcessRunner`) use a single, idempotent setup for the `spawn` method.
   - Prevented duplicate or missing multiprocessing configuration, improving cross-platform reliability (especially on macOS and under debuggers).
+
+- **Cross-Process Config Propagation with Spawn-Based Runners**:
+
+  - Fixed a bug where child processes spawned by `ProcessRunner` or `PersistentProcessRunner` created new `Pynenc` instances with a fresh SQLite DB path instead of reusing the one from the parent process.
+  - Root cause: during pickle deserialisation `Task.__setstate__` triggered a module re-import; because the multiton was empty at that point, the re-imported module-level `PynencBuilder` call created a second instance with a different temp path.
+  - The fix is the early registration of the reconstructed instance in `_instances` inside `_new_pynenc`, before pickle restores the state dict, so the re-import finds the correct instance and returns it unchanged.
 
 - **DisabledTrigger**: Triggering it's a core functionality and cannot be disabled, the option has been removed.
 

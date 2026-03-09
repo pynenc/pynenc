@@ -134,11 +134,23 @@ myst_substitutions = {
 html_theme = "furo"
 html_title = "Pynenc"
 html_logo = "_static/logo.png"
-html_favicon = "_static/logo.png"
+html_favicon = "_static/favicon.ico"
 
 language = "en"
 html_static_path = ["_static"]
 html_theme_options: dict[str, Any] = {
+    "light_css_variables": {
+        "color-brand-primary": "#c04020",
+        "color-brand-content": "#d05030",
+        "color-admonition-title--note": "#d05030",
+        "color-admonition-title-background--note": "#d050301a",
+    },
+    "dark_css_variables": {
+        "color-brand-primary": "#e07050",
+        "color-brand-content": "#e08060",
+        "color-admonition-title--note": "#e07050",
+        "color-admonition-title-background--note": "#e070501a",
+    },
     "navigation_with_keys": True,
     "footer_icons": [
         {

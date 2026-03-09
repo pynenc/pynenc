@@ -196,41 +196,6 @@ def aggregate_results(
     )
 
 
-# Environment variables needed by child processes
-_ENV_VARS = [
-    "PYNENC__SQLITE_DB_PATH",
-    "PYNENC__ORCHESTRATOR_CLS",
-    "PYNENC__BROKER_CLS",
-    "PYNENC__STATE_BACKEND_CLS",
-    "PYNENC__ARG_CACHE_CLS",
-]
-
-
-@pytest.fixture
-def sqlite_env_for_child_processes() -> Generator[None, None, None]:
-    """Set environment variables for PersistentProcessRunner child processes.
-
-    PersistentProcessRunner spawns child processes that create their own
-    Pynenc app instances from environment variables.  This fixture sets those
-    env vars at test start and restores original values afterwards.
-    """
-    original_values = {key: os.environ.get(key) for key in _ENV_VARS}
-
-    os.environ["PYNENC__SQLITE_DB_PATH"] = _temp_db_path
-    os.environ["PYNENC__ORCHESTRATOR_CLS"] = "SQLiteOrchestrator"
-    os.environ["PYNENC__BROKER_CLS"] = "SQLiteBroker"
-    os.environ["PYNENC__STATE_BACKEND_CLS"] = "SQLiteStateBackend"
-    os.environ["PYNENC__ARG_CACHE_CLS"] = "SQLiteArgCache"
-
-    yield
-
-    for key, original_value in original_values.items():
-        if original_value is None:
-            os.environ.pop(key, None)
-        else:
-            os.environ[key] = original_value
-
-
 @pytest.fixture(scope="module", autouse=True)
 def cleanup_temp_db() -> Generator[None, None, None]:
     """Clean up temp database file after all tests in module complete."""
@@ -242,10 +207,7 @@ def cleanup_temp_db() -> Generator[None, None, None]:
             pass
 
 
-def test_deep_family_tree(
-    pynmon_client: "PynmonClient",
-    sqlite_env_for_child_processes: None,
-) -> None:
+def test_deep_family_tree(pynmon_client: "PynmonClient") -> None:
     """Generate a deep randomised family tree and verify the timeline renders.
 
     Fire-and-forget pattern: we know roughly how long the tree takes:

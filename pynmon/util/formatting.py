@@ -143,3 +143,65 @@ class RunnerContextInfo:
             if self.parent_thread_id
             else None,
         }
+
+
+# ── Cron-expression helpers ───────────────────────────────────────────────
+
+
+_WEEKDAYS = ("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
+
+
+def cron_to_human(expr: str) -> str:
+    """
+    Convert a cron expression to a short human-readable description.
+
+    Handles common patterns like ``*/5 * * * *`` ("every 5 min") and
+    ``0 3 * * *`` ("daily at 03:00"). Falls back to the raw expression
+    for anything too complex to summarise in one phrase.
+
+    :param expr: Standard five-field cron expression
+    :return: Short human-readable description
+    """
+    parts = expr.strip().split()
+    if len(parts) != 5:
+        return expr
+    minute, hour, dom, month, dow = parts
+
+    # every minute
+    if parts == ["*", "*", "*", "*", "*"]:
+        return "every minute"
+
+    # */N * * * *  →  every N min
+    if hour == "*" and dom == "*" and month == "*" and dow == "*":
+        if minute.startswith("*/"):
+            return f"every {minute[2:]} min"
+        if minute == "*":
+            return "every minute"
+
+    # 0 */N * * *  →  every N hours
+    if minute == "0" and dom == "*" and month == "*" and dow == "*":
+        if hour.startswith("*/"):
+            return f"every {hour[2:]} hours"
+
+    # 0 H * * *  →  daily at HH:00
+    if (
+        dom == "*"
+        and month == "*"
+        and dow == "*"
+        and minute.isdigit()
+        and hour.isdigit()
+    ):
+        return f"daily at {int(hour):02d}:{int(minute):02d}"
+
+    # 0 H * * D  →  DOW at HH:00
+    if (
+        dom == "*"
+        and month == "*"
+        and minute.isdigit()
+        and hour.isdigit()
+        and dow.isdigit()
+    ):
+        day_name = _WEEKDAYS[int(dow) % 7]
+        return f"{day_name} at {int(hour):02d}:{int(minute):02d}"
+
+    return expr

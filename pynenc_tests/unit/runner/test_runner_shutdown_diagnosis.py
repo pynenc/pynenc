@@ -20,7 +20,7 @@ from pynenc.runner.shutdown_diagnostics import (
 from pynenc_tests.conftest import MockPynenc
 from pynenc_tests.util import capture_logs
 
-app = MockPynenc(app_id="pynenc_tests/unit/runner/test_runner_shutdown_diagnosis")
+app = MockPynenc.with_id("pynenc_tests/unit/runner/test_runner_shutdown_diagnosis")
 
 
 # ---------------------------------------------------------------------------

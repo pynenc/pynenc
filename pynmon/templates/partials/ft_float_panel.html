@@ -507,8 +507,12 @@
       return url;
     }
 
-    /** Load the family tree into the panel (always from true root). */
-    window._ftLoadTree = function (focusId, expandId) {
+    /** Load the family tree into the panel (always from true root).
+     *  @param {string} focusId – invocation to highlight as focused node.
+     *  @param {string} [expandId] – optional node whose subtree to expand.
+     *  @param {boolean} [preserveScroll] – keep current scroll position.
+     */
+    window._ftLoadTree = function (focusId, expandId, preserveScroll) {
       if (_ftLoading) return;
       _ftCurrentFocusId = focusId;
       const isExpansion = !!expandId;
@@ -516,10 +520,11 @@
       if (expandId && !_ftExpandedIds.includes(expandId)) {
         _ftExpandedIds.push(expandId);
       }
-      // Save scroll position before replacing content on in-place expansions
-      const savedScroll = isExpansion
-        ? { left: body.scrollLeft, top: body.scrollTop }
-        : null;
+      // Save scroll position for in-place expansions or explicit request
+      const savedScroll =
+        isExpansion || preserveScroll
+          ? { left: body.scrollLeft, top: body.scrollTop }
+          : null;
       _ftLoading = true;
       panel.style.display = "flex";
       // Only show "Loading…" placeholder on initial loads, not expansions
@@ -649,8 +654,12 @@
         saveFtState();
         window.location.href = "/invocations/" + invId;
       } else if (typeof loadInvocationDetails === "function") {
-        // Timeline: update detail panel + cross-highlighting, skip tree reload
+        // Timeline: update detail panel + cross-highlighting
         loadInvocationDetails(invId, { skipTree: true });
+        // Reload tree with new focus, preserving expanded state and scroll
+        if (typeof window._ftLoadTree === "function") {
+          window._ftLoadTree(invId, null, true);
+        }
       }
     });
 
