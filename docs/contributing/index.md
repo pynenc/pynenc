@@ -2,6 +2,14 @@
 
 Set up your development environment and contribute to Pynenc.
 
+**pynenc** is a distributed task orchestration library for Python. It solves hard problems in distributed systems — dependency-aware task scheduling, deadlock prevention, concurrency control, and automatic runner recovery — using a clean declarative API.
+
+Contributions are welcome across:
+
+- **pynenc** — core library (this repo)
+- **pynenc.org** — project website at [github.com/pynenc/pynenc.org](https://github.com/pynenc/pynenc.org)
+- **docs** — Sphinx documentation, living in the `docs/` directory of this repo
+
 ```{toctree}
 :hidden:
 :maxdepth: 2
@@ -24,7 +32,7 @@ Set up your development environment and contribute to Pynenc.
 3. **Install Dependencies**: Install all dependencies including development and documentation extras:
 
    ```bash
-   uv sync --all-extras
+   make install
    ```
 
 4. **Install Pre-commit Hooks**: Set up automatic code quality checks:

@@ -889,12 +889,12 @@ provides-extras = ["monitor", "tests"]
 [package.metadata.requires-dev]
 dev = [{ name = "black", specifier = "==23.11.0" }]
 docs = [
-    { name = "furo", specifier = ">=2023" },
-    { name = "myst-parser", specifier = ">=2" },
-    { name = "sphinx", specifier = ">=7.0" },
+    { name = "furo", specifier = ">=2024" },
+    { name = "myst-parser", specifier = ">=4.0" },
+    { name = "sphinx", specifier = ">=8.0,<9" },
     { name = "sphinx-autodoc2", specifier = ">=0.5.0" },
     { name = "sphinx-copybutton", specifier = ">=0.5.2" },
-    { name = "sphinx-design", specifier = ">=0.5.0" },
+    { name = "sphinx-design", specifier = ">=0.6.0" },
     { name = "sphinx-inline-tabs", specifier = ">=2023.4.21" },
 ]
 

@@ -78,6 +78,7 @@ configuration/index
 cli/index
 monitoring/index
 reference/builder
+reference/plugins
 reference/runners
 reference/serializers
 apidocs/index.rst

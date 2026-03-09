@@ -1,83 +1,86 @@
 # Contributing to pynenc
 
-Thank you for your interest in contributing to pynenc! At this moment, the project is in its initial development phase and is not yet ready for contributions from the community. We are working hard to reach a Minimum Viable Product (MVP) and establish a solid foundation for the project.
+Thank you for your interest in contributing to pynenc!
 
-Once the project reaches a stage where we are ready to accept contributions, we will update this CONTRIBUTING guide with detailed instructions on how to contribute. In the meantime, feel free to watch the repository for updates and engage in discussions in the issues.
+**pynenc** is a distributed task orchestration library for Python. It solves hard problems in distributed systems — dependency-aware task scheduling, deadlock prevention through cycle detection, concurrency control across workers, and automatic recovery from runner failures — using a clean declarative API.
 
-We appreciate your understanding and look forward to collaborating with you in the near future!
+Contributions are welcome across all parts of the project:
 
-Best regards,
-Pynenc
+- **pynenc** — core library: [github.com/pynenc/pynenc](https://github.com/pynenc/pynenc)
+- **pynenc.org** — project website: [github.com/pynenc/pynenc.org](https://github.com/pynenc/pynenc.org)
+- **docs** — Sphinx documentation, living inside the main repo under `docs/`
 
 ## Setting Up the Development Environment
 
-To contribute to pynenc once it's open for contributions, follow these steps to set up your development environment:
+1. **Fork and clone**:
 
-1. **Fork the Repository**: Start by forking the pynenc repository on GitHub to your own account.
+   ```bash
+   git clone https://github.com/YOUR_USERNAME/pynenc.git
+   cd pynenc
+   ```
 
-2. **Clone the Fork**: Clone your fork to your local machine.
+2. **Install [UV](https://docs.astral.sh/uv/getting-started/installation/)** — pynenc uses UV for dependency management.
 
-```bash
-git clone https://github.com/YOUR_USERNAME/pynenc.git
-cd pynenc
-```
+3. **Install all dependencies** (library, monitor, tests, docs):
 
-3. **Install Poetry**: pynenc uses Poetry for dependency management. Install Poetry as per the official documentation: [Poetry Installation](https://python-poetry.org/docs/#installation).
+   ```bash
+   make install
+   ```
 
-4. **Set Up the Project**: Inside the project directory, set up your local development environment using Poetry and install pre-commit hooks.
+4. **Install pre-commit hooks**:
 
-```bash
-# Install dependencies and set up the project
-make install
+   ```bash
+   make install-pre-commit
+   ```
 
-# Install pre-commit hooks
-make install-pre-commit
-```
+5. **Install Docker** _(optional)_ — required for integration tests with Redis, MongoDB, or RabbitMQ backends. See [docs.docker.com/get-docker](https://docs.docker.com/get-docker/).
 
-5. **Activate the Virtual Environment**: Use Poetry to activate the virtual environment.
-
-```bash
-poetry shell
-```
-
-6. **Start Development**: You're now ready to start development. Feel free to make changes, commit them, and push them to your fork.
-
-## Running Tests and Checking Coverage
-
-Maintaining a high standard of code quality is crucial, which includes thorough testing and good test coverage. Here's how to run tests and check coverage:
-
-### Running Tests
-
-You can run different test suites using the following make commands:
+## Running Tests
 
 ```bash
-# Run all tests with combined coverage
+# All tests with combined coverage
 make test
 
-# Run only unit tests
+# Unit tests only
 make test-unit
 
-# Run only integration tests
+# Integration tests only
 make test-integration
-```
 
-### Checking Test Coverage
-
-After running tests, you can check coverage in multiple ways:
-
-```bash
-# Display coverage report in the console
+# Coverage report in the console
 make coverage
 
-# Generate an HTML coverage report
+# HTML coverage report (opens at htmlcov/index.html)
 make htmlcov
 ```
 
-The HTML report will be available at `htmlcov/index.html`. Open it in a web browser to view detailed coverage information.
+## Building Documentation
 
-## Pre-commit Hooks
+The docs live in `docs/` and are built with Sphinx + MyST.
 
-The project uses pre-commit hooks to ensure code quality and consistency. These hooks run automatically when you commit changes, but you can also run them manually:
+```bash
+# Check all docs dependencies are installed
+make docs-check-deps
+
+# Build HTML docs (output: docs/_build/html/index.html)
+make docs
+
+# Build and serve locally at http://localhost:8080
+make docs-serve
+```
+
+Docstrings are written in **Markdown** (MyST syntax), not reStructuredText. See:
+
+- [MyST syntax cheat sheet](https://jupyterbook.org/en/stable/reference/cheatsheet.html)
+- [Roles and Directives](https://myst-parser.readthedocs.io/en/latest/syntax/roles-and-directives.html)
+
+## Contributing to pynenc.org
+
+The project website source is at [github.com/pynenc/pynenc.org](https://github.com/pynenc/pynenc.org). It is a separate repository — open a PR there for website content changes.
+
+## Code Quality
+
+The project uses pre-commit hooks for linting and formatting. Run them manually at any time:
 
 ```bash
 make pre-commit
@@ -85,13 +88,11 @@ make pre-commit
 
 ## Continuous Integration
 
-The project uses GitHub Actions for continuous integration. The CI pipeline runs:
+GitHub Actions runs on every pull request:
 
 1. Pre-commit checks
 2. Unit tests
 3. Integration tests
-4. Combines coverage reports
+4. Combined coverage report
 
-When you submit a pull request, all these checks will run automatically. Make sure your changes pass all these checks before requesting a review.
-
-Remember, these guidelines will become relevant once the project is open for contributions. Until then, feel free to familiarize yourself with the codebase and the project's goals.
+Make sure all checks pass before requesting a review.

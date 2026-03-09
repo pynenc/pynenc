@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.abspath("../../pynenc"))  # Adjust the path as needed
 
 DISTRIBUTION_METADATA = importlib.metadata.metadata("Pynenc")
 # -- Project information -----------------------------------------------------
-author = DISTRIBUTION_METADATA["Author"]
+author = "Luis Diaz"
 project = DISTRIBUTION_METADATA["Name"]
 version = DISTRIBUTION_METADATA["Version"]
 current_year = datetime.datetime.now(datetime.UTC).year

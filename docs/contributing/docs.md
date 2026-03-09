@@ -4,29 +4,32 @@ Build and preview the Sphinx documentation for Pynenc locally.
 
 ## Prerequisites
 
-Install documentation dependencies using UV:
+Install all project dependencies (including documentation tools):
 
 ```bash
-uv sync --all-extras
+make install
 ```
 
-This installs Sphinx, MyST Parser, autodoc2, and all other documentation build dependencies.
+The docs build commands (`make docs`, `make docs-serve`) automatically include the docs dependency group via `uv run --group docs`.
 
 ## Building
 
-1. Navigate to the `docs` directory:
+From the project root:
 
-   ```bash
-   cd docs
-   ```
+```bash
+# Build HTML docs (output: docs/_build/html/index.html)
+make docs
 
-2. Build the HTML documentation:
+# Build and serve locally at http://localhost:8080
+make docs-serve
+```
 
-   ```bash
-   make html
-   ```
+Or manually from the `docs/` directory:
 
-3. Open `_build/html/index.html` in a browser to preview.
+```bash
+cd docs
+make html
+```
 
 ## Documentation Format
 
@@ -44,6 +47,6 @@ Write docstrings in Markdown using MyST syntax. See:
 
 ## Troubleshooting
 
-- If you encounter missing dependency errors, run `uv sync --all-extras` from the project root
+- If you encounter missing dependency errors, run `make install` from the project root
 - For Sphinx build errors, check the console output for specific file and line references
-- Ensure you are in the `docs/` directory when running `make html`
+- Ensure you are in the `docs/` directory when running `make html` directly
