@@ -24,15 +24,15 @@ jobs:
 
       - name: Get PR number
         id: pr
-        run: echo "::set-output name=number::${{ github.event.pull_request.number }}"
+        run: echo "number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
 
       - name: Set PR version
         run: |
-          current_version=$(uv version --short)
+          current_version=$(python -c "import tomllib, pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
           # PEP 440: {version}rc{pr}.dev{run}
           # Example: 0.0.16rc72.dev1 (PR #72, first run)
           pr_version="${current_version}rc${PR_NUMBER}.dev${GITHUB_RUN_NUMBER}"
-          uv version $pr_version
+          sed -i "s/^version = \".*\"/version = \"${pr_version}\"/" pyproject.toml
           echo "VERSION=$pr_version" >> $GITHUB_ENV
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -41,7 +41,7 @@ jobs:
         run: uv build
 
       - name: Publish package
-        run: uv publish --index testpypi
+        run: uv publish --publish-url https://test.pypi.org/legacy/
         env:
           UV_PUBLISH_TOKEN: ${{ secrets.TEST_PYPI_TOKEN }}
 

@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       is_release: ${{ steps.check-version.outputs.tag != '' }}
-      version: ${{ steps.check-version.outputs.tag || steps.dev-version.outputs.version }}
+      version: ${{ steps.extract-version.outputs.version || steps.dev-version.outputs.version }}
       tag: ${{ steps.check-version.outputs.tag }}
     steps:
       - name: Check out the repository
@@ -39,8 +39,17 @@ jobs:
         if: steps.check-parent-commit.outputs.sha
         uses: salsify/action-detect-and-tag-new-version@v2.0.1
         with:
+          tag-template: "v{VERSION}"
           version-command: |
             python -c "import tomllib, pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])"
+
+      - name: Extract bare version from tag
+        id: extract-version
+        if: steps.check-version.outputs.tag
+        run: |
+          echo "version=${TAG#v}" >> $GITHUB_OUTPUT
+        env:
+          TAG: ${{ steps.check-version.outputs.tag }}
 
       - name: Bump version for developmental release
         id: dev-version
@@ -67,6 +76,11 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v4
 
+      - name: Apply dev version
+        if: needs.check-version.outputs.is_release == 'false'
+        run: |
+          sed -i "s/^version = \".*\"/version = \"${{ needs.check-version.outputs.version }}\"/" pyproject.toml
+
       - name: Install dependencies
         run: uv sync
 
@@ -86,7 +100,7 @@ jobs:
     if: needs.check-version.outputs.is_release == 'true'
     environment:
       name: pypi
-      url: https://pypi.org/project/pynenc/${{ needs.check-version.outputs.tag }}/
+      url: https://pypi.org/project/pynenc/${{ needs.check-version.outputs.version }}/
     permissions:
       id-token: write # For trusted publishing
     steps:
@@ -108,9 +122,9 @@ jobs:
         run: |
           echo "### 📦 Package Published to PyPI" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Version: \`${{ needs.check-version.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "Version: \`${{ needs.check-version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "🔗 [View on PyPI](https://pypi.org/project/pynenc/${{ needs.check-version.outputs.tag }}/)" >> $GITHUB_STEP_SUMMARY
+          echo "🔗 [View on PyPI](https://pypi.org/project/pynenc/${{ needs.check-version.outputs.version }}/)" >> $GITHUB_STEP_SUMMARY
 
   publish-testpypi:
     name: Publish to TestPyPI
@@ -131,7 +145,7 @@ jobs:
         uses: astral-sh/setup-uv@v4
 
       - name: Publish package
-        run: uv publish --index testpypi
+        run: uv publish --publish-url https://test.pypi.org/legacy/
         env:
           UV_PUBLISH_TOKEN: ${{ secrets.TEST_PYPI_TOKEN }}
 
