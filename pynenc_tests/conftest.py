@@ -216,10 +216,6 @@ class MockPynenc(Pynenc):
     def trigger(self) -> Any:
         return self._trigger
 
-    @property  # type: ignore[override]
-    def serializer(self) -> Any:
-        return self._serializer
-
     @property
     def runner(self) -> Any:  # type: ignore[override]
         return self._runner_instance
