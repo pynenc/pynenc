@@ -13,6 +13,8 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: System :: Distributed Computing",
 ]
@@ -90,7 +92,7 @@ profile = "black"
 
 [tool.black]
 line-length = 88
-target-version = ['py311']
+target-version = ['py311', 'py312', 'py313', 'py314']
 required-version = '23.11.0'
 exclude = '''
 /(
