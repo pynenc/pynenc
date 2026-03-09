@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://pynenc.org/assets/img/pynenc_logo_.png" alt="Pynenc" width="300">
+  <img src="https://pynenc.org/assets/img/pynenc_logo.png" alt="Pynenc" width="300">
 </p>
 <h1 align="center">Pynenc</h1>
 <p align="center">
