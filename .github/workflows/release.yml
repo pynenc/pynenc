@@ -40,16 +40,15 @@ jobs:
         uses: salsify/action-detect-and-tag-new-version@v2.0.1
         with:
           version-command: |
-            uv version --short
+            python -c "import tomllib, pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])"
 
       - name: Bump version for developmental release
         id: dev-version
         if: ${{ ! steps.check-version.outputs.tag }}
         run: |
-          uv version --bump patch
-          current_version=$(uv version --short)
+          current_version=$(python -c "import tomllib, pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
           dev_version="${current_version}.dev$(date +%s)"
-          uv version $dev_version
+          sed -i "s/^version = \".*\"/version = \"${dev_version}\"/" pyproject.toml
           echo "version=$dev_version" >> $GITHUB_OUTPUT
 
   build:
