@@ -12,7 +12,7 @@
               <th>Task ID:</th>
               <td>
                 <a
-                  href="/tasks/{{ task.task_id }}"
+                  href="/tasks/{{ task.task_id.key }}"
                   class="text-decoration-none"
                 >
                   {{ task.task_id }}
@@ -108,7 +108,7 @@
           {% if run.parent_workflow %}
           <div>
             <a
-              href="/workflows/{{ run.parent_workflow.workflow_task_id }}"
+              href="/workflows/{{ run.parent_workflow.workflow_task_id.key }}"
               class="text-decoration-none text-muted"
             >
               {{ run.parent_workflow.workflow_task_id }}
@@ -134,6 +134,13 @@
             class="btn btn-sm btn-outline-primary pynmon-action-btn"
           >
             View All Invocations
+          </a>
+          <a
+            href="/invocations/{{ run.workflow_id }}"
+            class="btn btn-sm btn-outline-secondary pynmon-action-btn ms-1"
+            title="View family tree for this workflow run"
+          >
+            Family Tree
           </a>
         </td>
       </tr>

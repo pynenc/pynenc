@@ -1,53 +1,49 @@
 from abc import ABC, abstractmethod
 from functools import cached_property
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
-from pynenc import context
-from pynenc.call import Call
 from pynenc.conf.config_broker import ConfigBroker
-from pynenc.invocation.dist_invocation import DistributedInvocation
-from pynenc.types import Params, Result
 
 if TYPE_CHECKING:
     from ..app import Pynenc
+    from pynenc.identifiers.invocation_id import InvocationId
 
 
 class BaseBroker(ABC):
     """
-    An Abstract Base Class for Message Brokers in Pynenc**
+    Abstract base class for message brokers in Pynenc's plugin system.
 
-    This class serves as the foundational structure for implementing various message brokers.
-    It currently supports a simple FIFO queue and is extendable for more complex functionalities
-    like priority queues and integration with different databases and message queues.
+    This class serves as the foundational interface for implementing various message brokers
+    across different backend systems. The plugin architecture allows for flexible integration
+    with multiple storage and messaging solutions, each providing their own broker implementation.
 
-    :param Pynenc app: A reference to the Pynenc application.
+    The broker is responsible for routing task invocations through a message queue system,
+    supporting both FIFO and priority-based queuing strategies depending on the implementation.
+
+    :param Pynenc app: A reference to the Pynenc application instance.
 
     ```{note}
-    The `BaseBroker` is currently implemented with an in-memory queue (`MemBroker`) for testing and demonstration,
-    and a Redis-backed queue (`RedisBroker`) for production use.
+    Available broker implementations depend on installed plugins:
+    - **MemBroker**: Built-in memory-based broker for development and testing (single-host only, not suitable for distributed systems; only compatible with ThreadRunner for memory save)
+    - **SQLiteBroker**: Built-in SQLite-based broker for testing on a single host (not suitable for distributed systems; compatible with any runner that shares the same database file)
+    - **RedisBroker**: Available with `pynenc-redis` plugin for production Redis deployments
+    - **MongoBroker**: Available with `pynenc-mongodb` plugin for MongoDB-based systems
+    - **RabbitMQBroker**: Available with `pynenc-rabbitmq` plugin for message queue-based distributed systems
     ```
 
     ```{attention}
-    The implementation is currently limited to a FIFO queue. Future enhancements will include support
-    for priority queues and compatibility with other databases and message queues like RabbitMQ.
+    Plugin-specific brokers may have different capabilities and performance characteristics.
+    Consult the documentation for your chosen backend plugin for implementation-specific details.
     ```
 
     ```{hint}
-    The class is designed to be flexible and expandable, allowing for easy integration of additional
-    features and message brokers in the future.
+    The plugin system allows for easy extension with custom broker implementations.
+    Create a custom broker by subclassing BaseBroker and implementing the abstract methods.
     ```
 
     ```{seealso}
-    For more advanced or production-ready features, refer to the specific implementations like `RedisBroker`.
-    ```
-
-    The `route_call` method creates a new invocation and routes it, demonstrating a basic usage of the broker.
-
-    ### Examples
-    ```{code-block} python
-        # Assuming `app` is an instance of Pynenc and `call` is a valid Call object
-        broker = BaseBroker(app)
-        invocation = broker.route_call(call)
+    For production deployments, consider Redis or MongoDB plugins which provide
+    persistent, distributed message queuing capabilities.
     ```
     """
 
@@ -62,19 +58,19 @@ class BaseBroker(ABC):
         )
 
     @abstractmethod
-    def route_invocation(self, invocation: DistributedInvocation) -> None:
+    def route_invocation(self, invocation_id: "InvocationId") -> None:
         """
-        Abstract method for routing a given invocation.
+        Abstract method for routing a given invocation id.
 
         This method should define the process of handling and dispatching a given
-        DistributedInvocation within the broker system. Implementations might involve
+        invocation id within the broker system. Implementations might involve
         sending the invocation to a queue or handling it internally.
 
-        :param DistributedInvocation invocation: The invocation to be routed.
+        :param InvocationId invocation_id: The invocation id to be routed.
         """
 
     @abstractmethod
-    def route_invocations(self, invocations: list[DistributedInvocation]) -> None:
+    def route_invocations(self, invocation_ids: list["InvocationId"]) -> None:
         """
         Routes multiple invocations at once.
 
@@ -84,20 +80,20 @@ class BaseBroker(ABC):
         Default implementation sequentially routes each invocation. Subclasses can
         override this with more efficient batch processing implementations.
 
-        :param list[DistributedInvocation] invocations: The invocations to be routed.
+        :param list["InvocationId"] invocation_ids: The invocation ids to be routed.
         """
 
     @abstractmethod
-    def retrieve_invocation(self) -> Optional[DistributedInvocation]:
+    def retrieve_invocation(self) -> "InvocationId | None":
         """
-        Method to retrieve a distributed invocation.
+        Method to retrieve a distributed invocation id.
 
         Implementations of this method should detail how to retrieve the next
         available invocation from the broker's queue or storage system. It is
-        expected to return a DistributedInvocation if one is available, or None
+        expected to return a invocation id if one is available, or None
         if the queue is empty.
 
-        :return: The next invocation to be processed, or None.
+        :return: The next invocation id to be processed, or None.
         """
 
     @abstractmethod
@@ -120,41 +116,3 @@ class BaseBroker(ABC):
         removing all pending invocations. It's crucial for error handling and
         managing the queue in specific situations like maintenance or reset.
         """
-
-    # @abstractmethod
-    # def _acknowledge_invocation(self, invocation: DistributedInvocation) -> None:
-    #     ...
-
-    # @abstractmethod
-    # def _requeue_invocation(self, invocation: DistributedInvocation) -> None:
-    #     ...
-
-    def route_call(
-        self, call: "Call[Params, Result]"
-    ) -> DistributedInvocation[Params, Result]:
-        """
-        Creates and routes a new DistributedInvocation based on the given call.
-
-        This method instantiates a DistributedInvocation with the provided call
-        and the current invocation context. It then routes this invocation using
-        the `route_invocation` method. This demonstrates the basic use of the
-        broker's functionality.
-
-        :param Call[Params, Result] call: The call object to be transformed into an invocation.
-
-        :return: The routed invocation.
-
-        ```{note}
-        The method also logs the routing process for debugging purposes.
-        ```
-        """
-        parent_invocation = context.get_dist_invocation_context(self.app.app_id)
-        self.route_invocation(
-            invocation := DistributedInvocation(
-                call, parent_invocation=parent_invocation
-            )
-        )
-        self.app.logger.debug(
-            f"Routed {call=} on invocation {invocation.invocation_id}"
-        )
-        return invocation

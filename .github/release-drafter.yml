@@ -1,5 +1,4 @@
-# https://github.com/release-drafter/release-drafter
-name-template: "v$RESOLVED_VERSION 🌈"
+name-template: "v$RESOLVED_VERSION"
 tag-template: "v$RESOLVED_VERSION"
 categories:
   - title: "🚀 Features"
@@ -11,10 +10,41 @@ categories:
       - "fix"
       - "bugfix"
       - "bug"
-  - title: "🧰 Maintenance"
-    label: "chore"
+  - title: "📚 Documentation"
+    labels:
+      - "documentation"
+      - "docs"
+  - title: "🧪 Testing"
+    labels:
+      - "test"
+      - "tests"
+  - title: "🔧 Maintenance"
+    labels:
+      - "chore"
+      - "refactor"
+      - "style"
 change-template: "- $TITLE @$AUTHOR (#$NUMBER)"
-change-title-escapes: '\<*_&' # You can add # and @ to disable mentions, and add ` to disable code blocks.
+change-title-escapes: '\<*_&' # Escape markdown special characters
+
+template: |
+  ## What's Changed
+
+  $CHANGES
+
+  **Full Changelog**: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
+
+  ## Installation
+
+  Install via pip:
+  ```bash
+  pip install pynenc==$RESOLVED_VERSION
+  ```
+
+  Or with specific Pynenc Monitoring support:
+  ```bash
+  pip install pynenc[monitor]==$RESOLVED_VERSION
+  ```
+
 version-resolver:
   major:
     labels:
@@ -26,7 +56,30 @@ version-resolver:
     labels:
       - "patch"
   default: patch
-template: |
-  ## Changes
 
-  $CHANGES
+autolabeler:
+  - label: "feature"
+    branch:
+      - "/^feat(ure)?[/-]/"
+    title:
+      - '/^feat(\(.+\))?:/i'
+  - label: "fix"
+    branch:
+      - "/^fix[/-]/"
+    title:
+      - '/^fix(\(.+\))?:/i'
+  - label: "documentation"
+    branch:
+      - "/^docs?[/-]/"
+    title:
+      - '/^docs?(\(.+\))?:/i'
+  - label: "chore"
+    branch:
+      - "/^chore[/-]/"
+    title:
+      - '/^chore(\(.+\))?:/i'
+  - label: "test"
+    branch:
+      - "/^test[/-]/"
+    title:
+      - '/^test(\(.+\))?:/i'

@@ -7,32 +7,18 @@ It includes listing all workflows, viewing workflow runs, and workflow details.
 
 import logging
 import traceback
-from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
-from pynmon.app import get_pynenc_instance, templates
+from pynenc.identifiers.task_id import TaskId
 
-if TYPE_CHECKING:
-    from pynenc.task import Task
+from pynmon.app import get_pynenc_instance, templates
+from pynmon.util.formatting import format_task_extra_info
+
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
 logger = logging.getLogger("pynmon.views.workflows")
-
-
-def _create_task_extra_info(task: "Task") -> dict[str, str | list[str]]:
-    """
-    Create additional task information for template display.
-
-    :param task: The task to extract information from
-    :return: Dictionary with extra task information
-    """
-    return {
-        "module": task.func.__module__,
-        "func_qualname": task.func.__qualname__,
-        "retry_for": [e.__name__ for e in task.conf.retry_for],
-    }
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -43,16 +29,17 @@ async def workflows_list(request: Request) -> HTMLResponse:
 
     try:
         # Get all workflow types (convert iterator to list)
-        workflow_types = list(app.state_backend.get_all_workflows())
+        workflow_types = list(app.state_backend.get_all_workflow_types())
         logger.info(f"Found {len(workflow_types)} workflow types")
 
         # Get workflow runs for each type
         workflows_with_runs = []
-        for workflow_task_id in workflow_types:
-            runs = list(app.state_backend.get_workflow_runs(workflow_task_id))
+        for workflow_type in workflow_types:
+            runs = list(app.state_backend.get_workflow_runs(workflow_type))
             workflows_with_runs.append(
                 {
-                    "workflow_task_id": workflow_task_id,
+                    # The workflow type is the same as the workflow_task_id
+                    "workflow_task_id": workflow_type,
                     "run_count": len(runs),
                     "latest_run": runs[0] if runs else None,
                 }
@@ -83,7 +70,7 @@ async def refresh_workflows_list(request: Request) -> HTMLResponse:
 
     try:
         # Get all workflow types (convert iterator to list)
-        workflow_types = list(app.state_backend.get_all_workflows())
+        workflow_types = list(app.state_backend.get_all_workflow_types())
         logger.info(f"Found {len(workflow_types)} workflow types")
 
         # Get workflow runs for each type
@@ -121,7 +108,7 @@ async def workflow_runs_list(request: Request) -> HTMLResponse:
 
     try:
         # Get all workflow runs (convert iterator to list)
-        all_runs = list(app.state_backend.get_all_workflows_runs())
+        all_runs = list(app.state_backend.get_all_workflow_runs())
         logger.info(f"Found {len(all_runs)} workflow runs")
 
         # Sort by creation time if available (newest first)
@@ -152,7 +139,7 @@ async def refresh_workflow_runs_list(request: Request) -> HTMLResponse:
 
     try:
         # Get all workflow runs (convert iterator to list)
-        all_runs = list(app.state_backend.get_all_workflows_runs())
+        all_runs = list(app.state_backend.get_all_workflow_runs())
         logger.info(f"Found {len(all_runs)} workflow runs")
 
         # Sort by creation time if available (newest first)
@@ -174,17 +161,19 @@ async def refresh_workflow_runs_list(request: Request) -> HTMLResponse:
 
 
 # Important: This route must come AFTER all specific routes like '/refresh' and '/runs/refresh'
-# because FastAPI matches routes in order and '/{workflow_task_id}' would match anything
-@router.get("/{workflow_task_id}", response_class=HTMLResponse)
-async def workflow_detail(request: Request, workflow_task_id: str) -> HTMLResponse:
+# because FastAPI matches routes in order and '/{workflow_type_key}' would match anything
+@router.get("/{workflow_type_key}", response_class=HTMLResponse)
+async def workflow_detail(request: Request, workflow_type_key: str) -> HTMLResponse:
     """Display details for a specific workflow type."""
     app = get_pynenc_instance()
-    logger.info(f"Retrieving workflow details for: {workflow_task_id}")
+    logger.info(f"Retrieving workflow details for: {workflow_type_key}")
 
     try:
+        # Get workflow type (TaskId) from workflow main invocation
+        workflow_type = TaskId.from_key(workflow_type_key)
         # Get runs for this specific workflow type (convert iterator to list)
-        workflow_runs = list(app.state_backend.get_workflow_runs(workflow_task_id))
-        logger.info(f"Found {len(workflow_runs)} runs for workflow {workflow_task_id}")
+        workflow_runs = list(app.state_backend.get_workflow_runs(workflow_type))
+        logger.info(f"Found {len(workflow_runs)} runs for workflow {workflow_type}")
 
         # Sort by creation time if available (newest first)
         sorted_runs = sorted(
@@ -192,44 +181,55 @@ async def workflow_detail(request: Request, workflow_task_id: str) -> HTMLRespon
         )
 
         # Get the task if it exists
-        task = app.tasks.get(workflow_task_id)
+        task = app.tasks.get(workflow_type)
 
         # Create additional task information for template
-        task_extra = _create_task_extra_info(task) if task else None
+        task_extra = format_task_extra_info(task) if task else None
+
+        return templates.TemplateResponse(
+            "workflows/detail.html",
+            {
+                "request": request,
+                "title": "Workflow Details",
+                "app_id": app.app_id,
+                "workflow_type": workflow_type,
+                "workflow_runs": sorted_runs,
+                "task": task,
+                "task_extra": task_extra,
+            },
+        )
 
     except Exception as e:
-        logger.error(f"Error retrieving workflow details for {workflow_task_id}: {e}")
+        logger.error(f"Error retrieving workflow details for {workflow_type_key}: {e}")
         logger.error(f"Full traceback: {traceback.format_exc()}")
-        sorted_runs = []
-        task = None
-        task_extra = None
 
-    return templates.TemplateResponse(
-        "workflows/detail.html",
-        {
-            "request": request,
-            "title": "Workflow Details",
-            "app_id": app.app_id,
-            "workflow_task_id": workflow_task_id,
-            "workflow_runs": sorted_runs,
-            "task": task,
-            "task_extra": task_extra,
-        },
-    )
+        return templates.TemplateResponse(
+            "error.html",
+            {
+                "request": request,
+                "title": "Error",
+                "app_id": app.app_id,
+                "error_title": "Workflow Not Found",
+                "error_message": f"Could not load workflow '{workflow_type_key}': {str(e)}",
+            },
+            status_code=404,
+        )
 
 
-@router.get("/{workflow_task_id}/refresh", response_class=HTMLResponse)
+@router.get("/{workflow_type_key}/refresh", response_class=HTMLResponse)
 async def refresh_workflow_detail(
-    request: Request, workflow_task_id: str
+    request: Request, workflow_type_key: str
 ) -> HTMLResponse:
     """Refresh the workflow detail for HTMX partial updates."""
     app = get_pynenc_instance()
-    logger.info(f"Refreshing workflow details for: {workflow_task_id}")
+    logger.info(f"Refreshing workflow details for: {workflow_type_key}")
 
     try:
+        # Get workflow type (TaskId) from workflow main invocation
+        workflow_type = TaskId.from_key(workflow_type_key)
         # Get runs for this specific workflow type (convert iterator to list)
-        workflow_runs = list(app.state_backend.get_workflow_runs(workflow_task_id))
-        logger.info(f"Found {len(workflow_runs)} runs for workflow {workflow_task_id}")
+        workflow_runs = list(app.state_backend.get_workflow_runs(workflow_type))
+        logger.info(f"Found {len(workflow_runs)} runs for workflow {workflow_type}")
 
         # Sort by creation time if available (newest first)
         sorted_runs = sorted(
@@ -237,28 +237,30 @@ async def refresh_workflow_detail(
         )
 
         # Get the task if it exists
-        task = app.tasks.get(workflow_task_id)
+        task = app.tasks.get(workflow_type)
 
         # Create additional task information for template
-        task_extra = _create_task_extra_info(task) if task else None
+        task_extra = format_task_extra_info(task) if task else None
+
+        return templates.TemplateResponse(
+            "workflows/partials/detail_content.html",
+            {
+                "request": request,
+                "workflow_type": workflow_type,
+                "workflow_runs": sorted_runs,
+                "task": task,
+                "task_extra": task_extra,
+            },
+        )
 
     except Exception as e:
-        logger.error(f"Error refreshing workflow details for {workflow_task_id}: {e}")
+        logger.error(f"Error refreshing workflow details for {workflow_type_key}: {e}")
         logger.error(f"Full traceback: {traceback.format_exc()}")
-        sorted_runs = []
-        task = None
-        task_extra = None
 
-    return templates.TemplateResponse(
-        "workflows/partials/detail_content.html",
-        {
-            "request": request,
-            "workflow_task_id": workflow_task_id,
-            "workflow_runs": sorted_runs,
-            "task": task,
-            "task_extra": task_extra,
-        },
-    )
+        return HTMLResponse(
+            f'<div class="alert alert-danger">Error loading workflow: {str(e)}</div>',
+            status_code=500,
+        )
 
 
 @router.get("/debug", response_class=HTMLResponse)
@@ -276,7 +278,7 @@ async def debug_info(request: Request) -> HTMLResponse:
 
         # Try to get workflow runs count
         try:
-            all_workflow_runs = list(app.state_backend.get_all_workflows_runs())
+            all_workflow_runs = list(app.state_backend.get_all_workflow_runs())
             info["total_workflow_runs"] = len(all_workflow_runs)
         except Exception as e:
             info["workflow_runs_error"] = str(e)

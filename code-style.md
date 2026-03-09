@@ -8,7 +8,7 @@
   - Use `dict[str, int]` not `Dict[str, int]`
   - Use `tuple[int, str]` not `Tuple[int, str]`
   - Use `type[MyClass]` not `Type[MyClass]`
-  - Use `x: str | None` not `Optional[str]`
+  - Use `x: str | None` not `str | None`
 - If a Class is only imported for typing it should be imported under TYPE_CHECKING and use with quotes
 
 ```python

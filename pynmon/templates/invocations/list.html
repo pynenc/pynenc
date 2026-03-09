@@ -32,6 +32,22 @@
                             </select>
                         </div>
                         <div class="mb-3">
+                            <label for="workflow_type" class="form-label">Workflow Type</label>
+                            <select name="workflow_type" id="workflow_type" class="form-select">
+                                <option value="">All Workflow Types</option>
+                                {% for wt in all_workflow_types %}
+                                <option value="{{ wt }}" {% if wt == current_filters.workflow_type %}selected{% endif %}>
+                                    {{ wt }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="workflow_id" class="form-label">Workflow ID</label>
+                            <input type="text" class="form-control" id="workflow_id" name="workflow_id"
+                                value="{{ current_filters.workflow_id }}" placeholder="Partial or full ID">
+                        </div>
+                        <div class="mb-3">
                             <label for="limit" class="form-label">Limit</label>
                             <input type="number" class="form-control" id="limit" name="limit"
                                 value="{{ current_filters.limit }}">
@@ -50,7 +66,8 @@
                     <button class="btn btn-sm btn-outline-primary"
                             hx-get="/invocations/table?{{ request.query_string.decode() }}"
                             hx-target="#invocations-table"
-                            hx-swap="outerHTML">
+                            hx-swap="innerHTML"
+                            hx-indicator="#invocations-table">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-clockwise" viewBox="0 0 16 16">
                             <path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
                             <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/>
@@ -60,6 +77,11 @@
                 </div>
                 <div class="card-body p-0">
                     <div id="invocations-table">
+                        <!-- HTMX loading indicator -->
+                        <div class="pynmon-inline-spinner htmx-indicator">
+                          <div class="spinner-border" role="status"><span class="visually-hidden">Loading…</span></div>
+                          <span>Loading invocations…</span>
+                        </div>
                         {% if invocations %}
                         <div class="table-responsive">
                             <table class="table table-hover mb-0">
@@ -80,15 +102,18 @@
                                             <a href="/invocations/{{ invocation.invocation_id }}" class="text-decoration-none">
                                                 <code class="text-primary">{{ invocation.invocation_id }}</code>
                                             </a>
-                                        </td>
-                                        <td>
-                                            <a href="/tasks/{{ invocation.task.task_id }}" class="text-decoration-none">
-                                                {{ invocation.task.task_id.split('.')[-1] }}
+                                            <a href="#" class="ms-2 view-in-timeline-link" data-invocation-id="{{ invocation.invocation_id }}" title="View in timeline">
+                                                <span class="material-icons" style="font-size: 14px; vertical-align: middle; color: #28a745;">timeline</span>
                                             </a>
                                         </td>
                                         <td>
-                                            <a href="/calls/?call_id={{ invocation.call_id|urlencode }}" class="text-decoration-none">
-                                                <code class="text-secondary">{{ invocation.call_id }}</code>
+                                            <a href="/tasks/{{ invocation.task.task_id }}" class="text-decoration-none">
+                                                {{ invocation.task.task_id.func_name }}
+                                            </a>
+                                        </td>
+                                        <td>
+                                            <a href="/calls/?call_id_key={{ invocation.call.call_id.key|urlencode }}">
+                                                <code class="text-primary">{{ invocation.call.call_id }}</code>
                                             </a>
                                         </td>
                                         <td>
@@ -119,10 +144,88 @@
                         {% else %}
                         <div class="alert alert-info m-3">No invocations found matching the filters.</div>
                         {% endif %}
+
+                        <!-- Pagination Controls -->
+                        {% if pagination %}
+                        <nav aria-label="Invocations pagination" class="d-flex justify-content-between align-items-center p-3 border-top">
+                            <div class="text-muted small">
+                                Showing {{ invocations|length }} of {{ pagination.total_count }} invocations
+                                (Page {{ pagination.page }} of {{ pagination.total_pages }})
+                            </div>
+                            <ul class="pagination pagination-sm mb-0">
+                                <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+                                    <a class="page-link" href="?status={{ current_filters.status[0] if current_filters.status else '' }}&task_id={{ current_filters.task_id }}&workflow_id={{ current_filters.workflow_id }}&workflow_type={{ current_filters.workflow_type }}&limit={{ pagination.limit }}&page=1">First</a>
+                                </li>
+                                <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+                                    <a class="page-link" href="?status={{ current_filters.status[0] if current_filters.status else '' }}&task_id={{ current_filters.task_id }}&workflow_id={{ current_filters.workflow_id }}&workflow_type={{ current_filters.workflow_type }}&limit={{ pagination.limit }}&page={{ pagination.page - 1 }}">Previous</a>
+                                </li>
+                                <li class="page-item active">
+                                    <span class="page-link">{{ pagination.page }}</span>
+                                </li>
+                                <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+                                    <a class="page-link" href="?status={{ current_filters.status[0] if current_filters.status else '' }}&task_id={{ current_filters.task_id }}&workflow_id={{ current_filters.workflow_id }}&workflow_type={{ current_filters.workflow_type }}&limit={{ pagination.limit }}&page={{ pagination.page + 1 }}">Next</a>
+                                </li>
+                                <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+                                    <a class="page-link" href="?status={{ current_filters.status[0] if current_filters.status else '' }}&task_id={{ current_filters.task_id }}&workflow_id={{ current_filters.workflow_id }}&workflow_type={{ current_filters.workflow_type }}&limit={{ pagination.limit }}&page={{ pagination.total_pages }}">Last</a>
+                                </li>
+                            </ul>
+                        </nav>
+                        {% endif %}
                     </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // View in timeline functionality for list items
+  document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.view-in-timeline-link').forEach(link => {
+      link.addEventListener('click', function(e) {
+        e.preventDefault();
+        const invocationId = this.dataset.invocationId;
+
+        // Fetch invocation history to get time range
+        fetch(`/invocations/${invocationId}/history`)
+          .then(response => response.json())
+          .then(historyData => {
+            if (!historyData || historyData.length === 0) {
+              alert('No history data available for this invocation');
+              return;
+            }
+
+            // Get first and last timestamp
+            const startTime = new Date(historyData[0].timestamp);
+            const endTime = new Date(historyData[historyData.length - 1].timestamp);
+
+            // Add 10% padding on each side
+            const durationMs = endTime - startTime;
+            const paddingMs = Math.max(durationMs * 0.1, 1000); // At least 1 second padding
+
+            const paddedStart = new Date(startTime.getTime() - paddingMs);
+            const paddedEnd = new Date(endTime.getTime() + paddingMs);
+
+            // Format for datetime-local input (YYYY-MM-DDTHH:MM:SS)
+            const formatForInput = (date) => date.toISOString().slice(0, 19);
+
+            // Build the timeline URL with custom range
+            const params = new URLSearchParams();
+            params.set('time_range', 'custom');
+            params.set('start_date', formatForInput(paddedStart));
+            params.set('end_date', formatForInput(paddedEnd));
+
+            // Navigate to timeline
+            window.location.href = '/invocations/timeline?' + params.toString();
+          })
+          .catch(error => {
+            console.error('Error fetching history:', error);
+            alert('Failed to load invocation history');
+          });
+      });
+    });
+  });
+</script>
 {% endblock %}

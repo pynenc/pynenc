@@ -1,0 +1,81 @@
+name: PR Validation
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, labeled]
+
+jobs:
+  validate-pr:
+    name: Validate PR Description
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install PyGithub
+
+      - name: Validate PR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          python .github/scripts/validate_pr.py
+
+      - name: Comment on PR if validation fails
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let comment = '## ❌ PR Validation Failed\n\n';
+
+            if (fs.existsSync('/tmp/pr_validation_errors.txt')) {
+              const errors = fs.readFileSync('/tmp/pr_validation_errors.txt', 'utf8');
+              comment += errors;
+            } else {
+              comment += 'Please ensure your PR description meets the quality standards for release notes.';
+            }
+
+            comment += '\n\n### Requirements for Release Notes:\n';
+            comment += '- **Title**: Use conventional commit format (e.g., `feat(scope): description`)\n';
+            comment += '- **Description**: Minimum 50 characters explaining what and why\n';
+            comment += '- **Labels**: Optional but recommended for categorization\n';
+            comment += '- **Quality**: No placeholder text like "WIP" or "TODO"\n\n';
+            comment += '_These requirements ensure quality automated release notes via Release Drafter._';
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+      - name: Comment on PR with warnings
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            if (fs.existsSync('/tmp/pr_validation_errors.txt')) {
+              const content = fs.readFileSync('/tmp/pr_validation_errors.txt', 'utf8');
+              if (content.includes('⚠️')) {
+                const comment = '## ✅ PR Validation Passed\n\n' + content;
+
+                github.rest.issues.createComment({
+                  issue_number: context.issue.number,
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  body: comment
+                });
+              }
+            }

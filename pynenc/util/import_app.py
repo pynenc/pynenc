@@ -4,9 +4,9 @@ import os
 import sys
 import types
 from importlib.util import module_from_spec, spec_from_file_location
-from typing import Optional
 
-from pynenc.app import AppInfo, Pynenc
+from pynenc.app import Pynenc
+from pynenc.app_info import AppInfo
 
 
 def build_file_path_from_module_name(module_name: str) -> str:
@@ -192,7 +192,7 @@ def extract_module_info(app: "Pynenc") -> tuple[str | None, str | None]:
     return module_filepath, app_variable
 
 
-def create_app_from_info(app_info: AppInfo) -> Optional[Pynenc]:
+def create_app_from_info(app_info: AppInfo) -> Pynenc | None:
     """
     Create a Pynenc app instance from AppInfo.
 

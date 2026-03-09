@@ -1,0 +1,225 @@
+{% extends "base.html" %} {% block extra_css %}
+<link rel="stylesheet" href="/static/css/log_explorer.css" />
+{% endblock %} {% block content %}
+<div class="pynmon-container">
+  {# ── Paste form ─────────────────────────────────────────────────────── #}
+  <div class="row mb-3">
+    <div class="col-12">
+      <div class="card pynmon-card">
+        <div class="card-header pynmon-card-header compact-header">
+          Log Explorer — Analyse Pynenc Log Lines
+        </div>
+        <div class="card-body pynmon-card-body">
+          <form action="/log-explorer" method="get" id="log-form">
+            <div class="mb-3">
+              <label for="log" class="form-label metadata-text"
+                >Paste one or more log lines</label
+              >
+              <textarea
+                class="form-control font-monospace"
+                id="log"
+                name="log"
+                rows="6"
+                style="font-size: 11.5px; line-height: 1.5"
+                placeholder="2026-03-05 00:13:51.125+01:00 INFO  pynenc.app [TR(a86ab1f8)] NEW task:pynenc.core_tasks.recover_running_invocations invocation:cc6c0e34-… REGISTERED and ROUTED
+2026-03-05 00:13:51.126+01:00 INFO  pynenc.app [TR(a86ab1f8)] invocation:cc6c0e34-… ROUTED"
+              >
+{{ log }}</textarea
+              >
+              <div class="form-text" style="font-size: 11px">
+                Paste any pynenc log block. Each line starting with a timestamp
+                + level is parsed individually. Entity references like
+                <code>invocation:UUID</code>, <code>task:key</code>,
+                <code>runner:ID</code>, <code>workflow:ID</code> become
+                clickable links. IDs inside
+                <code>[PPR(id).PPRW(id)…]</code> brackets are also clickable.
+              </div>
+            </div>
+            <div class="d-flex gap-2">
+              <button
+                type="submit"
+                class="btn btn-sm btn-primary pynmon-action-btn"
+              >
+                <span
+                  class="material-icons"
+                  style="font-size: 14px; vertical-align: middle"
+                  >search</span
+                >
+                Analyse
+              </button>
+              {% if log %}
+              <a
+                href="/log-explorer"
+                class="btn btn-sm btn-outline-secondary pynmon-action-btn"
+                id="clear-btn"
+                >Clear</a
+              >
+              {% endif %}
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ── Analysis results ────────────────────────────────────────────────── #}
+  {% if analysis %} {% if not analysis.has_valid %}
+  <div class="alert alert-warning" style="font-size: 13px">
+    Could not extract pynenc context from the pasted text. Make sure each line
+    starts with a timestamp and log level, or contains structured entity
+    references like <code>invocation:UUID</code>.
+  </div>
+
+  {% else %} {# ── Per-line log display
+  ────────────────────────────────────────────── #}
+  <div class="row mb-3">
+    <div class="col-12">
+      <div class="card" style="background: #fff; border: 1px solid #dee2e6">
+        <div class="card-body py-3 px-3">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <h6
+              class="text-muted fw-semibold text-uppercase mb-0"
+              style="font-size: 11px; letter-spacing: 0.05em"
+            >
+              Parsed Log Lines
+              <span class="badge bg-secondary ms-1" style="font-size: 10px"
+                >{{ analysis.lines|length }}</span
+              >
+            </h6>
+            <a
+              href="/invocations/timeline?{{ analysis.timeline_qs }}"
+              class="btn btn-sm btn-outline-primary pynmon-action-btn"
+              title="Open timeline spanning all log timestamps"
+            >
+              <span
+                class="material-icons"
+                style="font-size: 13px; vertical-align: middle"
+                >timeline</span
+              >
+              Timeline
+            </a>
+          </div>
+
+          {% for la in analysis.lines %} {% include
+          "log_explorer/partials/line_card.html" %} {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ── SVG mini-timeline ──────────────────────────────────────────────── #} {%
+  if analysis.svg_content %}
+  <div class="row mb-3">
+    <div class="col-12">
+      <h6
+        class="text-muted fw-semibold text-uppercase mb-2"
+        style="font-size: 11px; letter-spacing: 0.05em"
+      >
+        Invocation Timeline
+        <a
+          href="/invocations/timeline?{{ analysis.timeline_qs }}"
+          class="ms-2 log-svg-timeline-link"
+          style="font-size: 10px; text-transform: none; letter-spacing: 0"
+          title="Open full timeline"
+        >
+          open full →
+        </a>
+      </h6>
+      <div class="log-svg-container" id="log-svg-container">
+        {{ analysis.svg_content|safe }}
+      </div>
+      {# Detail panel shown on SVG element click #}
+      <div class="log-inv-detail" id="log-inv-detail">
+        <span class="detail-close material-icons">close</span>
+        <div class="detail-row">
+          <span class="detail-label">Invocation:</span>
+          <span class="detail-inv-id font-monospace"></span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Status:</span>
+          <span class="detail-status"></span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Task:</span>
+          <span class="detail-task font-monospace"></span>
+        </div>
+        <div class="detail-actions">
+          <a href="#" class="detail-link">
+            <span
+              class="material-icons"
+              style="font-size: 12px; vertical-align: middle"
+              >info</span
+            >
+            Detail
+          </a>
+          <a href="#" class="detail-timeline-link">
+            <span
+              class="material-icons"
+              style="font-size: 12px; vertical-align: middle"
+              >timeline</span
+            >
+            Timeline
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %} {# ── Compact all-references panel
+  ─────────────────────────────────── #} {% if analysis.all_entity_refs %}
+  <div class="row mb-3">
+    <div class="col-12">
+      <h6
+        class="text-muted fw-semibold text-uppercase mb-2"
+        style="font-size: 11px; letter-spacing: 0.05em"
+      >
+        References
+        <span class="badge bg-secondary ms-1" style="font-size: 10px"
+          >{{ analysis.all_entity_refs|length }}</span
+        >
+      </h6>
+      {% include "log_explorer/partials/all_refs.html" %}
+    </div>
+  </div>
+  {% endif %} {% endif %}{# has_valid #} {% endif %}{# analysis #}
+</div>
+
+{# ── Session persistence: remember last log across tab switches ────────── #}
+<script>
+  (function () {
+    const STORAGE_KEY = "pynmon_log_explorer_last";
+    const textarea = document.getElementById("log");
+    const form = document.getElementById("log-form");
+    const clearBtn = document.getElementById("clear-btn");
+
+    if (textarea && !textarea.value.trim()) {
+      const saved = sessionStorage.getItem(STORAGE_KEY);
+      if (saved) textarea.value = saved;
+    }
+
+    if (form) {
+      form.addEventListener("submit", function () {
+        if (textarea) sessionStorage.setItem(STORAGE_KEY, textarea.value);
+      });
+    }
+
+    if (clearBtn) {
+      clearBtn.addEventListener("click", function () {
+        sessionStorage.removeItem(STORAGE_KEY);
+      });
+    }
+  })();
+</script>
+
+{% if analysis and analysis.svg_content %} {# Emit invocation→task mapping for
+JS task highlighting in SVG #}
+<script>
+  window.__invTaskMap = {
+    {% for key, detail in analysis.ref_details.items() %}
+    {% if key.startswith('invocation:') and detail.get('task') %}
+    "{{ key[11:] }}": "{{ detail['task'] }}",
+    {% endif %}
+    {% endfor %}
+  };
+</script>
+{% include "log_explorer/partials/log_explorer_scripts.html" %} {% endif %} {%
+endblock %}

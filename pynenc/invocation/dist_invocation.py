@@ -1,31 +1,28 @@
 from __future__ import annotations
 
-import json
-import time
 from collections.abc import AsyncGenerator, Iterator
-from typing import TYPE_CHECKING, Any, cast
+import time
+from typing import TYPE_CHECKING, Any
 
 from pynenc import context, exceptions
 from pynenc.arguments import Arguments
 from pynenc.call import Call
+from pynenc.identifiers.invocation_id import InvocationId, generate_invocation_id
 from pynenc.invocation.base_invocation import (
     BaseInvocation,
     BaseInvocationGroup,
-    InvocationIdentity,
 )
 from pynenc.invocation.status import InvocationStatus
+from pynenc.models.invocation_dto import InvocationDTO
 from pynenc.types import Params, Result
 from pynenc.util.asyncio_helper import run_task_sync
-from pynenc.workflow.exceptions import WorkflowPauseError
-from pynenc.workflow.identity import WorkflowIdentity
+from pynenc.workflow.workflow_exceptions import WorkflowPauseError
+from pynenc.workflow.workflow_identity import WorkflowIdentity
 
 if TYPE_CHECKING:
-    from pynenc.workflow import WorkflowContext
-
-    from ..app import Pynenc
+    from pynenc.runner import RunnerContext
 
 
-# Create a context variable to store current invocation
 class DistributedInvocation(BaseInvocation[Params, Result]):
     """
     Represents a distributed invocation of a task call in the system.
@@ -39,7 +36,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
     :param DistributedInvocation | None parent_invocation:
         A reference to a parent invocation, if this invocation is part of a nested call structure.
         This attribute is used to maintain the invocation hierarchy in complex task workflows.
-    :param Optional[str] _invocation_id:
+    :param InvocationId | None _invocation_id:
         A unique identifier for the invocation. This ID is crucial for tracking and orchestrating the invocation
         across the distributed system. It's assigned internally and used by the orchestration mechanism.
     :param bool _disable_upsert:
@@ -50,13 +47,15 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
     def __init__(
         self,
         call: Call[Params, Result],
-        parent_invocation: DistributedInvocation | None = None,
-        invocation_id: str | None = None,
-        stored_in_backend: bool = False,
-        workflow: WorkflowIdentity | None = None,
+        invocation_id: InvocationId,
+        parent_invocation_id: InvocationId | None,
+        workflow: WorkflowIdentity,
+        stored_in_backend: bool,
     ) -> None:
         # Call parent init
-        super().__init__(call, parent_invocation, invocation_id, workflow)
+        super().__init__(call, invocation_id)
+        self.parent_invocation_id = parent_invocation_id
+        self._workflow = workflow
 
         # Initialize additional state
         self._result: Result | None = None
@@ -67,35 +66,72 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         self._cached_status_time: float = 0.0
 
         # Store in state backend
-        self._stored_in_backend: bool = stored_in_backend
+        self._stored_in_backend = stored_in_backend
         self.store_in_backend()
 
-    @property
-    def parent_invocation(self) -> DistributedInvocation | None:
+    @classmethod
+    def isolated(cls, call: Call[Params, Result]) -> DistributedInvocation:
+        """Create a new DistributedInvocation for a given call ignoring any existing invocation context."""
+        return cls.from_parent(call, parent_invocation=None)
+
+    @classmethod
+    def from_parent(
+        cls,
+        call: Call[Params, Result],
+        parent_invocation: DistributedInvocation | None = None,
+    ) -> DistributedInvocation:
+        """Create a new invocation as a child of an existing invocation.
+
+        :param Call[Params, Result] call:
+            The call that this invocation will execute.
+        :param DistributedInvocation | None parent_invocation:
+            The parent invocation that this new invocation will be a child of. If None, the new invocation will be a main workflow task.
         """
-        :return: the parent invocation of this invocation
-        """
-        return (
-            cast(DistributedInvocation, self.identity.parent_invocation)
-            if self.identity.parent_invocation
-            else None
+        new_invocation_id = generate_invocation_id()
+        if parent_invocation is None:
+            workflow = WorkflowIdentity.new_workflow(
+                invocation_id=new_invocation_id, task_id=call.task.task_id
+            )
+            call.app.logger.info(f"Creating a new main workflow:{workflow.workflow_id}")
+        elif call.task.conf.force_new_workflow:
+            workflow = WorkflowIdentity.new_subworkflow(
+                invocation_id=new_invocation_id,
+                task_id=call.task.task_id,
+                parent_workflow_id=parent_invocation.workflow.workflow_id,
+            )
+            call.app.logger.info(
+                f"Creating a new sub-workflow:{workflow.workflow_id} from parent-workflow:{parent_invocation.workflow.workflow_id}"
+            )
+        else:
+            workflow = parent_invocation.workflow
+            call.app.logger.debug(
+                f"Inheriting workflow from parent-workflow:{workflow.workflow_id} for new-invocation:{new_invocation_id}"
+            )
+        return cls(
+            call=call,
+            invocation_id=new_invocation_id,
+            parent_invocation_id=parent_invocation.invocation_id
+            if parent_invocation
+            else None,
+            workflow=workflow,
+            stored_in_backend=False,
         )
 
     @property
-    def wf(self) -> WorkflowContext:
-        """Access workflow functionality for this invocation task."""
-        return self.task.wf
+    def workflow(self) -> WorkflowIdentity:
+        """Get the workflow identity for this invocation."""
+        return self._workflow
 
     def store_in_backend(self) -> None:
         """Store the invocation in the state backend."""
         if not self._stored_in_backend:
             self._stored_in_backend = True
-            self.app.state_backend.upsert_invocation(self)
+            self.app.state_backend.upsert_invocations([self])
 
     @property
     def num_retries(self) -> int:
         """:return: number of times the invocation got retried"""
-        return self.app.orchestrator.get_invocation_retries(self)
+        return self.app.orchestrator.get_invocation_retries(self.invocation_id)
 
     def update_status_cache(self, status: InvocationStatus) -> None:
         """Update the cached status and timestamp."""
@@ -109,49 +145,58 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         # First check cache for final statuses - they never change
         if self._cached_status and self._cached_status.is_final():
             return self._cached_status
-        # For non-final statuses, use a short cache (100ms) to avoid hammering Redis
+        # For non-final statuses, use a short cache (100ms) to reduce orchestrator load
         cache_ttl = self.app.conf.cached_status_time
         if self._cached_status and (time.time() - self._cached_status_time < cache_ttl):
             return self._cached_status
         # check status and update cache
-        status = self.app.orchestrator.get_invocation_status(self)
+        status = self.app.orchestrator.get_invocation_status(self.invocation_id)
         self.update_status_cache(status)
         return status
 
-    def to_json(self) -> str:
-        """:return: The serialized invocation"""
-        inv_dict: dict = {}
-        inv_dict["invocation_id"] = self.invocation_id
-        inv_dict["call"] = self.call.to_json()
-        inv_dict["workflow"] = self.workflow.to_json()
-        if self.parent_invocation:
-            inv_dict["parent_invocation"] = self.parent_invocation.to_json()
-        inv_dict["_stored_in_backend"] = self._stored_in_backend
-        return json.dumps(inv_dict)
+    def to_dto(self) -> InvocationDTO:
+        """Create a side-effect-free DTO with invocation-level fields only.
+
+        The DTO carries identity and workflow data. It does NOT embed
+        call/argument data — the state backend pairs this with a separate
+        ``CallDTO`` when persisting.
+
+        :return: An InvocationDTO with invocation identity fields.
+        """
+        return InvocationDTO(
+            invocation_id=self.invocation_id,
+            call_id=self.call.call_id,
+            parent_invocation_id=self.parent_invocation_id,
+            workflow=self.workflow,
+        )
 
     @classmethod
-    def from_json(cls, app: Pynenc, serialized: str) -> DistributedInvocation:
-        """:return: a new invocation from a serialized invocation"""
-        inv_dict = json.loads(serialized)
-        parent_invocation: DistributedInvocation | None = None
-        if "parent_invocation" in inv_dict:
-            parent_invocation = cls.from_json(app, inv_dict["parent_invocation"])
+    def from_dto(cls, dto: InvocationDTO, call: Call) -> DistributedInvocation:
+        """Reconstruct a DistributedInvocation from a DTO and a pre-built call.
+
+        The caller (state backend) is responsible for constructing the call
+        (typically a ``LazyCall``) from the corresponding ``CallDTO``. Parent
+        invocation is loaded from the state backend by ID (flat lookup).
+
+        :param InvocationDTO dto: The DTO with invocation identity fields.
+        :param Call call: The call for this invocation (usually a LazyCall).
+        :return: A fully reconstructed DistributedInvocation.
+        """
         return cls(
-            call=Call.from_json(app, inv_dict["call"]),
-            parent_invocation=parent_invocation,
-            invocation_id=inv_dict["invocation_id"],
-            stored_in_backend=inv_dict["_stored_in_backend"],
-            workflow=WorkflowIdentity.from_json(inv_dict["workflow"]),
+            call=call,
+            invocation_id=dto.invocation_id,
+            parent_invocation_id=dto.parent_invocation_id,
+            workflow=dto.workflow,
+            stored_in_backend=True,
         )
 
     def __getstate__(self) -> dict:
         """Return a serialized state dict for pickling."""
         state: dict = {}
-        state["identity"] = {
-            "invocation_id": self.invocation_id,
-            "call": self.call,
-            "parent_invocation": self.parent_invocation,
-        }
+        state["call"] = self._call
+        state["invocation_id"] = self._invocation_id
+        state["parent_invocation_id"] = self.parent_invocation_id
+        state["workflow"] = self._workflow
         state["state"] = {
             "cached_status": self._cached_status,
             "cached_status_time": self._cached_status_time,
@@ -159,19 +204,15 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             "num_retries": self._num_retries,
             "result": self._result,
         }
-        state["workflow"] = self.workflow.to_json()
         return state
 
     def __setstate__(self, state: dict) -> None:
         """Restore state from a pickled dict."""
         # Recreate identity object (it's immutable, needs to be created properly)
-        identity_data = state["identity"]
-        self.identity = InvocationIdentity(
-            call=identity_data["call"],
-            invocation_id=identity_data["invocation_id"],
-            parent_invocation=identity_data["parent_invocation"],
-        )
-        self.workflow = WorkflowIdentity.from_json(state["workflow"])
+        self._call = state["call"]
+        self._invocation_id = state["invocation_id"]
+        self.parent_invocation_id = state["parent_invocation_id"]
+        self._workflow = state["workflow"]
         # Restore mutable state directly
         state_data = state["state"]
         self._cached_status = state_data["cached_status"]
@@ -179,8 +220,34 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         self._stored_in_backend = state_data["stored_in_backend"]
         self._num_retries = state_data["num_retries"]
         self._result = state_data["result"]
-        # Initialize logger if needed
-        self.init_logger()
+
+    def is_main_workflow_task(self) -> bool:
+        """Check if the task is the main workflow task.
+
+        :return: True if the task is the main workflow task, False otherwise
+
+        ```{note}
+            All tasks run within a workflow, the main workflow task is just the first task in the workflow.
+            To determine that, we check if the task_id of the workflow task is the same as the task_id of the current task.
+        ```
+        """
+        return self.workflow.workflow_type == self.task.task_id
+
+    def _register_workflow_run(self) -> None:
+        """Register workflow tracking for this invocation start."""
+        if self.is_main_workflow_task():
+            self.app.state_backend.store_workflow_run(self.workflow)
+            if self.workflow.parent_workflow_id:
+                self.app.state_backend.store_workflow_sub_invocation(
+                    self.workflow.parent_workflow_id,
+                    self.workflow.workflow_id,
+                )
+            return
+
+        self.app.state_backend.store_workflow_sub_invocation(
+            self.workflow.workflow_id,
+            self.invocation_id,
+        )
 
     def swap_context(self) -> DistributedInvocation | None:
         """
@@ -210,7 +277,9 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             self.app.app_id, previous_invocation_context
         )
 
-    def run(self, runner_args: dict[str, Any] | None = None) -> None:
+    def run(
+        self, runner_ctx: RunnerContext, runner_args: dict[str, Any] | None = None
+    ) -> None:
         """
         Execute the task associated with this invocation in a distributed environment.
 
@@ -218,6 +287,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         and updating the task's state in the orchestrator. It manages the invocation context and communicates with
         the orchestrator to set the invocation's run state and result.
 
+        :param RunnerContext runner_ctx: The context of the runner executing this invocation.
         :param dict[str, Any] | None runner_args:
             Optional arguments passed from/to the runner. These arguments can be used for synchronization
             in subprocesses or other runner-specific tasks. Default is None.
@@ -241,32 +311,56 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             Raises the original exception if a non-retriable exception occurs or the maximum retries are reached for a retriable exception.
         """
         # runner_args are passed from/to the runner (e.g. used to sync subprocesses)
-        context.runner_args = runner_args
+        # Always set runner_args in thread-local storage so nested invocations can access them
+        context.set_runner_args(runner_args)
+        # Set the current app so core tasks can access it
+        context.set_current_app(self.app)
+        # Set the runner context for this thread so any sub-invocations
+        # registered from within this task use the correct runner context
+        # (log.py reads directly from context.py, so this is the single source of truth)
+        context.set_runner_context(self.app.app_id, runner_ctx)
+        previous_invocation_context = self.swap_context()
         try:
-            self.task.logger.info("Invocation STARTED")
-            previous_invocation_context = self.swap_context()
             if not self.app.orchestrator.is_authorize_to_run_by_concurrency_control(
                 self
             ):
-                self.app.orchestrator.reroute_invocations({self})
-            self.app.orchestrator.set_invocation_run(self.parent_invocation, self)
+                self.app.orchestrator.reroute_invocations(
+                    {self.invocation_id}, runner_ctx
+                )
+            self.app.orchestrator.set_invocation_status(
+                self.invocation_id, InvocationStatus.RUNNING, runner_ctx
+            )
+            self._register_workflow_run()
             result = run_task_sync(self.task.func, **self.arguments.kwargs)
-            self.app.orchestrator.set_invocation_result(self, result)
-            self.task.logger.info("Invocation FINISHED")
+            self.app.orchestrator.set_invocation_result(self, result, runner_ctx)
         except WorkflowPauseError as ex:
             self.task.logger.warning(
-                f"Workflow pause requested but not implemented yet: {ex.reason}"
+                f"invocation:{self.invocation_id} Workflow pause requested but not implemented yet: {ex.reason}"
             )
         except self.task.retriable_exceptions as ex:
             if self.num_retries >= self.task.conf.max_retries:
-                self.app.logger.exception("Invocation MAX-RETRY")
-                self.app.orchestrator.set_invocation_exception(self, ex)
+                self.app.logger.exception(f"invocation:{self.invocation_id} MAX-RETRY")
+                self.app.orchestrator.set_invocation_exception(self, ex, runner_ctx)
                 raise ex
-            self.app.orchestrator.set_invocation_retry(self, ex)
-            self.task.logger.warning(f"Invocation WILL-RETRY {ex=}")
+            self.app.orchestrator.set_invocation_retry(
+                self.invocation_id, ex, runner_ctx
+            )
+            self.task.logger.warning(
+                f"invocation:{self.invocation_id} WILL-RETRY exception:{ex}"
+            )
+        except exceptions.InvocationStatusTransitionError as ex:
+            # Expected race condition: another runner already picked up this invocation
+            self.task.logger.warning(
+                f"invocation:{self.invocation_id} status transition conflict (another runner took ownership): {ex}"
+            )
+        except exceptions.InvocationStatusOwnershipError as ex:
+            # Expected race condition: we lost ownership to another runner
+            self.task.logger.warning(
+                f"invocation:{self.invocation_id} lost ownership to another runner: {ex}"
+            )
         except Exception as ex:
-            self.app.logger.exception("Invocation EXCEPTION")
-            self.app.orchestrator.set_invocation_exception(self, ex)
+            self.app.logger.exception(f"invocation:{self.invocation_id} EXCEPTION")
+            self.app.orchestrator.set_invocation_exception(self, ex, runner_ctx)
             raise ex
         finally:
             self.reset_context(previous_invocation_context)
@@ -294,24 +388,32 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             for the task to complete.
         ```
         """
-        self.app.logger.debug(f"ini waiting for invocation {self.invocation_id} result")
+        self.app.logger.debug(f"ini waiting for invocation:{self.invocation_id} result")
         if not self.status.is_final():
-            self.app.orchestrator.waiting_for_results(self.parent_invocation, [self])
+            self.app.orchestrator.waiting_for_results(
+                self.parent_invocation_id, [self.invocation_id]
+            )
 
         while not self.status.is_final():
             self.app.runner.waiting_for_results(
-                self.parent_invocation, [self], context.runner_args
+                self.parent_invocation_id,
+                [self.invocation_id],
+                context.get_runner_args(),
             )
-        self.app.logger.debug(f"end waiting for invocation {self.invocation_id} result")
+        self.app.logger.debug(f"end waiting for invocation:{self.invocation_id} result")
         return self.get_final_result()
 
     async def async_result(self) -> Result:
         # Assuming an async_waiting_for_results will be implemented in the runner:
         if not self.status.is_final():
-            self.app.orchestrator.waiting_for_results(self.parent_invocation, [self])
+            self.app.orchestrator.waiting_for_results(
+                self.parent_invocation_id, [self.invocation_id]
+            )
         while not self.status.is_final():
             await self.app.runner.async_waiting_for_results(
-                self.parent_invocation, [self], context.runner_args
+                self.parent_invocation_id,
+                [self.invocation_id],
+                context.get_runner_args(),
             )
         return self.get_final_result()
 
@@ -333,8 +435,8 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
                 self.invocation_id, "Invocation is not final"
             )
         if self.status == InvocationStatus.FAILED:
-            raise self.app.state_backend.get_exception(self)
-        return self.app.state_backend.get_result(self)
+            raise self.app.state_backend.get_exception(self.invocation_id)
+        return self.app.state_backend.get_result(self.invocation_id)
 
 
 class DistributedInvocationGroup(
@@ -374,45 +476,53 @@ class DistributedInvocationGroup(
             This method will block until all invocations in the group have completed and their results are available.
         ```
         """
-        waiting_invocations = self.invocations.copy()
-        if not waiting_invocations:
+        waiting_invocation_ids = list(self.invocation_map.keys())
+        if not waiting_invocation_ids:
             return
-        parent_invocation = waiting_invocations[0].parent_invocation
+        parent_invocation_id = self.invocation_map[
+            waiting_invocation_ids[0]
+        ].parent_invocation_id
         notified_orchestrator = False
-        while waiting_invocations:
-            for final_inv in self.app.orchestrator.filter_final(waiting_invocations):
-                waiting_invocations.remove(final_inv)
-                yield final_inv.result
-            if not waiting_invocations:
+        while waiting_invocation_ids:
+            for final_inv_id in self.app.orchestrator.filter_final(
+                waiting_invocation_ids
+            ):
+                waiting_invocation_ids.remove(final_inv_id)
+                yield self.invocation_map[final_inv_id].result
+            if not waiting_invocation_ids:
                 break
             if not notified_orchestrator:
                 self.app.orchestrator.waiting_for_results(
-                    parent_invocation, waiting_invocations
+                    parent_invocation_id, waiting_invocation_ids
                 )
                 notified_orchestrator = True
             self.app.runner.waiting_for_results(
-                parent_invocation, waiting_invocations, context.runner_args
+                parent_invocation_id, waiting_invocation_ids, context.get_runner_args()
             )
 
     async def async_results(self) -> AsyncGenerator[Result, None]:
-        waiting_invocations = self.invocations.copy()
-        if not waiting_invocations:
+        waiting_invocation_ids = list(self.invocation_map.keys())
+        if not waiting_invocation_ids:
             return
-        parent_invocation = waiting_invocations[0].parent_invocation
+        parent_invocation_id = self.invocation_map[
+            waiting_invocation_ids[0]
+        ].parent_invocation_id
         notified_orchestrator = False
-        while waiting_invocations:
-            for final_inv in self.app.orchestrator.filter_final(waiting_invocations):
-                waiting_invocations.remove(final_inv)
-                yield final_inv.result
-            if not waiting_invocations:
+        while waiting_invocation_ids:
+            for final_inv_id in self.app.orchestrator.filter_final(
+                waiting_invocation_ids
+            ):
+                waiting_invocation_ids.remove(final_inv_id)
+                yield self.invocation_map[final_inv_id].result
+            if not waiting_invocation_ids:
                 break
             if not notified_orchestrator:
                 self.app.orchestrator.waiting_for_results(
-                    parent_invocation, waiting_invocations
+                    parent_invocation_id, waiting_invocation_ids
                 )
                 notified_orchestrator = True
             await self.app.runner.async_waiting_for_results(
-                parent_invocation, waiting_invocations, context.runner_args
+                parent_invocation_id, waiting_invocation_ids, context.get_runner_args()
             )
 
 
@@ -423,48 +533,42 @@ class ReusedInvocation(DistributedInvocation):
     This class is used for scenarios where an existing invocation is reused, possibly with some differences
     in arguments. It adds an attribute to track these argument differences.
 
-    :ivar Arguments | None diff_arg:
-        An optional `Arguments` object representing any differences in arguments compared to the original invocation.
-        If `None`, it indicates no differences in arguments.
+    :param DistributedInvocation invocation:
+        The existing invocation to reuse.
+    :param Arguments | None diff_arg:
+        Optional argument differences for the new invocation. If provided, these arguments will be used to
+        distinguish the new invocation from the original. Default is None.
+    :return:
+        A new instance of `ReusedInvocation` based on the provided existing invocation.
+    :rtype:
+        ReusedInvocation
     """
 
     def __init__(
         self,
-        call: Call[Params, Result],
-        parent_invocation: DistributedInvocation | None = None,
-        invocation_id: str | None = None,
+        existing_invocation: DistributedInvocation,
         diff_arg: Arguments | None = None,
     ):
-        # Call parent init
-        super().__init__(call, parent_invocation, invocation_id)
+        if not existing_invocation._stored_in_backend:
+            raise ValueError(
+                "Cannot reuse an invocation that is not stored in the backend"
+            )
+        super().__init__(
+            existing_invocation.call,
+            existing_invocation.invocation_id,
+            existing_invocation.parent_invocation_id,
+            existing_invocation.workflow,
+            existing_invocation._stored_in_backend,
+        )
         self.diff_arg = diff_arg
 
-    @classmethod
-    def from_existing(
-        cls, invocation: DistributedInvocation, diff_arg: Arguments | None = None
-    ) -> ReusedInvocation:
-        """
-        Create a `ReusedInvocation` instance from an existing `DistributedInvocation`.
-
-        This method constructs a new `ReusedInvocation` based on an existing distributed invocation. It reuses
-        the invocation ID and other relevant attributes from the original invocation and allows specifying
-        differences in arguments.
-
-        :param DistributedInvocation invocation:
-            The existing invocation to reuse.
-        :param Arguments | None diff_arg:
-            Optional argument differences for the new invocation. If provided, these arguments will be used to
-            distinguish the new invocation from the original. Default is None.
-        :return:
-            A new instance of `ReusedInvocation` based on the provided existing invocation.
-        :rtype:
-            ReusedInvocation
-        """
-        new_invc = cls(
-            call=Call(invocation.task, invocation.arguments),
-            parent_invocation=invocation.parent_invocation,
-            # we reuse invocation_id from original invocation
-            invocation_id=invocation.invocation_id,
-            diff_arg=diff_arg,
+    def run(
+        self, runner_ctx: RunnerContext, runner_args: dict[str, Any] | None = None
+    ) -> None:
+        """ReusedInvocation cannot be run directly, it's just a wrapper around an existing invocation."""
+        self.app.logger.error(
+            f"Attempted to run a ReusedInvocation, with runner_ctx:{runner_ctx} runner_args:{runner_args}."
         )
-        return new_invc
+        raise NotImplementedError(
+            "ReusedInvocation cannot be run directly, it's just a wrapper around an existing invocation"
+        )

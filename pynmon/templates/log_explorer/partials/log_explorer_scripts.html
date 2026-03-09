@@ -1,0 +1,215 @@
+{# ── Log Explorer interactivity scripts ─────────────────────────────── #} {#
+SVG click/hover, cross-highlighting between ref chips and SVG, and invocation
+detail panel on click. #}
+<script>
+  (function () {
+    const svgContainer = document.getElementById("log-svg-container");
+    const detailPanel = document.getElementById("log-inv-detail");
+    if (!svgContainer) return;
+
+    // ── SVG click → show invocation detail ────────────────────────────
+    svgContainer.addEventListener("click", function (e) {
+      const el = e.target.closest("[data-invocation-id]");
+      if (!el) return;
+      const invId = el.dataset.invocationId;
+      if (invId) showInvocationDetail(invId);
+    });
+
+    // ── SVG hover → highlight matching SVG elements ───────────────────
+    svgContainer.addEventListener("mouseover", function (e) {
+      const el = e.target.closest("[data-invocation-id]");
+      if (el) highlightInvocation(el.dataset.invocationId, true);
+      const rl = e.target.closest(".runner-label[data-runner-id]");
+      if (rl) highlightRunner(rl.getAttribute("data-runner-id"), true);
+      const tl = e.target.closest("[data-task-key]");
+      if (tl) highlightTask(tl.getAttribute("data-task-key"), true);
+    });
+    svgContainer.addEventListener("mouseout", function (e) {
+      const el = e.target.closest("[data-invocation-id]");
+      if (el) highlightInvocation(el.dataset.invocationId, false);
+      const rl = e.target.closest(".runner-label[data-runner-id]");
+      if (rl) highlightRunner(rl.getAttribute("data-runner-id"), false);
+      const tl = e.target.closest("[data-task-key]");
+      if (tl) highlightTask(tl.getAttribute("data-task-key"), false);
+    });
+
+    // ── Cross-highlight: ref chips ↔ SVG ──────────────────────────────
+    document.querySelectorAll("[data-invocation-id]").forEach(function (chip) {
+      if (svgContainer.contains(chip)) return; // skip SVG elements
+      chip.addEventListener("mouseenter", function () {
+        highlightInvocation(chip.dataset.invocationId, true);
+        crossHighlightChips(chip.dataset.invocationId, true);
+      });
+      chip.addEventListener("mouseleave", function () {
+        highlightInvocation(chip.dataset.invocationId, false);
+        crossHighlightChips(chip.dataset.invocationId, false);
+      });
+    });
+
+    document.querySelectorAll("[data-runner-id]").forEach(function (chip) {
+      if (svgContainer.contains(chip)) return;
+      chip.addEventListener("mouseenter", function () {
+        crossHighlightChips(null, false); // clear previous
+        highlightRunner(chip.dataset.runnerId, true);
+      });
+      chip.addEventListener("mouseleave", function () {
+        highlightRunner(chip.dataset.runnerId, false);
+      });
+    });
+
+    document.querySelectorAll("[data-task-key]").forEach(function (chip) {
+      if (svgContainer.contains(chip)) return;
+      chip.addEventListener("mouseenter", function () {
+        highlightTask(chip.dataset.taskKey, true);
+      });
+      chip.addEventListener("mouseleave", function () {
+        highlightTask(chip.dataset.taskKey, false);
+      });
+    });
+
+    // ── Highlight helpers ─────────────────────────────────────────────
+    function highlightInvocation(invId, on) {
+      if (!invId) return;
+      svgContainer
+        .querySelectorAll('[data-invocation-id="' + invId + '"]')
+        .forEach(function (el) {
+          const g = el.closest("g") || el;
+          on
+            ? g.classList.add("invocation-highlight")
+            : g.classList.remove("invocation-highlight");
+        });
+      crossHighlightChips(invId, on);
+    }
+
+    function highlightRunner(runnerId, on) {
+      if (!runnerId) return;
+      // Highlight SVG lane backgrounds and labels
+      svgContainer
+        .querySelectorAll('[data-runner-id="' + runnerId + '"]')
+        .forEach(function (el) {
+          on
+            ? el.classList.add("runner-highlight")
+            : el.classList.remove("runner-highlight");
+        });
+      // Highlight all chips with this runner_id
+      document
+        .querySelectorAll('[data-runner-id="' + runnerId + '"]')
+        .forEach(function (el) {
+          if (svgContainer.contains(el)) return;
+          on
+            ? el.classList.add("cross-highlight")
+            : el.classList.remove("cross-highlight");
+        });
+    }
+
+    function highlightTask(taskKey, on) {
+      if (!taskKey) return;
+      var taskMap = window.__invTaskMap || {};
+      // Highlight SVG elements whose invocation maps to this task
+      svgContainer
+        .querySelectorAll("[data-invocation-id]")
+        .forEach(function (el) {
+          var invId =
+            el.dataset.invocationId || el.getAttribute("data-invocation-id");
+          if (taskMap[invId] === taskKey) {
+            var g = el.closest("g") || el;
+            on
+              ? g.classList.add("invocation-highlight")
+              : g.classList.remove("invocation-highlight");
+          }
+        });
+      // Highlight SVG elements with matching task-key directly
+      svgContainer
+        .querySelectorAll('[data-task-key="' + taskKey + '"]')
+        .forEach(function (el) {
+          var g = el.closest("g") || el;
+          on
+            ? g.classList.add("invocation-highlight")
+            : g.classList.remove("invocation-highlight");
+        });
+      // Highlight all chips/links with this task-key outside SVG
+      document
+        .querySelectorAll('[data-task-key="' + taskKey + '"]')
+        .forEach(function (el) {
+          if (svgContainer.contains(el)) return;
+          on
+            ? el.classList.add("cross-highlight")
+            : el.classList.remove("cross-highlight");
+        });
+    }
+
+    function crossHighlightChips(invId, on) {
+      if (!invId) return;
+      document
+        .querySelectorAll('[data-invocation-id="' + invId + '"]')
+        .forEach(function (el) {
+          if (svgContainer.contains(el)) return;
+          on
+            ? el.classList.add("cross-highlight")
+            : el.classList.remove("cross-highlight");
+        });
+    }
+
+    // ── Invocation detail panel ───────────────────────────────────────
+    function showInvocationDetail(invId) {
+      if (!detailPanel) return;
+      detailPanel.classList.add("visible");
+      detailPanel.querySelector(".detail-inv-id").textContent = invId;
+
+      const detailLink = detailPanel.querySelector(".detail-link");
+      detailLink.href = "/invocations/" + invId;
+
+      const timelineLink = detailPanel.querySelector(".detail-timeline-link");
+      // Build a tight timeline URL matching log explorer precision
+      const params = new URLSearchParams(window.location.search);
+      params.set("selected", invId);
+      timelineLink.href =
+        "/invocations/timeline?" + buildTightTimelineQs(invId);
+
+      // Fetch basic info via API
+      fetchInvocationInfo(invId, detailPanel);
+    }
+
+    if (detailPanel) {
+      detailPanel
+        .querySelector(".detail-close")
+        .addEventListener("click", function () {
+          detailPanel.classList.remove("visible");
+        });
+    }
+
+    function buildTightTimelineQs(invId) {
+      // Reuse the shared timeline_qs from the page and append selected
+      const tlLink = document.querySelector(".log-svg-timeline-link");
+      if (tlLink) {
+        const base = new URL(tlLink.href, window.location.origin);
+        base.searchParams.set("selected", invId);
+        return base.searchParams.toString();
+      }
+      return "time_range=1h&selected=" + invId;
+    }
+
+    function fetchInvocationInfo(invId, panel) {
+      const statusEl = panel.querySelector(".detail-status");
+      const taskEl = panel.querySelector(".detail-task");
+      statusEl.textContent = "loading…";
+      taskEl.textContent = "";
+
+      fetch("/invocations/" + invId + "/api")
+        .then(function (r) {
+          return r.ok ? r.json() : null;
+        })
+        .then(function (data) {
+          if (!data) {
+            statusEl.textContent = "not found";
+            return;
+          }
+          statusEl.textContent = data.status || "unknown";
+          taskEl.textContent = data.task_id_key || "";
+        })
+        .catch(function () {
+          statusEl.textContent = "error";
+        });
+    }
+  })();
+</script>

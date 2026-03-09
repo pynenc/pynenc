@@ -1,4 +1,4 @@
-{% if invocations %}
+{% from "partials/status_badge.html" import status_badge %} {% if invocations %}
 <div class="table-responsive">
   <table class="table table-hover mb-0">
     <thead>
@@ -32,19 +32,13 @@
         </td>
         <td>
           <a
-            href="/calls/?call_id={{ invocation.call_id|urlencode }}"
+            href="/calls/?call_id_key={{ invocation.call.call_id.key|urlencode }}"
             class="text-decoration-none"
           >
-            <code class="text-secondary">{{ invocation.call_id }}</code>
+            <code class="text-secondary">{{ invocation.call.call_id }}</code>
           </a>
         </td>
-        <td>
-          <span
-            class="badge {% if invocation.status.name == 'SUCCESS' %}bg-success {% elif invocation.status.name == 'FAILED' %}bg-danger {% elif invocation.status.name == 'RUNNING' %}bg-primary {% elif invocation.status.name == 'PENDING' %}bg-warning {% elif invocation.status.name == 'PAUSED' %}bg-info {% elif invocation.status.name == 'RETRY' %}bg-secondary {% else %}bg-dark{% endif %}"
-          >
-            {{ invocation.status.name }}
-          </span>
-        </td>
+        <td>{{ status_badge(invocation.status.name) }}</td>
         <td>{{ invocation.num_retries }}</td>
         <td>
           <a

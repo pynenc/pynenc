@@ -1,3 +1,4 @@
 # Ignore problematic Jinja2 templates
 pynmon/templates/invocations/list.html
 pynmon/templates/invocations/timeline.html
+pynmon/templates/invocations/partials/timeline_filters.html

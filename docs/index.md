@@ -1,55 +1,30 @@
-# Welcome to Pynenc's Documentation!
+# Pynenc Documentation
 
-**Pynenc: A task management system for complex distributed orchestration.**
+**A task management system for complex distributed orchestration in Python.**
 
-## Introduction
-
-Pynenc is a task management tool designed for orchestration in distributed Python environments. It simplifies the orchestration of tasks with an emphasis on user-friendly configuration and efficient execution.
-
-```{toctree}
-:hidden:
-:maxdepth: 2
-:caption: Table of Contents
-
-overview
-getting_started/index
-usage_guide/index
-configuration/index
-cli/index
-apidocs/index.rst
-contributing/index
-faq
-changelog
-license
-```
-
-## Key Features
-
-- Intuitive Orchestration
-- Configurable Concurrency Management
-- Workflow System for Complex Task Orchestration with Deterministic Execution
-- Trigger System for Event-Driven and Scheduled Tasks
-- Automatic Task Prioritization
-- Automatic Task Pausing
-- Cycle Detection
-- Modularity and Extensibility
-- Flexible Configuration Builder
-
-For more details on these features, refer to the {doc}`usage_guide/index`.
+Pynenc manages the routing, scheduling, and execution of tasks across distributed Python processes. It provides automatic orchestration, concurrency control, workflow management, and a plugin-based architecture for swapping backends without changing application code.
 
 ## Installation
-
-Pynenc can be easily installed using pip:
 
 ```bash
 pip install pynenc
 ```
 
-Refer to the {doc}`getting_started/index` section for more detailed installation instructions.
+### Backend Plugins
+
+| Plugin   | Install                       | Backend                |
+| -------- | ----------------------------- | ---------------------- |
+| Redis    | `pip install pynenc-redis`    | Redis backend plugin   |
+| MongoDB  | `pip install pynenc-mongodb`  | Document-store backend |
+| RabbitMQ | `pip install pynenc-rabbitmq` | Message-broker backend |
+
+### Monitoring
+
+```bash
+pip install pynenc[monitor]
+```
 
 ## Quick Start
-
-Define your first task:
 
 ```python
 from pynenc import Pynenc
@@ -59,24 +34,62 @@ app = Pynenc()
 @app.task
 def add(x: int, y: int) -> int:
     return x + y
-```
 
-And get the result (requires a distributed runner, redis or dev mode):
-
-```python
+# Route and retrieve the result
 result = add(1, 2).result
 ```
 
-Get started quickly with a basic example in the {doc}`getting_started/index` section.
+For a complete walkthrough, see the {doc}`getting_started/index` tutorial.
 
-## Requirements
+## What's New in v0.1.0
 
-Pynenc currently requires Redis for distributed task management. Future updates will expand its compatibility with other databases and message queues.
+- **Plugin Architecture**: Modular backend system with Redis, MongoDB, and RabbitMQ as separate plugins
+- **Invocation State Machine**: Declarative, type-safe status management with ownership tracking
+- **Runner Recovery**: Automatic detection and recovery of stuck invocations from inactive runners
+- **Enhanced Monitoring**: SVG-based timeline visualization, runner monitoring, workflow tracking
+- **Fluent Builder API**: Extensible `PynencBuilder` with plugin-provided methods
 
-## Contact or Support
+See the {doc}`changelog` for the complete list of changes.
 
-Need help or want to discuss Pynenc? Check out our [GitHub Issues](https://github.com/pynenc/pynenc/issues) and [GitHub Discussions](https://github.com/pynenc/pynenc/discussions).
+```{toctree}
+:hidden:
+:maxdepth: 2
+:caption: Learn
 
-## License
+getting_started/index
+usage_guide/index
+```
 
-Pynenc is released under the MIT License. For more information, see {doc}`license`.
+```{toctree}
+:hidden:
+:maxdepth: 2
+:caption: Understand
+
+overview
+faq
+```
+
+```{toctree}
+:hidden:
+:maxdepth: 2
+:caption: Reference
+
+configuration/index
+cli/index
+monitoring/index
+reference/builder
+reference/plugins
+reference/runners
+reference/serializers
+apidocs/index.rst
+```
+
+```{toctree}
+:hidden:
+:maxdepth: 2
+:caption: Project
+
+contributing/index
+changelog
+license
+```

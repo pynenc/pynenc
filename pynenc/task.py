@@ -1,26 +1,29 @@
 from __future__ import annotations
 
 import importlib
-import json
+from logging import Logger
 import time
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Callable, Generic, overload
+from typing import TYPE_CHECKING, Any, Generic, overload
 
 from pynenc import context
 from pynenc.arguments import Arguments
 from pynenc.call import Call, PreSerializedCall
 from pynenc.conf.config_task import ConcurrencyControlType, ConfigTask
+from pynenc.core_tasks import CoreTaskFunction
 from pynenc.exceptions import InvalidTaskOptionsError, RetryError
 from pynenc.invocation.base_invocation import BaseInvocation, BaseInvocationGroup
 from pynenc.invocation.conc_invocation import (
     ConcurrentInvocation,
     ConcurrentInvocationGroup,
 )
-from pynenc.invocation.dist_invocation import DistributedInvocationGroup
+from pynenc.invocation.dist_invocation import (
+    DistributedInvocationGroup,
+)
+from pynenc.identifiers.task_id import TaskId
 from pynenc.types import Func, Params, Result
-from pynenc.util.log import TaskLoggerAdapter
-from pynenc.workflow.context import WorkflowContext
+from pynenc.workflow.workflow_context import WorkflowContext
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
@@ -82,9 +85,8 @@ class Task(Generic[Params, Result]):
             raise RuntimeError(
                 "Cannot create a task from a function in the __main__ module"
             )
-        self.task_id = f"{func.__module__}.{func.__name__}"
+        self.task_id = TaskId(func.__module__, func.__name__)
         self.app = app
-        self.logger = TaskLoggerAdapter(self.app.logger, self.task_id)
         self.func = func
         self.options = options
         self.validate_options()
@@ -113,6 +115,11 @@ class Task(Generic[Params, Result]):
         )
 
     @property
+    def logger(self) -> Logger:
+        """The logger for the task"""
+        return self.app.logger
+
+    @property
     def invocation(self) -> BaseInvocation:
         """The invocation of the task"""
         if dist_inv := context.get_dist_invocation_context(self.app.app_id):
@@ -120,18 +127,6 @@ class Task(Generic[Params, Result]):
         if sync_inv := context.sync_inv_context.get(self.app.app_id):
             return sync_inv
         raise RuntimeError("Task has not been invoked yet")
-
-    def is_main_workflow_task(self) -> bool:
-        """Check if the task is the main workflow task.
-
-        :return: True if the task is the main workflow task, False otherwise
-
-        ```{note}
-            All tasks run within a workflow, the main workflow task is just the first task in the workflow.
-            To determine that, we check if the task_id of the workflow task is the same as the task_id of the current task.
-        ```
-        """
-        return self.invocation.is_main_workflow_task()
 
     @cached_property
     def wf(self) -> WorkflowContext:
@@ -168,68 +163,82 @@ class Task(Generic[Params, Result]):
         """
         return WorkflowContext(self)
 
-    def to_json(self) -> str:
-        """:return: The serialized task"""
-        return json.dumps(
-            {"task_id": self.task_id, "options": self.conf.options_to_json()}
-        )
-
     def __getstate__(self) -> dict:
         # Return state as a dictionary and a secondary value as a tuple
         return {
             "app": self.app,
-            "task_json": self.to_json(),
+            "task_id_key": self.task_id.key,
+            "options_json": self.conf.options_to_json(),
         }
 
     def __setstate__(self, state: dict) -> None:
         # Restore instance attributes
         self.app = state["app"]
-        serialized = state["task_json"]
-        task_id, func, options = Task._from_json(serialized)
-        # Restore the cached property
-        self.task_id = task_id
-        self.app = self.app
-        self.func = func
-        self.options = options
-        self.logger = TaskLoggerAdapter(self.app.logger, self.task_id)
+        self.task_id = TaskId.from_key(state["task_id_key"])
+        self.options = ConfigTask.options_from_json(state["options_json"])
+        function = Task._get_from_task_id(self.task_id)
+        # Check if the function is:
+        #  - Task (from @task) or a plain function (from @direct_task)
+        #  - CoreTaskFunction (from core_tasks_registry)
+        if isinstance(function, (Task, CoreTaskFunction)):
+            self.func = function.func
+        else:
+            self.func = function.__inner_function__  # type: ignore
 
     @staticmethod
-    def _get_from_task_id(task_id: str) -> Task | Callable:
-        try:
-            module_name, function_name = task_id.rsplit(".", 1)
-        except ValueError as e:
-            raise ValueError(
-                f"Invalid task_id format: {task_id}. Expected format: module_name.function_name"
-            ) from e
-        module = importlib.import_module(module_name)
-        return getattr(module, function_name)
-
-    @staticmethod
-    def _from_json(serialized: str) -> tuple[str, Func, dict[str, Any]]:
-        """:return: a function and options from a serialized task"""
-        task_dict = json.loads(serialized)
-        task_id = task_dict["task_id"]
-        function = Task._get_from_task_id(task_id)
-        options = ConfigTask.options_from_json(task_dict["options"])
-        # Check if the function is a Task (from @task) or a plain function (from @direct_task)
-        if isinstance(function, Task):
-            return task_id, function.func, options
-        # For direct_task, return the function itself
-        return task_id, function.__inner_function__, options  # type: ignore
+    def _get_from_task_id(task_id: TaskId) -> Task | Callable:
+        module = importlib.import_module(task_id.module)
+        return getattr(module, task_id.func_name)
 
     @classmethod
-    def from_json(cls, app: Pynenc, serialized: str) -> Task:
-        """:return: a new task from a serialized task"""
-        _, func, options = cls._from_json(serialized)
-        return cls(app, func, options)
+    def from_id(cls, app: Pynenc, task_id: TaskId) -> Task:
+        """Resolve a Task instance by its TaskId, bound to the given app.
 
-    @classmethod
-    def from_id(cls, app: Pynenc, task_id: str) -> Task:
-        """:return: a new task from a task ID"""
+        Checks the app's registered tasks first, then falls back to importing
+        the module. When a module-level Task is found, a new Task instance is
+        created and bound to ``app`` so the caller never shares the module-level
+        app reference. This prevents cross-contamination when multiple apps
+        with different runners coexist in the same process.
+
+        :param Pynenc app: The application instance with registered tasks
+        :param TaskId task_id: The task identifier to resolve
+        :return: The resolved Task instance bound to ``app``
+        :raises ValueError: If the task_id cannot be resolved to a Task
+        """
+        # Check app's registered tasks first — handles dynamically registered tasks
+        # and tasks whose module-level name was replaced by a wrapper (e.g. direct_task)
+        if task_id in app._tasks:
+            return app._tasks[task_id]
         function = Task._get_from_task_id(task_id)
         if isinstance(function, Task):
-            return function
-        raise ValueError("Cannot reference direct_task by ID")
+            # Create an app-bound copy rather than returning the module-level
+            # Task whose .app points to a possibly different app instance.
+            task: Task = Task(app, function.func, function.options)
+            app._tasks[task_id] = task
+            return task
+
+        if isinstance(function, CoreTaskFunction):
+            # For CoreTaskFunction, just register all of them in the app
+            # and return the one matching the task_id.
+            app.register_core_tasks()
+            return app._tasks[task_id]
+
+        # Handle wrappers that hold a reference to the underlying Task.
+        # Scan the object's attributes for any Task instance — this covers
+        # direct_task's __pynenc_task__, Celery shims with pynenc_task, or
+        # any other wrapper pattern without hardcoding attribute names.
+        if source_task := _extract_task_from_wrapper(function):
+            task = Task(app, source_task.func, source_task.options)
+            app._tasks[task_id] = task
+            return task
+        # After importing the module, the decorator may have registered the
+        # task in app._tasks (when the module shares the same app instance).
+        if task_id in app._tasks:
+            return app._tasks[task_id]
+        app.logger.warning(
+            f"_get_from_task_id returns a non-Task function {function} for task:{task_id}"
+        )
+        raise ValueError(f"Cannot resolve Task from task:{task_id}")
 
     @cached_property
     def retriable_exceptions(self) -> tuple[type[Exception], ...]:
@@ -280,16 +289,14 @@ class Task(Generic[Params, Result]):
         self,
         param_iter: Iterable[tuple | dict | Arguments],
         common_args: None = None,
-    ) -> BaseInvocationGroup:
-        ...
+    ) -> BaseInvocationGroup: ...
 
     @overload
     def parallelize(
         self,
         param_iter: Iterable[dict],
         common_args: dict,
-    ) -> BaseInvocationGroup:
-        ...
+    ) -> BaseInvocationGroup: ...
 
     def parallelize(
         self,
@@ -310,8 +317,8 @@ class Task(Generic[Params, Result]):
         - As an `Arguments` instance: Created using `task.args(*args, **kwargs)`.
         ```
         ```{important}
-        common_args is intended for optimize parallelization of huge arguments that will be cached by the arg_cache.
-        if the arguments are small or the arg_cache is disabled, it will not provide any major improvement.
+        common_args is intended for optimize parallelization of huge arguments that will be cached by the client data store.
+        if the arguments are small or the client data store is disabled, it will not provide any major improvement.
         However, for big arguments, it will provide massive time and memory improvements.
         ```
 
@@ -358,7 +365,7 @@ class Task(Generic[Params, Result]):
         print(list(invocation_group.results))  # [len("huge_string") + i for i in range(3)]
         ```
         """
-        self.logger.info(f"parallelizing {self.task_id}")
+        self.app.logger.info(f"parallelizing task:{self.task_id}")
 
         # Convert param_iter to a list to allow multiple iterations and length checking
         param_list = list(param_iter)
@@ -374,6 +381,26 @@ class Task(Generic[Params, Result]):
         if can_batch_process(self, len(param_list)):
             return distribute_batch_calls(self, param_list, common_args)
         return distribute_calls(self, param_list, common_args)
+
+
+def _extract_task_from_wrapper(wrapper: object) -> Task | None:
+    """Extract a Task from a wrapper by scanning its instance attributes.
+
+    Handles any wrapper pattern (direct_task's ``__pynenc_task__``,
+    Celery migration shims with ``pynenc_task``, etc.) without
+    hardcoding attribute names.
+
+    :param object wrapper: The object to inspect
+    :return: The first Task instance found, or None
+    """
+    try:
+        for value in vars(wrapper).values():
+            if isinstance(value, Task):
+                return value
+    except TypeError:
+        # vars() fails on objects without __dict__ (e.g. slots-only)
+        pass
+    return None
 
 
 def can_batch_process(task: Task, num_calls: int) -> bool:
@@ -488,9 +515,9 @@ def distribute_batch_calls(
     other_args: list[dict[str, Any]] = []
     if common_args:
         task.logger.info("Pre-serializing common arguments for batch parallelization")
-        pre_serialized_args = {
-            k: task.app.arg_cache.serialize(v) for k, v in common_args.items()
-        }
+        pre_serialized_args = task.app.client_data_store.serialize_arguments(
+            common_args, task.conf.disable_cache_args
+        )
         task.logger.debug(f"Pre-serialized {len(pre_serialized_args)} common arguments")
         other_args = param_list  # type: ignore
     else:
@@ -507,7 +534,10 @@ def distribute_batch_calls(
         batch_args = other_args[i : i + batch_size]
         batch_calls = [
             PreSerializedCall(
-                task, other_args=args, pre_serialized_args=pre_serialized_args
+                task,
+                other_args=args,
+                common_serialized_args=pre_serialized_args,
+                common_args=common_args,
             )
             for args in batch_args
         ]
@@ -515,7 +545,7 @@ def distribute_batch_calls(
         invocations.extend(batch_invocations)
         if i + batch_size < len(other_args):
             task.logger.info(
-                f"Processed batch {i//batch_size + 1}, "
+                f"Processed batch {i // batch_size + 1}, "
                 f"{len(invocations)}/{len(other_args)} invocations"
             )
 

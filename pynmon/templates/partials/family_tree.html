@@ -1,0 +1,25 @@
+{% if family_tree_svg %}
+<div class="row pynmon-row-compact">
+  <div class="col-12">
+    <div class="card pynmon-card">
+      <div
+        class="card-header pynmon-card-header d-flex justify-content-between align-items-center"
+      >
+        <span class="compact-header">Invocation Family Tree</span>
+      </div>
+      <div
+        class="card-body pynmon-card-body"
+        style="overflow-x: auto; padding: 12px"
+      >
+        {{ family_tree_svg | safe }}
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    var svg = document.getElementById("ft-svg");
+    if (svg && window._initFtHover) window._initFtHover(svg);
+  });
+</script>
+{% endif %}

@@ -1,11 +1,11 @@
 from collections import deque
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from pynenc.broker.base_broker import BaseBroker
-from pynenc.invocation.dist_invocation import DistributedInvocation
 
 if TYPE_CHECKING:
     from ..app import Pynenc
+    from pynenc.identifiers.invocation_id import InvocationId
 
 
 class MemBroker(BaseBroker):
@@ -28,42 +28,40 @@ class MemBroker(BaseBroker):
         self._queue: deque = deque()
         super().__init__(app)
 
-    def route_invocation(self, invocation: "DistributedInvocation") -> None:
+    def route_invocation(self, invocation_id: "InvocationId") -> None:
         """
-        Route an invocation by adding it to the in-memory queue.
+        Route an invocation id by adding it to the in-memory queue.
 
-        This method serializes the DistributedInvocation object to JSON
-        and appends it to the deque, effectively queuing it for processing.
+        This method appends the invocation ID to the deque, effectively queuing it for processing.
 
-        :param DistributedInvocation invocation: The invocation to be queued.
+        :param InvocationId invocation_id: The ID of the invocation to be queued.
         """
-        self._queue.append(invocation.to_json())
+        self._queue.append(invocation_id)
 
-    def route_invocations(self, invocations: list[DistributedInvocation]) -> None:
+    def route_invocations(self, invocation_ids: list["InvocationId"]) -> None:
         """
-        Routes multiple invocations at once.
+        Routes multiple invocation IDs at once.
 
-        :param list[DistributedInvocation] invocations: The invocations to be routed.
+        :param list[InvocationId] invocation_ids: The invocation IDs to be routed.
         """
-        for invocation in invocations:
-            self.route_invocation(invocation)
+        for invocation_id in invocation_ids:
+            self.route_invocation(invocation_id)
 
-        if invocations:
-            self.app.logger.debug(f"Batch routed {len(invocations)} invocations")
+        if invocation_ids:
+            self.app.logger.debug(f"Batch routed {len(invocation_ids)} invocations")
 
-    def retrieve_invocation(self) -> Optional["DistributedInvocation"]:
+    def retrieve_invocation(self) -> "InvocationId | None":
         """
-        Retrieve the next invocation from the queue.
+        Retrieve the next invocation id from the queue.
 
-        This method pops the next item from the deque, deserializes it from JSON,
-        and returns the DistributedInvocation object. If the queue is empty,
-        it returns None.
+        This method pops the next item from the deque and returns the invocation ID.
+        If the queue is empty, it returns None.
 
-        :return:
-            The next invocation from the queue, or None if the queue is empty.
+        :return: The next invocation id from the queue, or None if the queue is empty.
+        :rtype: InvocationId | None
         """
-        if self._queue and (inv := self._queue.pop()):
-            return DistributedInvocation.from_json(self.app, inv)
+        if self._queue:
+            return self._queue.popleft()
         return None
 
     def count_invocations(self) -> int:

@@ -1,90 +1,400 @@
 {% extends "base.html" %} {% block content %}
-<div class="row">
-  <div class="col-lg-4 col-md-6 mb-3">
-    <div class="card">
-      <div class="card-header">System Overview</div>
-      <div class="card-body">
-        <h6 class="mb-3">Application: <strong>{{ app_id }}</strong></h6>
-        <div class="mb-2">
-          <small class="text-muted">Broker:</small><br />
-          <span class="badge bg-info">{{ broker_type }}</span>
-        </div>
-        <div class="mb-2">
-          <small class="text-muted">State Backend:</small><br />
-          <span class="badge bg-info">{{ state_backend_type }}</span>
-        </div>
-        <div class="mb-2">
-          <small class="text-muted">Runner:</small><br />
-          <span class="badge bg-info">{{ runner_type }}</span>
-        </div>
-      </div>
+
+<!-- Quick Stats Bar -->
+<div class="row g-3 mb-4">
+  <div class="col-md-2">
+    <div class="metric-card text-center">
+      <span
+        class="material-icons"
+        style="color: var(--nav-active); font-size: 28px"
+        >hub</span
+      >
+      <h6 class="section-title mt-2 mb-1">Application</h6>
+      <p class="fw-bold mb-0" style="font-size: 0.95rem">{{ app_id }}</p>
     </div>
   </div>
-
-  <div class="col-lg-4 col-md-6 mb-3">
-    <div class="card">
-      <div class="card-header">Quick Actions</div>
-      <div class="card-body">
-        <div class="d-grid gap-2">
-          <a href="/tasks" class="btn btn-outline-primary btn-sm">
-            ✅ View Tasks
-          </a>
-          <a href="/invocations" class="btn btn-outline-primary btn-sm">
-            📋 View Invocations
-          </a>
-          <a
-            href="/invocations/timeline"
-            class="btn btn-outline-primary btn-sm"
-          >
-            📈 Timeline View
-          </a>
-          <a href="/broker" class="btn btn-outline-primary btn-sm">
-            🔗 Broker Status
-          </a>
-        </div>
+  <div class="col-md-2">
+    <a href="/tasks" class="text-decoration-none">
+      <div class="metric-card text-center">
+        <span
+          class="material-icons"
+          style="color: var(--nav-active); font-size: 28px"
+          >task</span
+        >
+        <h6 class="section-title mt-2 mb-1">Registered Tasks</h6>
+        <p class="h3 mb-0">{{ registered_tasks }}</p>
       </div>
-    </div>
+    </a>
   </div>
-
-  <div class="col-lg-4 col-md-12 mb-3">
-    <div class="card">
-      <div class="card-header">System Management</div>
-      <div class="card-body">
-        <p class="text-muted small mb-3">
-          Monitor and manage your Pynenc application components.
+  <div class="col-md-2">
+    <a href="/broker" class="text-decoration-none">
+      <div class="metric-card text-center">
+        <span
+          class="material-icons"
+          style="color: var(--info-teal); font-size: 28px"
+          >queue</span
+        >
+        <h6 class="section-title mt-2 mb-1">Broker Queue</h6>
+        <p
+          class="h3 mb-0 {% if broker_pending > 0 %}text-warning{% else %}text-success{% endif %}"
+        >
+          {{ broker_pending }}
         </p>
-        <div class="d-grid gap-2">
-          <a href="/orchestrator" class="btn btn-outline-secondary btn-sm">
-            ⚙️ Orchestrator
-          </a>
-          <a href="/state-backend" class="btn btn-outline-secondary btn-sm">
-            💾 State Backend
-          </a>
-          <a href="/arg-cache" class="btn btn-outline-secondary btn-sm">
-            📝 Argument Cache
-          </a>
+        <small class="text-muted">pending</small>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-2">
+    <a href="/runners" class="text-decoration-none">
+      <div class="metric-card text-center">
+        <span
+          class="material-icons"
+          style="color: var(--success-green); font-size: 28px"
+          >devices</span
+        >
+        <h6 class="section-title mt-2 mb-1">Active Runners</h6>
+        <p
+          class="h3 mb-0 {% if active_runner_count > 0 %}text-success{% else %}text-muted{% endif %}"
+        >
+          {{ active_runner_count }}
+        </p>
+        <small class="text-muted">running</small>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-2">
+    <a href="/invocations" class="text-decoration-none">
+      <div class="metric-card text-center">
+        <span
+          class="material-icons"
+          style="color: var(--nav-active); font-size: 28px"
+          >fact_check</span
+        >
+        <h6 class="section-title mt-2 mb-1">Invocations</h6>
+        <p class="h3 mb-0">{{ invocation_summary.total }}</p>
+        <small class="text-muted">total tracked</small>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-2">
+    <a href="/invocations/timeline" class="text-decoration-none">
+      <div class="metric-card text-center">
+        <span
+          class="material-icons"
+          style="color: var(--nav-active); font-size: 28px"
+          >timeline</span
+        >
+        <h6 class="section-title mt-2 mb-1">Timeline</h6>
+        <p class="mb-0 text-muted" style="font-size: 0.85rem">
+          View execution timeline
+        </p>
+      </div>
+    </a>
+  </div>
+</div>
+
+<!-- Invocation Status Summary -->
+<div class="row g-3 mb-4">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header">
+        <span class="material-icons align-middle me-1" style="font-size: 18px"
+          >monitoring</span
+        >
+        Invocation Status Summary
+      </div>
+      <div class="card-body py-3">
+        <div class="row g-2 text-center">
+          <div class="col">
+            <div
+              class="p-2 rounded"
+              style="background: rgba(40, 167, 69, 0.08)"
+            >
+              <div class="text-success fw-bold h4 mb-0">
+                {{ invocation_summary.running }}
+              </div>
+              <small class="text-muted">Running</small>
+            </div>
+          </div>
+          <div class="col">
+            <div
+              class="p-2 rounded"
+              style="background: rgba(255, 193, 7, 0.08)"
+            >
+              <div class="text-warning fw-bold h4 mb-0">
+                {{ invocation_summary.pending }}
+              </div>
+              <small class="text-muted">Pending</small>
+            </div>
+          </div>
+          <div class="col">
+            <div
+              class="p-2 rounded"
+              style="background: rgba(23, 162, 184, 0.08)"
+            >
+              <div class="fw-bold h4 mb-0" style="color: var(--info-teal)">
+                {{ invocation_summary.paused }}
+              </div>
+              <small class="text-muted">Paused</small>
+            </div>
+          </div>
+          <div class="col">
+            <div
+              class="p-2 rounded"
+              style="background: rgba(220, 53, 69, 0.08)"
+            >
+              <div class="text-danger fw-bold h4 mb-0">
+                {{ invocation_summary.failed }}
+              </div>
+              <small class="text-muted">Failed</small>
+            </div>
+          </div>
+          <div class="col">
+            <div
+              class="p-2 rounded"
+              style="background: rgba(108, 117, 125, 0.05)"
+            >
+              <div class="text-muted fw-bold h4 mb-0">
+                {{ invocation_summary.succeeded }}
+              </div>
+              <small class="text-muted">Succeeded</small>
+            </div>
+          </div>
+          <div class="col">
+            <div
+              class="p-2 rounded"
+              style="background: rgba(255, 152, 0, 0.08)"
+            >
+              <div class="fw-bold h4 mb-0" style="color: #e65100">
+                {{ invocation_summary.recovering }}
+              </div>
+              <small class="text-muted">Recovering</small>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   </div>
 </div>
 
-<div class="row">
+<!-- Component Architecture -->
+<div class="row mb-4">
   <div class="col-12">
     <div class="card">
-      <div class="card-header">⚠️ Danger Zone</div>
+      <div class="card-header">
+        <span class="material-icons align-middle me-1" style="font-size: 18px"
+          >account_tree</span
+        >
+        Component Architecture
+      </div>
       <div class="card-body">
-        <p class="text-muted mb-3">
-          <strong>Warning:</strong> The following action will permanently delete
-          all data from your Pynenc application.
+        <div class="row g-2">
+          {% for comp in components %}
+          <div class="col-lg col-md-4 col-sm-6">
+            <a href="{{ comp.href }}" class="text-decoration-none">
+              <div
+                class="metric-card text-center py-3 h-100"
+                style="transition: transform 0.15s; cursor: pointer"
+                onmouseover="this.style.transform='translateY(-2px)'"
+                onmouseout="this.style.transform='none'"
+              >
+                <span
+                  class="material-icons mb-1"
+                  style="font-size: 24px; color: var(--nav-active)"
+                  >{{ comp.icon }}</span
+                >
+                <div
+                  class="text-muted"
+                  style="font-size: 11px; font-weight: 500"
+                >
+                  {{ comp.label }}
+                </div>
+                <div
+                  class="fw-bold"
+                  style="font-size: 12px; color: var(--text-primary)"
+                >
+                  {{ comp.type }}
+                </div>
+              </div>
+            </a>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <!-- Configuration Summary -->
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header">
+        <span class="material-icons align-middle me-1" style="font-size: 18px"
+          >tune</span
+        >
+        Configuration
+      </div>
+      <div class="card-body">
+        <div class="row g-4">
+          <div class="col-6">
+            <div class="metric-grid">
+              <div class="metric-item">
+                <span class="metric-label">Dev Mode</span>
+                <span
+                  class="badge {% if config_summary.dev_mode %}bg-warning{% else %}bg-secondary{% endif %}"
+                >
+                  {{ 'ON' if config_summary.dev_mode else 'OFF' }}
+                </span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Log Level</span>
+                <span class="badge bg-info"
+                  >{{ config_summary.logging_level | upper }}</span
+                >
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Log Format</span>
+                <span class="badge bg-info"
+                  >{{ config_summary.log_format }}</span
+                >
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Arg Print Mode</span>
+                <span class="badge bg-info"
+                  >{{ config_summary.argument_print_mode }}</span
+                >
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Compact Logs</span>
+                <span
+                  class="badge {% if config_summary.compact_log_context %}bg-success{% else %}bg-secondary{% endif %}"
+                >
+                  {{ 'ON' if config_summary.compact_log_context else 'OFF' }}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="metric-grid">
+              <div class="metric-item">
+                <span class="metric-label">Blocking Control</span>
+                <span
+                  class="badge {% if config_summary.blocking_control %}bg-success{% else %}bg-secondary{% endif %}"
+                >
+                  {{ 'ON' if config_summary.blocking_control else 'OFF' }}
+                </span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Auto-Purge</span>
+                <span class="badge bg-info"
+                  >{{ config_summary.auto_purge_hours }}h</span
+                >
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Atomic Svc Interval</span>
+                <span class="badge bg-info"
+                  >{{ config_summary.atomic_service_interval }}m</span
+                >
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Runner Dead After</span>
+                <span class="badge bg-info"
+                  >{{ config_summary.runner_dead_after }}m</span
+                >
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Max Pending</span>
+                <span class="badge bg-info"
+                  >{{ config_summary.max_pending_seconds }}s</span
+                >
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Navigation + Danger Zone -->
+  <div class="col-lg-6">
+    <div class="card mb-3">
+      <div class="card-header">
+        <span class="material-icons align-middle me-1" style="font-size: 18px"
+          >explore</span
+        >
+        Quick Navigation
+      </div>
+      <div class="card-body">
+        <div class="d-flex flex-wrap gap-2">
+          <a href="/tasks" class="btn btn-outline-primary btn-sm">
+            <span
+              class="material-icons align-middle me-1"
+              style="font-size: 16px"
+              >task</span
+            >
+            Tasks
+          </a>
+          <a href="/invocations" class="btn btn-outline-primary btn-sm">
+            <span
+              class="material-icons align-middle me-1"
+              style="font-size: 16px"
+              >list</span
+            >
+            Invocations
+          </a>
+          <a
+            href="/invocations/timeline"
+            class="btn btn-outline-primary btn-sm"
+          >
+            <span
+              class="material-icons align-middle me-1"
+              style="font-size: 16px"
+              >timeline</span
+            >
+            Timeline
+          </a>
+          <a href="/workflows" class="btn btn-outline-primary btn-sm">
+            <span
+              class="material-icons align-middle me-1"
+              style="font-size: 16px"
+              >workspaces</span
+            >
+            Workflows
+          </a>
+          <a href="/log-explorer" class="btn btn-outline-primary btn-sm">
+            <span
+              class="material-icons align-middle me-1"
+              style="font-size: 16px"
+              >search</span
+            >
+            Log Explorer
+          </a>
+        </div>
+      </div>
+    </div>
+    <div class="card border-danger">
+      <div class="card-header text-danger">
+        <span class="material-icons align-middle me-1" style="font-size: 18px"
+          >warning</span
+        >
+        Danger Zone
+      </div>
+      <div class="card-body">
+        <p class="text-muted small mb-2">
+          Permanently delete all data from broker, orchestrator, state backend,
+          and data store.
         </p>
         <button
           class="btn btn-danger btn-sm"
           hx-post="/purge"
-          hx-confirm="⚠️ WARNING: This will purge ALL data from the broker, orchestrator, state backend, and argument cache. This operation cannot be undone! Continue?"
+          hx-confirm="⚠️ WARNING: This will purge ALL data from the broker, orchestrator, state backend, and data store. This operation cannot be undone! Continue?"
           hx-swap="outerHTML"
         >
-          🗑️ Purge All Application Data
+          <span class="material-icons align-middle me-1" style="font-size: 16px"
+            >delete_forever</span
+          >
+          Purge All Application Data
         </button>
       </div>
     </div>

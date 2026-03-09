@@ -5,7 +5,8 @@ This module provides a fluent interface for building trigger definitions,
 making it easier to define complex triggering conditions for tasks.
 """
 
-from typing import TYPE_CHECKING, Any, Callable, TypeVar, cast
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from pynenc.invocation.status import InvocationStatus
 from pynenc.trigger.arguments.argument_filters import create_argument_filter
@@ -32,7 +33,7 @@ from pynenc.trigger.conditions.result import ResultCondition, ResultContext
 from pynenc.trigger.trigger_definitions import TriggerDefinition
 
 if TYPE_CHECKING:
-    from pynenc.task import Task
+    from pynenc.task import Task, TaskId
     from pynenc.trigger.conditions.base import TriggerCondition
     from pynenc.trigger.trigger_context import TriggerContext
 
@@ -335,7 +336,7 @@ class TriggerBuilder:
         self.conditions.append(condition)
         return self
 
-    def build(self, task_id: str) -> TriggerDefinition:
+    def build(self, task_id: "TaskId") -> TriggerDefinition:
         """
         Build the trigger definition for a task.
 

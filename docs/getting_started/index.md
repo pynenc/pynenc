@@ -1,26 +1,23 @@
 # Getting Started
 
-This section covers the basics of getting Pynenc installed and running in your environment.
+This tutorial walks you through installing Pynenc, defining a task, executing it, and retrieving its result. By the end you will have a working distributed task running locally.
 
-## Installation
+## Prerequisites
 
-Installing Pynenc is straightforward and can be accomplished using pip. Simply run the following command in your terminal:
+- Python 3.11 or later
+- pip (or any Python package manager)
+
+## Step 1: Install Pynenc
 
 ```bash
 pip install pynenc
 ```
 
-This command will download and install Pynenc along with its necessary dependencies. Once the installation is complete, you are ready to start using Pynenc in your Python projects.
+This installs the core package with the built-in Memory and SQLite backends.
 
-For more detailed instructions and advanced installation options, refer to the `Installation` section in the Pynenc Documentation.
+## Step 2: Define a Task
 
-## Quick Start
-
-To get a quick feel of Pynenc, here's a basic example of creating and executing a distributed task.
-
-### 1. Define a Task
-
-Create a file named `tasks.py` and define a simple addition task:
+Create a file named `tasks.py`:
 
 ```python
 from pynenc import Pynenc
@@ -29,82 +26,130 @@ app = Pynenc()
 
 @app.task
 def add(x: int, y: int) -> int:
-    add.logger.info(f"{add.task_id=} Adding {x} + {y}")
-    return x + y
-
-@app.direct_task
-def direct_add(x: int, y: int) -> int:
     return x + y
 ```
 
-### 2. Start Your Runner or Run Synchronously
+```{important}
+Tasks cannot be defined in modules that run as `__main__` (e.g., scripts executed with `python tasks.py`).
+Define tasks in importable modules and reference the `app` object from elsewhere.
+See the {doc}`../faq` for details on this limitation.
+```
 
-Before executing the task, decide if you want to run it asynchronously with a runner or synchronously for testing or development purposes.
+## Step 3: Run Synchronously (Dev Mode)
 
-- **Asynchronously**: Start a runner in a separate terminal or script:
+The fastest way to test is synchronous execution. Set the environment variable:
 
-  ```bash
-  pynenc --app=tasks.app runner start
-  ```
+```bash
+export PYNENC__DEV_MODE_FORCE_SYNC_TASKS=True
+```
 
-  Check out the [basic_redis_example](https://github.com/pynenc/samples/tree/main/basic_redis_example)
-
-- **Synchronously**:
-  For test or local demonstration, to try synchronous execution, you can set the environment variable:
-
-  ```bash
-  export PYNENC__DEV_MODE_FORCE_SYNC_TASKS=True
-  ```
-
-### 3. Execute the Task
+Then in a Python session or script (separate from `tasks.py`):
 
 ```python
-result = add(1, 2).result
-print(result)  # This will output the result of 1 + 2
+from tasks import add
 
-print(direct_add(1, 2))  # Directly waits for result
+result = add(1, 2).result
+print(result)  # 3
 ```
 
-### 4. Alternative: Use `PynencBuilder` for Setup
+The task runs in the calling thread. No runner process is needed.
 
-Pynenc also provides a flexible builder interface for configuring your app. Here's how to configure an app using Redis and a `MultiThreadRunner`:
+## Step 4: Run with a Runner
+
+For actual distributed execution, start a runner in one terminal:
+
+```bash
+pynenc --app=tasks.app runner start
+```
+
+In another terminal or script:
+
+```python
+from tasks import add
+
+invocation = add(1, 2)
+print(invocation.result)  # blocks until the runner executes the task
+```
+
+The runner picks up the task from the broker, executes it, and stores the result in the state backend.
+
+## Step 5: Use the Builder for Programmatic Setup
+
+Instead of environment variables, configure Pynenc with the `PynencBuilder`:
 
 ```python
 from pynenc.builder import PynencBuilder
 
 app = (
     PynencBuilder()
+    .app_id("my_app")
+    .memory()
+    .dev_mode(force_sync_tasks=True)
+    .build()
+)
+
+@app.task
+def multiply(x: int, y: int) -> int:
+    return x * y
+
+result = multiply(3, 4).result
+print(result)  # 12
+```
+
+## Step 6: Switch to a Production Backend
+
+Install a backend plugin and update your configuration. Example with Redis:
+
+```bash
+pip install pynenc-redis
+```
+
+```toml
+# pyproject.toml
+[tool.pynenc]
+app_id = "my_app"
+orchestrator_cls = "RedisOrchestrator"
+broker_cls = "RedisBroker"
+state_backend_cls = "RedisStateBackend"
+runner_cls = "MultiThreadRunner"
+```
+
+Or with the builder:
+
+```python
+app = (
+    PynencBuilder()
+    .app_id("my_app")
     .redis(url="redis://localhost:6379")
-    .multi_thread_runner()
+    .multi_thread_runner(min_threads=2, max_threads=8)
     .build()
 )
 ```
 
-This creates a production-ready Pynenc app with Redis as the backend and a `MultiThreadRunner` for parallel execution.
+Start the runner:
 
-You can pass this `app` to your task module and proceed just like before:
-
-```python
-@app.task
-def add(x: int, y: int) -> int:
-    return x + y
+```bash
+pynenc --app=tasks.app runner start
 ```
 
-For a more comprehensive guide on setting up and running this example, visit our [Basic Redis Example on GitHub](https://github.com/pynenc/samples/tree/main/basic_redis_example).
+Your tasks now route through Redis.
 
-```{important}
-   Note that in Pynenc, tasks cannot be defined in Python modules intended to run as standalone scripts
-   (where `__name__` is set to `"__main__"`). This includes modules executed directly or using the
-   `python -m module` command. To learn more about this limitation and its implications, refer to the
-   {doc}`../faq` or the detailed explanation in the {doc}`../usage_guide/index`.
+## Step 7: Launch the Monitor
+
+Install the monitoring extra and start Pynmon:
+
+```bash
+pip install pynenc[monitor]
+pynenc --app=tasks.app monitor
 ```
 
-## Requirements
+Open `http://localhost:8000` to see invocations, runners, and task timelines.
 
-To effectively use Pynenc in a distributed system, the primary requirement is:
+## Next Steps
 
-- **Redis**: Currently, Pynenc requires a Redis server for distributed task management. Make sure Redis is installed and running in your environment.
-
-Future Updates:
-
-- Development plans include extending support to additional databases and message queues to broaden Pynenc's compatibility in various distributed systems.
+- {doc}`../usage_guide/use_case_003_concurrency_control` — Control parallel task execution
+- {doc}`../usage_guide/use_case_004_auto_orchestration` — Automatic task dependency resolution
+- {doc}`../usage_guide/use_case_010_trigger_system` — Schedule tasks with cron and events
+- {doc}`../usage_guide/use_case_011_workflow_system` — Deterministic multi-step workflows
+- {doc}`../configuration/index` — Full configuration reference
+- {doc}`../reference/builder` — Builder API reference

@@ -38,22 +38,14 @@
       </div>
     </div>
   </div>
-  <!-- Configuration and Stats Grid -->
+
+  <!-- Configuration, Stats, and Runners Grid -->
   <div class="row g-3">
     <!-- Configuration Card -->
-    <div class="col-md-6">
+    <div class="col-md-4">
       <div class="metric-card">
         <h6 class="section-title">Configuration</h6>
         <div class="metric-grid">
-          <div class="metric-item">
-            <span class="metric-label">Cycle Control</span>
-            <span
-              class="badge {% if orchestrator_info.cycle_control_enabled %}bg-success{% else %}bg-secondary{% endif %}"
-            >
-              {{ 'Enabled' if orchestrator_info.cycle_control_enabled else
-              'Disabled' }}
-            </span>
-          </div>
           <div class="metric-item">
             <span class="metric-label">Blocking Control</span>
             <span
@@ -71,12 +63,115 @@
           </div>
         </div>
       </div>
+
+      <!-- Recovery & Atomic Services -->
+      <div class="metric-card mt-3">
+        <h6 class="section-title">Recovery &amp; Atomic Services</h6>
+        <div class="metric-grid">
+          <div class="metric-item">
+            <span class="metric-label">Atomic Svc Interval</span>
+            <span class="badge bg-info"
+              >{{ recovery_info.atomic_service_interval }}m</span
+            >
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">Spread Margin</span>
+            <span class="badge bg-info"
+              >{{ recovery_info.atomic_service_spread_margin }}m</span
+            >
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">Check Interval</span>
+            <span class="badge bg-info"
+              >{{ recovery_info.atomic_service_check_interval }}m</span
+            >
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">Recover Pending</span>
+            <span
+              class="d-inline-flex flex-column align-items-end"
+              style="line-height: 1.1"
+            >
+              <span class="text-muted" style="font-size: 9px"
+                >{{ recovery_info.recover_pending_human }}</span
+              >
+              <span
+                class="badge bg-info"
+                style="font-family: monospace; font-size: 10px"
+                >{{ recovery_info.recover_pending_cron }}</span
+              >
+            </span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">Max Pending</span>
+            <span class="badge bg-info"
+              >{{ recovery_info.max_pending_seconds }}s</span
+            >
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">Recover Running</span>
+            <span
+              class="d-inline-flex flex-column align-items-end"
+              style="line-height: 1.1"
+            >
+              <span class="text-muted" style="font-size: 9px"
+                >{{ recovery_info.recover_running_human }}</span
+              >
+              <span
+                class="badge bg-info"
+                style="font-family: monospace; font-size: 10px"
+                >{{ recovery_info.recover_running_cron }}</span
+              >
+            </span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">Runner Dead After</span>
+            <span class="badge bg-info"
+              >{{ recovery_info.runner_dead_after_minutes }}m</span
+            >
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Stats Section -->
-    <div class="col-md-6">
+    <div class="col-md-4">
       <div id="orchestrator-stats">
         {% include "orchestrator/partials/stats.html" %}
+      </div>
+    </div>
+
+    <!-- Active Runners Section -->
+    <div class="col-md-4">
+      <div class="metric-card">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6 class="section-title mb-0">Active Runners</h6>
+          <a href="/runners" class="btn btn-sm btn-outline-primary">View All</a>
+        </div>
+        <div class="metric-grid">
+          <div class="metric-item">
+            <span class="metric-label">Total Active</span>
+            <span class="badge bg-success">{{ total_runners }}</span>
+          </div>
+          {% if active_runners %}
+          <div class="mt-2">
+            <p class="small text-muted mb-1">Recent Runners:</p>
+            {% for runner in active_runners[:3] %}
+            <div class="small mb-1">
+              <code class="text-muted">{{ runner.runner_id[:30] }}...</code>
+            </div>
+            {% endfor %} {% if total_runners > 3 %}
+            <p class="small text-muted mb-0">
+              ...and {{ total_runners - 3 }} more
+            </p>
+            {% endif %}
+          </div>
+          {% else %}
+          <div class="text-center py-2">
+            <p class="small text-muted mb-0">No active runners</p>
+          </div>
+          {% endif %}
+        </div>
       </div>
     </div>
   </div>
@@ -92,6 +187,9 @@
           >
           <a href="/tasks" class="btn btn-outline-info btn-sm"
             >View All Tasks</a
+          >
+          <a href="/runners" class="btn btn-outline-success btn-sm"
+            >View Active Runners</a
           >
           <button
             class="btn btn-outline-warning btn-sm"

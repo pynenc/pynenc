@@ -16,6 +16,7 @@ from pynenc.trigger.conditions.status import StatusCondition, StatusContext
 
 if TYPE_CHECKING:
     from ...app import Pynenc
+    from pynenc.identifiers.task_id import TaskId
 
 
 @dataclass
@@ -51,7 +52,7 @@ class ResultContext(StatusContext):
         data = super()._to_json(app)
 
         # Serialize the result
-        data["result"] = app.arg_cache.serialize(self.result)
+        data["result"] = app.client_data_store.serialize(self.result)
 
         return data
 
@@ -71,14 +72,14 @@ class ResultContext(StatusContext):
         # Deserialize the result if it was serialized
         result = None
         if result_data is not None:
-            result = app.arg_cache.deserialize(result_data)
+            result = app.client_data_store.deserialize(result_data)
 
         # Create instance with proper fields
         return cls(
-            task_id=status_context.task_id,
             call_id=status_context.call_id,
             invocation_id=status_context.invocation_id,
             arguments=status_context.arguments,
+            disable_cache_args=status_context.disable_cache_args,
             status=status_context.status,
             result=result,
         )
@@ -101,7 +102,7 @@ class ResultCondition(TriggerCondition[ResultContext]):
 
     def __init__(
         self,
-        task_id: str,
+        task_id: "TaskId",
         arguments_filter: ArgumentFilter,
         result_filter: ResultFilterProtocol,
     ) -> None:
@@ -124,7 +125,7 @@ class ResultCondition(TriggerCondition[ResultContext]):
         )
 
     @property
-    def task_id(self) -> str:
+    def task_id(self) -> "TaskId":
         """
         Get the task ID that this condition monitors.
 
@@ -163,7 +164,7 @@ class ResultCondition(TriggerCondition[ResultContext]):
         base_id = self._status_condition.condition_id
         return f"{base_id}_result_{self.result_filter.filter_id}"
 
-    def get_source_task_ids(self) -> set[str]:
+    def get_source_task_ids(self) -> set["TaskId"]:
         return self._status_condition.get_source_task_ids()
 
     def _to_json(self, app: "Pynenc") -> dict[str, Any]:
@@ -212,7 +213,7 @@ class ResultCondition(TriggerCondition[ResultContext]):
         # Then check if the result matches the filter
         return self.result_filter.filter_result(context.result)
 
-    def affects_task(self, task_id: str) -> bool:
+    def affects_task(self, task_id: "TaskId") -> bool:
         """
         Check if this condition is affected by a specific task.
 

@@ -1,0 +1,27 @@
+{# Unified status badge macro for consistent styling across pynmon #} {# Uses
+colors that match the SVG timeline status colors #} {% macro
+status_badge(status, size='normal') %} {# Render a status badge with unified
+colors matching the timeline SVG. Args: status: The status string (can be
+uppercase or lowercase) size: 'normal' or 'small' for font sizing Usage: {% from
+"partials/status_badge.html" import status_badge %} {{
+status_badge(invocation.status.name) }} {{ status_badge('RUNNING', 'small') }}
+#} {% set status_upper = status|upper if status is string else status.name|upper
+%} {% set badge_class = { 'REGISTERED': 'secondary', 'PENDING': 'warning',
+'RUNNING': 'info', 'SUCCESS': 'success', 'FAILED': 'danger', 'RETRY':
+'secondary', 'PAUSED': 'primary', 'RESUMED': 'info', 'CONCURRENCY_CONTROLLED':
+'warning', 'CONCURRENCY_CONTROLLED_FINAL': 'warning', 'CANCELLED': 'dark',
+'TIMEOUT': 'danger', 'SCHEDULED': 'warning', 'REROUTED': 'info'
+}.get(status_upper, 'secondary') %} {% set size_class = 'badge-sm' if size ==
+'small' else '' %}
+<span class="badge bg-{{ badge_class }} {{ size_class }}"
+  >{{ status_upper }}</span
+>
+{% endmacro %} {% macro status_color(status) %} {# Get the hex color for a
+status (for inline styles or SVG). Args: status: The status string Returns: Hex
+color string #} {% set status_upper = status|upper if status is string else
+status.name|upper %} {{ { 'REGISTERED': '#95a5a6', 'PENDING': '#f39c12',
+'RUNNING': '#3498db', 'SUCCESS': '#27ae60', 'FAILED': '#e74c3c', 'RETRY':
+'#9b59b6', 'PAUSED': '#1abc9c', 'RESUMED': '#2980b9', 'CONCURRENCY_CONTROLLED':
+'#e67e22', 'CONCURRENCY_CONTROLLED_FINAL': '#d35400', 'CANCELLED': '#7f8c8d',
+'TIMEOUT': '#c0392b', 'SCHEDULED': '#f1c40f', 'REROUTED': '#16a085'
+}.get(status_upper, '#7f8c8d') }} {% endmacro %}

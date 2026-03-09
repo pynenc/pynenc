@@ -1,0 +1,160 @@
+{% extends "base.html" %} {% block content %}
+<div class="container-fluid">
+  <!-- Page Header -->
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h2 class="h4 mb-0 text-primary">Atomic Service Timeline</h2>
+      <small class="text-muted"
+        >Execution history of atomic service across runners</small
+      >
+    </div>
+    <a href="/runners" class="btn btn-sm btn-outline-secondary">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="16"
+        height="16"
+        fill="currentColor"
+        class="bi bi-arrow-left"
+        viewBox="0 0 16 16"
+      >
+        <path
+          fill-rule="evenodd"
+          d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"
+        />
+      </svg>
+      Back to Runners
+    </a>
+  </div>
+
+  <!-- Configuration Info -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="info-card">
+        <h6 class="section-title">Service Configuration</h6>
+        <div class="row">
+          <div class="col-md-6">
+            <div class="metric-item">
+              <span class="metric-label">Service Interval</span>
+              <span class="badge bg-info"
+                >{{ service_interval_minutes }} minutes</span
+              >
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="metric-item">
+              <span class="metric-label">Executions Recorded</span>
+              <span class="badge bg-primary">{{ timeline_data|length }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Timeline Visualization -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <h6 class="mb-0">Execution Timeline</h6>
+        </div>
+        <div class="card-body">
+          {% if timeline_data %}
+          <div class="table-responsive">
+            <table class="table table-sm mb-0">
+              <thead>
+                <tr>
+                  <th style="width: 300px">Runner ID</th>
+                  <th>Execution Period</th>
+                  <th style="width: 100px">Duration</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% set earliest_start = timeline_data[0].start %} {% set
+                latest_end = timeline_data|map(attribute='end')|max %} {% set
+                total_time_span = (latest_end - earliest_start).total_seconds()
+                %} {% for execution in timeline_data %}
+                <tr>
+                  <td>
+                    <a
+                      href="/runners/{{ execution.runner_id }}"
+                      class="text-decoration-none"
+                    >
+                      <code class="small text-primary"
+                        >{{ execution.runner_id }}</code
+                      >
+                    </a>
+                  </td>
+                  <td>
+                    <div class="execution-timeline">
+                      <div class="execution-bar-container">
+                        {% if total_time_span > 0 %} {% set start_offset =
+                        (execution.start - earliest_start).total_seconds() /
+                        total_time_span * 100 %} {% set bar_width =
+                        execution.duration / total_time_span * 100 %} {% else %}
+                        {% set start_offset = 0 %} {% set bar_width = 100 %} {%
+                        endif %}
+                        <div
+                          class="execution-bar"
+                          style="left: {{ start_offset|round(2) }}%; width: {{ (bar_width if bar_width > 0.5 else 0.5)|round(2) }}%"
+                          title="Start: {{ execution.start.strftime('%H:%M:%S.%f')[:-3] }} - End: {{ execution.end.strftime('%H:%M:%S.%f')[:-3] }} - Duration: {{ execution.duration|round(3) }}s"
+                        >
+                          <span class="execution-time-label"
+                            >{{ execution.start.strftime('%H:%M:%S.%f')[:-3]
+                            }}</span
+                          >
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <span class="badge bg-info"
+                      >{{ execution.duration|round(3) }}s</span
+                    >
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          {% else %}
+          <div class="text-center py-4">
+            <p class="text-muted mb-0">
+              No atomic service executions recorded yet
+            </p>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Execution Stats -->
+  {% if timeline_data %}
+  <div class="row">
+    <div class="col-md-4">
+      <div class="metric-card">
+        <h6 class="section-title">Total Executions</h6>
+        <p class="h3 mb-0 text-primary">{{ timeline_data|length }}</p>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="metric-card">
+        <h6 class="section-title">Avg Duration</h6>
+        {% set avg_duration = (timeline_data | map(attribute='duration') | sum)
+        / timeline_data|length %}
+        <p class="h3 mb-0 text-info">{{ avg_duration|round(2) }}s</p>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="metric-card">
+        <h6 class="section-title">Max Duration</h6>
+        {% set max_duration = timeline_data | map(attribute='duration') | max %}
+        <p class="h3 mb-0 text-warning">{{ max_duration|round(2) }}s</p>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

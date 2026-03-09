@@ -5,7 +5,7 @@ This module provides time-based trigger conditions, including cron schedule trig
 that allow tasks to be executed at specific times or intervals.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from croniter import croniter  # type: ignore[import]
@@ -21,6 +21,7 @@ DEFAULT_STRICT_TIMING = False
 
 if TYPE_CHECKING:
     from ...app import Pynenc
+    from pynenc.identifiers.task_id import TaskId
 
 
 class CronContext(ConditionContext):
@@ -46,7 +47,7 @@ class CronContext(ConditionContext):
         """
         super().__init__()
         self.last_execution = last_execution
-        self.timestamp = timestamp if timestamp else datetime.now(timezone.utc)
+        self.timestamp = timestamp if timestamp else datetime.now(UTC)
 
     @property
     def context_id(self) -> str:
@@ -133,6 +134,17 @@ class CronCondition(TriggerCondition[CronContext]):
                 "Use minute-level precision (5 fields) instead."
             )
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, CronCondition):
+            return False
+        return (
+            self.cron_expression == other.cron_expression
+            and self.check_window_seconds == other.check_window_seconds
+            and self.min_interval_seconds == other.min_interval_seconds
+            and self.precision_tolerance_seconds == other.precision_tolerance_seconds
+            and self.strict_timing == other.strict_timing
+        )
+
     @property
     def condition_id(self) -> str:
         """
@@ -142,7 +154,7 @@ class CronCondition(TriggerCondition[CronContext]):
         """
         return f"cron_{self.cron_expression}"
 
-    def get_source_task_ids(self) -> set[str]:
+    def get_source_task_ids(self) -> set["TaskId"]:
         return set()
 
     def _to_json(self, app: "Pynenc") -> dict[str, Any]:

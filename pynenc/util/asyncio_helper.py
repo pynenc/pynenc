@@ -1,6 +1,6 @@
 import asyncio
 import inspect
-from typing import Callable
+from collections.abc import Callable
 
 from pynenc.types import Params, Result
 

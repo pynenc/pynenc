@@ -8,14 +8,16 @@ Each trigger definition links a task to one or more conditions that determine wh
 import hashlib
 import json
 import logging
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
+from pynenc.models.trigger_definition_dto import TriggerDefinitionDTO
 from pynenc.trigger.arguments.argument_providers import ArgumentProvider
 from pynenc.trigger.conditions import CompositeLogic
 from pynenc.trigger.trigger_context import TriggerContext
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
+    from pynenc.identifiers.task_id import TaskId
 
 logger = logging.getLogger(__name__)
 
@@ -30,10 +32,10 @@ class TriggerDefinition:
 
     def __init__(
         self,
-        task_id: str,
+        task_id: "TaskId",
         condition_ids: list[str],
         logic: CompositeLogic = CompositeLogic.AND,
-        argument_provider: Optional[ArgumentProvider] = None,
+        argument_provider: ArgumentProvider | None = None,
     ):
         """
         Create a new trigger definition.
@@ -49,6 +51,16 @@ class TriggerDefinition:
         self.argument_provider = argument_provider
         self.trigger_id = self._generate_trigger_id()
 
+    def __eq__(self, value: object) -> bool:
+        if not isinstance(value, TriggerDefinition):
+            return False
+        return (
+            self.task_id == value.task_id
+            and self.condition_ids == value.condition_ids
+            and self.logic == value.logic
+            and self.argument_provider == value.argument_provider
+        )
+
     def _generate_trigger_id(self) -> str:
         """
         Generate a deterministic ID based on the trigger content.
@@ -62,7 +74,7 @@ class TriggerDefinition:
         hasher = hashlib.sha256()
 
         # Add task_id, sorted condition_ids, and logic
-        hasher.update(self.task_id.encode("utf-8"))
+        hasher.update(self.task_id.key.encode("utf-8"))
         hasher.update(",".join(sorted(self.condition_ids)).encode("utf-8"))
         hasher.update(self.logic.name.encode("utf-8"))
 
@@ -142,54 +154,43 @@ class TriggerDefinition:
             return {}
         return self.argument_provider.get_arguments(trigger_context)
 
-    def to_json(self, app: "Pynenc") -> str:
+    def to_dto(self, app: "Pynenc") -> TriggerDefinitionDTO:
         """
-        Serialize this trigger definition to a JSON string.
+        Serialize this trigger definition to a DTO.
 
         :param app: Pynenc application instance
-        :return: JSON string representation of this trigger definition
+        :return: DTO representation of this trigger definition
         """
-        data = {
-            "trigger_id": self.trigger_id,
-            "task_id": self.task_id,
-            "condition_ids": self.condition_ids,
-            "logic": self.logic.value,
-        }
-        if self.argument_provider:
-            data["argument_provider"] = self.argument_provider.to_json(app)
-        return json.dumps(data)
+        return TriggerDefinitionDTO(
+            trigger_id=self.trigger_id,
+            task_id=self.task_id,
+            condition_ids=self.condition_ids,
+            logic=self.logic,
+            argument_provider_json=self.argument_provider.to_json(app)
+            if self.argument_provider
+            else None,
+        )
 
     @classmethod
-    def from_json(cls, json_str: str, app: "Pynenc") -> "TriggerDefinition":
+    def from_dto(cls, dto: TriggerDefinitionDTO, app: "Pynenc") -> "TriggerDefinition":
         """
-        Create a trigger definition instance from a JSON string.
+        Create a trigger definition instance from a DTO.
 
-        :param json_str: JSON string containing serialized trigger definition
+        :param dto: DTO containing serialized trigger definition
         :param app: Pynenc application instance for deserializing conditions
         :return: A new TriggerDefinition instance
         :raises ValueError: If the JSON data is invalid
         """
         try:
-            data = json.loads(json_str)
-
-            task_id = data.get("task_id")
-            trigger_id = data.get("trigger_id")
-            if not task_id:
-                raise ValueError("Missing task_id in trigger definition")
-            if not trigger_id:
-                raise ValueError("Missing trigger_id in trigger definition")
-            condition_ids = data.get("condition_ids", [])
-            logic = CompositeLogic(data.get("logic"))
-            argument_provider = None
-            if "argument_provider" in data:
-                argument_provider = ArgumentProvider.from_json(
-                    data["argument_provider"], app
-                )
-
+            argument_provider = (
+                ArgumentProvider.from_json(dto.argument_provider_json, app)
+                if dto.argument_provider_json
+                else None
+            )
             return cls(
-                task_id=task_id,
-                condition_ids=condition_ids,
-                logic=logic,
+                task_id=dto.task_id,
+                condition_ids=dto.condition_ids,
+                logic=dto.logic,
                 argument_provider=argument_provider,
             )
 

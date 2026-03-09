@@ -14,7 +14,7 @@ Key components:
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Iterable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -31,18 +31,19 @@ from pynenc.trigger.conditions import (
     StatusContext,
     ValidCondition,
 )
+from pynenc.trigger.trigger_definitions import TriggerDefinition
 from pynenc.trigger.trigger_context import TriggerContext
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
-    from pynenc.invocation.base_invocation import BaseInvocation
+    from pynenc.invocation.base_invocation import BaseInvocation, InvocationId
     from pynenc.invocation.dist_invocation import DistributedInvocation
     from pynenc.invocation.status import InvocationStatus
-    from pynenc.task import Task
+    from pynenc.models.trigger_definition_dto import TriggerDefinitionDTO
+    from pynenc.task import Task, TaskId
     from pynenc.trigger.conditions import ConditionContext, TriggerCondition
     from pynenc.trigger.trigger_builder import TriggerBuilder
-    from pynenc.trigger.trigger_definitions import TriggerDefinition
-    from pynenc.trigger.types import ConditionId, TaskId
+    from pynenc.trigger.types import ConditionId
 
 
 class BaseTrigger(ABC):
@@ -103,7 +104,7 @@ class BaseTrigger(ABC):
                 )
         else:
             self.app.logger.debug(
-                f"Condition {condition.condition_id} already registered, skipping."
+                f"condition:{condition.condition_id} already registered, skipping."
             )
 
     @abstractmethod
@@ -136,7 +137,7 @@ class BaseTrigger(ABC):
             self._register_source_task_condition(task_id, condition_id)
         else:
             self.app.logger.debug(
-                f"Condition {condition_id} already registered for source task {task_id}, skipping."
+                f"condition:{condition_id} already registered for task:{task_id}, skipping."
             )
 
     @abstractmethod
@@ -150,7 +151,7 @@ class BaseTrigger(ABC):
         pass
 
     @abstractmethod
-    def register_trigger(self, trigger: "TriggerDefinition") -> None:
+    def register_trigger(self, trigger: "TriggerDefinitionDTO") -> None:
         """
         Register a trigger definition.
 
@@ -160,8 +161,19 @@ class BaseTrigger(ABC):
         """
         pass
 
-    @abstractmethod
     def get_trigger(self, trigger_id: str) -> "TriggerDefinition | None":
+        """
+        Get a trigger definition by ID.
+
+        :param trigger_id: ID of the trigger to retrieve
+        :return: The trigger definition if found, None otherwise
+        """
+        if trigger_dto := self._get_trigger(trigger_id):
+            return TriggerDefinition.from_dto(trigger_dto, self.app)
+        return None
+
+    @abstractmethod
+    def _get_trigger(self, trigger_id: str) -> "TriggerDefinitionDTO | None":
         """
         Get a trigger definition by ID.
 
@@ -173,7 +185,7 @@ class BaseTrigger(ABC):
     @abstractmethod
     def get_triggers_for_condition(
         self, condition_id: str
-    ) -> list["TriggerDefinition"]:
+    ) -> list["TriggerDefinitionDTO"]:
         """
         Get all triggers that depend on a specific condition.
 
@@ -184,7 +196,7 @@ class BaseTrigger(ABC):
 
     @abstractmethod
     def get_conditions_sourced_from_task(
-        self, task_id: str, context_type: type["ConditionContext"] | None = None
+        self, task_id: "TaskId", context_type: type["ConditionContext"] | None = None
     ) -> list["TriggerCondition"]:
         """
         Get all conditions that are sourced from a specific task.
@@ -271,7 +283,7 @@ class BaseTrigger(ABC):
         """
 
     @abstractmethod
-    def clean_task_trigger_definitions(self, task_id: str) -> None:
+    def clean_task_trigger_definitions(self, task_id: "TaskId") -> None:
         """
         Remove all trigger definitions for a specific task.
 
@@ -306,11 +318,11 @@ class BaseTrigger(ABC):
             for condition in builder.conditions:
                 self.register_condition(condition)
             trigger_def = builder.build(task.task_id)
-            self.register_trigger(trigger_def)
+            self.register_trigger(trigger_def.to_dto(self.app))
 
     def report_tasks_status(
         self,
-        invocations: list["DistributedInvocation"],
+        invocation_ids: list["InvocationId"],
         status: Optional["InvocationStatus"] = None,
     ) -> None:
         """
@@ -319,15 +331,16 @@ class BaseTrigger(ABC):
         This method efficiently processes status changes for multiple invocations
         by batching context creation and condition validation.
 
-        :param invocations: List of invocations reporting status changes
+        :param invocation_ids: List of invocation IDs reporting status changes
         :param status: The new status for all invocations
         """
         condition_context_pairs: list[tuple[TriggerCondition, ConditionContext]] = []
-        for invocation in invocations:
+        for invocation_id in invocation_ids:
             # Create a status context for each invocation
+            invocation = self.app.state_backend.get_invocation(invocation_id)
             context = StatusContext.from_invocation(invocation, status)
             conditions = self.get_conditions_sourced_from_task(
-                context.task_id, StatusContext
+                context.call_id.task_id, StatusContext
             )
             for condition in conditions:
                 condition_context_pairs.append((condition, context))
@@ -350,17 +363,20 @@ class BaseTrigger(ABC):
         """
         # Create the result context
         context = ResultContext(
-            task_id=invocation.task.task_id,
             call_id=invocation.call.call_id,
             invocation_id=invocation.invocation_id,
             arguments=invocation.call.arguments,
-            status=invocation.status,
+            disable_cache_args=invocation.call.task.conf.disable_cache_args,
+            # get status directly from orchestrator to avoid caching
+            status=self.app.orchestrator.get_invocation_status(
+                invocation.invocation_id
+            ),
             result=result,
         )
 
         # Get conditions affected by this task
         conditions = self.get_conditions_sourced_from_task(
-            invocation.task.task_id, ResultContext
+            context.call_id.task_id, ResultContext
         )
 
         # Evaluate each condition with the context
@@ -382,10 +398,10 @@ class BaseTrigger(ABC):
         """
         # Create the exception context
         context = ExceptionContext(
-            task_id=invocation.task.task_id,
             call_id=invocation.call.call_id,
             invocation_id=invocation.invocation_id,
             arguments=invocation.call.arguments,
+            disable_cache_args=invocation.call.task.conf.disable_cache_args,
             status=invocation.status,
             exception_type=type(exception).__name__,
             exception_message=str(exception),
@@ -393,7 +409,7 @@ class BaseTrigger(ABC):
 
         # Get conditions affected by this task
         conditions = self.get_conditions_sourced_from_task(
-            invocation.task.task_id, ExceptionContext
+            invocation.call.task.task_id, ExceptionContext
         )
 
         # Evaluate each condition with the context
@@ -447,8 +463,8 @@ class BaseTrigger(ABC):
         """
         Get the timestamp of the last execution of a cron condition from persistent storage.
 
-        :param condition_id: ID of the cron condition
-        :return: Timestamp of last execution, or None if never executed
+        :param str condition_id: ID of the cron condition
+        :return: Timestamp of last execution in UTC timezone, or None if never executed
         """
         pass
 
@@ -465,27 +481,29 @@ class BaseTrigger(ABC):
         This should be implemented as an atomic operation to prevent race conditions
         in distributed environments.
 
-        :param condition_id: ID of the cron condition
-        :param execution_time: Timestamp of the execution
-        :param expected_last_execution: Expected current value for optimistic locking
+        :param str condition_id: ID of the cron condition
+        :param datetime execution_time: Timestamp of the execution (must be UTC timezone-aware)
+        :param datetime | None expected_last_execution: Expected current value for optimistic locking (UTC timezone-aware)
         :return: True if stored successfully, False if another process already updated it
         """
         pass
 
     def _should_trigger_cron_condition(
         self, condition: CronCondition, current_time: datetime
-    ) -> bool:
+    ) -> CronContext | None:
         """
         Determine if a cron condition should be triggered based on its schedule and last execution.
 
         This method uses both local cache and persistent storage to efficiently determine
-        if a cron condition should be triggered in a distributed environment.
+        if a cron condition should be triggered in a distributed environment. All datetime
+        values are expected to be UTC timezone-aware.
 
-        :param condition: The cron condition to check
-        :param current_time: Current time to check against
-        :return: True if the condition should be triggered, False otherwise
+        :param CronCondition condition: The cron condition to check
+        :param datetime current_time: Current time to check against (UTC timezone-aware)
+        :return: CronContext if the condition is valid and should be triggered, None otherwise
         """
         condition_id = condition.condition_id
+        context = CronContext(timestamp=current_time)
 
         # Check local cache first for efficiency
         cached_last_execution = self._last_cron_execution_cache.get(condition_id)
@@ -498,7 +516,7 @@ class BaseTrigger(ABC):
             # If the condition isn't satisfied with the cached last execution,
             # no need to check persistent storage
             if not condition.is_satisfied_by(context):
-                return False
+                return None
 
         # If we're here, either no cached time or it's time to check again
         # Get the definitive last execution time from storage
@@ -513,7 +531,7 @@ class BaseTrigger(ABC):
                 timestamp=current_time, last_execution=storage_last_execution
             )
             if not condition.is_satisfied_by(context):
-                return False
+                return None
 
         # Try to atomically update the last execution time
         success = self.store_last_cron_execution(
@@ -523,17 +541,17 @@ class BaseTrigger(ABC):
         if success:
             # Update local cache
             self._last_cron_execution_cache[condition_id] = current_time
-            return True
+            return context
         else:
             # Another process beat us to it
             self.app.logger.info(
-                f"Cron condition {condition_id} was triggered by another process."
+                f"Cron condition:{condition_id} was triggered by another process."
             )
             # Update our cache with the latest value
             fresh_last_execution = self.get_last_cron_execution(condition_id)
             if fresh_last_execution:
                 self._last_cron_execution_cache[condition_id] = fresh_last_execution
-            return False
+            return None
 
     def check_time_based_triggers(self, current_time: datetime | None = None) -> None:
         """
@@ -544,23 +562,15 @@ class BaseTrigger(ABC):
 
         :param current_time: Current time to check against, defaults to now
         """
-        # Create time context
-        now = current_time or datetime.now(timezone.utc)
-        context = CronContext(timestamp=now)
-
-        time_conditions = [
-            c for c in self._get_all_conditions() if isinstance(c, CronCondition)
-        ]
-
-        # Evaluate each condition
-        for condition in time_conditions:
-            if isinstance(condition, CronCondition):
-                if not self._should_trigger_cron_condition(condition, now):
-                    continue
-
-            if self.validate_and_record_condition(condition, context):
-                self.app.logger.debug(
-                    f"Recorded valid time condition: {condition.condition_id}"
+        now = current_time or datetime.now(UTC)
+        for condition in self._get_all_conditions():
+            if not isinstance(condition, CronCondition):
+                continue
+            if triggering_context := self._should_trigger_cron_condition(
+                condition, now
+            ):
+                self.record_valid_conditions(
+                    [ValidCondition(condition, triggering_context)]
                 )
 
     @abstractmethod
@@ -587,9 +597,6 @@ class BaseTrigger(ABC):
         1. Check time-based triggers
         2. Process valid conditions
         3. Execute triggered tasks
-
-        It uses atomic claiming to ensure each valid condition only triggers
-        a task exactly once across all workers.
         """
         self.check_time_based_triggers()
         # Check for validated conditions
@@ -601,10 +608,11 @@ class BaseTrigger(ABC):
         affected_triggers: dict[str, tuple[TriggerDefinition, TriggerContext]] = {}
         condition_to_pending_triggers: dict[str, set[str]] = defaultdict(set)
         for valid_condition in valid_conditions.values():
-            triggers = self.get_triggers_for_condition(
+            trigger_dtos = self.get_triggers_for_condition(
                 valid_condition.condition.condition_id
             )
-            for trigger in triggers:
+            for trigger_dto in trigger_dtos:
+                trigger = TriggerDefinition.from_dto(trigger_dto, self.app)
                 if trigger.trigger_id not in affected_triggers:
                     affected_triggers[trigger.trigger_id] = (trigger, TriggerContext())
                 affected_triggers[trigger.trigger_id][1].add_valid_condition(
@@ -639,7 +647,7 @@ class BaseTrigger(ABC):
         self.clear_valid_conditions(conditions_to_clean)
 
     def execute_task(
-        self, task_id: str, arguments: dict[str, Any] | None = None
+        self, task_id: "TaskId", arguments: dict[str, Any] | None = None
     ) -> "BaseInvocation":
         """
         Execute a task with the given arguments.
@@ -654,14 +662,33 @@ class BaseTrigger(ABC):
         if not task:
             raise ValueError(f"Task {task_id} not found")
         invocation = task._call(Arguments(kwargs=arguments or {}))
-        self.app.logger.info(f"Triggered task {task_id} with arguments {arguments}")
+        self.app.logger.info(f"Triggered task:{task_id} with arguments {arguments}")
         return invocation
 
-    @abstractmethod
     def purge(self) -> None:
+        """Purges all the trigger data for the current self.app.app_id."""
+        self._purge()
+        self.reload_task_conditions()
+
+    @abstractmethod
+    def _purge(self) -> None:
+        """Purges all the trigger data for the current self.app.app_id."""
+
+    def reload_task_conditions(self) -> None:
         """
-        Purges all the trigger data for the current self.app.app_id.
-        ```{important}
-            This should only be used for testing purposes.
-        ```
+        Reload all task conditions from the current app's registered tasks.
+
+        This method clears the local condition and source-task mappings,
+        then iterates over all tasks in the app and re-registers their triggers and conditions.
+
+        :return: None
         """
+        # Clear local mappings
+        self._last_cron_execution_cache.clear()
+        self._registered_conditions = {}
+        self._source_task_conditions = defaultdict(set)
+
+        # Re-register triggers and conditions for each task
+        for task in self.app.tasks.values():
+            # This will re-register all triggers and their conditions for the task
+            self.register_task_triggers(task, getattr(task, "triggers", None))

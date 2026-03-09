@@ -1,20 +1,59 @@
+import asyncio
 import json
 import logging
 import time
 import traceback
-from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Optional
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
+from pynenc.exceptions import InvocationNotFoundError
+from pynenc.identifiers.invocation_id import InvocationId
+from pynenc.identifiers.task_id import TaskId
 from pynenc.invocation.status import InvocationStatus
 from pynmon.app import get_pynenc_instance, templates
+from pynmon.util.formatting import RunnerContextInfo
+from pynmon.util.time_ranges import parse_time_range, parse_resolution
+from pynmon.util.view_helpers import format_call_arguments
+from pynmon.util.svg.builder import TimelineDataBuilder
+from pynmon.util.svg.models import TimelineConfig
+from pynmon.util.svg.renderer import TimelineSVGRenderer
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
-    from pynenc.call import Call
     from pynenc.invocation.dist_invocation import DistributedInvocation
+    from pynenc.runner.runner_context import RunnerContext
+
+
+@dataclass
+class TimelineRequest:
+    """Grouped parameters for building an SVG timeline."""
+
+    app: "Pynenc"
+    start_time: datetime
+    end_time: datetime
+    config: "TimelineConfig"
+    limit: int | None
+    task_id: "TaskId | None" = None
+    workflow_inv_ids: set[str] | None = None
+    collapse_external: bool = True
+
+
+@dataclass
+class _IterState:
+    """Mutable accumulation state for history iteration."""
+
+    builder: "TimelineDataBuilder"
+    runner_contexts: dict = field(default_factory=dict)
+    invocations_seen: set = field(default_factory=set)
+    history_count: int = 0
+    allowed_invocation_ids: set | None = None
+    skipped_by_task_filter: int = 0
+    batch_number: int = 0
+
 
 router = APIRouter(prefix="/invocations", tags=["invocations"])
 logger = logging.getLogger("pynmon.views.invocations")
@@ -23,12 +62,16 @@ logger = logging.getLogger("pynmon.views.invocations")
 @router.get("/", response_class=HTMLResponse)
 async def invocations_list(
     request: Request,
-    status: Optional[str] = None,
-    task_id: Optional[str] = None,
+    status: str | None = None,
+    task_id: str | None = None,
+    workflow_id: str | None = None,
+    workflow_type: str | None = None,
     limit: int = 50,
+    page: int = 1,
 ) -> HTMLResponse:
-    """Display invocations with optional filtering."""
+    """Display invocations with optional filtering and pagination."""
     app = get_pynenc_instance()
+    parsed_task_id = TaskId.from_key(task_id) if task_id else None
 
     # Convert status to list format for consistent processing
     status_list = None
@@ -44,39 +87,43 @@ async def invocations_list(
             if hasattr(InvocationStatus, s.upper())
         ]
 
-    # Get all invocations across all tasks
-    all_invocations = []
+    # Calculate offset for pagination
+    offset = (page - 1) * limit
 
-    # Find task by ID if specified
-    if task_id:
-        task = app.get_task(task_id)
-        if task:
-            # Get invocations for this specific task with filters
-            all_invocations = list(
-                app.orchestrator.get_existing_invocations(
-                    task=task,
-                    statuses=statuses,
-                )
-            )[:limit]
-    else:
-        # Get invocations from all tasks
-        for task in app.tasks.values():
-            invocations = list(
-                app.orchestrator.get_existing_invocations(
-                    task=task,
-                    statuses=statuses,
-                )
-            )
-            all_invocations.extend(invocations)
-            if len(all_invocations) >= limit:
-                all_invocations = all_invocations[:limit]
-                break
+    # Pre-load workflow-filtered invocation IDs if workflow filters active
+    workflow_inv_ids = _load_workflow_invocation_ids(app, workflow_id, workflow_type)
+
+    # Offload heavy DB queries to a thread so the event loop stays free
+    def _fetch_invocations() -> tuple[list["DistributedInvocation"], int]:
+        ids = app.orchestrator.get_invocation_ids_paginated(
+            task_id=parsed_task_id,
+            statuses=statuses,
+            limit=limit,
+            offset=offset,
+        )
+        # Apply workflow filter if active
+        if workflow_inv_ids is not None:
+            ids = [i for i in ids if str(i) in workflow_inv_ids]
+        count = app.orchestrator.count_invocations(
+            task_id=parsed_task_id,
+            statuses=statuses,
+        )
+        invocations = [app.state_backend.get_invocation(inv_id) for inv_id in ids]
+        return invocations, count
+
+    all_invocations, total_count = await asyncio.to_thread(_fetch_invocations)
+    total_pages = (total_count + limit - 1) // limit if limit > 0 else 1
 
     # Get all possible statuses for filter dropdown
     all_statuses = [status.name.lower() for status in InvocationStatus]
 
     # Get all available task IDs for the dropdown
     all_task_ids = list(app.tasks.keys())
+
+    # Get all workflow types for the dropdown
+    all_workflow_types = await asyncio.to_thread(
+        lambda: [str(wt) for wt in app.state_backend.get_all_workflow_types()]
+    )
 
     return templates.TemplateResponse(
         "invocations/list.html",
@@ -87,60 +134,27 @@ async def invocations_list(
             "invocations": all_invocations,
             "all_statuses": all_statuses,
             "all_task_ids": all_task_ids,
+            "all_workflow_types": all_workflow_types,
             "current_filters": {
                 "status": status_list or [],
                 "task_id": task_id or "",
+                "workflow_id": workflow_id or "",
+                "workflow_type": workflow_type or "",
                 "limit": limit,
+            },
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total_count": total_count,
+                "total_pages": total_pages,
+                "has_prev": page > 1,
+                "has_next": page < total_pages,
             },
         },
     )
 
 
-def _parse_timeline_date_range(
-    time_range: str, start_date: Optional[str], end_date: Optional[str]
-) -> tuple[datetime, datetime]:
-    """Parse the time range parameters into start and end datetime objects."""
-    now = datetime.now(timezone.utc)
-    end_datetime = now
-
-    if time_range == "custom" and start_date and end_date:
-        try:
-            # Parse custom dates and convert to UTC if they don't have timezone info
-            start_datetime = datetime.fromisoformat(start_date)
-            if start_datetime.tzinfo is None:
-                start_datetime = start_datetime.replace(tzinfo=timezone.utc)
-
-            end_datetime = datetime.fromisoformat(end_date)
-            if end_datetime.tzinfo is None:
-                end_datetime = end_datetime.replace(tzinfo=timezone.utc)
-        except ValueError:
-            logger.warning(f"Invalid date format: {start_date} - {end_date}")
-            # Fall back to last hour
-            start_datetime = now - timedelta(hours=1)
-    else:
-        # Parse time range - using UTC time
-        if time_range == "15m":
-            start_datetime = now - timedelta(minutes=15)
-        elif time_range == "1h":
-            start_datetime = now - timedelta(hours=1)
-        elif time_range == "3h":
-            start_datetime = now - timedelta(hours=3)
-        elif time_range == "12h":
-            start_datetime = now - timedelta(hours=12)
-        elif time_range == "1d":
-            start_datetime = now - timedelta(days=1)
-        elif time_range == "3d":
-            start_datetime = now - timedelta(days=3)
-        elif time_range == "1w":
-            start_datetime = now - timedelta(weeks=1)
-        else:
-            # Default to last hour
-            start_datetime = now - timedelta(hours=1)
-
-    return start_datetime, end_datetime
-
-
-def _get_tasks_to_check(app: "Pynenc", task_id: Optional[str]) -> list:
+def _get_tasks_to_check(app: "Pynenc", task_id: "TaskId | None") -> list:
     """Get the list of tasks to check based on task_id filter.
 
     :param app: The Pynenc application instance
@@ -156,11 +170,11 @@ def _get_tasks_to_check(app: "Pynenc", task_id: Optional[str]) -> list:
             # Re-raise with a more descriptive error message
             if isinstance(e, ModuleNotFoundError):
                 raise ValueError(
-                    f"Task not found: Module '{task_id.rsplit('.', 1)[0]}' could not be imported. {str(e)}"
+                    f"Task not found: Module '{task_id.module}' could not be imported. {str(e)}"
                 ) from e
             elif isinstance(e, AttributeError):
-                module_name = task_id.rsplit(".", 1)[0]
-                function_name = task_id.rsplit(".", 1)[1]
+                module_name = task_id.module
+                function_name = task_id.func_name
                 raise ValueError(
                     f"Task not found: Function '{function_name}' not found in module '{module_name}'. {str(e)}"
                 ) from e
@@ -171,175 +185,238 @@ def _get_tasks_to_check(app: "Pynenc", task_id: Optional[str]) -> list:
     return list(app.tasks.values())
 
 
-def _collect_invocations_from_tasks(
-    app: "Pynenc", tasks_to_check: list, limit: int
-) -> list["DistributedInvocation"]:
-    """Collect invocations from the specified tasks up to the limit."""
-    all_invocations = []
-    logger.info(f"Fetching invocations from {len(tasks_to_check)} tasks")
+def _load_workflow_invocation_ids(
+    app: "Pynenc",
+    workflow_id: str | None,
+    workflow_type: str | None,
+) -> set[str] | None:
+    """Pre-load invocation IDs matching workflow filters.
 
-    for task in tasks_to_check:
-        invocations = list(app.orchestrator.get_existing_invocations(task=task))
-        all_invocations.extend(invocations)
+    :param Pynenc app: The Pynenc application instance
+    :param str | None workflow_id: Workflow ID to filter by
+    :param str | None workflow_type: Workflow type key to filter by
+    :return: Set of matching invocation ID strings, or None if no filter
+    """
+    if not workflow_id and not workflow_type:
+        return None
+    ids = app.state_backend.get_invocation_ids_by_workflow(
+        workflow_id=workflow_id,
+        workflow_type_key=workflow_type,
+    )
+    return {str(i) for i in ids}
 
-        # Limit the number to avoid overloading the browser
-        if len(all_invocations) >= limit:
-            all_invocations = all_invocations[:limit]
+
+def _merge_allowed_ids(
+    task_ids: set | None,
+    workflow_ids: set[str] | None,
+) -> set | None:
+    """Intersect task and workflow ID sets (None means "all").
+
+    :param set | None task_ids: IDs from task filter, or None for all
+    :param set[str] | None workflow_ids: IDs from workflow filter, or None for all
+    :return: Intersection of non-None sets, or None if both are None
+    """
+    if task_ids is None:
+        return workflow_ids
+    if workflow_ids is None:
+        return task_ids
+    return task_ids & workflow_ids
+
+
+def _build_svg_timeline(req: TimelineRequest) -> str:
+    """
+    Build SVG timeline from a TimelineRequest.
+
+    :param TimelineRequest req: Grouped parameters
+    :return: SVG markup as string
+    """
+    t0 = time.time()
+    task_ids = _load_task_invocation_ids(req)
+    allowed = _merge_allowed_ids(task_ids, req.workflow_inv_ids)
+    state = _IterState(
+        builder=TimelineDataBuilder(
+            config=req.config,
+            collapse_external=req.collapse_external,
+        ),
+        allowed_invocation_ids=allowed,
+    )
+    _accumulate_history(req, state)
+    t_hist = time.time()
+    logger.info(
+        f"History accumulated: {len(state.invocations_seen)} invocations, "
+        f"{state.history_count} entries in {t_hist - t0:.2f}s"
+        + (
+            f", {state.skipped_by_task_filter} skipped by task filter"
+            if state.skipped_by_task_filter
+            else ""
+        )
+    )
+    data = state.builder.build(start_time=req.start_time, end_time=req.end_time)
+    t_build = time.time()
+    logger.info(f"SVG data built in {t_build - t_hist:.2f}s")
+    svg = TimelineSVGRenderer().render(data)
+    logger.info(f"SVG rendered in {time.time() - t_build:.2f}s ({len(svg):,} chars)")
+    return svg
+
+
+def _load_task_invocation_ids(req: TimelineRequest) -> set | None:
+    """
+    Pre-load invocation IDs for a task to enable client-side filtering.
+
+    :param TimelineRequest req: Request with optional task_id
+    :return: Set of invocation IDs if task_id is set, else None (no filter)
+    """
+    if not req.task_id:
+        return None
+    load_start = time.time()
+    ids = set(req.app.orchestrator.get_task_invocation_ids(req.task_id))
+    logger.info(
+        f"Pre-loaded {len(ids)} invocation IDs for task {req.task_id} "
+        f"in {time.time() - load_start:.2f}s"
+    )
+    return ids
+
+
+def _accumulate_history(req: TimelineRequest, state: _IterState) -> None:
+    """
+    Iterate history in batches and accumulate into state.
+
+    :param TimelineRequest req: Request parameters
+    :param _IterState state: Mutable accumulation state
+    """
+    for batch in req.app.state_backend.iter_history_in_timerange(
+        start_time=req.start_time,
+        end_time=req.end_time,
+        batch_size=2000,
+    ):
+        state.batch_number += 1
+        if state.batch_number % 5 == 0:
+            logger.debug(
+                f"Processing batch {state.batch_number}: "
+                f"{len(state.invocations_seen)} invocations, "
+                f"{state.history_count} history entries so far"
+            )
+        if not _process_batch(batch, req, state):
             break
 
-    logger.info(f"Found {len(all_invocations)} invocations before time filtering")
-    return all_invocations
+
+def _process_batch(batch: list, req: TimelineRequest, state: _IterState) -> bool:
+    """
+    Filter, fetch contexts, and add batch to builder.
+
+    :return: False to signal early termination
+    """
+    filtered = _filter_batch(batch, req.limit, state)
+    _fetch_new_runner_contexts(filtered, req.app, state)
+    if filtered:
+        state.builder.add_history_batch(filtered, state.runner_contexts)
+    return not (req.limit and len(state.invocations_seen) >= req.limit)
 
 
-def _filter_invocations_by_time(
-    app: "Pynenc",
-    all_invocations: list["DistributedInvocation"],
-    start_datetime: datetime,
-    end_datetime: datetime,
-    show_relationships: bool,
-) -> list[dict[str, str | None]]:
-    """Filter invocations based on time range and format for timeline display."""
-    filtered_invocations = []
+def _filter_batch(batch: list, limit: int | None, state: _IterState) -> list:
+    """
+    Filter batch entries respecting invocation limit and task filter.
 
-    for invocation in all_invocations:
-        # Try to get history for the invocation
-        history = app.state_backend.get_history(invocation)
+    :return: Filtered list of history entries
+    """
+    result = []
+    for entry in batch:
+        # Skip entries not matching task filter
+        if state.allowed_invocation_ids is not None:
+            if entry.invocation_id not in state.allowed_invocation_ids:
+                state.skipped_by_task_filter += 1
+                continue
 
-        if not history:
-            logger.debug(
-                f"Invocation {invocation.invocation_id} has no history, skipping"
-            )
-            continue
+        if entry.invocation_id not in state.invocations_seen:
+            if limit and len(state.invocations_seen) >= limit:
+                break
+            state.invocations_seen.add(entry.invocation_id)
+        result.append(entry)
+        state.history_count += 1
+    return result
 
-        # Sort history by timestamp
-        sorted_history = sorted(history, key=lambda entry: entry.timestamp)
 
-        # Get start time (first entry)
-        invocation_start_time = sorted_history[0].timestamp
+def _fetch_new_runner_contexts(batch: list, app: "Pynenc", state: _IterState) -> None:
+    """
+    Fetch and cache any runner contexts not yet in state.
 
-        # Skip if outside our time range
-        if (
-            invocation_start_time < start_datetime
-            or invocation_start_time > end_datetime
-        ):
-            logger.debug(
-                f"Invocation {invocation.invocation_id} outside time range, skipping"
-            )
-            continue
-
-        # Get end time (last entry if in final state)
-        invocation_end_time = None
-        if sorted_history[-1].status and sorted_history[-1].status.is_final():
-            invocation_end_time = sorted_history[-1].timestamp
-
-        # Find parent invocation if it exists
-        parent_id = None
-        if show_relationships and invocation.parent_invocation:
-            parent_id = invocation.parent_invocation.invocation_id
-
-        # Add to filtered list
-        filtered_invocations.append(
-            {
-                "invocation_id": invocation.invocation_id,
-                "task_id": invocation.task.task_id,
-                "status": invocation.status.name,
-                "start_time": invocation_start_time.isoformat(),
-                "end_time": invocation_end_time.isoformat()
-                if invocation_end_time
-                else None,
-                "parent_id": parent_id,
-            }
-        )
-
-    # Sort by start time
-    def get_start_time(inv: dict) -> str:
-        start_time = inv.get("start_time")
-        return start_time if isinstance(start_time, str) else ""
-
-    filtered_invocations.sort(key=get_start_time)
-    return filtered_invocations
+    :param batch: Filtered history entries
+    :param app: Pynenc application instance
+    :param state: Mutable accumulation state
+    """
+    new_ids = [
+        h.runner_context_id
+        for h in batch
+        if h.runner_context_id not in state.runner_contexts
+    ]
+    if not new_ids:
+        return
+    for ctx in app.state_backend.get_runner_contexts(new_ids):
+        state.runner_contexts[ctx.runner_id] = ctx
 
 
 @router.get("/timeline", response_class=HTMLResponse)
 async def invocations_timeline(
     request: Request,
-    time_range: str = "1h",
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    task_id: Optional[str] = None,
-    show_relationships: bool = False,
-    limit: int = 100,
+    time_range: str = "5m",
+    start_date: str | None = None,
+    end_date: str | None = None,
+    task_id: str | None = None,
+    workflow_id: str | None = None,
+    workflow_type: str | None = None,
+    limit: str
+    | None = "500",  # str so empty string ("No limit") doesn't cause int parse error
+    resolution: str = "auto",
+    collapse_external: str = "1",  # "0" disables collapsing; default on
 ) -> HTMLResponse:
-    """Display a visual timeline of invocations with filters."""
+    """Display a visual SVG timeline of invocations with filters."""
     app = get_pynenc_instance()
     logger.info(f"Generating invocation timeline with time_range={time_range}")
     start_time = time.time()
 
     try:
-        # Parse date range parameters
-        start_datetime, end_datetime = _parse_timeline_date_range(
+        # Parse date range and resolution parameters
+        start_datetime, end_datetime = parse_time_range(
             time_range, start_date, end_date
         )
+        resolution_seconds = parse_resolution(resolution)
+        # Empty string means "No limit" from the select; None or empty → unlimited
+        limit_int: int | None = int(limit) if limit and limit.strip() else None
+
+        parsed_task_id = TaskId.from_key(task_id) if task_id else None
+
         logger.info(
             f"Using time range: {start_datetime.isoformat()} to {end_datetime.isoformat()}"
+            + (f", task_id={parsed_task_id}" if parsed_task_id else "")
+            + f", limit={limit_int}"
         )
 
-        # Get tasks to check - this may raise ValueError for invalid task_id
-        try:
-            tasks_to_check = _get_tasks_to_check(app, task_id)
-        except ValueError as e:
-            logger.warning(f"Invalid task ID: {task_id} - {str(e)}")
-            return templates.TemplateResponse(
-                "shared/error.html",
-                {
-                    "request": request,
-                    "title": "Task Not Found",
-                    "message": str(e),
-                },
-                status_code=404,
-            )
-
-        # Collect invocations from tasks
-        all_invocations = _collect_invocations_from_tasks(app, tasks_to_check, limit)
-
-        # Filter invocations by time range
-        filtered_invocations = _filter_invocations_by_time(
-            app, all_invocations, start_datetime, end_datetime, show_relationships
+        # Pre-load workflow-filtered invocation IDs
+        workflow_inv_ids = _load_workflow_invocation_ids(
+            app, workflow_id, workflow_type
         )
 
-        logger.info(
-            f"After time filtering: {len(filtered_invocations)} invocations match criteria"
+        # Build SVG timeline using efficient history iteration (offload to thread)
+        config = TimelineConfig(resolution_seconds=resolution_seconds)
+        req = TimelineRequest(
+            app=app,
+            start_time=start_datetime,
+            end_time=end_datetime,
+            config=config,
+            limit=limit_int,
+            task_id=parsed_task_id,
+            workflow_inv_ids=workflow_inv_ids,
+            collapse_external=collapse_external != "0",
         )
-
-        # Prepare timeline data for JavaScript
-        timeline_data = {
-            "invocations": filtered_invocations,
-            "start_time": start_datetime.isoformat(),
-            "end_time": end_datetime.isoformat(),
-        }
+        svg_content = await asyncio.to_thread(_build_svg_timeline, req)
 
         # Get all available task IDs for the dropdown
         all_task_ids = list(app.tasks.keys())
 
-        logger.info(f"Rendering timeline with {len(filtered_invocations)} invocations")
-        logger.info(f"Timeline data structure: {timeline_data}")
-        logger.info(
-            f"Filtered invocations structure: {filtered_invocations[:2] if filtered_invocations else 'empty'}"
+        # Get all workflow types for the dropdown
+        all_workflow_types = await asyncio.to_thread(
+            lambda: [str(wt) for wt in app.state_backend.get_all_workflow_types()]
         )
-
-        # Try to serialize timeline_data to catch any JSON issues
-        try:
-            serialized_timeline_data = json.dumps(timeline_data)
-            logger.info(
-                f"Successfully serialized timeline_data, length: {len(serialized_timeline_data)}"
-            )
-        except Exception as e:
-            logger.error(f"Failed to serialize timeline_data: {e}")
-            timeline_data = {
-                "invocations": [],
-                "start_time": start_datetime.isoformat(),
-                "end_time": end_datetime.isoformat(),
-            }
 
         return templates.TemplateResponse(
             "invocations/timeline.html",
@@ -347,9 +424,9 @@ async def invocations_timeline(
                 "request": request,
                 "title": "Invocations Timeline",
                 "app_id": app.app_id,
-                "invocations": filtered_invocations,
-                "timeline_data": json.dumps(timeline_data),
+                "svg_content": svg_content,
                 "all_task_ids": all_task_ids,
+                "all_workflow_types": all_workflow_types,
                 "start_datetime": start_datetime,
                 "end_datetime": end_datetime,
                 "current_filters": {
@@ -357,8 +434,11 @@ async def invocations_timeline(
                     "start_date": start_date or "",
                     "end_date": end_date or "",
                     "task_id": task_id or "",
-                    "show_relationships": show_relationships,
-                    "limit": limit,
+                    "workflow_id": workflow_id or "",
+                    "workflow_type": workflow_type or "",
+                    "limit": limit_int,
+                    "resolution": resolution,
+                    "collapse_external": collapse_external != "0",
                 },
             },
         )
@@ -389,15 +469,15 @@ def _get_invocation_result_and_exception(
     try:
         if invocation.status == InvocationStatus.SUCCESS:
             logger.info(f"Retrieving result for invocation {invocation_id}")
-            result = app.state_backend.get_result(invocation)
+            result = app.state_backend.get_result(invocation.invocation_id)
             # Format the result for display
-            if isinstance(result, (dict, list)):
+            if isinstance(result, dict | list):
                 formatted_result = json.dumps(result, indent=2)
             else:
                 formatted_result = str(result)
         elif invocation.status == InvocationStatus.FAILED:
             logger.info(f"Retrieving exception for invocation {invocation_id}")
-            exception = app.state_backend.get_exception(invocation)
+            exception = app.state_backend.get_exception(invocation.invocation_id)
             # Format the exception for display
             formatted_exception = str(exception)
             if hasattr(exception, "__traceback__"):
@@ -415,28 +495,55 @@ def _get_invocation_result_and_exception(
 
 def _get_formatted_invocation_history(
     app: "Pynenc", invocation: "DistributedInvocation", invocation_id: str
-) -> list[dict[str, str | None]]:
+) -> list[dict]:
     """Get formatted history for an invocation with timeout protection."""
     try:
         logger.info(f"Retrieving history for invocation {invocation_id}")
         history_start = time.time()
-        max_history_time = 3  # Maximum time to spend retrieving history (3 seconds)
 
-        # Get history with a timeout
-        history = app.state_backend.get_history(invocation)
+        # Get history
+        history = app.state_backend.get_history(invocation.invocation_id)
+
+        # Collect all unique runner context IDs
+        runner_context_ids = list({entry.runner_context_id for entry in history})
+
+        # Batch-load all runner contexts
+        runner_contexts_list = app.state_backend.get_runner_contexts(runner_context_ids)
+        runner_contexts = {ctx.runner_id: ctx for ctx in runner_contexts_list if ctx}
+
+        # Log any missing contexts
+        missing_ids = set(runner_context_ids) - set(runner_contexts.keys())
+        if missing_ids:
+            logger.warning(
+                f"Missing runner contexts for invocation {invocation_id}: "
+                f"{', '.join(missing_ids)}"
+            )
 
         # Convert history items to a more template-friendly format
         formatted_history = []
         for entry in history:
-            if time.time() - history_start > max_history_time:
-                logger.warning("History retrieval timeout reached")
-                break
+            # Get runner context, may be None if not found
+            runner_context = runner_contexts.get(entry.runner_context_id)
+            context_info = _format_owner_context(
+                runner_context, entry.runner_context_id
+            )
 
             formatted_history.append(
                 {
                     "timestamp": entry.timestamp.isoformat(),
-                    "status": entry.status.name if entry.status else "UNKNOWN",
-                    "execution_context": entry.execution_context,
+                    "status": entry.status_record.status.name,
+                    "status_runner_id": entry.status_record.runner_id,
+                    "runner_context_summary": context_info["summary"],
+                    "runner_cls": context_info["runner_cls"],
+                    "runner_id": context_info["runner_id"],
+                    "hostname": context_info["hostname"],
+                    "pid": context_info["pid"],
+                    "thread_id": context_info["thread_id"],
+                    "parent_runner_cls": context_info["parent_runner_cls"],
+                    "parent_runner_id": context_info["parent_runner_id"],
+                    "parent_hostname": context_info["parent_hostname"],
+                    "parent_pid": context_info["parent_pid"],
+                    "parent_thread_id": context_info["parent_thread_id"],
                 }
             )
 
@@ -458,8 +565,27 @@ def _get_formatted_invocation_history(
         return []
 
 
+def _format_owner_context(
+    owner_context: "RunnerContext | None", runner_context_id: str | None = None
+) -> dict[str, str | None]:
+    """Format owner context into display-friendly dict using RunnerContextInfo.
+
+    Handles None contexts gracefully, logging a warning if context is missing.
+
+    :param owner_context: The runner context to format, or None if not found
+    :param runner_context_id: The ID that was attempted (for logging), or None
+    :return: Formatted context dictionary with N/A values if context is missing
+    """
+    if owner_context is None and runner_context_id:
+        logger.warning(
+            f"Runner context not found for ID: {runner_context_id}. "
+            f"Displaying N/A values."
+        )
+    return RunnerContextInfo.from_context(owner_context).to_dict()
+
+
 def _get_invocation_timestamps_and_duration(
-    formatted_history: list[dict[str, str | None]]
+    formatted_history: list[dict[str, str | None]],
 ) -> tuple[str | None, str | None, float | None]:
     """Extract timestamps and calculate duration from formatted history."""
     created_at: str | None = "Unknown"
@@ -487,27 +613,10 @@ def _get_invocation_timestamps_and_duration(
     return created_at, completed_at, duration_seconds
 
 
-def _format_invocation_arguments(call: "Call") -> dict[str, str]:
-    """Format invocation arguments for display."""
-    try:
-        formatted_arguments = {}
-        max_length = 500  # Limit display length for very large values
-
-        for key, value in call.arguments.kwargs.items():
-            str_value = str(value)
-            if len(str_value) > max_length:
-                formatted_arguments[key] = f"{str_value[:max_length]}... (truncated)"
-            else:
-                formatted_arguments[key] = str_value
-
-        return formatted_arguments
-    except Exception as e:
-        logger.error(f"Error formatting arguments: {str(e)}")
-        return {"Error": f"Could not format arguments: {str(e)}"}
-
-
 @router.get("/{invocation_id}", response_class=HTMLResponse)
-async def invocation_detail(request: Request, invocation_id: str) -> HTMLResponse:
+async def invocation_detail(
+    request: Request, invocation_id: "InvocationId"
+) -> HTMLResponse:
     """Display detailed information about a specific invocation."""
     app = get_pynenc_instance()
     logger.info(f"Retrieving details for invocation: {invocation_id}")
@@ -515,19 +624,7 @@ async def invocation_detail(request: Request, invocation_id: str) -> HTMLRespons
 
     try:
         # Use the direct method to get the invocation
-        invocation = app.orchestrator.get_invocation(invocation_id)
-
-        if not invocation:
-            logger.warning(f"No invocation found with ID: {invocation_id}")
-            return templates.TemplateResponse(
-                "shared/error.html",
-                {
-                    "request": request,
-                    "title": "Invocation Not Found",
-                    "message": f"No invocation found with ID: {invocation_id}",
-                },
-                status_code=404,
-            )
+        invocation = app.state_backend.get_invocation(invocation_id)
 
         # Get basic details
         task = invocation.task
@@ -550,14 +647,14 @@ async def invocation_detail(request: Request, invocation_id: str) -> HTMLRespons
             duration_seconds,
         ) = _get_invocation_timestamps_and_duration(formatted_history)
 
-        # Format arguments
-        formatted_arguments = _format_invocation_arguments(call)
+        formatted_arguments = format_call_arguments(call)
 
-        # Add additional info for the template
-        task_extra = {
-            "module": task.func.__module__,
-            "func_qualname": task.func.__qualname__,
-        }
+        # Get workflow identity
+        workflow = None
+        try:
+            workflow = invocation.workflow
+        except Exception:
+            logger.debug("No workflow identity for invocation %s", invocation_id)
 
         logger.info(
             f"Rendering invocation detail template in {time.time() - start_time:.2f}s"
@@ -571,7 +668,6 @@ async def invocation_detail(request: Request, invocation_id: str) -> HTMLRespons
                 "invocation": invocation,
                 "call": call,
                 "task": task,
-                "task_extra": task_extra,
                 "result": formatted_result,
                 "exception": formatted_exception,
                 "history": formatted_history,
@@ -581,7 +677,19 @@ async def invocation_detail(request: Request, invocation_id: str) -> HTMLRespons
                 "duration": f"{duration_seconds:.2f} seconds"
                 if duration_seconds is not None
                 else None,
+                "workflow": workflow,
             },
+        )
+    except InvocationNotFoundError:
+        logger.warning(f"No invocation found with ID: {invocation_id}")
+        return templates.TemplateResponse(
+            "shared/error.html",
+            {
+                "request": request,
+                "title": "Invocation Not Found",
+                "message": f"No invocation found with ID: {invocation_id}",
+            },
+            status_code=404,
         )
     except Exception as e:
         logger.error(f"Unexpected error in invocation_detail: {str(e)}")
@@ -603,21 +711,23 @@ async def invocation_detail(request: Request, invocation_id: str) -> HTMLRespons
 
 
 @router.get("/{invocation_id}/history")
-async def invocation_history(request: Request, invocation_id: str) -> JSONResponse:
+async def invocation_history(
+    request: Request, invocation_id: "InvocationId"
+) -> JSONResponse:
     """Return invocation history as JSON for timeline visualization."""
     app = get_pynenc_instance()
     logger.info(f"Retrieving history for invocation {invocation_id} (API)")
 
     try:
         # Get the invocation
-        invocation = app.orchestrator.get_invocation(invocation_id)
+        invocation = app.state_backend.get_invocation(invocation_id)
         if not invocation:
             return JSONResponse(
                 {"error": f"No invocation found with ID: {invocation_id}"}, 404
             )
 
         # Get history
-        history = app.state_backend.get_history(invocation)
+        history = app.state_backend.get_history(invocation.invocation_id)
 
         # Convert to format needed for visualization
         formatted_history: list[dict] = []
@@ -625,13 +735,30 @@ async def invocation_history(request: Request, invocation_id: str) -> JSONRespon
             # Make sure timestamp is timezone-aware for comparison
             timestamp = entry.timestamp
             if timestamp.tzinfo is None:
-                timestamp = timestamp.replace(tzinfo=timezone.utc)
+                timestamp = timestamp.replace(tzinfo=UTC)
+
+            # Get full context info from runner_context
+            runner_context = app.state_backend.get_runner_context(
+                entry.runner_context_id
+            )
+            context_info = _format_owner_context(runner_context)
 
             formatted_history.append(
                 {
                     "timestamp": timestamp.isoformat(),
-                    "status": entry.status.name if entry.status else "UNKNOWN",
-                    "execution_context": entry.execution_context,
+                    "status": entry.status_record.status.value,
+                    "status_runner_id": entry.status_record.runner_id,
+                    "runner_context_summary": context_info["summary"],
+                    "runner_cls": context_info["runner_cls"],
+                    "runner_id": context_info["runner_id"],
+                    "hostname": context_info["hostname"],
+                    "pid": context_info["pid"],
+                    "thread_id": context_info["thread_id"],
+                    "parent_runner_cls": context_info["parent_runner_cls"],
+                    "parent_runner_id": context_info["parent_runner_id"],
+                    "parent_hostname": context_info["parent_hostname"],
+                    "parent_pid": context_info["parent_pid"],
+                    "parent_thread_id": context_info["parent_thread_id"],
                 }
             )
 
@@ -648,29 +775,43 @@ async def invocation_history(request: Request, invocation_id: str) -> JSONRespon
 
 
 @router.get("/{invocation_id}/api")
-async def invocation_api(request: Request, invocation_id: str) -> JSONResponse:
+async def invocation_api(
+    request: Request, invocation_id: "InvocationId"
+) -> JSONResponse:
     """Return invocation data as JSON for the timeline visualization."""
     app = get_pynenc_instance()
     logger.info(f"Retrieving API data for invocation {invocation_id}")
 
     try:
         # Get the invocation
-        invocation = app.orchestrator.get_invocation(invocation_id)
+        invocation = app.state_backend.get_invocation(invocation_id)
         if not invocation:
             return JSONResponse(
                 {"error": f"No invocation found with ID: {invocation_id}"}, 404
             )
 
         # Create a simplified representation for the API
-        invocation_data = {
+        invocation_data: dict = {
             "invocation_id": invocation.invocation_id,
-            "task_id": invocation.task.task_id,
+            "task_id_key": invocation.task.task_id.key,
             "status": invocation.status.name,
             "num_retries": invocation.num_retries,
-            "parent_invocation_id": invocation.parent_invocation.invocation_id
-            if invocation.parent_invocation
-            else None,
+            "parent_invocation_id": invocation.parent_invocation_id,
         }
+
+        # Add workflow information if available
+        try:
+            wf = invocation.workflow
+            invocation_data["workflow"] = {
+                "workflow_id": str(wf.workflow_id),
+                "workflow_type": str(wf.workflow_type),
+                "parent_workflow_id": str(wf.parent_workflow_id)
+                if wf.parent_workflow_id
+                else None,
+                "is_subworkflow": wf.is_subworkflow,
+            }
+        except Exception:
+            invocation_data["workflow"] = None
 
         return JSONResponse(invocation_data)
     except Exception as e:
@@ -681,16 +822,56 @@ async def invocation_api(request: Request, invocation_id: str) -> JSONResponse:
         return JSONResponse({"error": str(e)}, 500)
 
 
+@router.post("/{invocation_id}/rerun")
+async def rerun_invocation(invocation_id: "InvocationId") -> JSONResponse:
+    """Re-run the same call as a brand-new invocation (unrelated to the original).
+
+    Reads the original invocation's call (task + arguments) and routes a fresh
+    call through the orchestrator, producing a new independent invocation.
+    """
+    app = get_pynenc_instance()
+    logger.info(f"Re-running call for invocation {invocation_id}")
+
+    try:
+        invocation = app.state_backend.get_invocation(invocation_id)
+        call = invocation.call
+        task = invocation.task
+
+        # Route a fresh call through the task (produces a new invocation)
+        new_invocation = await asyncio.to_thread(task._call, call.arguments)
+
+        return JSONResponse(
+            {
+                "success": True,
+                "new_invocation_id": str(new_invocation.invocation_id),
+                "message": "New invocation created successfully.",
+            }
+        )
+    except InvocationNotFoundError:
+        return JSONResponse(
+            {"success": False, "message": f"Invocation {invocation_id} not found."},
+            status_code=404,
+        )
+    except Exception as e:
+        logger.error(f"Error re-running invocation {invocation_id}: {e}")
+        logger.error(traceback.format_exc())
+        return JSONResponse(
+            {"success": False, "message": f"Error: {str(e)}"},
+            status_code=500,
+        )
+
+
 @router.get("/table", response_class=HTMLResponse)
 async def invocations_table(
     request: Request,
-    status: Optional[str] = None,
-    task_id: Optional[str] = None,
+    status: str | None = None,
+    task_id: str | None = None,
     limit: int = 50,
 ) -> HTMLResponse:
     """Return just the invocations table for HTMX refresh."""
     # This is essentially the same logic as invocations_list but returns only the table partial
     app = get_pynenc_instance()
+    parsed_task_id = TaskId.from_key(task_id) if task_id else None
 
     # Parse status parameter
     status_list = None
@@ -707,31 +888,32 @@ async def invocations_table(
             except KeyError:
                 continue
 
-    all_invocations = []
+    def _fetch_table_invocations() -> list[InvocationId]:
+        result = []
+        if parsed_task_id:
+            if parsed_task_id in app.tasks:
+                task = app.tasks[parsed_task_id]
+                result = list(
+                    app.orchestrator.get_existing_invocations(
+                        task=task,
+                        statuses=statuses,
+                    )
+                )[:limit]
+        else:
+            for task in app.tasks.values():
+                invocations = list(
+                    app.orchestrator.get_existing_invocations(
+                        task=task,
+                        statuses=statuses,
+                    )
+                )
+                result.extend(invocations)
+                if len(result) >= limit:
+                    result = result[:limit]
+                    break
+        return result
 
-    if task_id:
-        # Get invocations from specific task
-        if task_id in app.tasks:
-            task = app.tasks[task_id]
-            all_invocations = list(
-                app.orchestrator.get_existing_invocations(
-                    task=task,
-                    statuses=statuses,
-                )
-            )[:limit]
-    else:
-        # Get invocations from all tasks
-        for task in app.tasks.values():
-            invocations = list(
-                app.orchestrator.get_existing_invocations(
-                    task=task,
-                    statuses=statuses,
-                )
-            )
-            all_invocations.extend(invocations)
-            if len(all_invocations) >= limit:
-                all_invocations = all_invocations[:limit]
-                break
+    all_invocations = await asyncio.to_thread(_fetch_table_invocations)
 
     return templates.TemplateResponse(
         "invocations/partials/table.html",

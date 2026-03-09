@@ -10,6 +10,47 @@
       href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
       rel="stylesheet"
     />
+    <style>
+      body {
+        background-color: #f8f9fa;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          sans-serif;
+      }
+      .card {
+        background: #ffffff;
+        border: 1px solid #dee2e6;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+      }
+      .card-header {
+        font-size: 16px;
+        font-weight: 600;
+        padding: 16px;
+      }
+      .card-body {
+        padding: 16px;
+      }
+      h5 {
+        font-size: 16px;
+        font-weight: 600;
+        color: #212529;
+        margin-bottom: 8px;
+      }
+      p {
+        font-size: 14px;
+        color: #6c757d;
+        margin-bottom: 8px;
+      }
+      pre {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        padding: 12px;
+        font-size: 12px;
+        margin-bottom: 16px;
+      }
+      .text-muted {
+        color: #adb5bd !important;
+      }
+    </style>
   </head>
   <body>
     <div class="container mt-5">
@@ -29,37 +70,58 @@
               <h5 class="mt-4">Using app discovery from state backends</h5>
               <p>
                 You can also run the monitor without specifying an app by
-                configuring a state backend:
+                configuring a state backend through a plugin system.
               </p>
 
               <div class="card mb-3">
-                <div class="card-header bg-light">Environment Variables</div>
+                <div class="card-header bg-light">
+                  <strong>Available Backend Plugins</strong>
+                </div>
                 <div class="card-body">
-                  <pre><code>PYNENC__STATE_BACKEND_CLS=RedisStateBackend \
-PYNENC__REDIS_HOST=localhost \
-PYNENC__REDIS_PORT=6379 \
-pynenc monitor</code></pre>
+                  <p>
+                    <strong>Redis Plugin:</strong>
+                    <code>pip install pynenc-redis</code>
+                  </p>
+                  <p>
+                    <strong>MongoDB Plugin:</strong>
+                    <code>pip install pynenc-mongodb</code>
+                  </p>
+                  <p class="mb-0">
+                    <strong>Memory Backend:</strong> Built-in (development only,
+                    no app discovery)
+                  </p>
                 </div>
               </div>
 
               <div class="card mb-3">
                 <div class="card-header bg-light">
-                  Configuration File (pyproject.toml)
+                  <strong>Configuration Methods</strong>
                 </div>
                 <div class="card-body">
-                  <pre><code>[tool.pynenc]
-state_backend_cls = "RedisStateBackend"
-
-[tool.pynenc.redis]
-host = "localhost"
-port = 6379</code></pre>
+                  <p>
+                    <strong>Environment Variables:</strong> Set plugin-specific
+                    configuration via environment
+                  </p>
+                  <p>
+                    <strong>Configuration Files:</strong> Use
+                    <code>pyproject.toml</code>, YAML, or JSON files
+                  </p>
+                  <p class="mb-0">
+                    <strong>PynencBuilder:</strong> Programmatic configuration
+                    in your application code
+                  </p>
                 </div>
               </div>
 
               <p class="text-muted mt-3">
                 The monitor will attempt to discover apps registered in the
-                configured state backend. For more information, refer to the
-                Pynenc documentation on configuration options.
+                configured state backend. Install the appropriate plugin for
+                your backend and ensure the backend service is running. For
+                configuration details, refer to the specific plugin
+                documentation and the
+                <a href="https://docs.pynenc.org" target="_blank"
+                  >Pynenc documentation</a
+                >.
               </p>
             </div>
           </div>

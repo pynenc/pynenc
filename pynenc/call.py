@@ -1,10 +1,27 @@
-import json
-from dataclasses import dataclass, field
+"""
+Task call representations with optimized argument handling.
+
+This module defines the core call abstractions for Pynenc tasks, optimized
+for different construction contexts:
+- Call: Standard client-side construction with raw arguments
+- LazyCall: State backend construction with deferred deserialization
+- PreSerializedCall: Batch construction with shared pre-serialized arguments
+
+Key components:
+- CallId: Structured identifier combining task and argument identity
+- CallDTO: Serialization-ready data transfer object
+- compute_args_id: Deterministic hashing from serialized arguments
+"""
+
+import hashlib
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, Generic
 
 from pynenc.arguments import Arguments
+from pynenc.exceptions import SerializationError
+from pynenc.models.call_dto import CallDTO
 from pynenc.conf.config_task import ConcurrencyControlType
+from pynenc.identifiers.call_id import CallId
 from pynenc.types import Params, Result
 
 if TYPE_CHECKING:
@@ -12,25 +29,39 @@ if TYPE_CHECKING:
     from pynenc.task import Task
 
 
-@dataclass
+def compute_args_id(serialized_args: dict[str, str]) -> str:
+    """Compute deterministic argument hash from serialized form."""
+    if not serialized_args:
+        return "no_args"
+    sorted_items = sorted(serialized_args.items())
+    args_str = "".join([f"{k}:{v}" for k, v in sorted_items])
+    return hashlib.sha256(args_str.encode()).hexdigest()
+
+
 class Call(Generic[Params, Result]):
-    """
-    Base class for task calls with common functionality.
+    """Standard task call with raw arguments.
 
-    :param Task[Params, Result] task: The task associated with the call.
+    Created client-side when invoking tasks. Arguments are stored as Python
+    objects and serialized on-demand for distribution.
+
+    :param Task[Params, Result] task: Associated task definition
+    :param Arguments arguments: Raw Python argument values
     """
 
-    task: "Task[Params, Result]"
-    _arguments: "Arguments" = field(default_factory=Arguments, repr=False)
-    _serialized_arguments: dict[str, str] | None = None
+    def __init__(
+        self,
+        task: "Task[Params, Result]",
+        arguments: Arguments | None = None,
+        _serialized_arguments: dict[str, str] | None = None,
+    ) -> None:
+        self.task = task
+        self._arguments = arguments
+        self._serialized_arguments = _serialized_arguments
+        self._args_id: str | None = None
+        self._call_id: CallId | None = None
 
     @property
     def app(self) -> "Pynenc":
-        """
-        Gets the Pynenc application instance associated with the task.
-
-        :return: The Pynenc application instance.
-        """
         return self.task.app
 
     @property
@@ -41,35 +72,57 @@ class Call(Generic[Params, Result]):
 
         :return: Arguments object containing call arguments
         """
+        if self._arguments is None:
+            self._arguments = Arguments()
         return self._arguments
 
     @property
-    def call_id(self) -> str:
-        """
-        Generates a unique identifier for the call based on the task ID and the arguments.
-
-        :return: A string representing the unique identifier of the call.
-        """
-        return "#task_id#" + self.task.task_id + "#args_id#" + self.arguments.args_id
-
-    @cached_property
     def serialized_arguments(self) -> dict[str, str]:
-        """
-        Serializes the call arguments into strings.
+        """Serialize arguments with external storage for large values.
 
-        :return: A dictionary of serialized argument strings.
+        :return: Mapping of argument names to serialized values or storage keys
+        :raises SerializationError: If an argument cannot be serialized,
+            enriched with task context.
         """
-        if self._serialized_arguments:
-            return self._serialized_arguments
-        disable_cache = "*" in self.task.conf.disable_cache_args
-        return {
-            k: self.app.arg_cache.serialize(
-                v, disable_cache or k in self.task.conf.disable_cache_args
-            )
-            for k, v in self.arguments.kwargs.items()
-        }
+        if self._serialized_arguments is None:
+            try:
+                self._serialized_arguments = (
+                    self.app.client_data_store.serialize_arguments(
+                        self.arguments.kwargs, self.task.conf.disable_cache_args
+                    )
+                )
+            except SerializationError as exc:
+                raise SerializationError(
+                    f"Task '{self.task.task_id.key}': {exc}"
+                ) from exc
+        return self._serialized_arguments
+
+    @property
+    def args_id(self) -> str:
+        """Compute argument identity hash.
+
+        :return: SHA256 hash of serialized arguments
+        """
+        if self._args_id is None:
+            self._args_id = compute_args_id(self.serialized_arguments)
+        return self._args_id
+
+    @property
+    def call_id(self) -> CallId:
+        """Compute composite call identifier.
+
+        :return: CallId combining task and argument identity
+        """
+        if self._call_id is None:
+            self._call_id = CallId(task_id=self.task.task_id, args_id=self.args_id)
+        return self._call_id
 
     @cached_property
+    def arg_keys(self) -> set[str]:
+        """Set of argument keys for this call."""
+        return set(self.arguments.kwargs.keys())
+
+    @property
     def serialized_args_for_concurrency_check(self) -> dict[str, str] | None:
         """
         Determines the call arguments required for the task concurrency check.
@@ -83,79 +136,28 @@ class Call(Generic[Params, Result]):
         if self.task.conf.registration_concurrency == ConcurrencyControlType.ARGUMENTS:
             return self.serialized_arguments
         if self.task.conf.registration_concurrency == ConcurrencyControlType.KEYS:
+            # TODO cache serialization of each argument independently?
+            # So we do not serialize all the arguments for the key if not needed
             return {
                 key: self.serialized_arguments[key]
                 for key in self.task.conf.key_arguments
             }
         return None
 
-    def deserialize_arguments(self, serialized_arguments: dict[str, str]) -> Arguments:
-        """
-        Deserializes the given serialized arguments.
+    def to_dto(self) -> CallDTO:
+        """Create serialization-ready DTO.
 
-        :param dict[str, str] serialized_arguments: The serialized arguments to deserialize.
-        :return: An Arguments object representing the deserialized arguments.
+        :return: CallDTO with pre-serialized data
         """
-        return Arguments(
-            {
-                k: self.app.arg_cache.deserialize(v)
-                for k, v in serialized_arguments.items()
-            }
-        )
-
-    def to_json(self) -> str:
-        """
-        Serializes the call into a JSON string.
-
-        :return: A JSON string representing the serialized call.
-        """
-        return json.dumps(
-            {"task": self.task.to_json(), "arguments": self.serialized_arguments}
-        )
-
-    def __getstate__(self) -> dict:
-        """
-        Gets the state of the Call object for serialization purposes.
-
-        :return: A dictionary representing the state of the Call object.
-        """
-        return {"task": self.task, "arguments": self.serialized_arguments}
-
-    def __setstate__(self, state: dict) -> None:
-        """
-        Sets the state of the Call object from the provided dictionary.
-
-        :param dict state: A dictionary representing the state to set.
-        """
-        object.__setattr__(self, "task", state["task"])
-        arguments = self.deserialize_arguments(state["arguments"])
-        object.__setattr__(self, "_arguments", arguments)
-
-    @classmethod
-    def from_json(cls, app: "Pynenc", serialized: str) -> "Call":
-        """
-        Creates a Call object from a serialized JSON string.
-
-        :param Pynenc app: The Pynenc application instance.
-        :param str serialized: The serialized JSON string representing the call.
-        :return: A Call object created from the serialized data.
-        """
-        from pynenc.task import Task
-
-        call_dict = json.loads(serialized)
-        return cls(
-            task=Task.from_json(app, call_dict["task"]),
-            _arguments=Arguments(
-                {
-                    k: app.arg_cache.deserialize(v)
-                    for k, v in call_dict["arguments"].items()
-                }
-            ),
-            _serialized_arguments=call_dict["arguments"],
+        return CallDTO(
+            call_id=self.call_id,
+            serialized_arguments=self.serialized_arguments,
         )
 
     def __str__(self) -> str:
-        return f"Call(call_id={self.call_id}, task={self.task}, arguments={self.arguments})"
+        return (
+            f"Call(task={self.task.task_id}, arguments={self.arguments.kwargs.keys()})"
+        )
 
     def __repr__(self) -> str:
         return self.__str__()
@@ -169,72 +171,120 @@ class Call(Generic[Params, Result]):
         return self.call_id == other.call_id
 
 
-@dataclass
-class PreSerializedCall(Call[Params, Result]):
+class LazyCall(Call[Params, Result]):
+    """Task call with deferred argument deserialization.
+
+    Created by state backends when loading persisted invocations. Arguments
+    remain serialized until accessed, avoiding deserialization cost for
+    identity-only operations (concurrency checks, status queries).
+
+    Must be constructed via from_dto factory method - do not instantiate directly.
+
+    :param Task[Params, Result] task: Associated task definition
+    :param dict[str, str] _serialized_arguments: Pre-serialized argument mapping
+    :param str _args_id: Pre-computed argument hash
     """
-    Represents a call optimized for parallel routing with pre-serialized arguments.
-    This call type is used for batch processing tasks with disabled concurrency control,
-    where some arguments are pre-serialized (e.g., large shared data).
 
-    :param Task[Params, Result] task: The task associated with the call.
-    :param dict[str, Any] other_args: Unique arguments for this specific call.
-    :param dict[str, str] pre_serialized_args: Pre-serialized common arguments.
-    """
-
-    other_args: dict[str, Any] = field(default_factory=dict)
-    pre_serialized_args: dict[str, str] = field(default_factory=dict)
-    _call: Call[Params, Result] | None = field(default=None, repr=False)
-    _cached_arguments: Arguments | None = field(default=None, repr=False)
-    _serialized_arguments: dict[str, str] | None = field(default=None, repr=False)
-    _args_hash: str | None = field(default=None, repr=False)
-
-    @property
-    def call(self) -> "Call[Params, Result]":
-        if self._call is None:
-            self.app.logger.warning(
-                "Generating a regular Call object from a RoutingParallelCall "
-                "is inefficient and should be avoided if possible. "
-            )
-            self._call = Call(
-                task=self.task,
-                _arguments=self.deserialize_arguments(self.serialized_arguments),
-            )
-        return self._call
+    def __init__(
+        self,
+        task: "Task[Params, Result]",
+        _serialized_arguments: dict[str, str],
+        _call_id: CallId,
+    ) -> None:
+        super().__init__(
+            task=task,
+            arguments=None,  # Arguments will be lazily deserialized
+            _serialized_arguments=_serialized_arguments,
+        )
+        self._args_id = _call_id.args_id
+        self._call_id = _call_id
 
     @property
     def arguments(self) -> "Arguments":
-        if not self._cached_arguments:
-            self._cached_arguments = self.deserialize_arguments(
+        """Lazily deserialize arguments on first access."""
+        if self._arguments is None:
+            self._arguments = Arguments()
+            self._arguments.kwargs = self.app.client_data_store.deserialize_arguments(
                 self.serialized_arguments
             )
-        return self._cached_arguments
+        return self._arguments
 
-    @property
-    def call_id(self) -> str:
-        """
-        Get the call_id from the underlying Call object.
+    @cached_property
+    def arg_keys(self) -> set[str]:
+        return set(self.serialized_arguments.keys())
 
-        :return: A string representing the unique identifier of the call.
+    @classmethod
+    def from_dto(cls, app: "Pynenc", dto: CallDTO) -> "LazyCall[Params, Result]":
+        """Construct LazyCall from DTO without deserialization.
+
+        Primary factory method for state backend usage.
+
+        :param Pynenc app: Pynenc application instance
+        :param CallDTO dto: Data transfer object with serialized data
+        :return: LazyCall with deferred deserialization
         """
-        return self.call.call_id
+        from pynenc.task import Task
+
+        task = Task.from_id(app, dto.call_id.task_id)
+        return cls(
+            task=task,
+            _serialized_arguments=dto.serialized_arguments,
+            _call_id=dto.call_id,
+        )
+
+    def __str__(self) -> str:
+        return f"LazyCall(task={self.task.task_id}, args_id={self.args_id})"
+
+
+class PreSerializedCall(Call[Params, Result]):
+    """Task call optimized for batch operations with shared arguments.
+
+    Used when distributing many similar tasks with large common arguments.
+    Common arguments are pre-serialized once; unique arguments serialized
+    per-call. Enables efficient batch routing without redundant serialization.
+
+    :param Task[Params, Result] task: Associated task definition
+    :param dict[str, str] pre_serialized_args: Shared pre-serialized arguments
+    :param dict[str, Any] other_args: Call-specific raw arguments
+    """
+
+    def __init__(
+        self,
+        task: "Task[Params, Result]",
+        common_args: dict[str, Any] | None = None,
+        common_serialized_args: dict[str, str] | None = None,
+        other_args: dict[str, Any] | None = None,
+    ) -> None:
+        # Store raw arguments without calling parent __init__
+        self.task = task
+        self.common_args = common_args or {}
+        self.common_serialized_args = common_serialized_args or {}
+        self.other_args = other_args or {}
+        self._serialized_arguments: dict[str, str] | None = None
+        self._arguments = Arguments(kwargs={**self.common_args, **self.other_args})
+        self._args_id: str | None = None
+        self._call_id: CallId | None = None
 
     @property
     def serialized_arguments(self) -> dict[str, str]:
-        """
-        Serializes the call arguments into strings.
+        """Combine pre-serialized and freshly serialized arguments.
 
-        :return: A dictionary of serialized argument strings.
+        :return: Complete serialized argument mapping
         """
         if self._serialized_arguments is None:
-            disable_cache = "*" in self.task.conf.disable_cache_args
-            serialized = {
-                k: self.app.arg_cache.serialize(
-                    v, disable_cache or k in self.task.conf.disable_cache_args
-                )
+            # Only serialize other_args not already in pre_serialized_args
+            other_only = {
+                k: v
                 for k, v in self.other_args.items()
-                if k not in self.pre_serialized_args
+                if k not in self.common_serialized_args
             }
-            self._serialized_arguments = {**serialized, **self.pre_serialized_args}
+            serialized_other = self.app.client_data_store.serialize_arguments(
+                other_only, self.task.conf.disable_cache_args
+            )
+            self._serialized_arguments = {
+                **self.common_serialized_args,
+                **serialized_other,
+            }
         return self._serialized_arguments
 
     @property
@@ -244,46 +294,7 @@ class PreSerializedCall(Call[Params, Result]):
             "(intended for batch routing only)"
         )
 
-    def __getstate__(self) -> dict:
-        return {
-            "task": self.task,
-            "other_args": {
-                k: v
-                for k, v in self.serialized_arguments.items()
-                if k in self.other_args
-            },
-            "pre_serialized_args": self.pre_serialized_args,
-        }
-
-    def __setstate__(self, state: dict) -> None:
-        object.__setattr__(self, "task", state["task"])
-        other_args = self.deserialize_arguments(state["other_args"]).kwargs
-        object.__setattr__(self, "other_args", other_args)
-        object.__setattr__(self, "pre_serialized_args", state["pre_serialized_args"])
-
-    @classmethod
-    def from_json(cls, app: "Pynenc", serialized: str) -> "Call":
-        """
-        PreSerializedCall doesn't support from_json as it's meant for batch routing.
-
-        :raises NotImplementedError: This method is not implemented for PreSerializedCall.
-        """
-        raise NotImplementedError(
-            "PreSerializedCall does not support from_json method "
-            "(Use a regular Call object for serialization)"
-        )
-
     def __str__(self) -> str:
-        return f"PreSerializedCall(task={self.task}, other_args={self.other_args}, pre_serialized_args={list(self.pre_serialized_args.keys())})"
-
-    def __hash__(self) -> int:
-        raise NotImplementedError(
-            "RoutingParallelCall does not support __hash__ (not intended for sets/dicts)"
-        )
-
-    def __eq__(self, other: Any) -> bool:
-        if not isinstance(other, Call):
-            return False
-        if isinstance(other, PreSerializedCall):
-            return self.call == other.call
-        return self.call == other
+        other_args = set(self.other_args.keys())
+        common_args = set(self.common_args.keys())
+        return f"PreSerializedCall(task={self.task}, {other_args=}, {common_args=})"

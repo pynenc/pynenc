@@ -13,9 +13,11 @@ This Usage Guide is designed to provide you with detailed instructions and pract
 ./use_case_004_auto_orchestration
 ./use_case_005_sync_unit_testing
 ./use_case_006_mem_unit_testing
-./use_case_009_argument_caching
+./use_case_007_json_serializable
+./use_case_009_client_data_store
 ./use_case_010_trigger_system
 ./use_case_011_workflow_system
+./invocation_status
 ```
 
 ## Getting Started with Pynenc
@@ -56,7 +58,7 @@ For a detailed guide and example, see {doc}`./use_case_001_basic_local_threaded`
 
 ## Use Case 2: Distributed System with Redis and Process Runner
 
-Explore setting up a distributed task processing system using `pynenc` with Redis. This use case demonstrates how to configure and run tasks in a distributed environment, leveraging Redis for task queuing and the ProcessRunner for executing tasks across multiple processes.
+Explore setting up a distributed task processing system using `pynenc` with Redis. This use case demonstrates how to configure and run tasks in a distributed environment, leveraging the Redis plugin for task queuing and the ProcessRunner for executing tasks across multiple processes.
 
 ```python
 import time
@@ -75,6 +77,12 @@ def sleep(x: int) -> int:
     time.sleep(x)
     add.logger.info(f"{sleep.task_id=} Done sleeping for {x} seconds")
     return x
+```
+
+**Prerequisites**: This use case requires the Redis plugin:
+
+```bash
+pip install pynenc-redis
 ```
 
 Configuration is key to integrating Redis with `pynenc`, as shown in the `pyproject.toml` setup. This setup enables tasks to be queued and processed in a truly distributed manner.
@@ -245,41 +253,66 @@ This use case also demonstrates configuring Pynenc through environment variables
 
 For a detailed guide and examples, see {doc}`./use_case_006_mem_unit_testing`.
 
-## Use Case 7: Extending Pynenc for Your Needs
+## Use Case 7: Custom JSON Serialization with `JsonSerializable`
 
-Pynenc's modular design is aimed at providing a flexible framework that can be easily extended to meet your specific requirements. Whether you have a unique use case or need to integrate Pynenc with other systems, this section will guide you through customizing and extending its capabilities.
+When using `JsonSerializer`, any task argument or return value that is not a JSON primitive
+will raise a `TypeError` — unless the class implements the `JsonSerializable` protocol.
+This protocol is a lightweight alternative to switching serializers: add two methods to
+your domain object and Pynenc handles the rest automatically.
 
-### Creating Custom Components
+```python
+from pynenc.serializer import JsonSerializable
 
-Pynenc is built with extensibility in mind, allowing you to create custom components to suit your specific needs. This can be done by subclassing the base classes provided by Pynenc:
+class Money:
+    def __init__(self, amount: float, currency: str) -> None:
+        self.amount = amount
+        self.currency = currency
 
-- **Custom Orchestrators**: Create a subclass of `BaseOrchestrator` or `RedisOrchestrator` to implement custom orchestration logic.
-- **Custom State Backends**: Develop a state backend that aligns with your data storage and retrieval needs by subclassing the `BaseStateBackend`.
-- **Custom Brokers**: Design a message broker tailored to your messaging and communication requirements.
-- **Custom Runners**: Build a runner that matches your execution environment and task management style.
+    def to_json(self) -> dict:
+        return {"amount": self.amount, "currency": self.currency}
 
-### Configuring Your Custom Components
-
-Integrating your custom components into your Pynenc application is straightforward. While one way to specify these components is through environment variables, it is important to note that this is just one of several methods available.
-
-To configure using environment variables:
-
-```{code-block} python
-    PYNENC__ORCHESTRATOR_CLS="path.to.CustomOrchestrator"
-    PYNENC__STATE_BACKEND_CLS="path.to.CustomStateBackend"
-    PYNENC__BROKER_CLS="path.to.CustomBroker"
-    PYNENC__RUNNER_CLS="path.to.CustomRunner"
+    @classmethod
+    def from_json(cls, data: dict) -> "Money":
+        return cls(data["amount"], data["currency"])
 ```
 
-Replace `path.to.CustomComponent` with the actual import path of your custom component. This method is particularly useful for deploying applications in different environments without modifying the code.
+With both methods in place, any Pynenc task can accept and return `Money` values
+without further configuration:
 
-For a comprehensive guide on all available configuration options, including file-based and code-based configurations, please refer to the {doc}`../configuration/index`. This document will provide you with detailed information on tailoring Pynenc to meet your specific requirements.
+```python
+from pynenc import Pynenc
 
-By offering various configuration methods, Pynenc ensures flexibility and ease of adaptation to a wide range of use cases, environments, and integration requirements.
+app = Pynenc()
+
+@app.task
+def calculate_total(unit_price: Money, quantity: int) -> Money:
+    return Money(unit_price.amount * quantity, unit_price.currency)
+```
+
+The serializer embeds the class's module and qualified name alongside the data so
+that deserialization reconstructs the exact original type — not a plain `dict`.
+
+| Method                         | Direction     | Purpose                                               |
+| ------------------------------ | ------------- | ----------------------------------------------------- |
+| `to_json(self) -> Any`         | object → JSON | Return a JSON-native value (`dict`, `list`, `str`, …) |
+| `from_json(cls, data) -> Self` | JSON → object | Reconstruct from the value `to_json` returned         |
+
+Because `JsonSerializable` is `@runtime_checkable`, compliance can be verified at
+runtime with a standard `isinstance` check.
+
+For a detailed guide and examples, see {doc}`./use_case_007_json_serializable`.
 
 ## Use Case 8: Customizing Data Serialization
 
-Pynenc provides built-in support for common serialization formats like JSON and Pickle through its `JsonSerializer` and `PickleSerializer` classes. However, there might be scenarios where these standard serializers are not suitable for your specific needs, particularly when working with complex objects or requiring a different serialization strategy.
+Pynenc provides built-in support for common serialization formats through its serializer classes:
+
+- **JsonPickleSerializer** (default): Preserves Python object types using the `jsonpickle` library. Best for internal persistence with trusted data.
+- **JsonSerializer**: Pure JSON serialization for interoperability.
+- **PickleSerializer**: Native Python pickle serialization for complex objects.
+
+```{warning}
+The `jsonpickle` serializer can reconstruct arbitrary Python objects on deserialization — use it only for trusted, internal persistence (local state backends).
+```
 
 ### Creating Custom Serializers
 
@@ -288,7 +321,7 @@ You can create a custom serializer to handle any specific requirements of your t
 To create a custom serializer, you need to subclass the `BaseSerializer` and implement the required serialization and deserialization methods. Here's a simplified example:
 
 ```{code-block} python
-    from pynenc.serializers import BaseSerializer
+    from pynenc.serializer import BaseSerializer
 
     class CustomSerializer(BaseSerializer):
         def serialize(self, obj):
@@ -302,17 +335,27 @@ To create a custom serializer, you need to subclass the `BaseSerializer` and imp
 
 ### Configuring Your Custom Serializer
 
-Once your custom serializer is implemented, you can configure Pynenc to use it just like any other component:
+Once your custom serializer is implemented, you can configure Pynenc to use it:
+
+Using the builder:
 
 ```{code-block} python
+    from pynenc.builder import PynencBuilder
+
+    app = PynencBuilder().custom_config(serializer_cls="path.to.CustomSerializer").build()
+```
+
+Or using environment variables:
+
+```{code-block} bash
     PYNENC__SERIALIZER_CLS="path.to.CustomSerializer"
 ```
 
-This is just one way to set the configuration. Pynenc allows various methods to configure your application, including environment variables, config files, or directly in code. For more details on configuration options, refer to the {doc}`../configuration/index`.
+For more details on configuration options, refer to the {doc}`../configuration/index`.
 
-## Use Case 9: Argument Caching
+## Use Case 9: Client Data Store
 
-Discover Pynenc's argument caching system, designed to optimize task execution by efficiently handling large serialized arguments. This feature is particularly valuable when working with substantial data objects that are frequently passed between distributed tasks.
+Pynenc's client data store optimizes task execution by efficiently handling large serialized arguments.
 
 ```python
 from pynenc import Pynenc
@@ -342,7 +385,7 @@ The argument caching system offers several key features:
 Configure the caching behavior through simple configuration settings:
 
 ```toml
-[tool.pynenc.arg_cache]
+[tool.pynenc.client_data_store]
 min_size_to_cache = 1024  # Cache arguments larger than 1KB
 local_cache_size = 1000   # Keep 1000 most recent entries
 ```
@@ -445,3 +488,21 @@ The workflow system provides essential features for enterprise-grade task orches
 This use case demonstrates how to build robust, stateful workflows that can handle complex business logic while providing reliability guarantees and failure recovery capabilities.
 
 For a detailed guide and examples, see {doc}`./use_case_011_workflow_system`.
+
+## Invocation Status System
+
+Pynenc uses a declarative, type-safe state machine to manage the lifecycle of task invocations. This system provides:
+
+- **Ownership Tracking**: Each invocation is owned by a specific runner during execution
+- **Valid State Transitions**: The state machine enforces which transitions are allowed
+- **Automatic Recovery**: Stuck invocations are automatically recovered when runners become inactive
+- **Concurrency Control Integration**: Status transitions integrate with concurrency control rules
+
+Key status categories include:
+
+- **Available for Run**: `REGISTERED`, `REROUTED`, `RETRY`
+- **Owned by Runner**: `PENDING`, `RUNNING`, `PAUSED`, `RESUMED`
+- **Recovery**: `PENDING_RECOVERY`, `RUNNING_RECOVERY`
+- **Final**: `SUCCESS`, `FAILED`, `CONCURRENCY_CONTROLLED_FINAL`
+
+For a detailed guide on the status system, state diagram, and recovery mechanisms, see {doc}`./invocation_status`.

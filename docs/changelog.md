@@ -4,6 +4,320 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0] - 2025-11-15
+
+### Added
+
+- **Plugin System Architecture**:
+
+  - Introduced a plugin system to support multiple backend implementations
+  - Created plugin interface for state backends, brokers, and orchestrators
+  - Enabled modular architecture for extending Pynenc with different storage and messaging systems
+  - Added automatic plugin loading at startup to ensure subclass discovery works without builder usage
+  - Added test coverage for plugin loading functionality
+
+- **Enhanced PynencBuilder Plugin Integration**:
+
+  - Extended `PynencBuilder` with plugin method registration system via `register_plugin_method()`
+  - Added plugin validator registration through `register_plugin_validator()`
+  - Implemented dynamic method resolution for plugin-provided builder methods
+  - Enhanced error handling with helpful messages for missing plugin methods
+  - Added comprehensive test coverage for plugin system functionality
+
+- **Invocation Status System Refactor**:
+
+  - Refactored invocation status management into a declarative, type-safe state machine.
+  - Added `InvocationStatusRecord` dataclass to encapsulate status, ownership, and timestamp.
+  - Created `StatusDefinition` for declarative status rules (final, available_for_run, ownership, transitions).
+  - Added `StatusConfiguration` for centralized status and transition configuration.
+  - Implemented state machine functions: `validate_transition`, `validate_ownership`, `compute_new_owner`, and `transition`.
+  - New invocation status `PENDING_RECOVERY` for handling stuck PENDING invocations that exceed timeout, allowing recovery without ownership validation.
+
+- **Runner Heartbeat Tracking and Recovery Service**:
+
+  - Implemented runner heartbeat tracking and invocation recovery service for stuck PENDING invocations
+  - Added distributed atomic service coordination using time-slot allocation to prevent race conditions
+  - Enhanced with execution time validation and history-aware scheduling to detect configuration issues
+  - New invocation status `RUNNING_RECOVERY` for recovering RUNNING invocations owned by inactive runners
+
+- **Pynenc Core Task**
+
+  - Adding the `pynenc/core_tasks.py` module with pynenc core functionalities
+  - Task for recover pending invocations that exceed `ConfigPynenc.max_pending_seconds`
+  - Task to recover invocations from dead runners (exceed `ConfigPynenc.runner_considered_dead_after_minutes`)
+
+- **Plugin Test Infrastructure**:
+
+  - Added `all_tests.py` pattern for centralized test exports to plugins
+  - Created `all_tests_validator` utility to ensure test completeness
+  - Central validation in `test_all_tests_for_plugins.py` validates all `all_tests.py` files
+  - Plugins import from `all_tests.py` to automatically receive new tests without manual updates
+
+- **Pynmon Runner Monitoring Interface**:
+
+  - Added dedicated /runners page in pynmon for monitoring active runners
+  - Displays runner details: ID, class, hostname, PID, creation time, last heartbeat, and age
+  - Integrated runner statistics into orchestrator overview page
+
+- **Pynmon Family Tree Visualization**:
+
+  - Interactive invocation family tree with time-ordered grid layout and parent-child hierarchies
+  - Floating draggable panel with resize, collapse, and zoom controls
+  - Progressive tree expansion with "load more" badges for large trees
+  - Cross-highlighting between timeline and family tree on selection
+
+- **Pynmon Log Explorer**:
+
+  - Added a page to analyze pynenc logs and add context to them.
+  - Check for runners, invocations and tasks and add links to the details pages.
+  - Added a small timeline of the logs, including all the invocations, runners during the logs period.
+
+- **Logging**:
+
+  - Enhanced Pynmon logging with colored timestamps and uvicorn integration
+  - Shortened context logs with ID truncation and compacted class names when `compact_log_context` is enabled
+  - Added `log_use_colors`, `log_stream`, and `log_format` config options to control ANSI colours, output stream, and structured JSON output.
+
+- **Pynmon UI Enhancements**:
+
+  - Global loading overlay for slow page navigation
+  - Inline spinners for HTMX-loaded sections
+  - Re-run call functionality to spawn independent invocations
+  - Workflow information display on invocation detail pages
+  - Enhanced timeline detail panels with status history and runner context
+  - Improved pagination and filter state persistence
+
+- **Builder System Improvements**:
+
+  - Enhanced builder test coverage with comprehensive unit tests
+  - Added validation for enum synchronization between builder and configuration classes
+  - Added `PynencBuilder.logging()`, `logging_colors()`, `logging_stream()`, and `logging_format()` methods for configuring logging options via the builder.
+  - Added robust plugin method chaining and cleanup mechanisms
+
+- **Enhanced Invocation History and Context Tracking**:
+
+  - Made `RunnerContext` mandatory for all status transitions, introducing `ExternalRunner` to track invocations registered outside Pynenc
+  - Added parent runner tracking in `RunnerContext` for hierarchical execution visibility
+  - Enhanced `InvocationHistory` to include parent invocation references and runner context
+  - Added efficient time-range iteration methods (`iter_invocations_in_timerange`, `iter_history_in_timerange`) for timeline visualization
+  - Improved logging context to display runner, task, and invocation information when available
+  - Added `compact_log_context` configuration option to reduce lenght of logging messages (default: True)
+
+- **Test Coverage for ArgCache Implementations**:
+
+  - Added `test_arg_cache_all_instances.py` to directly test abstract methods (`_store`, `_retrieve`, `_purge`) for all arg_cache implementations using the `app_instance` fixture.
+
+- **Improved Argument String Representation**:
+
+  - Enhanced argument string formatting for better debugging and logging of task parameters.
+
+- **New Exception: InvocationOnFinalStatusError**:
+
+  - Introduced `InvocationOnFinalStatusError` exception, raised when attempting to modify the status of an invocation that is already in a final state within the orchestrator.
+
+- **New Invocation Status: Resumed**:
+
+  - Added `Resumed` status to explicitly track the PAUSED-RESUME cycle in runners like the process runner, where processes executing invocations that wait for other invocations can be paused and resumed.
+
+- **Concurrency Control Task Saturation Prevention**:
+
+  - Added safeguards to prevent unbounded task accumulation when tasks are repeatedly triggered while blocked by running concurrency limits (e.g., cron jobs triggering tasks faster than they can execute).
+  - Introduced `CONCURRENCY_CONTROLLED_FINAL` status for invocations permanently blocked by concurrency control, preventing continuous rerouting.
+  - Added `reroute_on_concurrency_control` configuration option (defaults to `False`) to control whether concurrency-blocked tasks should be rerouted or marked as final.
+  - Updated orchestrator logic to check task configuration before rerouting concurrency-controlled invocations.
+  - Added comprehensive tests validating both rerouting and non-rerouting behavior for concurrency-controlled tasks.
+
+- **Retry Logic for SQLite Connection**:
+
+  - Implemented retry logic in SQLite connection handling to improve reliability and handle transient connection issues.
+
+- **Multiton Pattern for Cross-Process App Consistency**:
+
+  - Introduced `Pynenc._instances: ClassVar[dict[str, Pynenc]]` multiton registry to ensure a single app instance per `app_id` within each process.
+  - Added `_new_pynenc` as the pickle reconstructor: pre-registers the instance in `_instances` and performs minimal initialisation _before_ returning to pickle for state deserialisation, preventing module re-imports from creating a second instance with a different configuration.
+  - `__setstate__` re-registers the fully restored instance via `ConfigPynenc` resolution so the multiton entry is always up-to-date after unpickling.
+
+- **Migration from Poetry to UV**:
+
+  - **BREAKING CHANGE**: The project has migrated from Poetry to [UV](https://github.com/astral-sh/uv) for dependency management, versioning, and builds.
+  - All workflows, Makefile targets, and development instructions now use UV.
+  - The `pyproject.toml` format is now PEP 621-compliant and compatible with UV.
+  - See updated documentation for new development and release commands.
+
+- **Pynmon Invocations Pagination and UI Improvements**:
+
+  - Added pagination to invocations list route to handle large numbers of tasks efficiently
+  - Added refresh functionality to Apply Filters button on timeline
+  - Added "Zoom to Timeline" button on invocation details page
+  - Added comprehensive tests for pagination functionality
+
+- **JsonSerializable Protocol for Custom JSON Serialization**:
+
+  - Introduced `JsonSerializable` protocol for lightweight, explicit JSON serialization of domain objects
+  - Added `to_json()` and `from_json()` methods for full round-trip serialization without external dependencies
+
+### Changed
+
+- **Redis Extraction to Plugin**:
+
+  - **BREAKING CHANGE**: Redis is no longer included in the core Pynenc package
+  - Redis functionality has been extracted to a separate `pynenc-redis` plugin package
+  - Existing Redis-based applications will need to install `pynenc-redis` separately
+  - Redis configuration and functionality remains unchanged once the plugin is installed
+
+- **Orchestrator Architecture Optimization**:
+
+  - **BREAKING CHANGE**: Orchestrator now works exclusively with invocations, call and task IDs
+  - Objects are only serialized in the state backend to keep orchestrator lightweight
+  - Runners are now more lightweight as they retrieve invocations from state backend only when necessary
+  - Reduced memory consumption throughout Pynenc by using invocation_id in control structures
+  - Removed state backend dependencies from orchestrator integration tests
+
+- **Serializer**:
+
+  - Default serializer changed from JSON to `jsonpickle` to preserve Python object types (e.g., NamedTuple) when persisting state and results.
+  - Added `JsonPickleSerializer` implementation using the `jsonpickle` library.
+  - Security note: `jsonpickle` can reconstruct arbitrary Python objects on deserialization — use it only for trusted, internal persistence (local state backends).
+
+- **Plugin-Based Backend Selection**:
+
+  - Backend selection now uses plugin discovery mechanism
+  - Enhanced `PynencBuilder` to support plugin-based backend configuration
+  - Improved error messages when required plugins are missing
+
+- **Move Redis to a plugging**:
+
+  - The Redis-related backend implementations were moved out of the core repository into plugin packages to simplify core distribution.
+  - For testing process-compatible (non-memory) runners we recommend using a shared SQLite-backed state backend to enable cross-process coordination without adding external dependencies to the core.
+
+- **Builder Architecture**:
+
+  - Modified builder to support dynamic method registration from plugins
+  - Added validation system for plugin-provided configuration
+  - Enhanced builder to gracefully handle missing plugin dependencies
+
+- **Removed set_invocations_status Method**:
+
+  - Removed `set_invocations_status` to handle only one invocation at a time, as individual checks are required and not suitable for batch processing.
+
+- **Removed Pause-Resume for ThreadRunner Invocations**:
+
+  - Eliminated pause-resume functionality for invocations in ThreadRunner, as threads are not subprocesses and cannot be truly paused; this prevented issues where final invocations were incorrectly overwritten with `Resumed` status due to timing mismatches between waiting threads and status updates.
+
+- **Simplified MockPynenc for Testing**:
+
+  - Streamlined `MockPynenc` by removing manual definitions and automatically mocking only the abstract methods of Pynenc base classes, improving test maintainability and reducing boilerplate.
+  - Component properties (`orchestrator`, `broker`, `state_backend`, `client_data_store`, `trigger`, `serializer`) are overridden in `MockPynenc` to return `Any`, allowing tests to call `.return_value`, `.side_effect`, and `.assert_called_*` without `# type: ignore` noise.
+
+- **Lazy Property Initialization for App Components**:
+
+  - Replaced `@cached_property` with explicit `@property` backed by private `_field: Type | None` attributes for all app components (`orchestrator`, `broker`, `state_backend`, `serializer`, `client_data_store`, `trigger`, `runner`).
+  - Added `_reset_cached_components()` to clear all component references atomically, called on construction and after pickle restoration, simplifying test isolation and multiton semantics.
+
+- **Consistent `ConfigPynenc` Resolution in Pickle Methods**:
+
+  - `__reduce__`, `__getstate__`, and `__setstate__` no longer inject `app_id` manually into `config_values`; `ConfigPynenc` is the single source of truth, resolving `app_id` from `config_values`, `config_filepath`, or environment variables consistently throughout the pickle round-trip.
+
+- **Add Pr validation, fix release drafter, improve release workflow**
+
+  - PR validation workflow to ensure PR descriptions meet quality standards for automated release notes
+  - Validates conventional commit format with minimum description length
+  - Warns about missing labels for better release notes categorization
+  - Commit message validation via pre-commit hooks to enforce conventional commit format
+  - Release Drafter integration for automated release note generation from merged PRs
+
+- **Broker handles invocation_ids instead of entire invocations**:
+
+  - Broker do not deal with serialization of Invocations, it only distributed invocation_ids
+  - The orhcestrator will ensure the invocation is stored in the state backend
+  - On Future implementations of queues and priorities, the orchestrator will forward the required data to the broker,
+    instead of the broker using an instance of an invocation to get data relevant for queueing and priorizing.
+
+- **Core Task Refactor and Lazy Trigger Registration**:
+
+  - Refactored core task registration to support lazy loading and ensure proper initialization in distributed runners.
+  - Improved `Task.from_id` to dynamically register core tasks when resolving `CoreTaskFunction`.
+  - Added lazy trigger registration mechanism to defer backend operations until runner startup.
+  - Enhanced `BaseRunner` to import trigger modules and register deferred triggers during initialization.
+  - Updated `Pynenc.__getstate__` and `__setstate__` to handle deferred trigger tasks properly.
+  - Improved test coverage for core task registration and lazy trigger loading.
+
+- **Logging**:
+
+  - Introduced `contextvars`-based logging context that automatically injects `runner_id`, `task_id`, and `invocation_id` into log messages without requiring explicit logger adapters
+  - Unified context display showing `[runner:id task:id inv:id]` prefix when context is available
+
+- **Cycle detection**: Simplified cycle handling — `CycleDetectedError.from_cycle` now accepts a list of call ids and orchestrators return call-id lists (reduces coupling with `Call` objects).
+
+### Fixed
+
+- **MemBroker FIFO Fix**:
+
+  - Fixed MemBroker to use FIFO (First In, First Out) ordering instead of FILO (First In, Last Out), ensuring correct task processing order.
+
+- **ProcessRunner Retry Status Error Handling**:
+
+  - Fixed a bug in `ProcessRunner._on_stop` where attempting to set an invocation to `RETRY` would raise an error if the invocation was already in a final status.
+  - Now safely ignores errors when killing processes and updating invocation status, ensuring clean shutdown and preventing unnecessary exceptions.
+
+- **Multiprocessing Initialization Consistency**:
+
+  - Centralized multiprocessing start method configuration in a shared utility module.
+  - Ensured all runners (`MultiThreadRunner`, `ProcessRunner`, `PersistentProcessRunner`) use a single, idempotent setup for the `spawn` method.
+  - Prevented duplicate or missing multiprocessing configuration, improving cross-platform reliability (especially on macOS and under debuggers).
+
+- **Cross-Process Config Propagation with Spawn-Based Runners**:
+
+  - Fixed a bug where child processes spawned by `ProcessRunner` or `PersistentProcessRunner` created new `Pynenc` instances with a fresh SQLite DB path instead of reusing the one from the parent process.
+  - Root cause: during pickle deserialisation `Task.__setstate__` triggered a module re-import; because the multiton was empty at that point, the re-imported module-level `PynencBuilder` call created a second instance with a different temp path.
+  - The fix is the early registration of the reconstructed instance in `_instances` inside `_new_pynenc`, before pickle restores the state dict, so the re-import finds the correct instance and returns it unchanged.
+
+- **DisabledTrigger**: Triggering it's a core functionality and cannot be disabled, the option has been removed.
+
+- **Triggering cron**: Fixed a bug on the Cron Trigger validation and execution that prevented some valid cron triggers to run.
+
+- **ArgCache size handling**: Added `max_size_to_cache` configuration and enforcement in `BaseArgCache` to avoid storing oversized arguments in backends (default `0` = no limit). Tests were added to validate behavior and prevent backend document-size errors.
+
+- **State Backend Serialized Arguments Regression Tests**:
+
+  - Added regression tests for empty and non-empty serialized arguments round-trips in invocation storage
+  - Guards against plugins that incorrectly handle missing `arguments` field (e.g., MongoDB plugin KeyError bug)
+  - Ensures all state backend implementations properly preserve task arguments on store and retrieve
+
+- **Log Explorer Improvements**:
+
+  - Fixed HTML corruption in bracket-linked runner IDs by preventing regex matches inside HTML attributes
+  - Added `data-runner-id` attributes to runner chips for consistent hover-based lane highlighting across all timeline views
+  - Redesigned REFERENCES panel as compact entity cards grouped by invocation/runner with status badges and detail labels
+  - Added batch fetching of extra invocation details from message body entity refs for complete status/task information
+  - Fixed SVG mini-timeline to use native pixel width (2000px) instead of responsive scaling, matching main timeline aspect ratio
+  - Added task ID display in invocation detail panel when clicking SVG invocation bars
+
+- **Updated Documentation**
+
+  - Revised Use Case 7 documentation to focus on `JsonSerializable` protocol for custom JSON serialization instead of generic extensibility
+
+- **For Redis Users**: Install the Redis plugin to maintain existing functionality:
+
+  ```bash
+  pip install pynenc-redis
+  ```
+
+- **For MongoDB Users**: Install the new MongoDB plugin:
+
+  ```bash
+  pip install pynenc-mongodb
+  ```
+
+- **Code Changes**: No changes required to existing code once appropriate plugins are installed
+
+### Technical
+
+- **Backward Compatibility**: Existing code remains functional with appropriate plugin installation
+- **Plugin Interface**: Standardized interface for all backend implementations
+- **Discovery Mechanism**: Automatic plugin discovery and registration system
+- **Builder Extensions**: Plugin methods can extend builder functionality seamlessly
+
 ## [0.0.24] - 2025-06-07
 
 ### Added
@@ -21,15 +335,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **Workflow Monitoring System**:
 
   - Added workflow information storage when tasks run
-  - Implemented `get_all_workflows()`, `get_all_workflows_runs()`, and `get_workflow_runs()` methods in state backends
+  - Implemented `get_all_workflow_types()`, `get_all_workflow_runs()`, and `get_workflow_runs()` methods in state backends
   - Created workflow views for pynmon monitoring interface with list, detail, and runs pages
   - Complete Pynmon UI coherence with consistent styling
 
 - **Enhanced Pynmon Monitoring Interface**:
+  - Replaced timeline with SVG-based visualization showing invocations and state transitions across runners
+  - Added "View in Timeline" functionality with timeline icon links across invocation views
+  - Refactored codebase for improved readability and maintainability
+  - Enhanced call detail view with cleaner UX, full invocation IDs, and improved metadata display
   - Complete visual redesign with minimalist, professional aesthetic
   - Dark navigation menu with light content area for optimal contrast and readability
   - Material Design Icons integration replacing emoji icons for consistency
-  - Comprehensive design system with structured color palette and typography guidelines
 
 ### Improved
 
@@ -39,7 +356,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Enhanced table layouts with tighter row spacing and optimized column widths
   - Improved status badge system with distinct colors for all invocation states
   - Responsive grid layouts using Bootstrap for better mobile experience
-  - Reduced visual noise through selective use of colors and minimalist card designs
 
 - **HTMX Integration**:
 
@@ -127,7 +443,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **App Discovery and Registration**:
 
   - Added `store_app_info` and `get_app_info` methods to state backends
-  - Implemented `get_all_app_infos` to discover registered apps in the system
+  - Implemented `discover_app_infos` to discover registered apps in the system
   - Enhanced `AppInfo` class with module path and variable name information
 
 - **Improved Monitoring Interface**:

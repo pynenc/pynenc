@@ -6,8 +6,9 @@ argument filtering infrastructure. These filters determine if task results
 match certain criteria by adapting them to the argument filter format.
 """
 
+from collections.abc import Callable
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Callable, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from pynenc.trigger.arguments.argument_filters import (
     ArgumentFilter,
@@ -104,7 +105,7 @@ class StaticResultFilter(StaticArgumentFilter):
         :return: A new StaticResultFilter instance
         """
         arg_filter = StaticArgumentFilter._from_json(data, app)
-        return cls(arg_filter.arguments.kwargs["result"])
+        return cls(arg_filter.filter_args["result"])
 
     def filter_result(self, result: Any) -> bool:
         """
@@ -153,7 +154,7 @@ class CallableResultFilter(CallableArgumentFilter):
 
 
 def create_result_filter(
-    filter_spec: Any | Callable[[Any], bool]
+    filter_spec: Any | Callable[[Any], bool],
 ) -> ResultFilterProtocol:
     """
     Factory function to create the appropriate result filter based on the input type.

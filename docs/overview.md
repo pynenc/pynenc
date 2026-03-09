@@ -1,45 +1,147 @@
-# Overview
+# Architecture
 
-## Pynenc: A Comprehensive Solution for Distributed Task Orchestration
+Understanding Pynenc's design decisions and component structure.
 
-Pynenc is designed as a versatile and powerful task management system, optimized for orchestrating complex tasks in distributed environments. This overview provides insights into Pynenc's key features, architectural design, and the future direction of its development.
+## Why Pynenc Exists
 
-## Core Features and Design Philosophy
+Distributed task systems often force a choice between simplicity (fire-and-forget queues) and sophistication (workflow engines with heavy infrastructure). Pynenc occupies the middle ground: it provides automatic dependency orchestration, concurrency control, and workflow support while keeping the developer experience as close to regular Python functions as possible.
 
-Pynenc integrates a range of functionalities and features to streamline distributed task management:
+## Core Design Principles
 
-- **Configurable Concurrency Management**: Pynenc offers concurrency control mechanisms across different levels of task execution, enhancing the efficiency and reliability of distributed systems.
+### Tasks Are Functions
 
-- **Task Dependency Handling**: With mechanisms for task prioritization and automatic pausing, Pynenc adeptly manages dependencies to prevent bottlenecks and deadlocks.
+Every Pynenc task is a regular Python function decorated with `@app.task`. The function's signature defines its arguments. There is no task class to subclass, no configuration object to construct — the function is the task.
 
-- **Cycle Detection**: Pynenc identifies and resolve cyclical dependencies, ensuring robust task execution flows.
+This means tasks remain importable, testable, and readable as standard Python.
 
-- **Modularity and Extensibility**: Pynenc's architecture is built for modularity, supporting a variety of components and allowing for seamless adaptation to diverse operational requirements.
+### Plugin Architecture
 
-## Current Implementations and Future Enhancements
+Pynenc separates **what** (the task logic) from **where** (the backend infrastructure). The core package provides:
 
-- **Current Implementations**: Pynenc currently utilizes Redis for distributed task management. An in-memory synchronous version is also available for development and testing, simplifying the local setup.
+- In-memory backends for development and testing
+- SQLite backends for single-host scenarios
 
-- **Planned Extensions**: Future development aims to incorporate additional databases, message queues, and other technologies. This expansion will enhance Pynenc's adaptability and functionality in varied distributed environments.
+Production backends are installed as separate plugins:
 
-## Performance Focus and Scalability
+| Plugin   | Package           | Components Provided                          |
+| -------- | ----------------- | -------------------------------------------- |
+| Redis    | `pynenc-redis`    | Broker, Orchestrator, State Backend, Trigger |
+| MongoDB  | `pynenc-mongodb`  | Broker, Orchestrator, State Backend, Trigger |
+| RabbitMQ | `pynenc-rabbitmq` | Broker                                       |
 
-Pynenc emphasizes performance and scalability, essential traits for effective distributed task management:
+Plugins register themselves via Python entry points (`pynenc.plugins`). The `PynencBuilder` dynamically discovers plugin methods, and configuration classes support plugin-specific settings through multiple inheritance.
 
-- **High-Performance Execution**: Future iterations will explore the integration of runners written in high-performance languages, boosting the speed and efficiency of task processing.
+### Invocation Lifecycle
 
-- **Asynchronous Task Processing**: Pynenc is poised to adopt modern asynchronous programming models, enhancing its effectiveness in IO-bound operations and large-scale applications.
+When you call a task, Pynenc creates an **invocation** that progresses through a state machine:
 
-## Community Involvement and Open Development
+```
+REGISTERED → PENDING → RUNNING → SUCCESS
+                                → FAILED
+                                → RETRY → REGISTERED (re-queued)
+                       → PAUSED → RESUMED → RUNNING
+```
 
-Pynenc's growth is envisioned to be community-driven, encouraging contributions that enrich its capabilities:
+Each state transition is validated, and ownership is tracked to prevent multiple runners from processing the same invocation. Recovery mechanisms detect stuck invocations (via runner heartbeats) and re-route them.
 
-- **Integration of Message Brokers**: Plans include exploring integrations with various message brokers, broadening Pynenc's applicability.
+See {doc}`usage_guide/invocation_status` for the complete status reference.
 
-- **Community Contributions**: We welcome and encourage contributions from the community, ranging from new database integrations to advanced runner implementations.
+### Automatic Orchestration
 
-## Conclusion
+Pynenc's orchestrator automatically manages task dependencies:
 
-Pynenc is more than a task management tool; it is a framework designed for innovation in distributed environments. Its development is guided by principles of clarity, simplicity, and versatility, ensuring each component's interoperability and the system's overall performance.
+1. **Priority by dependency count**: Tasks with more dependents run first
+2. **Automatic pausing**: When a task waits for results from another task, it pauses instead of blocking a runner thread
+3. **Deadlock prevention**: Paused tasks free up runner slots for the tasks they depend on
 
-We invite the community to join us in advancing distributed task orchestration with Pynenc.
+This means recursive or deeply nested task graphs resolve without manual priority configuration.
+
+### Concurrency Control
+
+Concurrency is controlled at two levels:
+
+- **Registration concurrency**: Prevents duplicate invocations of the same task call from being created
+- **Running concurrency**: Limits how many instances of a task (or task+arguments combination) can execute simultaneously
+
+Four modes are available: `DISABLED`, `TASK` (one instance per task), `ARGUMENTS` (one per argument set), and `KEYS` (one per key-argument subset).
+
+## Component Architecture
+
+```
+┌─────────────────────────────────────┐
+│              Pynenc App             │
+│  ┌───────┐  ┌──────┐  ┌─────────┐   │
+│  │ Tasks │  │ Conf │  │ Builder │   │
+│  └───┬───┘  └──────┘  └─────────┘   │
+│      │                              │
+│  ┌───▼─────────────────────────┐    │
+│  │        Orchestrator         │    │
+│  │  (status, concurrency,      │    │
+│  │   blocking, recovery)       │    │
+│  └──┬───────────┬──────────┬───┘    │
+│     │           │          │        │
+│  ┌──▼───┐  ┌────▼────┐  ┌──▼──────┐ │
+│  │Broker│  │State    │  │Trigger  │ │
+│  │(queue│  │Backend  │  │(cron,   │ │
+│  │ mgmt)│  │(persist)│  │ events) │ │
+│  └──────┘  └─────────┘  └─────────┘ │
+│                                     │
+│  ┌──────────┐  ┌──────────────────┐ │
+│  │ Runner   │  │ Client Data Store│ │
+│  │(execute) │  │ (large arg cache)│ │
+│  └──────────┘  └──────────────────┘ │
+└─────────────────────────────────────┘
+```
+
+### Components
+
+| Component             | Responsibility                                                                         | Implementations                                                                      |
+| --------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| **Broker**            | Routes invocation IDs through queues; prioritizes by dependency count                  | MemBroker, SQLiteBroker, + plugins                                                   |
+| **Orchestrator**      | Manages invocation lifecycle, concurrency control, blocking/waiting, runner heartbeats | MemOrchestrator, SQLiteOrchestrator, + plugins                                       |
+| **State Backend**     | Persists invocation data, results, exceptions, history, workflow state                 | MemStateBackend, SQLiteStateBackend, + plugins                                       |
+| **Runner**            | Retrieves invocations from broker and executes them                                    | ThreadRunner, MultiThreadRunner, ProcessRunner, PersistentProcessRunner, DummyRunner |
+| **Trigger**           | Manages cron schedules, event-driven conditions, and task-status-based triggers        | MemTrigger, SQLiteTrigger, + plugins                                                 |
+| **Serializer**        | Converts task arguments and results to/from string form                                | JsonSerializer, JsonPickleSerializer, PickleSerializer                               |
+| **Client Data Store** | Stores large serialized arguments outside the broker/state backend                     | MemClientDataStore, SQLiteClientDataStore, + plugins                                 |
+
+### Configuration Hierarchy
+
+Configuration resolves in priority order (highest first):
+
+1. Direct assignment
+2. Environment variables (`PYNENC__FIELD_NAME`)
+3. Configuration file path from environment
+4. Configuration file (YAML, TOML, JSON)
+5. `pyproject.toml`
+6. Default values
+
+Task-specific configuration uses the pattern `PYNENC__CONFIGTASK__MODULE#TASK__FIELD`.
+
+See {doc}`configuration/index` for the complete configuration reference.
+
+## Workflow System
+
+The workflow system adds deterministic execution on top of the task system. When a task runs inside a workflow context:
+
+- Random numbers, timestamps, and UUIDs are seeded and stored, so replays produce identical values
+- Sub-task executions are recorded and replayed from stored results
+- Workflow state persists across failures, enabling resume from the exact point of interruption
+
+This enables complex multi-step business processes that survive crashes without explicit checkpoint code.
+
+See {doc}`usage_guide/use_case_011_workflow_system` for usage examples.
+
+## Monitoring (Pynmon)
+
+Pynmon is a built-in web interface (FastAPI + Jinja2 + HTMX) that provides:
+
+- Dashboard overview with system health
+- SVG-based timeline visualization of invocations across runners
+- Task browser with execution statistics
+- Invocation drill-down with status history
+- Workflow hierarchy visualization
+- Runner monitoring with heartbeat tracking
+- Log explorer for contextual log analysis
+
+See {doc}`monitoring/index` for the complete monitoring reference.

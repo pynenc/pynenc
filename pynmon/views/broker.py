@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -44,13 +44,12 @@ async def queue_view(
 
     # Warning: This operation has overhead as we retrieve and re-queue messages
     for _ in range(min(limit, queue_size)):
-        invocation = app.broker.retrieve_invocation()
-        if invocation:
-            pending_invocations.append(invocation)
+        if invocation_id := app.broker.retrieve_invocation():
+            pending_invocations.append(app.state_backend.get_invocation(invocation_id))
 
     for invocation in pending_invocations:
         # Re-route the invocation back to the broker
-        app.broker.route_invocation(invocation)
+        app.broker.route_invocation(invocation.invocation_id)
 
     return templates.TemplateResponse(
         "broker/queue.html",
@@ -85,7 +84,7 @@ async def refresh_broker(request: Request) -> HTMLResponse:
 
 
 @router.post("/purge", response_class=JSONResponse)
-async def purge_broker(request: Request) -> Dict[str, Any]:
+async def purge_broker(request: Request) -> dict[str, Any]:
     """Purge all pending invocations from the broker."""
     app = get_pynenc_instance()
 

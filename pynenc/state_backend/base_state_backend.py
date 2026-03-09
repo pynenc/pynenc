@@ -2,19 +2,26 @@ import json
 import threading
 from abc import ABC, abstractmethod
 from collections import defaultdict
+from collections.abc import Iterator
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Iterator, Optional
+from typing import TYPE_CHECKING, Any, Generic
 
 from pynenc.conf.config_state_backend import ConfigStateBackend
-from pynenc.exceptions import InvocationNotFoundError
-from pynenc.invocation.status import InvocationStatus
+from pynenc.exceptions import InvocationNotFoundError, PynencError
+from pynenc.invocation.dist_invocation import DistributedInvocation
+from pynenc.invocation.status import InvocationStatus, InvocationStatusRecord
+from pynenc.types import Params, Result
 
 if TYPE_CHECKING:
     from pynenc.app import AppInfo, Pynenc
-    from pynenc.invocation.dist_invocation import DistributedInvocation
-    from pynenc.types import Params, Result
+    from pynenc.call import Call
+    from pynenc.identifiers.invocation_id import InvocationId
+    from pynenc.invocation.dist_invocation import InvocationDTO
+    from pynenc.models.call_dto import CallDTO
+    from pynenc.runner.runner_context import RunnerContext
+    from pynenc.identifiers.task_id import TaskId
     from pynenc.workflow import WorkflowIdentity
 
 
@@ -26,18 +33,17 @@ class InvocationHistory:
     Stores the invocation ID, timestamp, status, and execution context.
     Provides methods for serialization and deserialization to and from JSON.
 
-    :ivar invocation_id: Unique identifier of the invocation.
+    :ivar str invocation_id: The ID of the invocation this history belongs to
     :ivar _timestamp: Timestamp of the invocation history creation.
-    :ivar status: Current status of the invocation.
-    :ivar execution_context: Context of the execution, reserved for future use.
+    :ivar InvocationStatusRecord status_record: Current status of the invocation.
+    :ivar RunnerContext owner_context: Context of the execution.
     """
 
     invocation_id: str
-    _timestamp: datetime = field(
-        init=False, default_factory=lambda: datetime.now(timezone.utc)
-    )
-    status: Optional["InvocationStatus"] = None
-    execution_context: Optional[Any] = None  # Todo on Runners
+    _timestamp: datetime = field(init=False, default_factory=lambda: datetime.now(UTC))
+    status_record: InvocationStatusRecord
+    runner_context_id: str
+    registered_by_inv_id: str | None = None
 
     @property
     def timestamp(self) -> datetime:
@@ -54,8 +60,9 @@ class InvocationHistory:
             {
                 "invocation_id": self.invocation_id,
                 "_timestamp": self._timestamp.isoformat(),
-                "status": self.status.value if self.status else None,
-                "execution_context": self.execution_context,  # TODO
+                "status_record": self.status_record.to_json(),
+                "runner_context_id": self.runner_context_id,
+                "registered_by_inv_id": self.registered_by_inv_id,
             }
         )
 
@@ -68,21 +75,22 @@ class InvocationHistory:
         :return: An instance of InvocationHistory.
         """
         hist_dict = json.loads(json_str)
-        history = cls(hist_dict["invocation_id"])
+        history = cls(
+            invocation_id=hist_dict["invocation_id"],
+            status_record=InvocationStatusRecord.from_json(hist_dict["status_record"]),
+            runner_context_id=hist_dict["runner_context_id"],
+            registered_by_inv_id=hist_dict.get("registered_by_inv_id"),
+        )
 
         timestamp = datetime.fromisoformat(hist_dict["_timestamp"])
         if timestamp.tzinfo is None:
-            timestamp = timestamp.replace(tzinfo=timezone.utc)
-
+            timestamp = timestamp.replace(tzinfo=UTC)
         history._timestamp = timestamp
 
-        if hist_dict["status"] is not None:
-            history.status = InvocationStatus(hist_dict["status"])
-        history.execution_context = hist_dict["execution_context"]
         return history
 
 
-class BaseStateBackend(ABC):
+class BaseStateBackend(ABC, Generic[Params, Result]):
     """
     Abstract base class for state backends in a distributed task system.
 
@@ -93,6 +101,7 @@ class BaseStateBackend(ABC):
     def __init__(self, app: "Pynenc") -> None:
         self.app = app
         self.invocation_threads: dict[str, list[threading.Thread]] = defaultdict(list)
+        self._runner_context_cache: dict[str, RunnerContext] = {}
 
     @cached_property
     def conf(self) -> ConfigStateBackend:
@@ -122,177 +131,293 @@ class BaseStateBackend(ABC):
         """Purges all store state backend data for the current application"""
 
     @abstractmethod
-    def _upsert_invocation(
-        self, invocation: "DistributedInvocation[Params, Result]"
-    ) -> None:
-        """
-        Updates or inserts an invocation.
+    def _get_invocation(
+        self, invocation_id: "InvocationId"
+    ) -> tuple["InvocationDTO", "CallDTO"] | None:
+        """Retrieve invocation and call DTOs by invocation ID.
 
-        :param DistributedInvocation invocation: The invocation to upsert.
+        :param "InvocationId" invocation_id: The ID of the invocation to retrieve.
+        :return: Paired DTOs if found, else None.
         """
 
     @abstractmethod
-    def _get_invocation(self, invocation_id: str) -> Optional["DistributedInvocation"]:
-        """Retrieves an invocation by its ID."""
-
-    @abstractmethod
-    def _add_history(
+    def _add_histories(
         self,
-        invocation: "DistributedInvocation[Params, Result]",
-        invocation_history: InvocationHistory,
+        invocation_ids: list["InvocationId"],
+        invocation_history: "InvocationHistory",
     ) -> None:
-        """Adds a history record for an invocation."""
-
-    @abstractmethod
-    def _get_history(
-        self, invocation: "DistributedInvocation[Params, Result]"
-    ) -> list[InvocationHistory]:
         """
-        Retrieves the history of an invocation.
+        Adds a history record for a list of invocations.
 
-        :param DistributedInvocation invocation: The invocation to get the history from
+        :param list["InvocationId"] invocation_ids: The IDs of the invocations.
+        :param InvocationHistory invocation_history: The history record to add.
         """
 
     @abstractmethod
-    def _get_result(
-        self, invocation: "DistributedInvocation[Params, Result]"
-    ) -> "Result":
+    def _get_history(self, invocation_id: "InvocationId") -> list["InvocationHistory"]:
+        """
+        Retrieves the history of an invocation ordered by timestamp.
+
+        :param "InvocationId" invocation_id: The ID of the invocation to get the history from
+        :return: List of InvocationHistory records
+        """
+
+    @abstractmethod
+    def _get_result(self, invocation_id: "InvocationId") -> str:
         """
         Retrieves the result of an invocation.
 
-        :param DistributedInvocation invocation: The invocation to get the result from
+        :param "InvocationId" invocation_id: The ID of the invocation to get the result from
+        :return: The serialized result string
         """
 
     @abstractmethod
     def _set_result(
-        self, invocation: "DistributedInvocation[Params, Result]", result: "Result"
+        self, invocation_id: "InvocationId", serialized_result: str
     ) -> None:
         """
         Sets the result of an invocation.
 
-        :param DistributedInvocation invocation: The invocation to set
-        :param Result result: The result to set
+        :param "InvocationId" invocation_id: The ID of the invocation to set
+        :param str serialized_result: The serialized result to set
         """
+
+    def serialize_exception(self, exception: Exception) -> str:
+        """
+        Serializes an exception into a string representation.
+
+        This method provides a default implementation for serializing exceptions using the `serialize` method.
+        It can be overridden by subclasses if specific handling for exceptions is required.
+
+        :param Exception exception: The exception to be serialized.
+        :return: A string representation of the serialized exception.
+        """
+        serialized_exception: dict[str, str | bool] = {
+            "error_name": exception.__class__.__name__
+        }
+        if isinstance(exception, PynencError):
+            serialized_exception["pynenc_error"] = True
+            serialized_exception["error_data"] = exception.to_json()
+        else:
+            serialized_exception["pynenc_error"] = False
+            serialized_exception["error_data"] = self.app.client_data_store.serialize(
+                exception
+            )
+        return json.dumps(serialized_exception)
+
+    def deserialize_exception(self, serialized: str) -> Exception:
+        """
+        Deserializes a string representation of an exception back into an Exception object.
+
+        This method provides a default implementation for deserializing exceptions using the `deserialize` method.
+        It can be overridden by subclasses if specific handling for exceptions is required.
+
+        :param str serialized: The string representation of the serialized exception.
+        :return: The deserialized Exception object.
+        """
+        serialized_exception = json.loads(serialized)
+        if serialized_exception["pynenc_error"]:
+            return PynencError.from_json(
+                serialized_exception["error_name"],
+                serialized_exception["error_data"],
+            )
+        return self.app.client_data_store.deserialize(
+            serialized_exception["error_data"]
+        )
 
     @abstractmethod
-    def _get_exception(
-        self, invocation: "DistributedInvocation[Params, Result]"
-    ) -> "Exception":
+    def _get_exception(self, invocation_id: "InvocationId") -> str:
         """
-        Retrieves the exception of an invocation.
+        Retrieves the serialized exception of an invocation.
 
-        :param DistributedInvocation invocation: The invocation to get the exception from
+        :param "InvocationId" invocation_id: The ID of the invocation to get the exception from
+        :return: The serialized exception string
         """
 
     @abstractmethod
     def _set_exception(
-        self,
-        invocation: "DistributedInvocation[Params, Result]",
-        exception: "Exception",
+        self, invocation_id: "InvocationId", serialized_exception: str
     ) -> None:
         """
         Sets the raised exception by an invocation ran.
 
-        :param DistributedInvocation invocation: The invocation to set
-        :param Exception exception: The exception raised
+        :param "InvocationId" invocation_id: The ID of the invocation to set
+        :param "Exception" exception: The exception raised
         """
 
-    def upsert_invocation(self, invocation: "DistributedInvocation") -> None:
-        """
-        Starts an asynchronous operation to update or insert an invocation.
+    def upsert_invocations(self, invocations: list["DistributedInvocation"]) -> None:
+        """Persist invocations by converting to DTOs and storing via backend.
 
-        :param DistributedInvocation invocation: The invocation to upsert.
-        """
-        self._upsert_invocation(invocation)
+        Converts each invocation into an ``(InvocationDTO, CallDTO)`` pair and
+        passes them to the abstract ``_upsert_invocations``.  Argument
+        serialization and external-storage decisions are handled transparently
+        by ``Call.serialized_arguments`` (which delegates to
+        ``ClientDataStore.serialize_arguments``).
 
-    def get_invocation(self, invocation_id: str) -> "DistributedInvocation":
+        :param list[DistributedInvocation] invocations: The invocations to upsert.
         """
-        Retrieves an invocation by its ID, raising an error if not found.
+        pairs: list[tuple[InvocationDTO, CallDTO]] = []
+        for invocation in invocations:
+            inv_dto = invocation.to_dto()
+            call_dto = invocation.call.to_dto()
+            pairs.append((inv_dto, call_dto))
+        self._upsert_invocations(pairs)
 
-        :param DistributedInvocation invocation_id: ID of the invocation.
-        :return: The retrieved invocation.
+    @abstractmethod
+    def _upsert_invocations(
+        self, entries: list[tuple["InvocationDTO", "CallDTO"]]
+    ) -> None:
+        """Backend-specific storage of invocation and call DTOs.
+
+        Each entry is a paired ``(InvocationDTO, CallDTO)`` ready for persistence.
+        Backends can store them together or in separate tables/collections.
+
+        :param list[tuple[InvocationDTO, CallDTO]] entries: Paired DTOs to persist.
+        """
+
+    def get_invocation(self, invocation_id: "InvocationId") -> "DistributedInvocation":
+        """Retrieve an invocation by ID, reconstructing from DTOs.
+
+        Loads the ``InvocationDTO`` and ``CallDTO`` from the backend, constructs
+        a ``LazyCall`` (arguments deserialized only when accessed), and
+        reassembles the ``DistributedInvocation`` via ``from_dto``.
+
+        :param "InvocationId" invocation_id: ID of the invocation.
+        :return: The retrieved invocation with a LazyCall.
         :raises InvocationNotFoundError: If the invocation wasn't found.
         """
-        if invocation := self._get_invocation(invocation_id):
-            return invocation
-        raise InvocationNotFoundError(invocation_id, "The invocation wasn't stored")
+        from pynenc.call import LazyCall
+        from pynenc.invocation.dist_invocation import DistributedInvocation
+
+        result = self._get_invocation(invocation_id)
+        if result is None:
+            raise InvocationNotFoundError(invocation_id, "The invocation wasn't stored")
+        inv_dto, call_dto = result
+        lazy_call: Call = LazyCall.from_dto(self.app, call_dto)
+        return DistributedInvocation.from_dto(inv_dto, call=lazy_call)
+
+    @abstractmethod
+    def get_child_invocations(
+        self, parent_invocation_id: "InvocationId"
+    ) -> Iterator["InvocationId"]:
+        """Return IDs of all invocations directly spawned by the given parent.
+
+        Used for family-tree traversal: given a parent invocation ID, find all
+        invocations that recorded it as their ``parent_invocation_id``.
+
+        :param parent_invocation_id: The invocation ID to find children for.
+        :return: List of child invocation IDs (may be empty).
+        """
+
+    def add_histories(
+        self,
+        invocations: list["DistributedInvocation[Params, Result]"],
+        status_record: "InvocationStatusRecord",
+        runner_context: "RunnerContext",
+    ) -> None:
+        """
+        Adds a history record for invocations.
+
+        :param list[DistributedInvocation] invocations: The invocations to add history for.
+        :param InvocationStatusRecord status_record: The status record of the invocation.
+        :param RunnerContext owner_context: The owner context of the execution.
+        """
+        self.store_runner_context(runner_context)
+        for invocation in invocations:
+            registered_by_inv_id = (
+                invocation.parent_invocation_id
+                if status_record.status == InvocationStatus.REGISTERED
+                else None
+            )
+            invocation_history = InvocationHistory(
+                invocation_id=invocation.invocation_id,
+                status_record=status_record,
+                runner_context_id=runner_context.runner_id,
+                registered_by_inv_id=registered_by_inv_id,
+            )
+            thread = threading.Thread(
+                target=self._add_histories,
+                args=([invocation.invocation_id], invocation_history),
+            )
+            self.invocation_threads[invocation.invocation_id].append(thread)
+            thread.start()
 
     def add_history(
         self,
-        invocation: "DistributedInvocation[Params, Result]",
-        status: Optional["InvocationStatus"] = None,
-        execution_context: Optional["Any"] = None,
+        invocation_id: "InvocationId",
+        status_record: "InvocationStatusRecord",
+        runner_context: "RunnerContext",
     ) -> None:
         """
-        Adds a history record for an invocation.
+        Adds a history record for a single invocation.
 
-        :param DistributedInvocation invocation: The invocation to add history for.
-        :param Optional[InvocationStatus] status: The status of the invocation.
-        :param Optional[Any] execution_context: The execution context of the invocation.
+        :param "InvocationId" invocation_id: The ID of the invocation.
+        :param InvocationStatusRecord status_record: The status record.
+        :param RunnerContext runner_context: The runner context.
         """
+        self.store_runner_context(runner_context)
         invocation_history = InvocationHistory(
-            invocation.invocation_id, status, execution_context
+            invocation_id=invocation_id,
+            status_record=status_record,
+            runner_context_id=runner_context.runner_id,
         )
         thread = threading.Thread(
-            target=self._add_history, args=(invocation, invocation_history)
+            target=self._add_histories, args=([invocation_id], invocation_history)
         )
-        self.invocation_threads[invocation.invocation_id].append(thread)
+        self.invocation_threads[invocation_id].append(thread)
         thread.start()
 
-    def get_history(
-        self, invocation: "DistributedInvocation[Params, Result]"
-    ) -> list[InvocationHistory]:
+    def get_history(self, invocation_id: "InvocationId") -> list[InvocationHistory]:
         """
         Retrieves the history of an invocation.
 
-        :param DistributedInvocation invocation: The invocation to retrieve history for.
+        :param "InvocationId" invocation_id: The ID of the invocation to retrieve history for.
         :return: A list of invocation history records.
         """
-        # todo fork open threads
-        return self._get_history(invocation)
+        return self._get_history(invocation_id)
 
-    def set_result(self, invocation: "DistributedInvocation", result: "Result") -> None:
+    def set_result(self, invocation_id: "InvocationId", result: Result) -> None:
         """
         Sets the result of an invocation.
 
-        :param DistributedInvocation invocation: The invocation to set the result for.
+        :param "InvocationId" invocation_id: The ID of the invocation to set the result for.
         :param Result result: The result of the invocation.
         """
-        self._set_result(invocation, result)
+        serialized_result = self.app.client_data_store.serialize(result)
+        self._set_result(invocation_id, serialized_result)
 
-    def get_result(
-        self, invocation: "DistributedInvocation[Params, Result]"
-    ) -> "Result":
+    def get_result(self, invocation_id: "InvocationId") -> Result:
         """
         Retrieves the result of an invocation.
 
-        :param DistributedInvocation invocation: The invocation to retrieve the result for.
+        :param "InvocationId" invocation_id: The ID of the invocation to retrieve the result for.
         :return: The result of the invocation.
         """
         # insert result is block, no need for thread control
-        return self._get_result(invocation)
+        serialized_result = self._get_result(invocation_id)
+        return self.app.client_data_store.deserialize(serialized_result)
 
     def set_exception(
-        self, invocation: "DistributedInvocation", exception: "Exception"
+        self, invocation_id: "InvocationId", exception: "Exception"
     ) -> None:
         """
         Sets the exception of an invocation.
 
-        :param DistributedInvocation invocation: The invocation to set the exception for.
+        :param "InvocationId" invocation_id: The ID of the invocation to set the exception for.
         :param Exception exception: The exception of the invocation.
         """
-        self._set_exception(invocation, exception)
+        serialized_exception = self.serialize_exception(exception)
+        self._set_exception(invocation_id, serialized_exception)
 
-    def get_exception(
-        self, invocation: "DistributedInvocation[Params, Result]"
-    ) -> Exception:
+    def get_exception(self, invocation_id: "InvocationId") -> Exception:
         """
         Retrieves the exception of an invocation.
 
-        :param DistributedInvocation invocation: The invocation to retrieve the exception for.
+        :param "InvocationId" invocation_id: The ID of the invocation to retrieve the exception for.
         :return: The exception of the invocation.
         """
-        return self._get_exception(invocation)
+        serialized_exception = self._get_exception(invocation_id)
+        return self.deserialize_exception(serialized_exception)
 
     @abstractmethod
     def set_workflow_data(
@@ -301,9 +426,9 @@ class BaseStateBackend(ABC):
         """
         Set a value in workflow data.
 
-        :param workflow_identity: Workflow identity
-        :param key: Data key to set
-        :param value: Value to store
+        :param "WorkflowIdentity" workflow_identity: Workflow identity
+        :param str key: Data key to set
+        :param Any value: Value to store
         """
 
     @abstractmethod
@@ -313,34 +438,10 @@ class BaseStateBackend(ABC):
         """
         Get a value from workflow data.
 
-        :param workflow_identity: Workflow identity
-        :param key: Data key to retrieve
-        :param default: Default value if key doesn't exist
+        :param "WorkflowIdentity" workflow_identity: Workflow identity
+        :param str key: Data key to retrieve
+        :param Any default: Default value if key doesn't exist
         :return: Stored value or default
-        """
-
-    @abstractmethod
-    def get_workflow_deterministic_value(
-        self, workflow: "WorkflowIdentity", key: str
-    ) -> Any:
-        """
-        Get a stored deterministic value for a workflow.
-
-        :param workflow_identity: Workflow identity
-        :param key: Value key
-        :return: Stored value or None if not found
-        """
-
-    @abstractmethod
-    def set_workflow_deterministic_value(
-        self, workflow: "WorkflowIdentity", key: str, value: Any
-    ) -> None:
-        """
-        Store a deterministic value for a workflow.
-
-        :param workflow_identity: Workflow identity
-        :param key: Value key
-        :param value: Value to store
         """
 
     @abstractmethod
@@ -348,7 +449,7 @@ class BaseStateBackend(ABC):
         """
         Register this app's information in the state backend for discovery.
 
-        :param app_info: The app information to store
+        :param "AppInfo" app_info: The app information to store
         :return: None
         """
 
@@ -361,9 +462,10 @@ class BaseStateBackend(ABC):
 
     @staticmethod
     @abstractmethod
-    def get_all_app_infos() -> dict[str, "AppInfo"]:
+    def discover_app_infos() -> dict[str, "AppInfo"]:
         """
-        Retrieve all app information registered in this state backend.
+        This static method tries to discover all registered apps in the system.
+        We will try to connect to the backend with the default configuration.
 
         :return: Dictionary mapping app_id to app information
         """
@@ -380,7 +482,7 @@ class BaseStateBackend(ABC):
         """
 
     @abstractmethod
-    def get_all_workflows(self) -> Iterator[str]:
+    def get_all_workflow_types(self) -> Iterator["TaskId"]:
         """
         Retrieve all workflow types (workflow_task_ids) stored in this state backend.
 
@@ -388,7 +490,7 @@ class BaseStateBackend(ABC):
         """
 
     @abstractmethod
-    def get_all_workflows_runs(self) -> Iterator["WorkflowIdentity"]:
+    def get_all_workflow_runs(self) -> Iterator["WorkflowIdentity"]:
         """
         Retrieve workflow run identities from this state backend.
 
@@ -396,17 +498,19 @@ class BaseStateBackend(ABC):
         """
 
     @abstractmethod
-    def get_workflow_runs(self, workflow_task_id: str) -> Iterator["WorkflowIdentity"]:
+    def get_workflow_runs(
+        self, workflow_type: "TaskId"
+    ) -> Iterator["WorkflowIdentity"]:
         """
         Retrieve workflow run identities from this state backend.
 
-        :param workflow_task_id: Filter for specific workflow type
+        :param workflow_type: Filter for specific workflow type
         :return: Iterator of workflow identities for runs
         """
 
     @abstractmethod
     def store_workflow_sub_invocation(
-        self, parent_workflow_id: str, sub_invocation_id: str
+        self, parent_workflow_id: "InvocationId", sub_invocation_id: "InvocationId"
     ) -> None:
         """
         Store a sub-invocation ID that runs inside a parent workflow.
@@ -414,15 +518,175 @@ class BaseStateBackend(ABC):
         This tracks which invocations (tasks or sub-workflows) are executed
         within the context of a parent workflow for monitoring and debugging.
 
-        :param parent_workflow_id: The workflow ID that contains the sub-invocation
+        :param "InvocationId" parent_workflow_id: The workflow ID that contains the sub-invocation
         :param sub_invocation_id: The invocation ID of the task/sub-workflow running inside
         """
 
     @abstractmethod
-    def get_workflow_sub_invocations(self, workflow_id: str) -> Iterator[str]:
+    def get_workflow_sub_invocations(
+        self, workflow_id: "InvocationId"
+    ) -> Iterator["InvocationId"]:
         """
         Retrieve all sub-invocation IDs that run inside a specific workflow.
 
         :param workflow_id: The workflow ID to get sub-invocations for
         :return: Iterator of invocation IDs that run inside the workflow
         """
+
+    @abstractmethod
+    def iter_invocations_in_timerange(
+        self,
+        start_time: datetime,
+        end_time: datetime,
+        batch_size: int = 100,
+    ) -> Iterator[list["InvocationId"]]:
+        """
+        Iterate over invocation IDs that have history within a time range.
+
+        :param datetime start_time: Start of the time range
+        :param datetime end_time: End of the time range
+        :param int batch_size: Number of invocation IDs per batch
+        :return: Iterator yielding batches of invocation IDs
+        """
+
+    @abstractmethod
+    def iter_history_in_timerange(
+        self,
+        start_time: datetime,
+        end_time: datetime,
+        batch_size: int = 100,
+    ) -> Iterator[list["InvocationHistory"]]:
+        """
+        Iterate over history entries within a time range.
+
+        :param datetime start_time: Start of the time range
+        :param datetime end_time: End of the time range
+        :param int batch_size: Number of history entries per batch
+        :return: Iterator yielding batches of InvocationHistory
+        """
+
+    @abstractmethod
+    def _store_runner_context(self, runner_context: "RunnerContext") -> None:
+        """
+        Backend-specific implementation to store a runner context.
+
+        :param RunnerContext runner_context: The context to store
+        """
+
+    @abstractmethod
+    def get_matching_runner_contexts(
+        self, partial_id: str
+    ) -> Iterator["RunnerContext"]:
+        """
+        Search for runner contexts whose runner_id contains the partial string.
+
+        Used by the log explorer to find runners from truncated log output.
+
+        :param str partial_id: Partial runner ID to match (prefix or substring)
+        :return: Iterator of matching RunnerContext instances
+        """
+
+    @abstractmethod
+    def get_invocation_ids_by_workflow(
+        self,
+        workflow_id: str | None = None,
+        workflow_type_key: str | None = None,
+    ) -> Iterator["InvocationId"]:
+        """
+        Retrieve invocation IDs filtered by workflow criteria.
+
+        :param str | None workflow_id: Exact workflow ID to match
+        :param str | None workflow_type_key: Workflow type key to match
+        :return: Iterator of matching invocation IDs
+        """
+
+    def store_runner_context(self, runner_context: "RunnerContext") -> None:
+        """
+        Store a runner context.
+
+        Updates the local cache and delegates to backend implementation.
+
+        :param RunnerContext runner_context: The context to store
+        """
+        if runner_context.runner_id not in self._runner_context_cache:
+            self._store_runner_context(runner_context)
+        self._runner_context_cache[runner_context.runner_id] = runner_context
+        if runner_context.parent_ctx:
+            self.store_runner_context(runner_context.parent_ctx)
+
+    @abstractmethod
+    def _get_runner_context(self, runner_id: str) -> "RunnerContext | None":
+        """
+        Backend-specific implementation to retrieve a single runner context.
+
+        :param str runner_id: The runner's unique identifier
+        :return: The stored RunnerContext or None if not found
+        """
+
+    @abstractmethod
+    def _get_runner_contexts(self, runner_ids: list[str]) -> list["RunnerContext"]:
+        """
+        Backend-specific implementation to retrieve multiple runner contexts.
+
+        Only called for IDs not found in local cache.
+
+        :param list[str] runner_ids: List of runner unique identifiers
+        :return: list["RunnerContext"] of the stored RunnerContexts
+        """
+
+    def get_runner_context(self, runner_id: str) -> "RunnerContext | None":
+        """
+        Retrieve a runner context by runner_id.
+
+        Checks local cache first, then backend if not found.
+
+        :param str runner_id: The runner's unique identifier
+        :return: The stored RunnerContext or None if not found
+        """
+        if runner_id in self._runner_context_cache:
+            return self._runner_context_cache[runner_id]
+
+        # Try to fetch from backend
+        contexts = self._get_runner_contexts([runner_id])
+        if contexts:
+            ctx = contexts[0]
+            self._runner_context_cache[runner_id] = ctx
+            return ctx
+        return None
+
+    def get_runner_contexts(self, runner_ids: list[str]) -> list["RunnerContext"]:
+        """
+        Retrieve multiple runner contexts by their IDs.
+
+        Uses local cache for known contexts, fetches missing ones from backend,
+        and updates cache with newly fetched contexts.
+
+        :param list[str] runner_ids: List of runner unique identifiers
+        :return: list["RunnerContext"] of the stored RunnerContexts
+        """
+        if not runner_ids:
+            return []
+
+        # Check cache first
+        cached_contexts = []
+        missing_ids = []
+
+        for runner_id in runner_ids:
+            if runner_id in self._runner_context_cache:
+                cached_contexts.append(self._runner_context_cache[runner_id])
+            else:
+                missing_ids.append(runner_id)
+
+        # If all found in cache, return immediately
+        if not missing_ids:
+            return cached_contexts
+
+        # Fetch missing ones from backend
+        fetched_contexts = self._get_runner_contexts(missing_ids)
+
+        # Update cache with fetched contexts
+        for ctx in fetched_contexts:
+            self._runner_context_cache[ctx.runner_id] = ctx
+
+        # Return all found contexts
+        return cached_contexts + fetched_contexts

@@ -1,7 +1,8 @@
 import argparse
 import re
+from collections.abc import Callable
 from functools import wraps
-from typing import Callable, Type, TypeVar
+from typing import TypeVar
 
 from pynenc.app import Pynenc
 from pynenc.conf.config_base import ConfigPynencBase
@@ -10,8 +11,8 @@ T = TypeVar("T", bound="ConfigPynencBase")
 
 
 def config_cls_cache(
-    func: Callable[[Type[T]], dict[str, str]]
-) -> Callable[[Type[T]], dict[str, str]]:
+    func: Callable[[type[T]], dict[str, str]],
+) -> Callable[[type[T]], dict[str, str]]:
     """
     Decorator for caching the output of functions that extract field descriptions.
 
@@ -25,7 +26,7 @@ def config_cls_cache(
     cache: dict[str, dict[str, str]] = {}
 
     @wraps(func)
-    def wrapper(config_cls: Type[T]) -> dict[str, str]:
+    def wrapper(config_cls: type[T]) -> dict[str, str]:
         class_name = config_cls.__name__
         if class_name not in cache:
             cache[class_name] = func(config_cls)
@@ -36,7 +37,7 @@ def config_cls_cache(
 
 @config_cls_cache
 def extract_descriptions_from_docstring(
-    config_cls: Type["ConfigPynencBase"],
+    config_cls: type["ConfigPynencBase"],
 ) -> dict[str, str]:
     """
     Extract field descriptions from the docstring of a configuration class.

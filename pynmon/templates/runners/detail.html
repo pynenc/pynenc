@@ -1,0 +1,298 @@
+{% extends "base.html" %} {% block content %}
+<div class="container-fluid">
+  <!-- Page Header -->
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h2 class="h4 mb-0 text-primary">Runner Details</h2>
+      <small class="text-muted">{{ runner_info.runner_id }}</small>
+    </div>
+    <a href="/runners" class="btn btn-sm btn-outline-secondary">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="16"
+        height="16"
+        fill="currentColor"
+        class="bi bi-arrow-left"
+        viewBox="0 0 16 16"
+      >
+        <path
+          fill-rule="evenodd"
+          d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"
+        />
+      </svg>
+      Back to Runners
+    </a>
+  </div>
+
+  <!-- Runner Context Card -->
+  <div class="row mb-4">
+    <div class="{{ 'col-md-6' if parent_context else 'col-12' }}">
+      <div class="card">
+        <div class="card-header">
+          <h6 class="mb-0">Runner Context</h6>
+        </div>
+        <div class="card-body">
+          {% if context %}
+          <table class="table table-sm mb-0">
+            <tbody>
+              <tr>
+                <td class="text-muted" style="width: 150px">Runner Class</td>
+                <td>
+                  <span class="badge bg-primary">{{ context.runner_cls }}</span>
+                </td>
+              </tr>
+              <tr>
+                <td class="text-muted">Runner ID</td>
+                <td><code class="small">{{ context.runner_id }}</code></td>
+              </tr>
+              <tr>
+                <td class="text-muted">Hostname</td>
+                <td><code class="small">{{ context.hostname }}</code></td>
+              </tr>
+              <tr>
+                <td class="text-muted">Process ID</td>
+                <td><code class="small">{{ context.pid }}</code></td>
+              </tr>
+              <tr>
+                <td class="text-muted">Thread ID</td>
+                <td><code class="small">{{ context.thread_id }}</code></td>
+              </tr>
+            </tbody>
+          </table>
+          {% else %}
+          <div class="alert alert-warning mb-0">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              fill="currentColor"
+              class="bi bi-exclamation-triangle"
+              viewBox="0 0 16 16"
+            >
+              <path
+                d="M7.938 2.016A.13.13 0 0 1 8.002 2a.13.13 0 0 1 .063.016.146.146 0 0 1 .054.057l6.857 11.667c.036.06.035.124.002.183a.163.163 0 0 1-.054.06.116.116 0 0 1-.066.017H1.146a.115.115 0 0 1-.066-.017.163.163 0 0 1-.054-.06.176.176 0 0 1 .002-.183L7.884 2.073a.147.147 0 0 1 .054-.057zm1.044-.45a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566z"
+              />
+              <path
+                d="M7.002 12a1 1 0 1 1 2 0 1 1 0 0 1-2 0zM7.1 5.995a.905.905 0 1 1 1.8 0l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995z"
+              />
+            </svg>
+            Runner context not available
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Parent Context Card -->
+    {% if parent_context %}
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header">
+          <h6 class="mb-0">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              fill="currentColor"
+              class="bi bi-diagram-3"
+              viewBox="0 0 16 16"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M6 3.5A1.5 1.5 0 0 1 7.5 2h1A1.5 1.5 0 0 1 10 3.5v1A1.5 1.5 0 0 1 8.5 6v1H14a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-1 0V8h-5v.5a.5.5 0 0 1-1 0V8h-5v.5a.5.5 0 0 1-1 0v-1A.5.5 0 0 1 2 7h5.5V6A1.5 1.5 0 0 1 6 4.5v-1z"
+              />
+              <path
+                d="M1 11.5A1.5 1.5 0 0 1 2.5 10h3A1.5 1.5 0 0 1 7 11.5v3A1.5 1.5 0 0 1 5.5 16h-3A1.5 1.5 0 0 1 1 14.5v-3zm8 0A1.5 1.5 0 0 1 10.5 10h3a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 14.5v-3z"
+              />
+            </svg>
+            Parent Context
+          </h6>
+        </div>
+        <div class="card-body">
+          <table class="table table-sm mb-0">
+            <tbody>
+              <tr>
+                <td class="text-muted" style="width: 150px">
+                  Parent Runner Class
+                </td>
+                <td>
+                  <span class="badge bg-secondary"
+                    >{{ parent_context.runner_cls }}</span
+                  >
+                </td>
+              </tr>
+              <tr>
+                <td class="text-muted">Parent Runner ID</td>
+                <td>
+                  <a
+                    href="/runners/{{ parent_context.runner_id }}"
+                    class="text-decoration-none"
+                  >
+                    <code class="small text-primary"
+                      >{{ parent_context.runner_id }}</code
+                    >
+                  </a>
+                  <a
+                    href="/runners/{{ parent_context.runner_id }}"
+                    class="btn btn-sm btn-outline-primary ms-2"
+                    title="View Parent Runner"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="14"
+                      height="14"
+                      fill="currentColor"
+                      class="bi bi-box-arrow-up-right"
+                      viewBox="0 0 16 16"
+                    >
+                      <path
+                        fill-rule="evenodd"
+                        d="M8.636 3.5a.5.5 0 0 0-.5-.5H1.5A1.5 1.5 0 0 0 0 4.5v10A1.5 1.5 0 0 0 1.5 16h10a1.5 1.5 0 0 0 1.5-1.5V7.864a.5.5 0 0 0-1 0V14.5a.5.5 0 0 1-.5.5h-10a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5h6.636a.5.5 0 0 0 .5-.5z"
+                      />
+                      <path
+                        fill-rule="evenodd"
+                        d="M16 .5a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0 0 1h3.793L6.146 9.146a.5.5 0 1 0 .708.708L15 1.707V5.5a.5.5 0 0 0 1 0v-5z"
+                      />
+                    </svg>
+                  </a>
+                </td>
+              </tr>
+              <tr>
+                <td class="text-muted">Parent Hostname</td>
+                <td>
+                  <code class="small">{{ parent_context.hostname }}</code>
+                </td>
+              </tr>
+              <tr>
+                <td class="text-muted">Parent PID</td>
+                <td><code class="small">{{ parent_context.pid }}</code></td>
+              </tr>
+              <tr>
+                <td class="text-muted">Parent Thread ID</td>
+                <td>
+                  <code class="small">{{ parent_context.thread_id }}</code>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Orchestrator Info -->
+  <div class="row mb-4">
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header">
+          <h6 class="mb-0">Heartbeat Status</h6>
+        </div>
+        <div class="card-body">
+          <table class="table table-sm mb-0">
+            <tbody>
+              <tr>
+                <td class="text-muted" style="width: 200px">Created At</td>
+                <td>
+                  {{ runner_info.creation_time.strftime('%Y-%m-%d %H:%M:%S') }}
+                </td>
+              </tr>
+              <tr>
+                <td class="text-muted">Last Heartbeat</td>
+                <td>
+                  {{ runner_info.last_heartbeat.strftime('%Y-%m-%d %H:%M:%S') }}
+                  {% if heartbeat_age.is_stale %}
+                  <span class="badge bg-warning ms-2">Stale</span>
+                  {% else %}
+                  <span class="badge bg-success ms-2">Fresh</span>
+                  {% endif %}
+                </td>
+              </tr>
+              <tr>
+                <td class="text-muted">Time Since Last Heartbeat</td>
+                <td>
+                  <span class="badge bg-info"
+                    >{{ heartbeat_age.seconds }}s ({{ heartbeat_age.minutes
+                    }}m)</span
+                  >
+                </td>
+              </tr>
+              <tr>
+                <td class="text-muted">Runner Age</td>
+                <td>
+                  {% set age_seconds = age.total_seconds %} {% if age_seconds <
+                  60 %}
+                  <span class="badge bg-success">{{ age.seconds }}s</span>
+                  {% elif age_seconds < 3600 %}
+                  <span class="badge bg-info"
+                    >{{ age.minutes }}m {{ (age.seconds % 60) }}s</span
+                  >
+                  {% else %}
+                  <span class="badge bg-warning"
+                    >{{ (age.hours)|int }}h {{ (age.minutes % 60) }}m</span
+                  >
+                  {% endif %}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header">
+          <h6 class="mb-0">Atomic Service Status</h6>
+        </div>
+        <div class="card-body">
+          <table class="table table-sm mb-0">
+            <tbody>
+              <tr>
+                <td class="text-muted" style="width: 200px">Eligible to Run</td>
+                <td>
+                  {% if runner_info.allow_to_run_atomic_service %}
+                  <span class="badge bg-success">Yes</span>
+                  {% else %}
+                  <span class="badge bg-secondary">No</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% if execution_stats %}
+              <tr>
+                <td class="text-muted">Last Service Start</td>
+                <td>
+                  {{ execution_stats.last_start.strftime('%Y-%m-%d %H:%M:%S') }}
+                </td>
+              </tr>
+              <tr>
+                <td class="text-muted">Last Service End</td>
+                <td>
+                  {{ execution_stats.last_end.strftime('%Y-%m-%d %H:%M:%S') }}
+                </td>
+              </tr>
+              <tr>
+                <td class="text-muted">Last Execution Duration</td>
+                <td>
+                  <span class="badge bg-info"
+                    >{{ execution_stats.duration_seconds|round(2) }}s</span
+                  >
+                </td>
+              </tr>
+              {% else %}
+              <tr>
+                <td colspan="2">
+                  <div class="alert alert-info mb-0">
+                    <small>No atomic service execution history available</small>
+                  </div>
+                </td>
+              </tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

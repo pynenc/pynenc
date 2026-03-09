@@ -16,7 +16,7 @@
             </a>
             <button
               class="btn btn-sm btn-outline-primary pynmon-action-btn"
-              hx-get="/workflows/{{ workflow_task_id }}/refresh"
+              hx-get="/workflows/{{ workflow_type.key }}/refresh"
               hx-target="#workflow-detail-content"
               hx-swap="innerHTML"
             >

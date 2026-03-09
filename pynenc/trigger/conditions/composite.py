@@ -14,6 +14,7 @@ from pynenc.trigger.conditions.base import ConditionContext, TriggerCondition
 
 if TYPE_CHECKING:
     from ...app import Pynenc
+    from pynenc.identifiers.task_id import TaskId
 
 
 class CompositeLogic(StrEnum):
@@ -67,7 +68,7 @@ class CompositeCondition(TriggerCondition[ConditionContext]):
 
         return f"composite:{hash_value}"
 
-    def get_source_task_ids(self) -> set[str]:
+    def get_source_task_ids(self) -> set["TaskId"]:
         """
         Get the task IDs of all source tasks for this composite condition.
 
@@ -162,7 +163,7 @@ class CompositeCondition(TriggerCondition[ConditionContext]):
         else:  # CompositeLogic.OR
             return any(cond.is_satisfied_by(context) for cond in self.conditions)
 
-    def affects_task(self, task_id: str) -> bool:
+    def affects_task(self, task_id: "TaskId") -> bool:
         """
         Check if this condition is affected by a specific task.
 

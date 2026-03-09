@@ -2,7 +2,24 @@
 
 ## Overview
 
-This guide provides a concise overview of using `pynenc` with Redis for distributed task processing. For detailed setup and execution, refer to the full [basic_redis_example](https://github.com/pynenc/samples/tree/main/basic_redis_example).
+This guide provides a concise overview of using `pynenc` with Redis for distributed task processing. Redis support is provided through the `pynenc-redis` plugin, which must be installed separately. For detailed setup and execution, refer to the full [basic_redis_example](https://github.com/pynenc/samples/tree/main/basic_redis_example).
+
+## Prerequisites
+
+**Required Plugin Installation**:
+
+Redis functionality in Pynenc is provided as a separate plugin. You must install it before using Redis as a backend:
+
+```bash
+pip install pynenc-redis
+```
+
+This plugin provides:
+
+- `RedisOrchestrator` - For task orchestration
+- `RedisBroker` - For message queuing
+- `RedisStateBackend` - For state management
+- Redis-based trigger support (when triggers are enabled)
 
 ## Key Concepts
 
@@ -40,9 +57,9 @@ from pynenc.builder import PynencBuilder
 
 app = (
     PynencBuilder()
-    .redis(url="redis://redis:6379")  # Matches docker-compose default
+    .redis(url="redis://redis:6379")  # Requires pynenc-redis plugin
     .process_runner()
-    .serializer("json")
+    .serializer_json()
     .custom_config(app_id="app_basic_redis_example")
     .build()
 )
@@ -66,7 +83,7 @@ You can configure `pynenc` to use Redis in two ways:
 
 ### Using pyproject.toml
 
-Configure `pynenc` in `pyproject.toml` with the `ProcessRunner`:
+Configure `pynenc` in `pyproject.toml` with the `ProcessRunner`. The Redis plugin classes (`RedisOrchestrator`, `RedisBroker`, `RedisStateBackend`) are automatically registered and available once you install `pynenc-redis`:
 
 ```toml
 [tool.pynenc]
@@ -83,7 +100,22 @@ redis_host = "redis"
 
 ### Using PynencBuilder
 
-As shown in Option 2 above, use `PynencBuilder` in your code to configure Redis, the runner, and other settings programmatically. The example uses `redis://redis:6379` to match a typical Docker setup, but you can adjust the URL (e.g., `redis://localhost:6379` for local testing).
+Use `PynencBuilder` in your code to configure Redis programmatically. The builder's `.redis()` method is only available when the `pynenc-redis` plugin is installed:
+
+```python
+from pynenc.builder import PynencBuilder
+
+app = (
+    PynencBuilder()
+    .redis(url="redis://redis:6379")  # Requires pynenc-redis plugin
+    .process_runner()
+    .serializer_json()
+    .custom_config(app_id="app_basic_redis_example")
+    .build()
+)
+```
+
+The example uses `redis://redis:6379` to match a typical Docker setup, but you can adjust the URL (e.g., `redis://localhost:6379` for local testing).
 
 ## Executing Tasks
 
@@ -128,7 +160,7 @@ results = list(invocation_group.results)
 
 ## Redis and Docker
 
-For a containerized setup using Docker, the `Dockerfile` and `docker-compose.yml` are configured to include Redis and the Python environment. The `PynencBuilder` example above uses `redis://redis:6379`, which aligns with the default Redis service name in `docker-compose.yml`.
+For a containerized setup using Docker, the `Dockerfile` and `docker-compose.yml` are configured to include Redis and the Python environment. The `PynencBuilder` example above uses `redis://redis:6379`, which aligns with the default Redis service name in `docker-compose.yml`. Ensure the `pynenc-redis` plugin is included in your requirements.
 
 ## Development Mode
 
@@ -138,8 +170,8 @@ Run in development mode without Redis by setting:
 PYNENC__DEV_MODE_FORCE_SYNC_TASKS=True python sample.py
 ```
 
-This mode is useful for debugging and testing, regardless of whether you use `Pynenc()` or `PynencBuilder`.
+This mode forces synchronous task execution using the in-memory backend, useful for debugging and testing without requiring Redis or the `pynenc-redis` plugin.
 
 ## Conclusion
 
-This guide highlights the essential steps to use `pynenc` with Redis, offering flexibility with both `pyproject.toml` and `PynencBuilder` configuration approaches. For a comprehensive understanding, including Docker setup and advanced configurations, refer to the [full example](https://github.com/pynenc/samples/tree/main/basic_redis_example).
+This guide highlights the essential steps to use `pynenc` with Redis. Remember that Redis functionality requires installing the `pynenc-redis` plugin separately. The guide offers flexibility with both `pyproject.toml` and `PynencBuilder` configuration approaches. For a comprehensive understanding, including Docker setup and advanced configurations, refer to the [full example](https://github.com/pynenc/samples/tree/main/basic_redis_example).

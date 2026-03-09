@@ -1,0 +1,134 @@
+{% extends "base.html" %} {% block content %}
+<div class="container-fluid">
+  <!-- Type Banner -->
+  <div class="row mb-3">
+    <div class="col-12">
+      <div class="info-card">
+        <h6 class="section-title">Data Store Type</h6>
+        <p class="mb-0 fw-semibold">{{ client_data_store_info.type }}</p>
+        {% if client_data_store_info.disabled %}
+        <span class="badge bg-warning mt-1">Disabled</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <!-- How it works -->
+    <div class="col-md-6">
+      <div class="metric-card h-100">
+        <h6 class="section-title">How It Works</h6>
+        <p class="text-muted small mb-3">
+          The Data Store manages serialization and external storage of
+          client-provided data: task arguments, results, and exceptions. Small
+          values pass inline; large values are stored externally with
+          content-hash keys for automatic deduplication.
+        </p>
+        <div class="metric-grid">
+          <div class="metric-item">
+            <span class="metric-label">Arguments</span>
+            <span class="text-muted small">Serialized &amp; size-routed</span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">Results</span>
+            <span class="text-muted small">Stored by invocation</span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">Exceptions</span>
+            <span class="text-muted small">Serialized &amp; stored</span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">Deduplication</span>
+            <span class="text-muted small">SHA-256 content hash</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Configuration -->
+    <div class="col-md-6">
+      <div class="metric-card h-100">
+        <h6 class="section-title">Configuration</h6>
+        <div class="metric-grid">
+          <div class="metric-item">
+            <span class="metric-label">Store Enabled</span>
+            <span
+              class="badge {% if not client_data_store_info.disabled %}bg-success{% else %}bg-secondary{% endif %}"
+            >
+              {{ 'Disabled' if client_data_store_info.disabled else 'Enabled' }}
+            </span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">Min Size to Externalize</span>
+            <span class="badge bg-info"
+              >{{ client_data_store_info.min_size_to_cache }} chars</span
+            >
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">Max Size to Externalize</span>
+            <span class="badge bg-info"
+              >{{ client_data_store_info.max_size_to_cache if
+              client_data_store_info.max_size_to_cache else '∞' }}</span
+            >
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">Local LRU Cache</span>
+            <span class="badge bg-info"
+              >{{ client_data_store_info.local_cache_size }} entries</span
+            >
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">Warn Threshold</span>
+            <span class="badge bg-info"
+              >{{ (client_data_store_info.warn_threshold / 1048576) | round(1)
+              }} MB</span
+            >
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">Compression</span>
+            <span
+              class="badge {% if client_data_store_info.compression_enabled %}bg-success{% else %}bg-secondary{% endif %}"
+            >
+              {{ 'ON' if client_data_store_info.compression_enabled else 'OFF'
+              }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Danger Zone -->
+  <div class="row mt-4">
+    <div class="col-12">
+      <div class="card border-danger">
+        <div class="card-header text-danger">
+          <span class="material-icons align-middle me-1" style="font-size: 18px"
+            >warning</span
+          >
+          Danger Zone
+        </div>
+        <div class="card-body">
+          <p class="text-muted small mb-2">
+            Permanently delete all externally stored data (arguments, results,
+            exceptions).
+          </p>
+          <button
+            class="btn btn-danger btn-sm"
+            hx-post="/client-data-store/purge"
+            hx-confirm="This will purge all client data store entries. This operation cannot be undone! Continue?"
+            hx-swap="outerHTML"
+          >
+            <span
+              class="material-icons align-middle me-1"
+              style="font-size: 16px"
+              >delete_forever</span
+            >
+            Purge Data Store
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -8,10 +8,10 @@ sys.path.insert(0, os.path.abspath("../../pynenc"))  # Adjust the path as needed
 
 DISTRIBUTION_METADATA = importlib.metadata.metadata("Pynenc")
 # -- Project information -----------------------------------------------------
-author = DISTRIBUTION_METADATA["Author"]
+author = "Luis Diaz"
 project = DISTRIBUTION_METADATA["Name"]
 version = DISTRIBUTION_METADATA["Version"]
-current_year = datetime.datetime.now(datetime.timezone.utc).year
+current_year = datetime.datetime.now(datetime.UTC).year
 project = "pynenc"
 copyright = f"{current_year}, {author}"
 release = version
@@ -134,11 +134,23 @@ myst_substitutions = {
 html_theme = "furo"
 html_title = "Pynenc"
 html_logo = "_static/logo.png"
-html_favicon = "_static/logo.png"
+html_favicon = "_static/favicon.ico"
 
 language = "en"
 html_static_path = ["_static"]
 html_theme_options: dict[str, Any] = {
+    "light_css_variables": {
+        "color-brand-primary": "#c04020",
+        "color-brand-content": "#d05030",
+        "color-admonition-title--note": "#d05030",
+        "color-admonition-title-background--note": "#d050301a",
+    },
+    "dark_css_variables": {
+        "color-brand-primary": "#e07050",
+        "color-brand-content": "#e08060",
+        "color-admonition-title--note": "#e07050",
+        "color-admonition-title-background--note": "#e070501a",
+    },
     "navigation_with_keys": True,
     "footer_icons": [
         {

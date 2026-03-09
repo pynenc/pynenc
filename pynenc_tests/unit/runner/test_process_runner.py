@@ -1,0 +1,256 @@
+import signal
+from collections.abc import Generator
+from multiprocessing.managers import DictProxy, SyncManager
+from unittest.mock import ANY, Mock, patch
+from typing import TYPE_CHECKING
+
+import pytest
+
+from pynenc import Task
+from pynenc.exceptions import RunnerError
+from pynenc.invocation import (
+    DistributedInvocation,
+    InvocationStatus,
+    InvocationStatusRecord,
+)
+from pynenc.runner.process_runner import ProcessRunner
+from pynenc.runner.runner_context import RunnerContext
+from pynenc_tests.conftest import MockPynenc
+
+
+if TYPE_CHECKING:
+    from pynenc.identifiers.invocation_id import InvocationId
+
+
+def add(x: int, y: int) -> int:
+    return x + y
+
+
+@pytest.fixture
+def app() -> MockPynenc:
+    return MockPynenc()
+
+
+@pytest.fixture
+def runner(app: MockPynenc) -> ProcessRunner:
+    runner = ProcessRunner(app)
+    return runner
+
+
+@pytest.fixture
+def add_task(runner: ProcessRunner) -> Task:
+    return runner.app.task(add)
+
+
+@pytest.fixture
+def mock_process() -> Generator[Mock, None, None]:
+    with patch("pynenc.runner.process_runner.Process") as mock:
+        yield mock
+
+
+@pytest.fixture
+def mock_manager() -> Generator[SyncManager, None, None]:
+    managed_dict_mock: dict = {}
+    with patch("pynenc.runner.process_runner.Manager") as mock_manager:
+        mock_manager.return_value.dict.return_value = managed_dict_mock
+        yield mock_manager
+
+
+def test_on_start(runner: ProcessRunner) -> None:
+    runner._on_start()
+    assert isinstance(runner.manager, SyncManager)
+    assert isinstance(runner.wait_invocation, DictProxy)
+
+
+def test_on_stop(
+    mock_process: Mock, runner: ProcessRunner, inv_id: "InvocationId"
+) -> None:
+    runner._on_start()
+    mock_invocation = Mock(spec=DistributedInvocation)
+    mock_invocation.invocation_id = inv_id
+    runner_id = "test-runner-id"
+    # Use the new tracking structure
+    from pynenc.runner.process_runner import ChildProcessInfo
+
+    runner.child_runner_ids[runner_id] = ChildProcessInfo(
+        process=mock_process, invocation_id=mock_invocation.invocation_id
+    )
+    runner.inv_id_to_runner_id[mock_invocation.invocation_id] = runner_id
+
+    # Ensure the mock orchestrator returns a non-final status
+    runner.app.orchestrator.get_invocation_status_record.return_value = (  # type: ignore
+        InvocationStatusRecord(status=InvocationStatus.RUNNING)
+    )
+
+    runner._on_stop()
+
+    mock_process.kill.assert_called_once()
+
+
+def test_runner_loop_iteration(
+    mock_process: Mock, add_task: Task, runner: ProcessRunner
+) -> None:
+    runner._on_start()
+    # First call returns a task, subsequent calls return no tasks (simulate real orchestrator behavior)
+    # Patch get_invocations_to_run to avoid assigning to a method
+    with patch.object(
+        runner.app.orchestrator,
+        "get_invocations_to_run",
+        side_effect=[[add_task(1, 2)], []],
+    ) as mock_get_inv:
+        runner.runner_loop_iteration()
+        # Only one process should be started, since only one invocation is available
+        assert mock_get_inv.call_count == 2
+        assert mock_process.call_count == 1
+        assert len(runner.child_runner_ids) == 1
+    assert mock_process.call_count == 1
+    assert len(runner.child_runner_ids) == 1
+
+
+def test_runner_loop_iteration_pause_waiting_invocations(
+    mock_process: Mock,
+    add_task: Task,
+    runner: ProcessRunner,
+    mock_manager: SyncManager,
+    app: MockPynenc,
+) -> None:
+    runner._on_start()
+    result_inv: DistributedInvocation = add_task(1, 2)  # type: ignore
+    waiting_inv: DistributedInvocation = add_task(3, 4)  # type: ignore
+    runner.wait_invocation[result_inv.invocation_id] = {waiting_inv.invocation_id}
+
+    # Use the new tracking structure
+    from pynenc.runner.process_runner import ChildProcessInfo
+
+    runner_id = "test-runner-id"
+    runner.child_runner_ids[runner_id] = ChildProcessInfo(
+        process=mock_process, invocation_id=waiting_inv.invocation_id
+    )
+    runner.inv_id_to_runner_id[waiting_inv.invocation_id] = runner_id
+
+    app.orchestrator.get_invocations_to_run = Mock(return_value=[])  # type: ignore
+    with patch("os.kill") as mock_kill:
+        # test that is the result_inv is still running, the waiting_inv is paused
+        # filter_by_status returns no final invocation, should stop waiting ones
+        app.orchestrator.filter_by_status.return_value = []
+        runner.runner_loop_iteration()
+        mock_kill.assert_called_with(ANY, signal.SIGSTOP)
+        # test that is the result_inv is finished, the waiting_inv is resumed
+        # filter_by_status returns the final invocation, should resume waiting ones
+        app.orchestrator.filter_by_status.return_value = [result_inv.invocation_id]
+        runner.runner_loop_iteration()
+        mock_kill.assert_called_with(ANY, signal.SIGCONT)
+
+
+def test_waiting_for_results(
+    runner: ProcessRunner,
+    add_task: Task,
+    mock_process: Mock,
+    mock_manager: SyncManager,
+) -> None:
+    runner._on_start()
+    running_invocation: DistributedInvocation = add_task(1, 2)  # type: ignore
+    result_invocation: DistributedInvocation = add_task(3, 4)  # type: ignore
+
+    with patch(
+        "pynenc.orchestrator.base_orchestrator.BaseOrchestrator.set_invocation_status",
+        return_value=[add_task(1, 2)],
+    ) as mock_set_invocation_status:
+        runner.waiting_for_results(
+            running_invocation.invocation_id,
+            [result_invocation.invocation_id],
+            {"wait_invocation": runner.wait_invocation},
+        )
+        # check that the invocation status is set to PAUSED
+        mock_set_invocation_status.assert_called_once_with(
+            running_invocation.invocation_id,
+            InvocationStatus.PAUSED,
+            runner_ctx=RunnerContext.from_runner(runner),
+        )
+        # check that the waiting invocation is stored in the wait_invocation dict
+        assert result_invocation.invocation_id in runner.wait_invocation
+        assert (
+            running_invocation.invocation_id
+            in runner.wait_invocation[result_invocation.invocation_id]
+        )
+
+
+def test_waiting_for_results_returns_without_waiting_invocation(
+    runner: ProcessRunner,
+    add_task: Task,
+    mock_manager: SyncManager,
+) -> None:
+    runner._on_start()
+    running_invocation: DistributedInvocation = add_task(1, 2)  # type: ignore
+
+    with patch(
+        "pynenc.orchestrator.base_orchestrator.BaseOrchestrator.set_invocation_status"
+    ) as mock_set_invocation_status:
+        runner.waiting_for_results(
+            running_invocation.invocation_id,
+            [],
+            {"wait_invocation": runner.wait_invocation},
+        )
+        # check that it was not called since there was no invocation to wait
+        mock_set_invocation_status.assert_not_called()
+        # there was no invocation to wait, the wait_invocation dict should be empty
+        assert len(runner.wait_invocation) == 0
+
+
+def test_waiting_for_results_no_args_error(
+    runner: ProcessRunner,
+    mock_manager: SyncManager,
+    add_task: Task,
+) -> None:
+    runner._on_start()
+    running_invocation: DistributedInvocation = add_task(1, 2)  # type: ignore
+    result_invocation: DistributedInvocation = add_task(3, 4)  # type: ignore
+
+    with patch(
+        "pynenc.orchestrator.base_orchestrator.BaseOrchestrator.set_invocation_status"
+    ) as mock_set_invocation_status:
+        with pytest.raises(RunnerError):
+            runner.waiting_for_results(
+                running_invocation.invocation_id, [result_invocation.invocation_id]
+            )
+        mock_set_invocation_status.assert_not_called()
+        # there was no invocation to wait, the wait_invocation dict should be empty
+        assert len(runner.wait_invocation) == 0
+
+
+def test_waiting_for_results_no_running_invocation(runner: ProcessRunner) -> None:
+    runner._on_start()
+    with patch("time.sleep") as mock_sleep:
+        runner.conf.invocation_wait_results_sleep_time_sec = -2323
+        runner.waiting_for_results(None, [])
+        mock_sleep.assert_any_call(-2323)
+
+
+def test_waiting_processes_property(
+    runner: ProcessRunner, mock_manager: SyncManager, add_task: Task
+) -> None:
+    runner._on_start()
+    # runner.wait_invocation: dict
+    assert runner.wait_invocation == {}
+    assert runner.waiting_processes == 0
+    inv0: DistributedInvocation = add_task(1, 2)  # type: ignore
+    inv1: DistributedInvocation = add_task(3, 4)  # type: ignore
+    inv3: DistributedInvocation = add_task(5, 6)  # type: ignore
+    inv4: DistributedInvocation = add_task(7, 8)  # type: ignore
+    # 2 invocations are waiting
+    runner.wait_invocation = {
+        inv0.invocation_id: {inv1.invocation_id},
+        inv3.invocation_id: {inv4.invocation_id},
+    }
+    assert runner.waiting_processes == 2
+    # 3 invocations waiting on the same invocation
+    runner.wait_invocation = {
+        inv0.invocation_id: {inv1.invocation_id, inv3.invocation_id, inv4.invocation_id}
+    }
+    assert runner.waiting_processes == 3
+    # 1 invocation waiting on 2 invocations
+    runner.wait_invocation = {
+        inv0.invocation_id: {inv1.invocation_id},
+        inv3.invocation_id: {inv1.invocation_id},
+    }
+    assert runner.waiting_processes == 1

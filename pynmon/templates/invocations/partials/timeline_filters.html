@@ -1,0 +1,117 @@
+<!-- Timeline left sidebar: filter form and active time range display -->
+<div class="card mb-4 filter-form">
+  <div class="card-header">
+    Filters
+    <small class="text-muted ms-2">All times in UTC</small>
+  </div>
+  <div class="card-body">
+    <form action="/invocations/timeline" method="get">
+      <div class="mb-2">
+        <label for="time_range" class="form-label">Time Range</label>
+        <select class="form-select form-select-sm" id="time_range" name="time_range">
+          <option value="1m"  {% if current_filters.time_range == '1m'  %}selected{% endif %}>Last 1 minute</option>
+          <option value="5m"  {% if current_filters.time_range == '5m'  %}selected{% endif %}>Last 5 minutes</option>
+          <option value="15m" {% if current_filters.time_range == '15m' %}selected{% endif %}>Last 15 minutes</option>
+          <option value="1h"  {% if current_filters.time_range == '1h'  %}selected{% endif %}>Last hour</option>
+          {# default is 5m — handled by route default; this comment keeps alignment #}
+          <option value="3h"  {% if current_filters.time_range == '3h'  %}selected{% endif %}>Last 3 hours</option>
+          <option value="12h" {% if current_filters.time_range == '12h' %}selected{% endif %}>Last 12 hours</option>
+          <option value="1d"  {% if current_filters.time_range == '1d'  %}selected{% endif %}>Last day</option>
+          <option value="3d"  {% if current_filters.time_range == '3d'  %}selected{% endif %}>Last 3 days</option>
+          <option value="1w"  {% if current_filters.time_range == '1w'  %}selected{% endif %}>Last week</option>
+          <option value="custom" {% if current_filters.time_range == 'custom' %}selected{% endif %}>Custom range</option>
+        </select>
+      </div>
+
+      <div id="custom_date_range" class="mb-2 {% if current_filters.time_range != 'custom' %}d-none{% endif %}">
+        <div class="mb-2">
+          <label for="start_date" class="form-label">Start Date (UTC)</label>
+          <input type="datetime-local" class="form-control form-control-sm" id="start_date" name="start_date"
+                 value="{{ current_filters.start_date }}" step="1">
+        </div>
+        <div class="mb-2">
+          <label for="end_date" class="form-label">End Date (UTC)</label>
+          <input type="datetime-local" class="form-control form-control-sm" id="end_date" name="end_date"
+                 value="{{ current_filters.end_date }}" step="1">
+        </div>
+      </div>
+
+      <div class="mb-2">
+        <label for="task_id" class="form-label">Task ID</label>
+        <select class="form-select form-select-sm" id="task_id" name="task_id">
+          <option value="">All Tasks</option>
+          {% for tid in all_task_ids %}
+          <option value="{{ tid }}" {% if tid == current_filters.task_id %}selected{% endif %}>
+            {{ tid }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="mb-2">
+        <label for="limit" class="form-label">Limit</label>
+        <select class="form-select form-select-sm" id="limit" name="limit">
+          <option value="100"   {% if current_filters.limit == 100   %}selected{% endif %}>100</option>
+          <option value="500"   {% if current_filters.limit == 500   %}selected{% endif %}>500</option>
+          <option value="1000"  {% if current_filters.limit == 1000  %}selected{% endif %}>1,000</option>
+          <option value="5000"  {% if current_filters.limit == 5000  %}selected{% endif %}>5,000</option>
+          <option value="20000" {% if current_filters.limit == 20000 %}selected{% endif %}>20,000</option>
+          <option value="50000" {% if current_filters.limit == 50000 %}selected{% endif %}>50,000</option>
+          <option value=""      {% if not current_filters.limit      %}selected{% endif %}>No limit</option>
+        </select>
+      </div>
+
+      <div class="mb-2">
+        <label for="workflow_type" class="form-label">Workflow Type</label>
+        <select class="form-select form-select-sm" id="workflow_type" name="workflow_type">
+          <option value="">All Workflow Types</option>
+          {% for wt in all_workflow_types %}
+          <option value="{{ wt }}" {% if wt == current_filters.workflow_type %}selected{% endif %}>
+            {{ wt }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="mb-2">
+        <label for="workflow_id" class="form-label">Workflow ID</label>
+        <input type="text" class="form-control form-control-sm" id="workflow_id" name="workflow_id"
+               value="{{ current_filters.workflow_id }}" placeholder="Partial or full ID">
+      </div>
+
+      <div class="mb-2 form-check">
+        <input type="hidden" id="collapse_external_hidden" name="collapse_external" value="0">
+        <input class="form-check-input" type="checkbox" id="collapse_external"
+               {% if current_filters.collapse_external %}checked{% endif %}
+               onchange="document.getElementById('collapse_external_hidden').value = this.checked ? '1' : '0'">
+        <label class="form-check-label" for="collapse_external">Collapse External Runners</label>
+      </div>
+      <script>
+        // Sync hidden field with checkbox on page load
+        (function(){
+          var chk = document.getElementById('collapse_external');
+          var hid = document.getElementById('collapse_external_hidden');
+          if (chk && hid) hid.value = chk.checked ? '1' : '0';
+        })();
+      </script>
+
+      <button type="submit" class="btn btn-primary btn-sm w-100">Apply Filters & Refresh</button>
+    </form>
+    <button type="button" class="btn btn-outline-secondary btn-sm w-100 mt-2" onclick="window.location.reload();">
+      <span class="material-icons" style="font-size: 14px; vertical-align: middle;">refresh</span>
+      Refresh
+    </button>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-header py-2">
+    <small class="mb-0">Time Range (UTC)</small>
+  </div>
+  <div class="card-body py-2">
+    <small class="text-muted">
+      <strong>Start:</strong> {{ start_datetime.strftime('%Y-%m-%d %H:%M:%S') }} UTC<br>
+      <strong>End:</strong> {{ end_datetime.strftime('%Y-%m-%d %H:%M:%S') }} UTC
+    </small>
+  </div>
+</div>

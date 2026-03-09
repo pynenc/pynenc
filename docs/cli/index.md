@@ -1,82 +1,90 @@
 # Command Line Interface (CLI)
 
-The Pynenc Command Line Interface (CLI) is a tool for managing your Pynenc application. So far just provides commands for starting runners and showing configuration, but more will be added in future releases.
-
-## Mandatory App Option
-
-Every command in the Pynenc CLI requires the `--app` option. This mandatory option specifies the application module and name, ensuring that the CLI is interacting with the correct Pynenc instance. Upon invocation, the CLI initializes the appropriate configuration classes and the runner based on the Pynenc configuration.
-
-For more information on configuration, please refer to the {doc}`../configuration/index`.
+Reference for all Pynenc CLI commands and options.
 
 ## Basic Usage
 
-The basic structure of a command in the Pynenc CLI is:
+```bash
+pynenc --app <app_module> <command> [options]
+```
+
+The `--app` option specifies the Python module containing your `Pynenc` instance. It accepts a module path (e.g., `myapp.tasks.app`) or a file path (e.g., `myapp/tasks.py`).
+
+## Global Options
+
+| Option            | Description                                                               |
+| ----------------- | ------------------------------------------------------------------------- |
+| `--app MODULE`    | Application module or file path (required for `runner` and `show_config`) |
+| `-v`, `--verbose` | Enable debug-level logging output                                         |
+
+## Commands
+
+### `runner start`
+
+Start a task runner for the specified application.
 
 ```bash
-    $ python -m pynenc --app=<app_module> <command> [options]
+pynenc --app myapp.tasks.app runner start
 ```
 
-Where `<app_module>` is the module path of your Pynenc application and `<command>` is one of the available commands.
+The runner type is determined by the application configuration (`runner_cls`). Using the default `DummyRunner` raises an error — configure a functional runner first.
 
-## Available Commands
+To stop the runner, send `SIGINT` (`Ctrl+C`) or `SIGTERM`. The runner shuts down gracefully.
 
-1. **runner**: Commands related to the runner.
-2. **show_config**: Show the current configuration of the app or runner.
-
-Each command might have its own set of options and arguments.
-
-## show_config Command
-
-To show the current configuration of your application:
+**Example with environment variable override**:
 
 ```bash
-    $ python -m pynenc --app=<app_module> show_config
+PYNENC__RUNNER_CLS=ThreadRunner pynenc --app myapp.tasks.app runner start
 ```
 
-This command displays the configuration settings of your Pynenc instance.
+### `runner show_config`
 
-## runner Command
-
-Use the `runner` command to manage the runner part of your Pynenc application.
+Display the runner configuration for the application.
 
 ```bash
-    $ python -m pynenc --app=<app_module> runner [subcommand]
+pynenc --app myapp.tasks.app runner show_config
 ```
 
-Subcommands for `runner` include:
+### `show_config`
 
-- **start**: Start a runner.
-- **show_config**: Show runner configuration.
-
-## Runner Management
-
-The `runner` command is used to control the runner component of your Pynenc application.
-
-To start the runner:
+Display the full application configuration, including all components and their settings.
 
 ```bash
-    $ python -m pynenc --app=<app_module> runner start
+pynenc --app myapp.tasks.app show_config
 ```
 
-This command initializes and starts the runner for your application. Note that using the default `DummyRunner` will result in an error, as shown below:
+### `monitor`
 
-```text
-    ValueError: DummyRunner cannot be started, use another runner
+Start the Pynmon web monitoring interface. The `--app` option is optional — the monitor can auto-discover registered applications.
+
+```bash
+pynenc monitor [--host HOST] [--port PORT] [--log-level LEVEL]
 ```
 
-To use a functional runner, ensure that your application's configuration specifies a valid runner class. For example:
+| Option        | Default     | Description                                                |
+| ------------- | ----------- | ---------------------------------------------------------- |
+| `--host`      | `127.0.0.1` | Host to bind the server                                    |
+| `--port`      | `8000`      | Port to bind the server                                    |
+| `--log-level` | `info`      | Log level: `debug`, `info`, `warning`, `error`, `critical` |
 
-.. code-block:: bash
+**Examples**:
 
-    $ PYNENC__RUNNER_CLS="ThreadRunner" python -m pynenc --app=<app_module> runner start
+```bash
+# Start monitor with auto-discovery
+pynenc monitor
 
-This command will start the `ThreadRunner`.
+# Start with a specific app
+pynenc --app myapp.tasks.app monitor --port 9000
 
-Stopping the Runner:
-
-To stop the runner, you can interrupt the process (e.g., using `Ctrl+C`). Upon receiving the interrupt signal, the runner will attempt to shut down gracefully:
-
-```text
-    INFO: Received signal signum=2 Stopping runner loop...
-    INFO: [runner: ThreadRunner] Stopping runner...
+# Start with debug logging
+pynenc monitor --log-level debug
 ```
+
+```{note}
+The monitor requires the monitoring extras to be installed: `pip install pynenc[monitor]`.
+It requires Python < 3.13 due to FastAPI/Pydantic v2 dependencies.
+```
+
+After starting, open `http://127.0.0.1:8000` in your browser to access the dashboard.
+
+See {doc}`../monitoring/index` for details on what the monitoring UI provides.

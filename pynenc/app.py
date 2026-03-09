@@ -1,35 +1,40 @@
 import asyncio
-import json
-from collections.abc import Iterable
-from dataclasses import dataclass
-from functools import cached_property, wraps
+from collections.abc import Callable, Iterable
+from collections import defaultdict
+from functools import wraps
 from logging import Logger
-from typing import TYPE_CHECKING, Any, Callable, Optional, Union, overload
+from typing import TYPE_CHECKING, Any, ClassVar, Optional, Union, overload
 
 from pynenc import context
-from pynenc.arg_cache.base_arg_cache import BaseArgCache
+from pynenc.app_info import AppInfo
 from pynenc.broker.base_broker import BaseBroker
+from pynenc.client_data_store.base_client_data_store import BaseClientDataStore
 from pynenc.conf.config_pynenc import ConfigPynenc
 from pynenc.conf.config_task import ConcurrencyControlType
+from pynenc.core_tasks import core_tasks_registry
 from pynenc.orchestrator.base_orchestrator import BaseOrchestrator
+from pynenc.plugin_loader import load_all_plugins
 from pynenc.runner.base_runner import BaseRunner
 from pynenc.serializer.base_serializer import BaseSerializer
 from pynenc.state_backend.base_state_backend import BaseStateBackend
 from pynenc.task import Task
 from pynenc.trigger.base_trigger import BaseTrigger
+from pynenc.trigger.trigger_builder import on_cron
 from pynenc.util.log import create_logger
 from pynenc.util.subclasses import get_subclass
 
 if TYPE_CHECKING:
     from pynenc.arguments import Arguments
+    from pynenc.core_tasks import CoreTaskDefinition
     from pynenc.invocation import BaseInvocationGroup
+    from pynenc.identifiers.task_id import TaskId
     from pynenc.trigger import TriggerBuilder
     from pynenc.types import Args, Func, Params, Result
 
     # Type for the parallel function that generates arguments for parallel processing
-    ParallelFuncReturn = Union[
+    ParallelFuncReturn = Union[  # noqa: UP007 # Use `X | Y` for type annotations
         # Option 1: Just return an iterable of arguments (any format)
-        Iterable[Union[tuple, dict, Arguments]],
+        Iterable[tuple | dict | Arguments],
         # Option 2: Return a tuple of (common_args, param_iter) for optimized processing of large shared data
         # This approach pre-serializes common_args once, reducing overhead for large arguments
         # tuple.0 Common arguments shared by all tasks
@@ -42,95 +47,57 @@ if TYPE_CHECKING:
     AggregateFunc = Callable[[Iterable[Result]], Result]
 
 
-@dataclass(frozen=True)
-class AppInfo:
+def _new_pynenc(
+    cls: "type[Pynenc]",
+    config_values: "dict[str, Any] | None",
+    config_filepath: "str | None",
+) -> "Pynenc":
+    """Module-level pickle reconstructor that forwards config to Pynenc.__new__.
+
+    Pickle calls ``__new__`` with no arguments by default, which breaks the
+    multiton lookup (config_values=None → app_id defaults to 'pynenc'). This
+    helper is returned by ``__reduce__`` so pickle calls it instead, ensuring
+    ``__new__`` receives the real config_values.
+
+    The instance is pre-registered in ``_instances`` and minimally initialised
+    so that module-level ``Pynenc()`` calls triggered during state
+    deserialisation (``Task.__setstate__`` → ``importlib.import_module``)
+    reuse this instance instead of creating a second one with a freshly
+    generated temp DB path.
     """
-    Information about a Pynenc application instance.
-
-    Stores metadata required for app discovery and re-instantiation.
-
-    :param app_id: Unique identifier for the application
-    :param module: Module path where the app is defined
-    :param config_values: Configuration values for app initialization
-    :param config_filepath: Path to configuration file, if any
-    :param module_filepath: Absolute file path of the module
-    :param app_variable: Name of the variable holding the app instance in the module
-    """
-
-    app_id: str
-    module: str
-    config_values: dict[str, Any] | None = None
-    config_filepath: str | None = None
-    module_filepath: str | None = None
-    app_variable: str | None = None
-
-    @classmethod
-    def from_app(cls, app: "Pynenc") -> "AppInfo":
-        """
-        Create AppInfo from a Pynenc app instance.
-
-        Captures necessary metadata for later re-instantiation.
-
-        :param app: The Pynenc app instance
-        :return: AppInfo containing app metadata
-        """
-        from pynenc.util.import_app import extract_module_info
-
-        module_filepath, app_variable = extract_module_info(app)
-        return cls(
-            app_id=app.app_id,
-            config_values=app.config_values,
-            config_filepath=app.config_filepath,
-            module=app.__module__,
-            module_filepath=module_filepath,
-            app_variable=app_variable,
+    instance = cls.__new__(cls, config_values, config_filepath)
+    # Only bootstrap genuinely new instances — __new__ may have returned an
+    # already-initialised multiton.
+    if not hasattr(instance, "_initialised"):
+        # Minimal init so __init__ is skipped on multiton re-encounter and
+        # lazy properties don't raise AttributeError.
+        instance._initialised = True
+        instance._config_values = config_values
+        instance._config_filepath = config_filepath
+        instance.reporting = None
+        instance._runner_instance = None
+        instance._tasks = {}
+        instance._deferred_trigger_tasks = defaultdict(list)
+        instance._reset_cached_components()
+        # Register early — *before* pickle deserialises the state dict whose
+        # Task objects may trigger module re-import.
+        # Use ConfigPynenc to resolve app_id consistently (it may come from
+        # config_values, config_filepath, or defaults).
+        resolved = ConfigPynenc(
+            config_values=config_values, config_filepath=config_filepath
         )
-
-    def to_json(self) -> str:
-        """
-        Serialize AppInfo to JSON string.
-
-        :return: JSON representation of AppInfo
-        """
-        return json.dumps(
-            {
-                "app_id": self.app_id,
-                "config_values": self.config_values,
-                "config_filepath": self.config_filepath,
-                "module": self.module,
-                "module_filepath": self.module_filepath,
-                "app_variable": self.app_variable,
-            }
-        )
-
-    @classmethod
-    def from_json(cls, json_str: str) -> "AppInfo":
-        """
-        Deserialize AppInfo from JSON string.
-
-        :param json_str: JSON string representation of AppInfo
-        :return: AppInfo instance
-        """
-        data = json.loads(json_str)
-        return cls(
-            app_id=data["app_id"],
-            config_values=data.get("config_values"),
-            config_filepath=data.get("config_filepath"),
-            module=data["module"],
-            module_filepath=data.get("module_filepath"),
-            app_variable=data.get("app_variable"),
-        )
+        cls._instances[resolved.app_id] = instance
+    return instance
 
 
 class Pynenc:
     """
     The main class of the Pynenc library that creates an application object.
 
-    :param Optional[str] app_id:
-        The id of the application.
-    :param Optional[dict[str, Any]] config_values:
-        A dictionary of configuration values.
-    :param Optional[str] config_filepath:
+    :param dict[str, Any] | None config_values:
+        A dictionary of configuration values. Use ``{"app_id": "my_app"}``
+        to set the application identifier.
+    :param str | None config_filepath:
         A path to a configuration file.
 
     ```{note}
@@ -141,20 +108,45 @@ class Pynenc:
     ```
     """
 
+    # Multiton registry: at most one instance per app_id in a process.
+    # Populated by __setstate__ when a parent app is unpickled in a child
+    # process, and consulted by __new__ so that module-level re-construction
+    # returns the same (already-configured) instance.
+    _instances: ClassVar[dict[str, "Pynenc"]] = {}
+
+    def __new__(
+        cls,
+        config_values: dict[str, Any] | None = None,
+        config_filepath: str | None = None,
+    ) -> "Pynenc":
+        """Return existing instance for this app_id if one was registered by __setstate__."""
+        if cls._instances:
+            resolved = ConfigPynenc(
+                config_values=config_values, config_filepath=config_filepath
+            )
+            if existing := cls._instances.get(resolved.app_id):
+                return existing
+        return super().__new__(cls)
+
     def __init__(
         self,
-        app_id: str | None = None,
-        config_values: Optional[dict[str, Any]] = None,
-        config_filepath: Optional[str] = None,
+        config_values: dict[str, Any] | None = None,
+        config_filepath: str | None = None,
     ) -> None:
-        self._app_id = app_id
-        self.config_values = config_values
-        self.config_filepath = config_filepath
+        # Skip re-initialisation when __new__ returned a cached instance
+        if hasattr(self, "_initialised"):
+            return
+        self._initialised = True
+        self._config_values = config_values
+        self._config_filepath = config_filepath
         self.reporting = None
-        self._runner_instance: Optional[BaseRunner] = None
-        self._tasks: dict[str, Task] = {}
-        self.logger.info(f"Initialized Pynenc app with id {self.app_id}")
-        self.state_backend.store_app_info(AppInfo.from_app(self))
+        self._runner_instance: BaseRunner | None = None
+        self._tasks: dict[TaskId, Task] = {}
+        self._deferred_trigger_tasks: dict[TaskId, list[TriggerBuilder]] = defaultdict(
+            list
+        )
+        self._reset_cached_components()
+        load_all_plugins()
 
     @classmethod
     def from_info(cls, app_info: AppInfo) -> "Pynenc":
@@ -168,18 +160,84 @@ class Pynenc:
 
         if app := create_app_from_info(app_info):
             return app
+        config_values = dict(app_info.config_values) if app_info.config_values else {}
+        config_values["app_id"] = app_info.app_id
         return cls(
-            app_id=app_info.app_id,
-            config_values=app_info.config_values,
+            config_values=config_values,
             config_filepath=app_info.config_filepath,
         )
 
-    @property
-    def app_id(self) -> str:
-        return self._app_id or self.conf.app_id
+    def register_core_tasks(self) -> None:
+        """Register all core tasks defined in the core_tasks_registry."""
+        for task_def in core_tasks_registry.definitions:
+            options = task_def.options.copy()
+            if task_def.config_cron:
+                cron_val = getattr(self.conf, task_def.config_cron)
+                options["triggers"] = [on_cron(cron_val)]
+            self.task(task_def.func, **options)
+
+    def register_core_task(self, task_def: "CoreTaskDefinition") -> None:
+        options = task_def.options.copy()
+        if task_def.config_cron:
+            cron_val = getattr(self.conf, task_def.config_cron)
+            options["triggers"] = [on_cron(cron_val)]
+        self.task(task_def.func, **options)
+
+    def _store_deferred_trigger(
+        self,
+        task: "Task",
+        triggers: Union["TriggerBuilder", list["TriggerBuilder"], None],
+    ) -> None:
+        """Store triggers to be registered later by the runner.
+
+        :param Task task: The Task instance that declared triggers
+        :param triggers: TriggerBuilder or list of TriggerBuilder
+        """
+        if not triggers:
+            return
+        if isinstance(triggers, list):
+            trigger_list = triggers
+        else:
+            trigger_list = [triggers]
+        self._deferred_trigger_tasks[task.task_id] = trigger_list
+
+    def register_deferred_triggers(self) -> None:
+        """Register all deferred task triggers that were collected during task decoration.
+
+        This is intended to be called by a runner during startup after relevant
+        modules have been imported so trigger backends are available.
+        """
+        if not self._deferred_trigger_tasks:
+            return
+        self.logger.info("Registering deferred task trigger(s):")
+        for task_id, triggers in self._deferred_trigger_tasks.items():
+            task = self.get_task(task_id)
+            self.trigger.register_task_triggers(task, triggers)
+            self.logger.info(f"  - Registered task:{task_id.key} triggers")
+        self._deferred_trigger_tasks.clear()
 
     @property
-    def tasks(self) -> dict[str, Task]:
+    def config_values(self) -> dict[str, Any] | None:
+        return self._config_values
+
+    @config_values.setter
+    def config_values(self, value: dict[str, Any] | None) -> None:
+        self._config_values = value
+
+    @property
+    def config_filepath(self) -> str | None:
+        return self._config_filepath
+
+    @config_filepath.setter
+    def config_filepath(self, value: str | None) -> None:
+        self._config_filepath = value
+
+    @property
+    def app_id(self) -> str:
+        return self.conf.app_id
+
+    @property
+    def tasks(self) -> dict["TaskId", Task]:
         """
         Get the dictionary of registered tasks.
 
@@ -187,7 +245,7 @@ class Pynenc:
         """
         return self._tasks
 
-    def get_task(self, task_id: str) -> Task:
+    def get_task(self, task_id: "TaskId") -> Task:
         """
         Get a task by its ID.
 
@@ -200,59 +258,124 @@ class Pynenc:
             self._tasks[task_id] = Task.from_id(self, task_id)
         return self._tasks[task_id]
 
+    def __reduce__(self) -> tuple:
+        """Control pickle reconstruction so __new__ receives config_values.
+
+        Without this, pickle calls ``Pynenc.__new__(Pynenc)`` with no args,
+        causing the multiton to fall back to the default app_id ('pynenc') and
+        return a stale instance for same-process roundtrips.
+        """
+        return (
+            _new_pynenc,
+            (type(self), self.config_values, self.config_filepath),
+            self.__getstate__(),
+        )
+
     def __getstate__(self) -> dict:
-        # Return state as a dictionary and a secondary value as a tuple
+        """Return the serializable state of the app for pickling or multiprocessing."""
         return {
-            "app_id": self.app_id,
             "config_values": self.config_values,
             "config_filepath": self.config_filepath,
             "reporting": self.reporting,
-            # "tasks": self._tasks,
+            "tasks": self._tasks,
         }
 
     def __setstate__(self, state: dict) -> None:
-        # Restore instance attributes
-        self._app_id = state["app_id"]
-        object.__setattr__(self, "_app_id", self._app_id)
-        self.config_values = state["config_values"]
-        self.config_filepath = state["config_filepath"]
+        """Restore the app state and register in the multiton.
+
+        When a child process (spawned via ``multiprocessing``) unpickles the
+        parent's app, this registers the instance so that subsequent
+        ``Pynenc(config_values={"app_id": ...})`` calls (e.g. during module
+        re-import) return the same already-configured instance.
+        """
+        self._initialised = True
+        self._config_values = state["config_values"]
+        self._config_filepath = state["config_filepath"]
         self.reporting = state["reporting"]
-        # self._tasks = state.get("tasks", {})
+        self._tasks = state.get("tasks", {})
+        self._deferred_trigger_tasks = defaultdict(list)
         self._runner_instance = None
-
-    @cached_property
-    def conf(self) -> ConfigPynenc:
-        return ConfigPynenc(
-            config_values=self.config_values, config_filepath=self.config_filepath
+        self._reset_cached_components()
+        load_all_plugins()
+        # Register so module-level Pynenc() with the same app_id reuses this instance.
+        # Use ConfigPynenc to resolve app_id consistently (may come from
+        # config_values, config_filepath, or environment variables).
+        resolved = ConfigPynenc(
+            config_values=self._config_values,
+            config_filepath=self._config_filepath,
         )
+        type(self)._instances[resolved.app_id] = self
 
-    @cached_property
+    def _reset_cached_components(self) -> None:
+        """Reset all lazily-initialised components so they are re-created on next access."""
+        self._conf: ConfigPynenc | None = None
+        self._logger: Logger | None = None
+        self._orchestrator: BaseOrchestrator | None = None
+        self._trigger: BaseTrigger | None = None
+        self._broker: BaseBroker | None = None
+        self._state_backend: BaseStateBackend | None = None
+        self._serializer: BaseSerializer | None = None
+        self._client_data_store: BaseClientDataStore | None = None
+
+    @property
+    def conf(self) -> ConfigPynenc:
+        if self._conf is None:
+            self._conf = ConfigPynenc(
+                config_values=self.config_values, config_filepath=self.config_filepath
+            )
+        return self._conf
+
+    @property
     def logger(self) -> Logger:
-        return create_logger(self)
+        if self._logger is None:
+            self._logger = create_logger(self)
+        return self._logger
 
-    @cached_property
+    @property
     def orchestrator(self) -> BaseOrchestrator:
-        return get_subclass(BaseOrchestrator, self.conf.orchestrator_cls)(self)  # type: ignore # mypy issue #4717
+        if self._orchestrator is None:
+            self._orchestrator = get_subclass(
+                BaseOrchestrator,  # type: ignore[type-abstract]
+                self.conf.orchestrator_cls,
+            )(self)
+        return self._orchestrator
 
-    @cached_property
+    @property
     def trigger(self) -> BaseTrigger:
-        return get_subclass(BaseTrigger, self.conf.trigger_cls)(self)  # type: ignore # mypy issue #4717
+        if self._trigger is None:
+            self._trigger = get_subclass(BaseTrigger, self.conf.trigger_cls)(self)  # type: ignore # mypy issue #4717
+        return self._trigger
 
-    @cached_property
+    @property
     def broker(self) -> BaseBroker:
-        return get_subclass(BaseBroker, self.conf.broker_cls)(self)  # type: ignore # mypy issue #4717
+        if self._broker is None:
+            self._broker = get_subclass(BaseBroker, self.conf.broker_cls)(self)  # type: ignore # mypy issue #4717
+        return self._broker
 
-    @cached_property
+    @property
     def state_backend(self) -> BaseStateBackend:
-        return get_subclass(BaseStateBackend, self.conf.state_backend_cls)(self)  # type: ignore # mypy issue #4717
+        if self._state_backend is None:
+            self._state_backend = get_subclass(
+                BaseStateBackend,  # type: ignore[type-abstract]
+                self.conf.state_backend_cls,
+            )(self)
+            self._state_backend.store_app_info(AppInfo.from_app(self))
+        return self._state_backend
 
-    @cached_property
+    @property
     def serializer(self) -> BaseSerializer:
-        return get_subclass(BaseSerializer, self.conf.serializer_cls)()  # type: ignore # mypy issue #4717
+        if self._serializer is None:
+            self._serializer = get_subclass(BaseSerializer, self.conf.serializer_cls)()  # type: ignore # mypy issue #4717
+        return self._serializer
 
-    @cached_property
-    def arg_cache(self) -> BaseArgCache:
-        return get_subclass(BaseArgCache, self.conf.arg_cache_cls)(self)  # type: ignore # mypy issue #4717
+    @property
+    def client_data_store(self) -> BaseClientDataStore:
+        if self._client_data_store is None:
+            self._client_data_store = get_subclass(
+                BaseClientDataStore,  # type: ignore[type-abstract]
+                self.conf.client_data_store_cls,
+            )(self)
+        return self._client_data_store
 
     @property
     def runner(self) -> BaseRunner:
@@ -287,7 +410,7 @@ class Pynenc:
         self.broker.purge()
         self.orchestrator.purge()
         self.state_backend.purge()
-        self.arg_cache.purge()
+        self.client_data_store.purge()
         self.trigger.purge()
 
     @overload
@@ -295,86 +418,87 @@ class Pynenc:
         self,
         func: "Func",
         *,
-        parallel_batch_size: Optional[int] = None,
-        retry_for: Optional[tuple[type[Exception], ...]] = None,
-        max_retries: Optional[int] = None,
-        running_concurrency: Optional[ConcurrencyControlType] = None,
-        registration_concurrency: Optional[ConcurrencyControlType] = None,
-        key_arguments: Optional[tuple[str, ...]] = None,
-        on_diff_non_key_args_raise: Optional[bool] = None,
-        call_result_cache: Optional[bool] = None,
-        disable_cache_args: Optional[tuple[str, ...]] = None,
+        parallel_batch_size: int | None = None,
+        retry_for: tuple[type[Exception], ...] | None = None,
+        max_retries: int | None = None,
+        running_concurrency: ConcurrencyControlType | None = None,
+        registration_concurrency: ConcurrencyControlType | None = None,
+        key_arguments: tuple[str, ...] | None = None,
+        on_diff_non_key_args_raise: bool | None = None,
+        call_result_cache: bool | None = None,
+        disable_cache_args: tuple[str, ...] | None = None,
         triggers: Union["TriggerBuilder", list["TriggerBuilder"]] | None = None,
-        force_new_workflow: Optional[bool] = None,
-    ) -> "Task":
-        ...
+        force_new_workflow: bool | None = None,
+        reroute_on_concurrency_control: bool | None = None,
+    ) -> "Task": ...
 
     @overload
     def task(
         self,
         func: None = None,
         *,
-        parallel_batch_size: Optional[int] = None,
-        retry_for: Optional[tuple[type[Exception], ...]] = None,
-        max_retries: Optional[int] = None,
-        running_concurrency: Optional[ConcurrencyControlType] = None,
-        registration_concurrency: Optional[ConcurrencyControlType] = None,
-        key_arguments: Optional[tuple[str, ...]] = None,
-        on_diff_non_key_args_raise: Optional[bool] = None,
-        call_result_cache: Optional[bool] = None,
-        disable_cache_args: Optional[tuple[str, ...]] = None,
+        parallel_batch_size: int | None = None,
+        retry_for: tuple[type[Exception], ...] | None = None,
+        max_retries: int | None = None,
+        running_concurrency: ConcurrencyControlType | None = None,
+        registration_concurrency: ConcurrencyControlType | None = None,
+        key_arguments: tuple[str, ...] | None = None,
+        on_diff_non_key_args_raise: bool | None = None,
+        call_result_cache: bool | None = None,
+        disable_cache_args: tuple[str, ...] | None = None,
         triggers: Union["TriggerBuilder", list["TriggerBuilder"]] | None = None,
-        force_new_workflow: Optional[bool] = None,
-    ) -> Callable[["Func"], "Task"]:
-        ...
+        force_new_workflow: bool | None = None,
+        reroute_on_concurrency_control: bool | None = None,
+    ) -> Callable[["Func"], "Task"]: ...
 
     def task(
         self,
         func: Optional["Func"] = None,
         *,
-        parallel_batch_size: Optional[int] = None,
-        retry_for: Optional[tuple[type[Exception], ...]] = None,
-        max_retries: Optional[int] = None,
-        running_concurrency: Optional[ConcurrencyControlType] = None,
-        registration_concurrency: Optional[ConcurrencyControlType] = None,
-        key_arguments: Optional[tuple[str, ...]] = None,
-        on_diff_non_key_args_raise: Optional[bool] = None,
-        call_result_cache: Optional[bool] = None,
-        disable_cache_args: Optional[tuple[str, ...]] = None,
+        parallel_batch_size: int | None = None,
+        retry_for: tuple[type[Exception], ...] | None = None,
+        max_retries: int | None = None,
+        running_concurrency: ConcurrencyControlType | None = None,
+        registration_concurrency: ConcurrencyControlType | None = None,
+        key_arguments: tuple[str, ...] | None = None,
+        on_diff_non_key_args_raise: bool | None = None,
+        call_result_cache: bool | None = None,
+        disable_cache_args: tuple[str, ...] | None = None,
         triggers: Union["TriggerBuilder", list["TriggerBuilder"]] | None = None,
-        force_new_workflow: Optional[bool] = None,
-    ) -> "Task" | Callable[["Func"], "Task"]:
+        force_new_workflow: bool | None = None,
+        reroute_on_concurrency_control: bool | None = None,
+    ) -> "Task | Callable[[Func], Task]":
         """
         The task decorator converts the function into an instance of a BaseTask. It accepts any kind of options,
         however these options will be validated with the options class assigned to the class.
 
         :param Optional[Callable] func:
             The function to be converted into a Task instance.
-        :param Optional[int] parallel_batch_size:
+        :param int | None parallel_batch_size:
             If set to 0, auto parallelization is disabled. If greater than 0, tasks with iterable
             arguments are automatically split into chunks.
         :param Optional[Tuple[Exception, ...]] retry_for:
             Exceptions for which the task should be retried.
-        :param Optional[int] max_retries:
+        :param int | None max_retries:
             The maximum number of retries for a task.
-        :param Optional[ConcurrencyControlType] running_concurrency:
+        :param ConcurrencyControlType | None running_concurrency:
             Controls the concurrency behavior of the task.
-        :param Optional[ConcurrencyControlType] registration_concurrency:
+        :param ConcurrencyControlType | None registration_concurrency:
             Manages task registration concurrency.
         :param Optional[Tuple[str, ...]] key_arguments:
             Key arguments for concurrency control.
-        :param Optional[bool] on_diff_non_key_args_raise:
+        :param bool | None on_diff_non_key_args_raise:
             If True, raises an exception for task invocations with matching key arguments but
             different non-key arguments.
-        :param Optional[bool] call_result_cache:
+        :param bool | None call_result_cache:
             If True, it will return the latest result of a Task with the same arguments if availble,
             otherwise it will trigger a new invocation as expected.
-        :param Optional[tuple[str, ...]] disable_cache_args:
+        :param tuple[str, ...] | None disable_cache_args:
             Arguments to exclude from caching, it will accept "*" to disable caching for all arguments.
         :param Union[TriggerBuilder, list[TriggerBuilder]] | None triggers:
             Trigger definitions that determine when this task should execute automatically.
             Can be a single TriggerBuilder or a list of builders for multiple trigger conditions.
-        :param Optional[bool] force_new_workflow:
+        :param bool | None force_new_workflow:
             If True, this task will always create a new workflow when invoked.
             Even when called from within another workflow, it creates a subworkflow
             that maintains a reference to its parent workflow.
@@ -436,6 +560,7 @@ class Pynenc:
             "call_result_cache": call_result_cache,
             "disable_cache_args": disable_cache_args,
             "force_new_workflow": force_new_workflow,
+            "reroute_on_concurrency_control": reroute_on_concurrency_control,
         }
         options = {k: v for k, v in options.items() if v is not None}
 
@@ -446,7 +571,7 @@ class Pynenc:
                 )
             task: Task = Task(self, _func, options)
             self._tasks[task.task_id] = task
-            self.trigger.register_task_triggers(task, triggers)
+            self._store_deferred_trigger(task, triggers)
             return task
 
         if func is None:
@@ -458,80 +583,80 @@ class Pynenc:
         self,
         func: "Func",
         *,
-        parallel_func: Optional["ParallelFunc"] = None,
-        aggregate_func: Optional["AggregateFunc"] = None,
-        parallel_batch_size: Optional[int] = None,
-        retry_for: Optional[tuple[type[Exception], ...]] = None,
-        max_retries: Optional[int] = None,
-        running_concurrency: Optional[ConcurrencyControlType] = None,
-        registration_concurrency: Optional[ConcurrencyControlType] = None,
-        key_arguments: Optional[tuple[str, ...]] = None,
-        on_diff_non_key_args_raise: Optional[bool] = None,
-        call_result_cache: Optional[bool] = None,
-        disable_cache_args: Optional[tuple[str, ...]] = None,
-        force_new_workflow: Optional[bool] = None,
-    ) -> "Func":
-        ...
+        parallel_func: "ParallelFunc | None" = None,
+        aggregate_func: "AggregateFunc | None" = None,
+        parallel_batch_size: int | None = None,
+        retry_for: tuple[type[Exception], ...] | None = None,
+        max_retries: int | None = None,
+        running_concurrency: ConcurrencyControlType | None = None,
+        registration_concurrency: ConcurrencyControlType | None = None,
+        key_arguments: tuple[str, ...] | None = None,
+        on_diff_non_key_args_raise: bool | None = None,
+        call_result_cache: bool | None = None,
+        disable_cache_args: tuple[str, ...] | None = None,
+        force_new_workflow: bool | None = None,
+        reroute_on_concurrency_control: bool | None = None,
+    ) -> "Func": ...
 
     @overload
     def direct_task(
         self,
         func: "Func[Params, Result]",
         *,
-        parallel_func: Optional["ParallelFunc"] = None,
-        aggregate_func: Optional["AggregateFunc"] = None,
-        parallel_batch_size: Optional[int] = None,
-        retry_for: Optional[tuple[type[Exception], ...]] = None,
-        max_retries: Optional[int] = None,
-        running_concurrency: Optional[ConcurrencyControlType] = None,
-        registration_concurrency: Optional[ConcurrencyControlType] = None,
-        key_arguments: Optional[tuple[str, ...]] = None,
-        on_diff_non_key_args_raise: Optional[bool] = None,
-        call_result_cache: Optional[bool] = None,
-        disable_cache_args: Optional[tuple[str, ...]] = None,
-        force_new_workflow: Optional[bool] = None,
-    ) -> "Func":
-        ...
+        parallel_func: "ParallelFunc | None" = None,
+        aggregate_func: "AggregateFunc | None" = None,
+        parallel_batch_size: int | None = None,
+        retry_for: tuple[type[Exception], ...] | None = None,
+        max_retries: int | None = None,
+        running_concurrency: ConcurrencyControlType | None = None,
+        registration_concurrency: ConcurrencyControlType | None = None,
+        key_arguments: tuple[str, ...] | None = None,
+        on_diff_non_key_args_raise: bool | None = None,
+        call_result_cache: bool | None = None,
+        disable_cache_args: tuple[str, ...] | None = None,
+        force_new_workflow: bool | None = None,
+        reroute_on_concurrency_control: bool | None = None,
+    ) -> "Func": ...
 
     @overload
     def direct_task(
         self,
         func: None = None,
         *,
-        parallel_func: Optional["ParallelFunc"] = None,
-        aggregate_func: Optional["AggregateFunc"] = None,
-        parallel_batch_size: Optional[int] = None,
-        retry_for: Optional[tuple[type[Exception], ...]] = None,
-        max_retries: Optional[int] = None,
-        running_concurrency: Optional[ConcurrencyControlType] = None,
-        registration_concurrency: Optional[ConcurrencyControlType] = None,
-        key_arguments: Optional[tuple[str, ...]] = None,
-        on_diff_non_key_args_raise: Optional[bool] = None,
-        call_result_cache: Optional[bool] = None,
-        disable_cache_args: Optional[tuple[str, ...]] = None,
-        force_new_workflow: Optional[bool] = None,
-    ) -> Callable[["Func[Params, Result]"], "Func[Params, Result]"]:
-        ...
+        parallel_func: "ParallelFunc | None" = None,
+        aggregate_func: "AggregateFunc | None" = None,
+        parallel_batch_size: int | None = None,
+        retry_for: tuple[type[Exception], ...] | None = None,
+        max_retries: int | None = None,
+        running_concurrency: ConcurrencyControlType | None = None,
+        registration_concurrency: ConcurrencyControlType | None = None,
+        key_arguments: tuple[str, ...] | None = None,
+        on_diff_non_key_args_raise: bool | None = None,
+        call_result_cache: bool | None = None,
+        disable_cache_args: tuple[str, ...] | None = None,
+        force_new_workflow: bool | None = None,
+        reroute_on_concurrency_control: bool | None = None,
+    ) -> Callable[["Func[Params, Result]"], "Func[Params, Result]"]: ...
 
     def direct_task(
         self,
         func: Optional["Func[Params, Result]"] = None,
         *,
-        parallel_func: Optional["ParallelFunc"] = None,
-        aggregate_func: Optional["AggregateFunc"] = None,
-        parallel_batch_size: Optional[int] = None,
-        retry_for: Optional[tuple[type[Exception], ...]] = None,
-        max_retries: Optional[int] = None,
-        running_concurrency: Optional[ConcurrencyControlType] = None,
-        registration_concurrency: Optional[ConcurrencyControlType] = None,
-        key_arguments: Optional[tuple[str, ...]] = None,
-        on_diff_non_key_args_raise: Optional[bool] = None,
-        call_result_cache: Optional[bool] = None,
-        disable_cache_args: Optional[tuple[str, ...]] = None,
-        force_new_workflow: Optional[bool] = None,
+        parallel_func: "ParallelFunc | None" = None,
+        aggregate_func: "AggregateFunc | None" = None,
+        parallel_batch_size: int | None = None,
+        retry_for: tuple[type[Exception], ...] | None = None,
+        max_retries: int | None = None,
+        running_concurrency: ConcurrencyControlType | None = None,
+        registration_concurrency: ConcurrencyControlType | None = None,
+        key_arguments: tuple[str, ...] | None = None,
+        on_diff_non_key_args_raise: bool | None = None,
+        call_result_cache: bool | None = None,
+        disable_cache_args: tuple[str, ...] | None = None,
+        force_new_workflow: bool | None = None,
+        reroute_on_concurrency_control: bool | None = None,
     ) -> (
-        "Func[Params, Result]"
-        | Callable[["Func[Params, Result]"], "Func[Params, Result]"]
+        "Func[Params, Result] | Callable[[Func[Params, Result]], Func[Params, Result]]"
     ):
         """
         Create a task that directly returns its result rather than returning an invocation.
@@ -571,28 +696,28 @@ class Pynenc:
                arguments (20MB+) as they're serialized only once instead of for each parallel task.
         :param Optional[AggregateFunc] aggregate_func:
             Function that takes a list of results and aggregates them into a single result.
-        :param Optional[int] parallel_batch_size:
+        :param int | None parallel_batch_size:
             If set to 0, auto parallelization is disabled. If greater than 0, tasks with iterable
             arguments are automatically split into chunks.
         :param Optional[Tuple[Exception, ...]] retry_for:
             Exceptions for which the task should be retried.
-        :param Optional[int] max_retries:
+        :param int | None max_retries:
             The maximum number of retries for a task.
-        :param Optional[ConcurrencyControlType] running_concurrency:
+        :param ConcurrencyControlType | None running_concurrency:
             Controls the concurrency behavior of the task.
-        :param Optional[ConcurrencyControlType] registration_concurrency:
+        :param ConcurrencyControlType | None registration_concurrency:
             Manages task registration concurrency.
         :param Optional[Tuple[str, ...]] key_arguments:
             Key arguments for concurrency control.
-        :param Optional[bool] on_diff_non_key_args_raise:
+        :param bool | None on_diff_non_key_args_raise:
             If True, raises an exception for task invocations with matching key arguments but
             different non-key arguments.
-        :param Optional[bool] call_result_cache:
+        :param bool | None call_result_cache:
             If True, it will return the latest result of a Task with the same arguments if available,
             otherwise it will trigger a new invocation as expected.
-        :param Optional[tuple[str, ...]] disable_cache_args:
+        :param tuple[str, ...] | None disable_cache_args:
             Arguments to exclude from caching, it will accept "*" to disable caching for all arguments.
-        :param Optional[bool] force_new_workflow:
+        :param bool | None force_new_workflow:
             If True, this task will always create a new workflow when invoked.
             Even when called from within another workflow, it creates a subworkflow
             that maintains a reference to its parent workflow.
@@ -670,6 +795,7 @@ class Pynenc:
                 "call_result_cache": call_result_cache,
                 "disable_cache_args": disable_cache_args,
                 "force_new_workflow": force_new_workflow,
+                "reroute_on_concurrency_control": reroute_on_concurrency_control,
             }
             task_options = {k: v for k, v in task_options.items() if v is not None}
             task = self.task(func, **task_options)  # type: ignore
@@ -689,8 +815,9 @@ class Pynenc:
                         return _aggregate_results(results)
                     return await task(*args, **kwargs).async_result()
 
-                # Attach the original function as an attribute
+                # Attach references for serialization and from_id resolution
                 async_wrapper.__inner_function__ = func  # type: ignore
+                async_wrapper.__pynenc_task__ = task  # type: ignore
                 return async_wrapper  # type: ignore
 
             @wraps(func)
@@ -702,8 +829,9 @@ class Pynenc:
                     return _aggregate_results(invocation_group.results)
                 return task(*args, **kwargs).result
 
-            # Attach the original function as an attribute
+            # Attach references for serialization and from_id resolution
             sync_wrapper.__inner_function__ = func  # type: ignore
+            sync_wrapper.__pynenc_task__ = task  # type: ignore
             return sync_wrapper
 
         if func is None:

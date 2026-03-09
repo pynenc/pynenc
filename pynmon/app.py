@@ -1,26 +1,139 @@
+"""
+Pynmon monitoring application and server startup.
+
+Note: Pynmon requires Python <3.13 due to FastAPI/Pydantic v2 dependency limitations.
+Core pynenc functionality supports Python 3.11+.
+"""
+
+import sys
+
+if sys.version_info >= (3, 13):
+    raise RuntimeError(
+        "The pynmon monitoring UI requires Python <3.13 due to FastAPI/Pydantic limitations. "
+        "Core pynenc functionality supports Python 3.13+."
+    )
+
 import logging
+import os
 import traceback
 from pathlib import Path
-from typing import Optional
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from pynenc.app import AppInfo, Pynenc
 
-# Configure logging
+
+# Standard library pattern: add NullHandler so that libraries using pynmon
+# don't see "No handlers could be found for logger 'pynmon'" warnings.
+# Actual handler/level configuration happens in configure_logging(), which is
+# called only from the application entry point (start_monitor), not at import time.
+# See: https://docs.python.org/3/howto/logging.html#configuring-logging-for-a-library
+logging.getLogger("pynmon").addHandler(logging.NullHandler())
+
 logger = logging.getLogger("pynmon")
-handler = logging.StreamHandler()
-handler.setFormatter(
-    logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-)
-logger.addHandler(handler)
-logger.setLevel(logging.INFO)
+
+
+def configure_logging(log_level: str = "INFO") -> None:
+    """
+    Configure pynmon logging for application use.
+
+    Should be called once at server startup. Not called at import time so
+    that embedding applications and tests can manage their own logging.
+    Falls back to the PYNMON_LOG_LEVEL env var, then INFO.
+
+    :param str log_level: Desired level ('debug', 'info', 'warning', 'error')
+    """
+    level_name = log_level.upper()
+    level = getattr(logging, level_name, logging.INFO)
+
+    pynmon_logger = logging.getLogger("pynmon")
+    # Remove the NullHandler added at import time
+    pynmon_logger.handlers = [
+        h for h in pynmon_logger.handlers if not isinstance(h, logging.NullHandler)
+    ]
+    pynmon_logger.setLevel(level)
+    pynmon_logger.propagate = False  # don't double-emit via root / uvicorn handler
+    pynmon_logger.addHandler(_make_handler())
+
+
+def _make_handler() -> logging.StreamHandler:
+    """Build a coloured, timestamped stream handler for pynmon loggers."""
+    try:
+        from uvicorn.logging import DefaultFormatter
+
+        fmt = "%(asctime)s %(levelprefix)s %(name)s: %(message)s"
+        formatter = DefaultFormatter(
+            fmt=fmt, datefmt="%Y-%m-%d %H:%M:%S", use_colors=True
+        )
+    except ImportError:
+        formatter = logging.Formatter(  # type: ignore[assignment]
+            "%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+    handler = logging.StreamHandler()
+    handler.setFormatter(formatter)
+    return handler
+
+
+def _uvicorn_log_config() -> dict:
+    """Return a uvicorn log config with timestamps and colors for uvicorn loggers.
+
+    pynmon.* loggers are handled by the handler added above (not here) so they
+    are not duplicated when uvicorn applies its dict config.
+    """
+    return {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "default": {
+                "()": "uvicorn.logging.DefaultFormatter",
+                "fmt": "%(asctime)s %(levelprefix)s %(message)s",
+                "datefmt": "%Y-%m-%d %H:%M:%S",
+                "use_colors": True,
+            },
+            "access": {
+                "()": "uvicorn.logging.AccessFormatter",
+                "fmt": '%(asctime)s %(levelprefix)s %(client_addr)s - "%(request_line)s" %(status_code)s',
+                "datefmt": "%Y-%m-%d %H:%M:%S",
+                "use_colors": True,
+            },
+        },
+        "handlers": {
+            "default": {
+                "formatter": "default",
+                "class": "logging.StreamHandler",
+                "stream": "ext://sys.stderr",
+            },
+            "access": {
+                "formatter": "access",
+                "class": "logging.StreamHandler",
+                "stream": "ext://sys.stdout",
+            },
+        },
+        "loggers": {
+            "uvicorn": {"handlers": ["default"], "level": "INFO", "propagate": False},
+            "uvicorn.error": {"level": "INFO"},
+            "uvicorn.access": {
+                "handlers": ["access"],
+                "level": "INFO",
+                "propagate": False,
+            },
+            # pynmon.* intentionally excluded — handled by the module-level
+            # handler above which works in all execution contexts.
+        },
+    }
+
 
 # Initialize FastAPI app
 app = FastAPI(title="Pynenc Monitor")
+
+# Set up static files
+static_dir = Path(__file__).parent / "static"
+app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 # Set up Jinja2 templates
 templates_dir = Path(__file__).parent / "templates"
@@ -28,7 +141,7 @@ templates = Jinja2Templates(directory=str(templates_dir))
 
 # Global reference to the monitored Pynenc app instance
 all_pynenc_instances: dict[str, Pynenc] = {}
-pynenc_instance: Optional[Pynenc] = None
+pynenc_instance: Pynenc | None = None
 
 
 # Global exception handler to catch and log all unhandled exceptions
@@ -49,30 +162,16 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
     )
 
 
-@app.get("/", response_class=HTMLResponse)
-async def root(request: Request) -> HTMLResponse:
-    """Root endpoint, shows the dashboard."""
-    active_app = get_active_app()
-    all_apps = get_all_apps()
-    if not all_apps or not active_app:
-        return templates.TemplateResponse(
-            "critical_error.html",
-            {
-                "request": request,
-                "title": "No App Configured",
-                "message": "No Pynenc application is configured for monitoring.",
-            },
-        )
+# The dashboard route is provided by pynmon.views.home.router (registered
+# in setup_routes).  Only a minimal guard is kept here for the edge case
+# where no app is configured at all.
 
-    return templates.TemplateResponse(
-        "base.html",
-        {
-            "request": request,
-            "title": "Pynenc Monitor Dashboard",
-            "app_id": active_app.app_id,
-            "all_apps": list(all_apps.keys()),
-        },
-    )
+
+@app.get("/health", response_class=JSONResponse)
+async def health_check() -> JSONResponse:
+    """Lightweight health endpoint."""
+    active = get_active_app() if get_all_apps() else None
+    return JSONResponse({"status": "ok", "app": active.app_id if active else None})
 
 
 @app.get("/switch-app/{app_id}")
@@ -125,25 +224,34 @@ def setup_routes() -> None:
     """Set up all route modules."""
     # Import view modules only when needed to avoid circular imports
     from pynmon.views import (
-        arg_cache,
         broker,
         calls,
+        client_data_store,
+        family_tree,
+        home,
         invocations,
+        log_explorer,
         orchestrator,
+        runners,
         state_backend,
         tasks,
         workflows,
     )
 
-    # Register the routes
+    # Register the routes — home first so "/" is the dashboard
+    app.include_router(home.router)
     app.include_router(broker.router)
+    app.include_router(client_data_store.router)
     app.include_router(orchestrator.router)
+    app.include_router(runners.router)
+    # family_tree first: its /{id}/family-tree is more specific than /{id}
+    app.include_router(family_tree.router)
     app.include_router(invocations.router)
     app.include_router(tasks.router)
     app.include_router(calls.router)
     app.include_router(state_backend.router)
-    app.include_router(arg_cache.router)
     app.include_router(workflows.router)
+    app.include_router(log_explorer.router)
 
 
 def start_monitor(
@@ -151,14 +259,20 @@ def start_monitor(
     selected_app: Pynenc | None,
     host: str = "127.0.0.1",
     port: int = 8000,
+    log_level: str | None = None,
 ) -> None:
     """
     Start the monitoring web server for a specific Pynenc app.
 
-    :param app_instance: The Pynenc app instance to monitor
+    :param apps: All available app instances to monitor
+    :param selected_app: The initially active app instance
     :param host: Host to bind to
     :param port: Port to listen on
+    :param log_level: Logging level ('debug', 'info', 'warning', 'error').
+        Falls back to PYNMON_LOG_LEVEL env var, then 'info'.
     """
+    resolved_level = log_level or os.environ.get("PYNMON_LOG_LEVEL") or "info"
+    configure_logging(resolved_level)
 
     global pynenc_instance, all_pynenc_instances
 
@@ -182,7 +296,13 @@ def start_monitor(
     setup_routes()
 
     print(f"Starting Pynenc Monitor at http://{host}:{port}")
-    uvicorn.run(app, host=host, port=port)
+    uvicorn.run(
+        app,
+        host=host,
+        port=port,
+        access_log=True,
+        log_config=_uvicorn_log_config(),
+    )
 
 
 def get_pynenc_instance() -> Pynenc:
@@ -199,7 +319,7 @@ def get_pynenc_instance() -> Pynenc:
 
 
 def hydrate_app_instances(
-    apps_info: dict[str, AppInfo], selected_app: Optional[Pynenc] = None
+    apps_info: dict[str, AppInfo], selected_app: Pynenc | None = None
 ) -> dict[str, Pynenc]:
     """
     Hydrate Pynenc app instances from AppInfo objects.

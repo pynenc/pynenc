@@ -1,69 +1,91 @@
-.PHONY: install clean test test-unit test-integration coverage htmlcov pre-commit docker-redis combine-coverage
-
-# Default Python version used in the project
-PYTHON_VERSION := 3.11.7
-
+.PHONY: install
 install:
-	@echo "Installing dependencies via Poetry with monitor extra..."
-	poetry install --no-interaction -E monitor
+	@echo "Installing dependencies via UV with all extras..."
+	uv sync --all-extras
 
+.PHONY: install-pre-commit
 install-pre-commit: install
 	@echo "Installing pre-commit hooks..."
-	poetry run pre-commit install
+	uv run pre-commit install
 
+.PHONY: pre-commit
 pre-commit:
 	@echo "Running pre-commit on all files..."
-	poetry run pre-commit run --all-files
+	uv run pre-commit run --all-files
 
+.PHONY: clean
 clean:
 	@echo "Cleaning previous coverage data and HTML reports..."
 	rm -f .coverage .coverage.*
 	rm -rf htmlcov
 
+.PHONY: test-unit
 test-unit: clean
 	@echo "Running unit tests with coverage..."
-	poetry run coverage run -m pytest tests/unit
-	poetry run coverage report
-	poetry run coverage html --show-contexts --title "Unit Test Coverage"
+	uv run coverage run -m pytest pynenc_tests/unit
+	uv run coverage report
+	uv run coverage html --show-contexts --title "Unit Test Coverage"
 
+.PHONY: test-integration
 test-integration: clean
 	@echo "Running integration tests with coverage..."
-	poetry run coverage run -m pytest tests/integration
-	poetry run coverage report
-	poetry run coverage html --show-contexts --title "Integration Test Coverage"
+	uv run coverage run -m pytest pynenc_tests/integration
+	uv run coverage report
+	uv run coverage html --show-contexts --title "Integration Test Coverage"
 
+.PHONY: test
 test: clean
 	@echo "Running all tests with combined coverage..."
-	poetry run coverage erase
-	poetry run coverage run -m pytest tests/unit
-	poetry run coverage run --append -m pytest tests/integration
-	poetry run coverage report
-	poetry run coverage html --show-contexts --title "Combined Test Coverage"
+	uv run coverage erase
+	uv run coverage run -m pytest pynenc_tests/unit
+	uv run coverage run --append -m pytest pynenc_tests/integration
+	uv run coverage report
+	uv run coverage html --show-contexts --title "Combined Test Coverage"
 
 # This target matches the GitHub Actions flow by creating separate coverage files
+.PHONY: test-ci
 test-ci: clean
 	@echo "Running tests in CI mode (separate coverage files)..."
-	poetry run coverage run -m pytest tests/unit
+	uv run coverage run -m pytest tests/unit
 	cp .coverage coverage.unit
-	poetry run coverage run -m pytest tests/integration
+	uv run coverage run -m pytest tests/integration
 	cp .coverage coverage.integration
 	$(MAKE) combine-coverage
 
+.PHONY: combine-coverage
 combine-coverage:
 	@echo "Combining coverage data..."
-	poetry run coverage combine coverage.unit coverage.integration
-	poetry run coverage report
-	poetry run coverage html --show-contexts --title "Combined Test Coverage"
+	uv run coverage combine coverage.unit coverage.integration
+	uv run coverage report
+	uv run coverage html --show-contexts --title "Combined Test Coverage"
 
+.PHONY: coverage
 coverage:
 	@echo "Displaying coverage report..."
-	poetry run coverage report
+	uv run coverage report
 
+.PHONY: htmlcov
 htmlcov:
 	@echo "Generating HTML coverage report..."
-	poetry run coverage html --show-contexts --title "Coverage Report"
+	uv run coverage html --show-contexts --title "Coverage Report"
 
-docker-redis:
-	@echo "Starting Redis container for integration tests..."
-	docker run --name redis-test -p 6379:6379 -d redis:7.2.3
-	@echo "Redis container started. To stop it later, run: docker stop redis-test && docker rm redis-test"
+.PHONY: clean-build
+build: clean-build ## Build wheel file
+	@echo "🚀 Creating wheel file"
+	@uvx --from build pyproject-build --installer uv
+
+.PHONY: publish
+publish: ## Publish a release to PyPI.
+	@echo "🚀 Publishing."
+	@uvx twine upload --repository-url https://upload.pypi.org/legacy/ dist/*
+
+.PHONY: docs
+docs:
+	@echo "Building documentation..."
+	uv run --group docs sphinx-build -b html docs docs/_build/html
+	@echo "Docs built — open docs/_build/html/index.html in a browser."
+
+.PHONY: docs-serve
+docs-serve: docs
+	@echo "Serving docs at http://localhost:8080 ..."
+	uv run --group docs python -m http.server 8080 --directory docs/_build/html

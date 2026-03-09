@@ -80,16 +80,15 @@
                     </a>
                   </td>
                   <td>
-                    <a href="/tasks/{{ invocation.task.task_id }}">
-                      {{ invocation.task.task_id.split('.')[-1] }}
+                    <a href="/tasks/{{ invocation.task.task_id.key }}">
+                      {{ invocation.task.task_id.func_name }}
                     </a>
                   </td>
                   <td>
                     <a
-                      href="/calls/?call_id={{ invocation.call_id|urlencode }}"
+                      href="/calls/?call_id_key={{ invocation.call.call_id.key|urlencode }}"
                     >
-                      {{ invocation.call_id.split('#')[-1][:8] if '#' in
-                      invocation.call_id else invocation.call_id[:8] }}...
+                      {{ invocation.call.call_id.key[:8] }}...
                     </a>
                   </td>
                   <td>

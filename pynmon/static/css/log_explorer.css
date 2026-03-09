@@ -1,0 +1,516 @@
+/* ── Log Explorer styles ─────────────────────────────────────────────── */
+
+/* Per-line log cards */
+.log-line-card {
+  border-left: 4px solid #dee2e6;
+  margin-bottom: 2px;
+}
+/* Level-coloured background spanning both columns */
+/* Colors matched to pynenc log.py: DEBUG=cyan, INFO=green, WARNING=yellow, ERROR=red */
+.log-line-card.level-info {
+  border-left-color: #28a745;
+  background: rgba(40, 167, 69, 0.08);
+}
+.log-line-card.level-warning {
+  border-left-color: #e8a020;
+  background: rgba(240, 173, 78, 0.14);
+}
+.log-line-card.level-error {
+  border-left-color: #dc3545;
+  background: rgba(220, 53, 69, 0.12);
+}
+.log-line-card.level-debug {
+  border-left-color: #17a2b8;
+  background: rgba(23, 162, 184, 0.08);
+}
+.log-line-card.level-critical {
+  border-left-color: #a71d2a;
+  background: rgba(220, 53, 69, 0.18);
+}
+
+/* Two-column layout: fixed-width left, aligned right */
+.log-line-columns {
+  display: flex;
+  min-height: 0;
+}
+.log-col-left {
+  flex: 0 0 660px;
+  min-width: 0;
+  border-right: 1px solid #e9ecef;
+  padding: 3px 6px;
+  overflow: hidden;
+}
+.log-col-right {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 3px 8px;
+}
+
+/* Compact metadata row: timestamp badge + level badge inline with refs */
+.line-meta {
+  display: inline;
+}
+.meta-ts {
+  display: inline-flex;
+  align-items: center;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 10px;
+  color: #495057;
+  background: #e9ecef;
+  border: 1px solid #dee2e6;
+  border-radius: 3px;
+  padding: 1px 5px;
+  margin-right: 3px;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.meta-level {
+  display: inline-flex;
+  align-items: center;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
+  margin-right: 3px;
+  vertical-align: middle;
+}
+.meta-level-info {
+  background: #d4edda;
+  color: #155724;
+}
+.meta-level-warning {
+  background: #fff3cd;
+  color: #856404;
+}
+.meta-level-error {
+  background: #f8d7da;
+  color: #842029;
+}
+.meta-level-critical {
+  background: #dc3545;
+  color: #fff;
+  outline: 1px solid #a71d2a;
+}
+.meta-level-debug {
+  background: #d1ecf1;
+  color: #0c5460;
+}
+
+/* Entity links in message body */
+.log-entity-link {
+  color: #0d6efd;
+  text-decoration: none;
+  border-bottom: 1px dotted #0d6efd;
+}
+.log-entity-link:hover {
+  color: #0a58ca;
+  border-bottom-style: solid;
+}
+
+/* Log message text (right column) */
+.log-msg-text {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+}
+
+/* Inline log-level coloring in rendered header text */
+.log-level {
+  font-weight: 700;
+  font-size: inherit;
+}
+.log-level-info {
+  color: #155724;
+}
+.log-level-warning {
+  color: #856404;
+}
+.log-level-error {
+  color: #842029;
+}
+.log-level-critical {
+  color: #fff;
+  background: #dc3545;
+  padding: 0 3px;
+  border-radius: 2px;
+}
+.log-level-debug {
+  color: #0c5460;
+}
+
+/* Message-body entity ref badges in the right column */
+.msg-refs {
+  padding: 2px 0 0;
+}
+
+/* Reference chips */
+.line-refs {
+  display: inline;
+  padding: 0;
+}
+.line-refs .ref-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 6px;
+  margin: 1px 2px 1px 0;
+  font-size: 10px;
+  border-radius: 3px;
+  background: #e9ecef;
+  color: #495057;
+  text-decoration: none;
+  border: 1px solid #dee2e6;
+  transition: background 0.1s;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.line-refs .ref-chip:hover {
+  background: #d3d8de;
+}
+.line-refs .ref-chip .material-icons {
+  font-size: 11px;
+}
+.line-refs .ref-chip.chip-invocation {
+  background: #e8f0fe;
+  border-color: #c2d7f2;
+  color: #1a56db;
+}
+.line-refs .ref-chip.chip-runner,
+.line-refs .ref-chip.chip-worker {
+  background: #e8fbe8;
+  border-color: #b8e2b8;
+  color: #1a7a1a;
+}
+.line-refs .ref-chip.chip-task {
+  background: #fef3e0;
+  border-color: #f0d9a8;
+  color: #8a5a00;
+}
+.line-refs .ref-chip.chip-workflow {
+  background: #f3e8ff;
+  border-color: #d9c2f2;
+  color: #6b21a8;
+}
+
+/* Grouped invocation + timeline chips (visually connected) */
+.inv-chip-group {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  margin: 1px 2px 1px 0;
+}
+.inv-chip-group .ref-chip {
+  margin: 0;
+}
+.inv-chip-group .ref-chip:first-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right: none;
+}
+.inv-chip-group .chip-timeline {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  padding: 1px 4px;
+}
+
+/* Status tokens in message text (colored using timeline palette) */
+.status-token {
+  font-weight: 700;
+}
+
+/* Compact references panel using chips instead of table */
+.all-refs-panel .ref-group-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6c757d;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.all-refs-panel .ref-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  margin: 2px 4px 2px 0;
+  font-size: 11px;
+  border-radius: 3px;
+  text-decoration: none;
+  border: 1px solid #dee2e6;
+  transition: background 0.15s;
+}
+.all-refs-panel .ref-link:hover {
+  background: #e2e6ea;
+}
+.all-refs-panel .ref-link .material-icons {
+  font-size: 12px;
+}
+.all-refs-panel .ref-link-inv {
+  background: #e8f0fe;
+  border-color: #c2d7f2;
+  color: #1a56db;
+}
+.all-refs-panel .ref-link-runner {
+  background: #e8fbe8;
+  border-color: #b8e2b8;
+  color: #1a7a1a;
+}
+.all-refs-panel .ref-link-task {
+  background: #fef3e0;
+  border-color: #f0d9a8;
+  color: #8a5a00;
+}
+.all-refs-panel .ref-link-wf {
+  background: #f3e8ff;
+  border-color: #d9c2f2;
+  color: #6b21a8;
+}
+
+/* SVG mini-timeline */
+.log-svg-container {
+  overflow-x: auto;
+  overflow-y: auto;
+  width: 100%;
+  max-height: 560px;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+}
+.log-svg-container svg {
+  display: block;
+}
+
+/* SVG hover/selection highlights */
+.log-svg-container .invocation-highlight rect,
+.log-svg-container .invocation-highlight circle {
+  stroke: #0d6efd;
+  stroke-width: 3;
+  filter: drop-shadow(0 0 4px rgba(13, 110, 253, 0.5));
+}
+.log-svg-container [data-invocation-id]:hover {
+  cursor: pointer;
+}
+
+/* Invocation detail floating panel shown on SVG click */
+.log-inv-detail {
+  display: none;
+  position: relative;
+  margin-top: 6px;
+  padding: 8px 12px;
+  font-size: 11.5px;
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+}
+.log-inv-detail.visible {
+  display: block;
+}
+.log-inv-detail .detail-row {
+  margin-bottom: 2px;
+}
+.log-inv-detail .detail-label {
+  color: #6c757d;
+  font-weight: 600;
+  margin-right: 4px;
+}
+.log-inv-detail .detail-actions {
+  margin-top: 4px;
+}
+.log-inv-detail .detail-actions a {
+  margin-right: 8px;
+  font-size: 11px;
+}
+.log-inv-detail .detail-close {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  cursor: pointer;
+  color: #6c757d;
+  font-size: 16px;
+}
+
+/* Cross-highlight: glow on ref chips when hovering SVG or vice versa */
+.ref-chip.cross-highlight,
+.ref-link.cross-highlight,
+.ref-entity-card.cross-highlight {
+  outline: 2px solid #0d6efd;
+  outline-offset: 1px;
+  background: #cfe2ff !important;
+}
+
+/* Enriched reference chip groups (kept for backward compat with line cards) */
+.ref-chip-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin: 2px 6px 2px 0;
+}
+.ref-chip-group .ref-link-icon {
+  padding: 2px 4px;
+}
+
+/* ── Entity cards in the REFERENCES panel ──────────────────────────────── */
+.refs-section-title {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6c757d;
+  font-weight: 600;
+  margin-bottom: 5px;
+}
+.refs-section-title .material-icons {
+  font-size: 12px;
+}
+
+.refs-card-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.ref-entity-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 5px 8px;
+  border-radius: 5px;
+  border: 1px solid #dee2e6;
+  min-width: 150px;
+  max-width: 220px;
+  cursor: default;
+  transition: background 0.15s, outline 0.1s;
+}
+.ref-card-inv {
+  background: #eef3ff;
+  border-color: #c2d7f2;
+}
+.ref-card-runner {
+  background: #edfaed;
+  border-color: #b8e2b8;
+}
+.ref-card-inv:hover {
+  background: #dce8ff;
+}
+.ref-card-runner:hover {
+  background: #d4f0d4;
+}
+
+.ref-card-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ref-card-id-link {
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+.ref-card-inv .ref-card-id-link {
+  color: #1a56db;
+}
+.ref-card-runner .ref-card-id-link {
+  color: #1a7a1a;
+}
+.ref-card-id-link:hover {
+  text-decoration: underline;
+}
+
+.ref-card-action {
+  display: inline-flex;
+  align-items: center;
+  color: #6c757d;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+.ref-card-action:hover {
+  color: #0d6efd;
+}
+.ref-card-action .material-icons {
+  font-size: 14px;
+}
+
+.ref-card-detail {
+  font-size: 10px;
+  color: #555;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ref-card-cls {
+  font-weight: 500;
+  color: #333;
+}
+.ref-card-host {
+  font-style: italic;
+  color: #6c757d;
+}
+
+/* Status badges inside ref chips */
+.ref-badge {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  padding: 0 4px;
+  margin-left: 3px;
+  border-radius: 2px;
+  vertical-align: middle;
+}
+.ref-badge-registered {
+  background: #e2e3e5;
+  color: #495057;
+}
+.ref-badge-pending {
+  background: #fff3cd;
+  color: #856404;
+}
+.ref-badge-running {
+  background: #cfe2ff;
+  color: #084298;
+}
+.ref-badge-success {
+  background: #d1e7dd;
+  color: #0f5132;
+}
+.ref-badge-failed {
+  background: #f8d7da;
+  color: #842029;
+}
+.ref-badge-paused {
+  background: #e0cffc;
+  color: #3d0a91;
+}
+.ref-badge-cancelled {
+  background: #e2e3e5;
+  color: #6c757d;
+}
+
+/* Extra detail labels (task key, runner class, hostname) */
+.ref-detail-label {
+  display: inline-block;
+  font-size: 10px;
+  color: #6c757d;
+  padding: 1px 5px;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.ref-detail-host {
+  font-style: italic;
+}

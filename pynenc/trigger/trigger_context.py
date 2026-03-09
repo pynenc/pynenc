@@ -5,7 +5,7 @@ This module defines the TriggerContext class which collects valid conditions
 and provides access to their contexts for trigger evaluation.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, TypeVar
 
 if TYPE_CHECKING:
@@ -35,13 +35,13 @@ class TriggerContext:
         :param timestamp: Time of context creation, defaults to current time
         :param valid_conditions: Dictionary of initial valid conditions, if any
         """
-        self.timestamp = timestamp or datetime.now(timezone.utc)
+        self.timestamp = timestamp or datetime.now(UTC)
         self.valid_conditions = valid_conditions or {}
         self.conditions = self.build_conditions_dict(self.valid_conditions)
 
     @staticmethod
     def build_conditions_dict(
-        valid_conditions: dict[str, "ValidCondition"]
+        valid_conditions: dict[str, "ValidCondition"],
     ) -> dict[str, "TriggerCondition"]:
         """
         Build a mapping from condition IDs to condition objects.
@@ -61,9 +61,9 @@ class TriggerContext:
         :param valid_condition: The valid condition to add
         """
         self.valid_conditions[valid_condition.valid_condition_id] = valid_condition
-        self.conditions[
-            valid_condition.condition.condition_id
-        ] = valid_condition.condition
+        self.conditions[valid_condition.condition.condition_id] = (
+            valid_condition.condition
+        )
 
     def has_condition(self, condition_id: str) -> bool:
         """

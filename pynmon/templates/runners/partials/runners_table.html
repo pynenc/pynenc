@@ -1,0 +1,151 @@
+{% if enriched_runners %}
+<div class="table-responsive">
+  <table class="table table-sm table-hover mb-0">
+    <thead>
+      <tr>
+        <th>Runner ID</th>
+        <th>Type</th>
+        <th>Parent</th>
+        <th>Host / PID</th>
+        <th>Created</th>
+        <th>Last Heartbeat</th>
+        <th>Age</th>
+        <th>Atomic Service</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for runner_data in enriched_runners %}
+      <tr>
+        <td>
+          <a
+            href="/runners/{{ runner_data.runner_info.runner_id }}"
+            class="text-decoration-none"
+          >
+            {{ runner_data.runner_info.runner_id }}
+          </a>
+        </td>
+        <td>
+          {% if runner_data.context %}
+          <span class="badge bg-light text-dark"
+            >{{ runner_data.context.runner_cls }}</span
+          >
+          {% if runner_data.context.parent_ctx %}
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="12"
+            height="12"
+            fill="currentColor"
+            class="bi bi-diagram-3"
+            viewBox="0 0 16 16"
+            title="Has parent context"
+          >
+            <path
+              fill-rule="evenodd"
+              d="M6 3.5A1.5 1.5 0 0 1 7.5 2h1A1.5 1.5 0 0 1 10 3.5v1A1.5 1.5 0 0 1 8.5 6v1H14a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-1 0V8h-5v.5a.5.5 0 0 1-1 0V8h-5v.5a.5.5 0 0 1-1 0v-1A.5.5 0 0 1 2 7h5.5V6A1.5 1.5 0 0 1 6 4.5v-1z"
+            />
+            <path
+              d="M1 11.5A1.5 1.5 0 0 1 2.5 10h3A1.5 1.5 0 0 1 7 11.5v3A1.5 1.5 0 0 1 5.5 16h-3A1.5 1.5 0 0 1 1 14.5v-3zm8 0A1.5 1.5 0 0 1 10.5 10h3a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 14.5v-3z"
+            />
+          </svg>
+          {% endif %} {% else %}
+          <span class="badge bg-secondary">Unknown</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if runner_data.context and runner_data.context.parent_ctx %}
+          <a
+            href="/runners/{{ runner_data.context.parent_ctx.runner_id }}"
+            class="text-decoration-none"
+            title="View parent: {{ runner_data.context.parent_ctx.runner_cls }}"
+          >
+            {{ runner_data.context.parent_ctx.runner_id }}
+          </a>
+          {% else %}
+          <span class="text-muted">-</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if runner_data.context %}
+          <small class="text-muted">
+            {{ runner_data.context.hostname }}
+            <span class="text-primary">:</span>
+            {{ runner_data.context.pid }}
+          </small>
+          {% else %}
+          <small class="text-muted">N/A</small>
+          {% endif %}
+        </td>
+        <td>
+          <small class="text-muted"
+            >{{ runner_data.runner_info.creation_time.strftime('%Y-%m-%d
+            %H:%M:%S') }}</small
+          >
+        </td>
+        <td>
+          <small class="text-muted"
+            >{{ runner_data.runner_info.last_heartbeat.strftime('%Y-%m-%d
+            %H:%M:%S') }}</small
+          >
+          {% if runner_data.heartbeat_age.is_stale %}
+          <span class="badge bg-warning" title="Stale heartbeat">!</span>
+          {% endif %}
+        </td>
+        <td>
+          {% set age_seconds = runner_data.age.total_seconds %} {% if
+          age_seconds < 60 %}
+          <span class="badge bg-success">{{ runner_data.age.seconds }}s</span>
+          {% elif age_seconds < 3600 %}
+          <span class="badge bg-info"
+            >{{ runner_data.age.minutes }}m {{ (runner_data.age.seconds % 60)
+            }}s</span
+          >
+          {% else %}
+          <span class="badge bg-warning"
+            >{{ (runner_data.age.hours)|int }}h {{ (runner_data.age.minutes %
+            60) }}m</span
+          >
+          {% endif %}
+        </td>
+        <td>
+          {% if runner_data.runner_info.allow_to_run_atomic_service %}
+          <span class="badge bg-success">Eligible</span>
+          {% if runner_data.runner_info.last_service_start %}
+          <span class="badge bg-info" title="Has execution history">H</span>
+          {% endif %} {% else %}
+          <span class="badge bg-secondary">No</span>
+          {% endif %}
+        </td>
+        <td>
+          <a
+            href="/runners/{{ runner_data.runner_info.runner_id }}"
+            class="btn btn-sm btn-outline-primary"
+            title="View Details"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              fill="currentColor"
+              class="bi bi-info-circle"
+              viewBox="0 0 16 16"
+            >
+              <path
+                d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"
+              />
+              <path
+                d="m8.93 6.588-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533L8.93 6.588zM9 4.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0z"
+              />
+            </svg>
+          </a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="text-center py-4">
+  <p class="text-muted mb-0">No active runners</p>
+</div>
+{% endif %}

@@ -1,95 +1,98 @@
-[tool.poetry]
+[project]
 name = "pynenc"
-version = "0.0.24"
+version = "0.1.0"
 description = "A task management system for complex distributed orchestration"
-authors = ["Jose Diaz"]
-license = "MIT License"
+authors = [{ name = "Luis Diaz", email = "code.luis.diaz@proton.me" }]
+license = { text = "MIT License" }
 readme = "README.md"
-homepage = "https://pynenc.org"
-documentation = "https://docs.pynenc.org"
-repository = "https://github.com/pynenc/pynenc"
+requires-python = ">=3.11.6"
+keywords = ["task", "orchestration", "workflow", "distributed", "python", "events"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: System :: Distributed Computing",
 ]
-packages = [
-    { include = "pynenc" },
-    { include = "pynmon" }
+
+dependencies = [
+    "pyyaml>=6.0.1",
+    "typing-extensions>=4.9.0",
+    "cistell==0.0.7",
+    "croniter>=6.0.0",
+    "jsonpickle>=4.1.0",
 ]
 
+[project.optional-dependencies]
+monitor = [
+    "fastapi>=0.115.0",
+    "jinja2>=3.1.0",
+    "python-multipart>=0.0.6",
+    "uvicorn>=0.34.0",
+]
+tests = [
+    "pytest>=7.4.4",
+    "pytest-asyncio>=0.18.3",
+    "pytest-timeout>=2.2.0",
+    "coverage[toml]>=7.2.6",
+    "mypy>=1.7.0",
+    "types-PyYAML>=6.0.0",
+    "pre-commit>=3.5.0",
+    "types-requests>=2.32.0",
+    "httpx>=0.27.0",
+    "requests>=2.31.0",
+    "psutil>=7.0.0",
+]
 
-[tool.poetry.scripts]
-pynenc = 'pynenc.__main__:main'
+[project.urls]
+Homepage = "https://pynenc.org"
+Documentation = "https://docs.pynenc.org"
+Repository = "https://github.com/pynenc/pynenc"
 
+[project.scripts]
+pynenc = "pynenc.__main__:main"
 
-[tool.poetry.dependencies]
-python = ">=3.11.6"
-redis = ">=4.6.0"
-pyyaml = ">=6.0.1"
-typing-extensions = "^4.9.0"
-cistell = "0.0.7"
-croniter = "^6.0.0"
-# Optional dependencies for monitor
-fastapi = { version = "^0.115.11", optional = true }
-jinja2 = { version = ">=3.1.4,<4.0.0", optional = true }
-python-multipart = { version = ">=0.0.6,<0.1.0", optional = true }
-uvicorn = { version = "^0.34.0", optional = true }
+[project.entry-points."pynenc.plugins"]
+# Core pynenc doesn't register any plugins
+# This section serves as documentation for plugin developers
 
+[dependency-groups]
+dev = [
+    "black==23.11.0",
+]
+docs = [
+    "sphinx>=8.0,<9",
+    "myst-parser>=4.0",
+    "furo>=2024",
+    "sphinx-copybutton>=0.5.2",
+    "sphinx-design>=0.6.0",
+    "sphinx-inline-tabs>=2023.4.21",
+    "sphinx-autodoc2>=0.5.0",
+]
 
-[tool.poetry.extras]
-monitor = ["fastapi", "jinja2", "python-multipart", "uvicorn"]
-
-
-[tool.poetry.group.dev.dependencies]
-black = "23.11.0"
-pytest = ">=8.2.0"
-pytest-asyncio = "^0.25.3"
-pytest-timeout = "^2.2.0"
-coverage = { version = ">=7.2.6,<8.0", extras = ["toml"] }
-mypy = "1.7.0"
-types-redis = "4.6.0.2"
-types-PyYAML = "6.0.12.12"
-pre-commit = "^3.5.0"
-types-requests = "^2.32.0.20250602"
-# Monitor dependencies for testing pynmon views
-fastapi = "^0.115.11"
-jinja2 = ">=3.1.4,<4.0.0"
-python-multipart = ">=0.0.6,<0.1.0"
-uvicorn = "^0.34.0"
-# Additional dependencies for testing
-httpx = "^0.27.0"
-requests = "^2.32.0"
-
-
-[tool.poetry.group.docs]
-optional = true
-
-
-[tool.poetry.group.docs.dependencies]
-sphinx = "^7.0"
-myst-parser = "^2"
-furo = "^2023"
-sphinx-copybutton = "^0.5.2"
-sphinx-design = "^0.5.0"
-sphinx-inline-tabs = "^2023.4.21"
-sphinx-autodoc2 = "^0.5.0"
-
+[[tool.uv.index]]
+name = "testpypi"
+url = "https://test.pypi.org/simple/"
+publish-url = "https://test.pypi.org/legacy/"
+explicit = true
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
+[tool.hatch.build.targets.wheel]
+packages = ["pynenc", "pynmon", "pynenc_tests"]
 
 [tool.isort]
 profile = "black"
 
 [tool.black]
 line-length = 88
-target-version = ['py311']
+target-version = ['py311', 'py312', 'py313', 'py314']
 required-version = '23.11.0'
 exclude = '''
 /(
@@ -99,17 +102,8 @@ exclude = '''
 )/
 '''
 
-
-# [tool.flake8]
-# max-line-length = 88
-# exclude = [".venv", ".env", ".eggs"]
-# ignore = [
-#     "E203",  # Whitespace before ':' (conflicts with black)
-#     "W503",  # Line break before binary operator (conflicts with black)
-# ]
-
 [tool.ruff]
-select = [
+lint.select = [
     "E",  # pycodestyle errors
     "W",  # pycodestyle warnings
     "F",  # pyflakes
@@ -118,7 +112,7 @@ select = [
     "B",  # flake8-bugbear
     "UP", # pyupgrade
 ]
-ignore = [
+lint.ignore = [
     "E501", # line too long, handled by black
     # "B008",  # do not perform function calls in argument defaults
     "C901",  # too complex
@@ -150,11 +144,17 @@ filterwarnings = [
     "ignore:Running in a secondary thread. Signal handling will be skipped.:UserWarning",
     "ignore::pytest.PytestUnhandledThreadExceptionWarning",
 ]
+# TO DEBUG pynmong let logs life in terminal and disable timeout
+# addopts = "-s"  # Disable output capture so logs/prints appear live in terminal
 timeout = 30
 
 [tool.coverage.run]
+source = [
+    "pynenc",
+    "pynmon",
+]
 omit = [
-    "tests/*",  # Exclude all files in the tests directory
+    "pynenc_tests/*",  # Exclude test files from coverage measurement
 ]
 relative_files = true # to combine coverage data from multiple processes
 

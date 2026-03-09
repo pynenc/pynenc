@@ -15,11 +15,11 @@ class PynencCLINamespace(argparse.Namespace):
     It extends the functionality of `argparse.Namespace` by explicitly defining fields for
     expected arguments. This approach enhances code clarity and type-checking.
 
-    :cvar Optional[str] app:
+    :cvar str | None app:
         The module and name of the application. Default is None.
-    :cvar Optional[bool] verbose:
+    :cvar bool | None verbose:
         Flag to increase output verbosity. Default is None.
-    :cvar Optional[Pynenc] app_instance:
+    :cvar Pynenc | None app_instance:
         An instance of the Pynenc application, set after parsing arguments.
     """
 

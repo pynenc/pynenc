@@ -16,6 +16,7 @@ from pynenc.util.subclasses import build_class_cache
 
 if TYPE_CHECKING:
     from ...app import Pynenc
+    from pynenc.identifiers.task_id import TaskId
 
 
 @dataclass
@@ -185,7 +186,7 @@ class TriggerCondition(Generic[C], ABC):
         return cls._condition_class_cache.get(condition_type)
 
     @abstractmethod
-    def get_source_task_ids(self) -> set[str]:
+    def get_source_task_ids(self) -> set["TaskId"]:
         """
         Get the ID of the task this condition is sourced from, if any.
 
@@ -296,17 +297,20 @@ class TriggerCondition(Generic[C], ABC):
         """
         pass
 
-    def affects_task(self, task_id: str) -> bool:
+    def affects_task(self, task_id: "TaskId") -> bool:
         """
         Check if this condition is affected by a specific task.
 
         Default implementation returns False as most conditions
         are not directly affected by specific tasks.
 
-        :param task_id: ID of the task to check
+        :param task_id: TaskId of the task to check
         :return: True if the condition is affected by the task
         """
         return False
+
+    def __eq__(self, other: object) -> bool:
+        raise NotImplementedError("Not implemented for Conditions")
 
 
 class ValidCondition:
@@ -327,6 +331,11 @@ class ValidCondition:
         """
         self.condition = condition
         self.context = context
+
+    def __eq__(self, value: object) -> bool:
+        if not isinstance(value, ValidCondition):
+            return False
+        return self.condition == value.condition and self.context == value.context
 
     @property
     def valid_condition_id(self) -> str:

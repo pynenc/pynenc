@@ -14,6 +14,7 @@ from pynenc.trigger.conditions.base import ConditionContext, TriggerCondition
 
 if TYPE_CHECKING:
     from ...app import Pynenc
+    from pynenc.identifiers.task_id import TaskId
 
 
 @dataclass
@@ -49,7 +50,7 @@ class EventContext(ConditionContext):
         if self.payload:
             serialized_payload = {}
             for key, value in self.payload.items():
-                serialized_payload[key] = app.arg_cache.serialize(value, False)
+                serialized_payload[key] = app.client_data_store.serialize(value, False)
             data["payload"] = serialized_payload
 
         return data
@@ -74,7 +75,7 @@ class EventContext(ConditionContext):
         payload = {}
         if payload_data:
             for key, value in payload_data.items():
-                payload[key] = app.arg_cache.deserialize(value)
+                payload[key] = app.client_data_store.deserialize(value)
         else:
             payload = payload_data
 
@@ -110,7 +111,7 @@ class EventCondition(TriggerCondition[EventContext]):
         """
         return f"event#{self.event_code}#{self.payload_filter.filter_id}"
 
-    def get_source_task_ids(self) -> set[str]:
+    def get_source_task_ids(self) -> set["TaskId"]:
         return set()
 
     def _to_json(self, app: "Pynenc") -> dict[str, Any]:
@@ -159,7 +160,7 @@ class EventCondition(TriggerCondition[EventContext]):
         # Check if all required parameters exist with matching values
         return self.payload_filter.filter_arguments(context.payload)
 
-    def affects_task(self, task_id: str) -> bool:
+    def affects_task(self, task_id: "TaskId") -> bool:
         """
         Check if this condition is affected by a specific task.
 

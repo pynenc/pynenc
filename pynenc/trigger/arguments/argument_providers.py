@@ -9,18 +9,9 @@ mapping from trigger contexts to task arguments.
 import json
 import logging
 from abc import ABC, abstractmethod
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    ClassVar,
-    Generic,
-    Protocol,
-    TypeVar,
-    cast,
-)
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, Protocol, TypeVar, cast
 
-from pynenc.arguments import Arguments
 from pynenc.trigger.arguments.arguments_common import SerializableCallable
 from pynenc.trigger.conditions.base import ConditionContext
 from pynenc.util.subclasses import build_class_cache
@@ -54,7 +45,7 @@ class ArgumentProviderError(Exception):
         """
         Initialize with details about the provider failure.
 
-        :param Optional[str] message: Explanation of the error
+        :param str | None message: Explanation of the error
         :param ArgumentProvider provider: Argument provider that failed
         :param Optional[Exception] cause: Original exception that caused this error, if any
         """
@@ -190,7 +181,7 @@ class StaticArgumentProvider(ArgumentProvider):
 
         :param arguments: Static arguments to provide
         """
-        self.arguments = Arguments(arguments)
+        self.arguments = arguments
 
     def get_arguments(self, trigger_context: "TriggerContext") -> dict[str, Any]:
         """
@@ -200,17 +191,20 @@ class StaticArgumentProvider(ArgumentProvider):
         :return: The static arguments dictionary
         """
         del trigger_context
-        return self.arguments.kwargs.copy()
+        return self.arguments.copy()
 
     def _to_json(self, app: "Pynenc") -> dict[str, Any]:
-        return {"arguments": self.arguments.to_json(app)}
+        serialized_args = app.client_data_store.serialize_arguments(self.arguments, ())
+        return {"arguments": serialized_args}
 
     @classmethod
     def _from_json(
         cls, data: dict[str, Any], app: "Pynenc"
     ) -> "StaticArgumentProvider":
-        arguments = Arguments.from_json(app, data.get("arguments", {}))
-        return cls(arguments.kwargs)
+        deserialized_args = app.client_data_store.deserialize_arguments(
+            data["arguments"]
+        )
+        return cls(deserialized_args)
 
     def __eq__(self, value: Any) -> bool:
         """
@@ -228,8 +222,7 @@ class StaticArgumentProvider(ArgumentProvider):
 class ContextCallable(Protocol[C_contra]):
     """Protocol for callables that process a specific context type."""
 
-    def __call__(self, context: C_contra) -> dict[str, Any]:
-        ...
+    def __call__(self, context: C_contra) -> dict[str, Any]: ...
 
 
 class ContextTypeArgumentProvider(ArgumentProvider, Generic[C]):

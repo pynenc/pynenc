@@ -1,0 +1,364 @@
+<script>
+  // Current invocation tracked for zoom + URL persistence
+  let currentInvocationId = null;
+  let currentInvocationData = null;
+
+  // ── Cross-highlight helpers ──────────────────────────────────────────
+  // Highlight / unhighlight an invocation across BOTH the timeline SVG
+  // and any family-tree SVG that may be loaded in the details panel.
+
+  function highlightInvocation(invocationId, on = true) {
+    // Timeline SVG (uses data-invocation-id)
+    const timeline = document.getElementById("timeline-container");
+    if (timeline) {
+      timeline
+        .querySelectorAll(`[data-invocation-id="${invocationId}"]`)
+        .forEach((el) => {
+          el.classList.toggle("invocation-highlight", on);
+        });
+    }
+    // Family-tree SVG (uses data-inv-id)
+    const ftBody = document.getElementById("ft-float-body");
+    if (ftBody) {
+      ftBody
+        .querySelectorAll(`.ft-node[data-inv-id="${invocationId}"] rect`)
+        .forEach((el) => {
+          el.classList.toggle("invocation-highlight", on);
+        });
+      ftBody
+        .querySelectorAll(`.ft-node[data-inv-id="${invocationId}"] text`)
+        .forEach((el) => {
+          el.classList.toggle("invocation-highlight", on);
+        });
+    }
+  }
+
+  function unhighlightInvocation(invocationId) {
+    highlightInvocation(invocationId, false);
+  }
+
+  // ── Runner highlight helpers ─────────────────────────────────────────
+  // Highlight / unhighlight all lane backgrounds and labels for a runner.
+
+  function highlightRunner(runnerId, on = true) {
+    const container = document.getElementById("timeline-container");
+    if (!container) return;
+    container
+      .querySelectorAll(`[data-runner-id="${runnerId}"]`)
+      .forEach((el) => {
+        el.classList.toggle("runner-highlight", on);
+      });
+  }
+
+  function unhighlightRunner(runnerId) {
+    highlightRunner(runnerId, false);
+  }
+
+  // Zoom timeline to invocation time range, preserving selected invocation in URL
+  function zoomToInvocation(historyData, invocationId) {
+    if (!historyData || historyData.length === 0) return;
+
+    const startTime = new Date(historyData[0].timestamp);
+    const endTime = new Date(historyData[historyData.length - 1].timestamp);
+    const durationMs = endTime - startTime;
+    const paddingMs = Math.max(durationMs * 0.1, 1000);
+
+    const paddedStart = new Date(startTime.getTime() - paddingMs);
+    const paddedEnd = new Date(endTime.getTime() + paddingMs);
+    const fmt = (d) => d.toISOString().slice(0, 19);
+
+    const params = new URLSearchParams(window.location.search);
+    params.set("time_range", "custom");
+    params.set("start_date", fmt(paddedStart));
+    params.set("end_date", fmt(paddedEnd));
+    // Carry selection forward so panel re-opens after page reload
+    if (invocationId) params.set("selected", invocationId);
+
+    window.location.href = "/invocations/timeline?" + params.toString();
+  }
+
+  function buildRunnerHtml(h) {
+    if (!h.runner_cls) return '<span class="text-muted">-</span>';
+    const rid = h.runner_id || "";
+
+    let html = `<div class="timeline-runner-info" data-runner-id="${rid}" style="margin-bottom:4px;">
+      <span class="badge bg-primary" style="font-size:9px;">${
+        h.runner_cls
+      }</span>
+      <a href="/runners/${rid}" class="text-decoration-none" title="View runner details">
+        <code style="font-size:9px;background:#e9ecef;padding:1px 3px;border-radius:2px;color:#0d6efd;">${
+          rid || "N/A"
+        }</code>
+      </a></div>
+      <div style="font-size:9px;color:#6c757d;margin-left:4px;">`;
+
+    if (h.hostname) html += `host: <strong>${h.hostname}</strong> `;
+    if (h.pid) html += `pid: <strong>${h.pid}</strong> `;
+    if (h.thread_id) html += `thread: <strong>${h.thread_id}</strong>`;
+    html += `</div>`;
+
+    if (!h.parent_runner_id) return html;
+
+    html += `<div class="timeline-runner-info" data-runner-id="${
+      h.parent_runner_id
+    }" style="margin-top:4px;padding-top:4px;border-top:1px dashed #dee2e6;">
+      <span style="font-size:9px;color:#6c757d;">↳ Parent:</span>
+      <span class="badge bg-secondary" style="font-size:9px;">${
+        h.parent_runner_cls || "Unknown"
+      }</span>
+      <a href="/runners/${h.parent_runner_id}" class="text-decoration-none">
+        <code style="font-size:9px;background:#e9ecef;padding:1px 3px;border-radius:2px;color:#0d6efd;">${
+          h.parent_runner_id
+        }</code>
+      </a>
+      <div style="font-size:9px;color:#6c757d;margin-left:12px;">`;
+    if (h.parent_hostname)
+      html += `host: <strong>${h.parent_hostname}</strong> `;
+    if (h.parent_pid) html += `pid: <strong>${h.parent_pid}</strong> `;
+    if (h.parent_thread_id)
+      html += `thread: <strong>${h.parent_thread_id}</strong>`;
+    html += `</div></div>`;
+    return html;
+  }
+
+  function buildSummaryRows(invocationId, apiData, historyData) {
+    let html = `<table class="table table-sm mb-0">
+      <tr><th style="width:130px;">Invocation ID</th>
+          <td><code style="font-size:11px;">${invocationId}</code></td></tr>`;
+
+    if (apiData?.task_id_key) {
+      html += `<tr><th>Task</th>
+        <td><a href="/tasks/${apiData.task_id_key}" class="text-decoration-none">
+          <code style="font-size:11px;">${apiData.task_id_key}</code></a></td></tr>`;
+    }
+
+    if (apiData?.parent_invocation_id) {
+      const pid = apiData.parent_invocation_id;
+      html += `<tr><th>Parent Invocation</th>
+        <td><a href="/invocations/${pid}" class="invocation-link text-decoration-none"
+              data-invocation-id="${pid}"
+              style="color:#0d6efd;cursor:pointer;"
+              onmouseenter="highlightInvocation('${pid}')"
+              onmouseleave="unhighlightInvocation('${pid}')"
+              onclick="event.preventDefault();loadInvocationDetails('${pid}')">
+          <code style="font-size:11px;color:inherit;">${pid}</code></a></td></tr>`;
+    }
+
+    if (apiData?.workflow) {
+      const wf = apiData.workflow;
+      html += `<tr><th>Workflow</th>
+        <td><a href="/workflows/${encodeURIComponent(
+          wf.workflow_type
+        )}" class="text-decoration-none">
+          <code style="font-size:11px;">${wf.workflow_type}</code></a>`;
+      if (wf.is_subworkflow)
+        html += ` <span class="badge bg-secondary" style="font-size:9px;">sub-workflow</span>`;
+      html += `</td></tr>`;
+    }
+
+    if (historyData?.length > 0) {
+      const last = historyData[historyData.length - 1];
+      html += `<tr><th>Status</th>
+        <td><span class="badge bg-${getStatusClass(
+          last.status
+        )}">${last.status.toLowerCase()}</span></td></tr>
+        <tr><th>Duration</th><td>${calculateDuration(historyData)}</td></tr>`;
+    }
+
+    html += `</table>`;
+    return html;
+  }
+
+  function buildHistoryRows(historyData) {
+    if (!historyData?.length) return "";
+
+    let html = `<h6 class="mt-3 mb-2">Status History</h6>
+      <table class="table table-sm mb-0"><thead>
+        <tr><th>Status</th><th>Timestamp (UTC)</th><th>Runner Context</th></tr>
+      </thead><tbody>`;
+
+    historyData.forEach((h) => {
+      html += `<tr>
+        <td><span class="badge bg-${getStatusClass(
+          h.status
+        )}">${h.status.toLowerCase()}</span></td>
+        <td style="font-size:11px;">${formatUTCDate(h.timestamp)}</td>
+        <td style="font-size:11px;">${buildRunnerHtml(h)}</td>
+      </tr>`;
+    });
+
+    html += `</tbody></table>`;
+    return html;
+  }
+
+  function loadInvocationDetails(invocationId, opts) {
+    opts = opts || {};
+    const panel = document.getElementById("invocation-details-panel");
+    const content = document.getElementById("invocation-details-content");
+    const fullLink = document.getElementById("view-full-details");
+
+    // Un-highlight previously selected invocation
+    if (currentInvocationId) unhighlightInvocation(currentInvocationId);
+
+    currentInvocationId = invocationId;
+    panel.classList.remove("d-none");
+    content.innerHTML = `<div class="d-flex justify-content-center">
+      <div class="spinner-border spinner-border-sm text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+      </div></div>`;
+    fullLink.href = `/invocations/${invocationId}`;
+
+    // Highlight the selected invocation in the timeline SVG
+    highlightInvocation(invocationId);
+
+    // Load family tree into floating panel (resets expansion state)
+    if (!opts.skipTree && typeof window._ftLoadTree === "function") {
+      if (typeof window._ftResetExpanded === "function")
+        window._ftResetExpanded();
+      window._ftLoadTree(invocationId);
+    }
+
+    Promise.all([
+      fetch(`/invocations/${invocationId}/api`).then((r) =>
+        r.ok ? r.json() : null
+      ),
+      fetch(`/invocations/${invocationId}/history`).then((r) =>
+        r.ok ? r.json() : []
+      ),
+    ])
+      .then(([apiData, historyData]) => {
+        currentInvocationData = historyData;
+        content.innerHTML =
+          buildSummaryRows(invocationId, apiData, historyData) +
+          buildHistoryRows(historyData);
+      })
+      .catch((err) => {
+        console.error("Error loading invocation details:", err);
+        currentInvocationId = null;
+        currentInvocationData = null;
+        content.innerHTML = `<div class="alert alert-danger mb-0">Error loading details: ${err.message}</div>`;
+      });
+  }
+
+  function getStatusClass(status) {
+    const map = {
+      REGISTERED: "secondary",
+      PENDING: "warning",
+      RUNNING: "info",
+      SUCCESS: "success",
+      FAILED: "danger",
+      RETRY: "secondary",
+      PAUSED: "primary",
+      RESUMED: "info",
+      REROUTED: "info",
+      CONCURRENCY_CONTROLLED: "warning",
+      CONCURRENCY_CONTROLLED_FINAL: "warning",
+      CANCELLED: "dark",
+      TIMEOUT: "danger",
+      SCHEDULED: "warning",
+    };
+    return map[(status || "").toUpperCase()] || "secondary";
+  }
+
+  function formatUTCDate(isoString) {
+    const d = new Date(isoString);
+    const ms = d.getUTCMilliseconds().toString().padStart(3, "0");
+    return (
+      d.toISOString().replace("T", " ").substring(0, 19) + "." + ms + " UTC"
+    );
+  }
+
+  function calculateDuration(history) {
+    if (!history || history.length < 2) return "N/A";
+    const ms =
+      new Date(history[history.length - 1].timestamp) -
+      new Date(history[0].timestamp);
+    if (ms < 1000) return `${ms}ms`;
+    if (ms < 60000) return `${(ms / 1000).toFixed(2)}s`;
+    if (ms < 3600000)
+      return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`;
+    return `${Math.floor(ms / 3600000)}h ${Math.floor(
+      (ms % 3600000) / 60000
+    )}m`;
+  }
+
+  document.addEventListener("DOMContentLoaded", function () {
+    // Show/hide custom date range inputs
+    document
+      .getElementById("time_range")
+      ?.addEventListener("change", function () {
+        document
+          .getElementById("custom_date_range")
+          ?.classList.toggle("d-none", this.value !== "custom");
+      });
+
+    // Close details panel
+    document.getElementById("close-details")?.addEventListener("click", () => {
+      if (currentInvocationId) unhighlightInvocation(currentInvocationId);
+      document
+        .getElementById("invocation-details-panel")
+        .classList.add("d-none");
+      currentInvocationId = null;
+      currentInvocationData = null;
+    });
+
+    // Zoom to invocation (pass ID so it's preserved in the URL)
+    document
+      .getElementById("zoom-to-invocation")
+      ?.addEventListener("click", () => {
+        if (currentInvocationData?.length > 0) {
+          zoomToInvocation(currentInvocationData, currentInvocationId);
+        }
+      });
+
+    // SVG click + hover wiring
+    const container = document.getElementById("timeline-container");
+    if (container) {
+      container.addEventListener("click", (e) => {
+        const target = e.target.closest(
+          "rect[data-invocation-id], circle[data-invocation-id]"
+        );
+        const id = target?.getAttribute("data-invocation-id");
+        if (id) loadInvocationDetails(id);
+      });
+
+      container.addEventListener("mouseover", (e) => {
+        const t = e.target.closest("[data-invocation-id]");
+        if (t) highlightInvocation(t.getAttribute("data-invocation-id"));
+      });
+
+      container.addEventListener("mouseout", (e) => {
+        const t = e.target.closest("[data-invocation-id]");
+        if (t) {
+          const id = t.getAttribute("data-invocation-id");
+          // Don't un-highlight the currently selected invocation
+          if (id !== currentInvocationId) unhighlightInvocation(id);
+        }
+      });
+
+      // Runner label hover → highlight entire lane
+      container.addEventListener("mouseover", (e) => {
+        const rl = e.target.closest(".runner-label[data-runner-id]");
+        if (rl) highlightRunner(rl.getAttribute("data-runner-id"));
+      });
+      container.addEventListener("mouseout", (e) => {
+        const rl = e.target.closest(".runner-label[data-runner-id]");
+        if (rl) unhighlightRunner(rl.getAttribute("data-runner-id"));
+      });
+    }
+
+    // Runner context info hover in detail panel → highlight SVG lane
+    document.addEventListener("mouseover", (e) => {
+      const ri = e.target.closest(".timeline-runner-info[data-runner-id]");
+      if (ri) highlightRunner(ri.getAttribute("data-runner-id"));
+    });
+    document.addEventListener("mouseout", (e) => {
+      const ri = e.target.closest(".timeline-runner-info[data-runner-id]");
+      if (ri) unhighlightRunner(ri.getAttribute("data-runner-id"));
+    });
+
+    // Re-open selected invocation if carried via URL (e.g. after zoom or from detail page)
+    const selected = new URLSearchParams(location.search).get("selected");
+    if (selected) loadInvocationDetails(selected);
+  });
+</script>

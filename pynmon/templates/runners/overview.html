@@ -1,0 +1,209 @@
+{% extends "base.html" %} {% block content %}
+<div class="container-fluid">
+  <!-- Page Header -->
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="h4 mb-0 text-primary">Active Runners</h2>
+    <div class="d-flex gap-2">
+      <a
+        href="/runners/atomic-service/timeline"
+        class="btn btn-sm btn-outline-secondary"
+      >
+        <span class="material-icons align-middle" style="font-size: 16px"
+          >schedule</span
+        >
+        Atomic Service
+      </a>
+      <button
+        class="btn btn-sm btn-outline-primary"
+        hx-get="/runners/refresh"
+        hx-target="#runners-table"
+        hx-swap="innerHTML"
+      >
+        <span class="material-icons align-middle" style="font-size: 16px"
+          >refresh</span
+        >
+        Refresh
+      </button>
+    </div>
+  </div>
+
+  <!-- Runner Type Banner -->
+  <div class="info-card mb-4">
+    <div class="d-flex align-items-center">
+      <span
+        class="material-icons me-2"
+        style="font-size: 22px; color: var(--nav-active)"
+        >devices</span
+      >
+      <div>
+        <div class="text-muted" style="font-size: 11px">
+          Runner Implementation
+        </div>
+        <div class="fw-bold" style="font-size: 1rem">
+          {{ runner_config.runner_type }}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats Overview -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <div class="metric-card">
+        <h6 class="section-title">Total Runners</h6>
+        <p class="h3 mb-0 text-primary">{{ total_runners }}</p>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="metric-card">
+        <h6 class="section-title">Atomic Eligible</h6>
+        <p class="h3 mb-0 text-success">{{ atomic_eligible }}</p>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="metric-card">
+        <h6 class="section-title">With Execution History</h6>
+        <p class="h3 mb-0 text-info">{{ runners_with_history }}</p>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="metric-card">
+        <h6 class="section-title">Heartbeat Timeout</h6>
+        <p class="h3 mb-0 text-secondary">{{ heartbeat_timeout_minutes }}m</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Runner Configuration -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-6">
+      <div class="card h-100">
+        <div class="card-header">
+          <span class="material-icons align-middle me-1" style="font-size: 18px"
+            >tune</span
+          >
+          Runner Configuration
+        </div>
+        <div class="card-body">
+          <div class="metric-grid">
+            <div class="metric-item">
+              <span class="metric-label">Wait Results Sleep</span>
+              <span class="badge bg-info"
+                >{{ runner_config.wait_results_sleep_sec }}s</span
+              >
+            </div>
+            <div class="metric-item">
+              <span class="metric-label">Loop Sleep</span>
+              <span class="badge bg-info"
+                >{{ runner_config.loop_sleep_sec }}s</span
+              >
+            </div>
+            <div class="metric-item">
+              <span class="metric-label">Min Parallel Slots</span>
+              <span class="badge bg-info"
+                >{{ runner_config.min_parallel_slots }}</span
+              >
+            </div>
+            {% if runner_config.min_threads is defined %}
+            <div class="metric-item">
+              <span class="metric-label">Threads (min / max)</span>
+              <span class="badge bg-info"
+                >{{ runner_config.min_threads }} / {{ runner_config.max_threads
+                }}</span
+              >
+            </div>
+            {% endif %} {% if runner_config.num_processes is defined %}
+            <div class="metric-item">
+              <span class="metric-label">Num Processes</span>
+              <span class="badge bg-info"
+                >{{ runner_config.num_processes }}</span
+              >
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+    {% if runner_config.min_processes is defined %}
+    <div class="col-md-6">
+      <div class="card h-100">
+        <div class="card-header">
+          <span class="material-icons align-middle me-1" style="font-size: 18px"
+            >memory</span
+          >
+          Multi-Process Configuration
+        </div>
+        <div class="card-body">
+          <div class="metric-grid">
+            <div class="metric-item">
+              <span class="metric-label">Processes (min / max)</span>
+              <span class="badge bg-info"
+                >{{ runner_config.min_processes }} / {{
+                runner_config.max_processes }}</span
+              >
+            </div>
+            <div class="metric-item">
+              <span class="metric-label">Idle Timeout</span>
+              <span class="badge bg-info"
+                >{{ runner_config.idle_timeout_sec }}s</span
+              >
+            </div>
+            <div class="metric-item">
+              <span class="metric-label">Enforce Max Processes</span>
+              <span
+                class="badge {% if runner_config.enforce_max %}bg-success{% else %}bg-secondary{% endif %}"
+              >
+                {{ 'ON' if runner_config.enforce_max else 'OFF' }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="col-md-6">
+      <div class="card h-100">
+        <div class="card-header">
+          <span class="material-icons align-middle me-1" style="font-size: 18px"
+            >schedule</span
+          >
+          Recovery Service
+        </div>
+        <div class="card-body">
+          <div class="metric-grid">
+            <div class="metric-item">
+              <span class="metric-label">Check Interval</span>
+              <span class="badge bg-info"
+                >{{ atomic_service_check_interval_minutes }}m</span
+              >
+            </div>
+            <div class="metric-item">
+              <span class="metric-label">Heartbeat Timeout</span>
+              <span class="badge bg-warning"
+                >{{ heartbeat_timeout_minutes }}m</span
+              >
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Active Runners Table -->
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <h6 class="mb-0">Active Runners</h6>
+        </div>
+        <div class="card-body p-0">
+          <div id="runners-table">
+            {% include "runners/partials/runners_table.html" %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
