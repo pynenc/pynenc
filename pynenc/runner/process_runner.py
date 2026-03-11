@@ -58,14 +58,18 @@ class ProcessRunner(BaseRunner):
     This runner is suitable for CPU-bound tasks and scenarios where task isolation is essential.
     """
 
-    wait_invocation: dict[
-        "InvocationId", set["InvocationId"]
-    ]  # Maps invocation_id to set of waiting invocation_ids
-    child_runner_ids: dict[str, ChildProcessInfo]  # Maps runner_id to process info
-    inv_id_to_runner_id: dict["InvocationId", str]  # Maps invocation_id to runner_id
-    manager: Manager  # type: ignore
-
-    max_processes: int
+    def __init__(
+        self,
+        app: "Pynenc",
+        runner_cache: dict | None = None,
+        runner_context: "RunnerContext | None" = None,
+    ) -> None:
+        self.child_runner_ids: dict[str, ChildProcessInfo] = {}
+        self.wait_invocation: dict[InvocationId, set[InvocationId]] = {}
+        self.inv_id_to_runner_id: dict[InvocationId, str] = {}
+        self.max_processes: int = 0
+        self.manager: Manager | None = None  # type: ignore
+        super().__init__(app, runner_cache, runner_context)
 
     @staticmethod
     def mem_compatible() -> bool:
@@ -173,7 +177,8 @@ class ProcessRunner(BaseRunner):
                 "ProcessRunnerWorker", runner_id=runner_id
             )
             self._kill_and_reroute(info.invocation_id, runner_ctx=child_ctx)
-        self.manager.shutdown()  # type: ignore
+        if self.manager is not None:
+            self.manager.shutdown()  # type: ignore
         self.logger.info("ProcessRunner stopped")
 
     def _on_stop_runner_loop(self) -> None:
@@ -182,7 +187,7 @@ class ProcessRunner(BaseRunner):
         Clears the wait_invocation dictionary.
         """
         self.logger.info("Stopping ProcessRunner loop")
-        if hasattr(self, "wait_invocation") and self.wait_invocation is not None:
+        if self.wait_invocation is not None:
             self.wait_invocation.clear()
             self.wait_invocation = {}
         self.logger.info("ProcessRunner loop stopped")

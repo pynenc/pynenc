@@ -36,8 +36,6 @@ def app() -> MockPynenc:
 def multi_thread_runner(app: MockPynenc) -> MultiThreadRunner:
     runner = MultiThreadRunner(app)
     runner.conf = TestConfig()
-    runner.child_runner_ids = {}
-    runner.shared_status = {}
     return runner
 
 

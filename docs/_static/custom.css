@@ -1,0 +1,41 @@
+/* === Pynenc Docs — Brand & Visual Polish === */
+
+/* ── Hero logo on landing page ── */
+.hero-logo {
+  display: block;
+  margin: 1.5rem auto 1rem;
+  height: 90px;
+  width: auto;
+  filter: drop-shadow(0 4px 14px rgba(192, 64, 32, 0.25));
+}
+
+/* ── Sphinx-design card hover: terracotta outline ── */
+.sd-card {
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.sd-card:hover {
+  border-color: #c04020 !important;
+  box-shadow: 0 4px 20px rgba(192, 64, 32, 0.13) !important;
+}
+
+/* ── H2 terracotta underline ── */
+article h2 {
+  border-bottom: 2px solid var(--color-brand-primary, #c04020);
+  padding-bottom: 0.25rem;
+}
+
+/* ── Table header subtle warm tint ── */
+table thead th {
+  background-color: rgba(192, 64, 32, 0.05) !important;
+}
+
+/* ── Code block top border accent ── */
+div[class*="highlight"] {
+  border-top: 3px solid var(--color-brand-primary, #c04020);
+  border-radius: 0 0 4px 4px;
+}
+
+/* ── Admonition note warm tint ── */
+.admonition.note {
+  border-left-color: var(--color-brand-primary, #c04020);
+}

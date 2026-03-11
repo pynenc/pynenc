@@ -43,8 +43,10 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
     "redis": ("https://redis-py.readthedocs.io/en/stable/", None),
+    "pynenc-redis": ("https://pynenc-redis.readthedocs.io/en/latest/", None),
+    "pynenc-mongodb": ("https://pynenc-mongodb.readthedocs.io/en/latest/", None),
+    "pynenc-rabbitmq": ("https://pynenc-rabbitmq.readthedocs.io/en/latest/", None),
 }
-# intersphinx_mapping = {"python": ("https://docs.python.org/3", None)}
 
 # -- Autodoc settings ---------------------------------------------------
 autodoc2_render_plugin = "myst"
@@ -138,18 +140,27 @@ html_favicon = "_static/favicon.ico"
 
 language = "en"
 html_static_path = ["_static"]
+html_css_files = ["custom.css"]
 html_theme_options: dict[str, Any] = {
     "light_css_variables": {
         "color-brand-primary": "#c04020",
         "color-brand-content": "#d05030",
         "color-admonition-title--note": "#d05030",
         "color-admonition-title-background--note": "#d050301a",
+        "color-background-primary": "#faf8f6",
+        "color-background-secondary": "#f2ece6",
+        "color-foreground-primary": "#2c1a14",
+        "color-foreground-secondary": "#6b5147",
+        "color-foreground-muted": "#a89288",
+        "color-background-border": "#e0d6d0",
     },
     "dark_css_variables": {
         "color-brand-primary": "#e07050",
         "color-brand-content": "#e08060",
         "color-admonition-title--note": "#e07050",
         "color-admonition-title-background--note": "#e070501a",
+        "color-background-primary": "#1e1210",
+        "color-background-secondary": "#2a1a16",
     },
     "navigation_with_keys": True,
     "footer_icons": [

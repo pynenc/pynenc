@@ -82,10 +82,16 @@ publish: ## Publish a release to PyPI.
 .PHONY: docs
 docs:
 	@echo "Building documentation..."
+	rm -rf docs/_build
 	uv run --group docs sphinx-build -b html docs docs/_build/html
 	@echo "Docs built — open docs/_build/html/index.html in a browser."
 
 .PHONY: docs-serve
-docs-serve: docs
-	@echo "Serving docs at http://localhost:8080 ..."
+docs-serve:
+	@echo "Serving last build at http://localhost:8080 ..."
+	uv run --group docs python -m http.server 8080 --directory docs/_build/html
+
+.PHONY: docs-preview
+docs-preview: docs
+	@echo "Serving clean build at http://localhost:8080 ..."
 	uv run --group docs python -m http.server 8080 --directory docs/_build/html

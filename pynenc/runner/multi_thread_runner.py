@@ -102,10 +102,17 @@ class MultiThreadRunner(BaseRunner):
         "This should be handled by the ThreadRunner instance in the process."
     )
 
-    child_runner_ids: dict[str, Process]  # Maps child runner_id to Process
-    manager: Manager  # type: ignore
-    shared_status: dict[str, ProcessStatus]
-    max_processes: int
+    def __init__(
+        self,
+        app: "Pynenc",
+        runner_cache: dict | None = None,
+        runner_context: RunnerContext | None = None,
+    ) -> None:
+        self.child_runner_ids: dict[str, Process] = {}
+        self.shared_status: dict[str, ProcessStatus] = {}
+        self.max_processes: int = 0
+        self.manager: Manager | None = None  # type: ignore
+        super().__init__(app, runner_cache, runner_context)
 
     @cached_property
     def conf(self) -> ConfigMultiThreadRunner:
@@ -147,8 +154,7 @@ class MultiThreadRunner(BaseRunner):
             self.runner_id,
             signum,
             processes={
-                rid: (proc, None)
-                for rid, proc in getattr(self, "child_runner_ids", {}).items()
+                rid: (proc, None) for rid, proc in self.child_runner_ids.items()
             },
         )
 
@@ -200,7 +206,8 @@ class MultiThreadRunner(BaseRunner):
                 proc.terminate()
                 proc.join()
                 self.logger.info(f"Terminated process worker:{runner_id}")
-        self.manager.shutdown()  # type: ignore
+        if self.manager is not None:
+            self.manager.shutdown()  # type: ignore
         self.logger.info("MultiThreadRunner stopped")
 
     def _safe_remove_shared_state(self, key: str) -> None:
@@ -219,21 +226,20 @@ class MultiThreadRunner(BaseRunner):
     def _on_stop_runner_loop(self) -> None:
         """Internal method called after receiving a signal to stop the runner loop."""
         self.logger.info("Stopping MultiThreadRunner loop")
-        if hasattr(self, "child_runner_ids") and self.child_runner_ids is not None:
-            for runner_id, proc in list(self.child_runner_ids.items()):
-                try:
-                    if proc.is_alive():
-                        proc.terminate()
-                        proc.join()
-                        self.child_runner_ids.pop(runner_id, None)
-                        self._safe_remove_shared_state(runner_id)
-                        self.logger.info(
-                            f"Terminated process worker:{runner_id} during loop stop"
-                        )
-                except AssertionError:
+        for runner_id, proc in list(self.child_runner_ids.items()):
+            try:
+                if proc.is_alive():
+                    proc.terminate()
+                    proc.join()
+                    self.child_runner_ids.pop(runner_id, None)
+                    self._safe_remove_shared_state(runner_id)
                     self.logger.info(
-                        f"Skipping process worker:{runner_id} termination - not a child process"
+                        f"Terminated process worker:{runner_id} during loop stop"
                     )
+            except AssertionError:
+                self.logger.info(
+                    f"Skipping process worker:{runner_id} termination - not a child process"
+                )
         self.logger.info("MultiThreadRunner loop stopped")
 
     def _cleanup_dead_processes(self) -> None:

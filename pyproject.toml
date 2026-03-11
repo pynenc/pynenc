@@ -1,6 +1,6 @@
 [project]
 name = "pynenc"
-version = "0.1.0"
+version = "0.1.1"
 description = "A task management system for complex distributed orchestration"
 authors = [{ name = "Luis Diaz", email = "code.luis.diaz@proton.me" }]
 license = { text = "MIT License" }

@@ -28,10 +28,6 @@ class ThreadRunner(BaseRunner):
     This runner is suitable for I/O-bound tasks and scenarios where shared memory between tasks is required.
     """
 
-    threads: dict[str, ThreadInfo]
-    max_threads: int
-    waiting_invocation_ids: set[str]
-
     def __init__(
         self,
         app: "Pynenc",
@@ -40,9 +36,9 @@ class ThreadRunner(BaseRunner):
     ) -> None:
         # Initialize ThreadRunner-specific attributes before calling super().__init__
         # This ensures they exist even if run() is never called
-        self.threads = {}
-        self.waiting_invocation_ids = set()
-        self.max_threads = 0  # Will be set properly in _on_start()
+        self.threads: dict[str, ThreadInfo] = {}
+        self.waiting_invocation_ids: set[str] = set()
+        self.max_threads: int = 0  # Will be set properly in _on_start()
         super().__init__(app, runner_cache, runner_context)
 
     @cached_property

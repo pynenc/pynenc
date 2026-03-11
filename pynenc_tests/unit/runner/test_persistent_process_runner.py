@@ -29,7 +29,6 @@ def app() -> MockPynenc:
 def runner(app: MockPynenc) -> PersistentProcessRunner:
     runner = PersistentProcessRunner(app)
     runner.running = True  # Set running to True to allow spawning processes
-    runner._process_id_counter = 0  # Initialize _process_id_counter
     return runner
 
 
@@ -402,6 +401,31 @@ def test_get_active_child_runner_ids_empty_before_start(
     runner: PersistentProcessRunner,
 ) -> None:
     """Test that get_active_child_runner_ids returns empty list before _on_start."""
-    # Don't call _on_start - child_runner_ids attribute doesn't exist yet
     active_ids = runner.get_active_child_runner_ids()
     assert active_ids == []
+
+
+def test_terminate_all_processes_before_on_start(
+    runner: PersistentProcessRunner,
+) -> None:
+    """Test that _terminate_all_processes does not crash before _on_start is called.
+
+    Reproduces: 'PersistentProcessRunner' object has no attribute 'child_runner_ids'
+    when a signal triggers _on_stop_runner_loop before _on_start has completed.
+    """
+    # Do NOT call _on_start — child_runner_ids, stop_event, manager are unset
+    runner._terminate_all_processes()  # must not raise
+
+
+def test_on_stop_runner_loop_before_on_start(
+    runner: PersistentProcessRunner,
+) -> None:
+    """Test that _on_stop_runner_loop is safe to call before _on_start."""
+    runner._on_stop_runner_loop()  # must not raise
+
+
+def test_on_stop_before_on_start(
+    runner: PersistentProcessRunner,
+) -> None:
+    """Test that _on_stop is safe to call before _on_start."""
+    runner._on_stop()  # must not raise

@@ -36,9 +36,94 @@ Before diving into specific use cases, ensure that you have Pynenc installed and
 
 ## Use Case Scenarios
 
-Each use case in this guide represents a typical scenario where Pynenc can significantly streamline your task management and orchestration processes.
+Each section below gives a self-contained summary with a key code snippet.
+Use the cards to jump to any full step-by-step guide, or follow the quick link
+directly beneath each section heading.
+
+::::{grid} 1 2 2 2
+:gutter: 2
+
+:::{grid-item-card} 1 · Basic Local Threaded
+:link: use_case_001_basic_local_threaded
+:link-type: doc
+:shadow: sm
+Run your first task with `ThreadRunner` — no infrastructure required.
+:::
+
+:::{grid-item-card} 2 · Distributed with Redis
+:link: use_case_002_basic_redis
+:link-type: doc
+:shadow: sm
+Scale out with `pynenc-redis` and `ProcessRunner` in a Docker environment.
+:::
+
+:::{grid-item-card} 3 · Concurrency Control
+:link: use_case_003_concurrency_control
+:link-type: doc
+:shadow: sm
+Prevent duplicate work with `TASK`-level and `DISABLED` concurrency modes.
+:::
+
+:::{grid-item-card} 4 · Auto Orchestration
+:link: use_case_004_auto_orchestration
+:link-type: doc
+:shadow: sm
+Fibonacci via recursive tasks — Pynenc resolves dependencies automatically.
+:::
+
+:::{grid-item-card} 5 · Sync Unit Testing
+:link: use_case_005_sync_unit_testing
+:link-type: doc
+:shadow: sm
+One flag forces synchronous execution for simple `assertEqual` tests.
+:::
+
+:::{grid-item-card} 6 · Mem Mode Testing
+:link: use_case_006_mem_unit_testing
+:link-type: doc
+:shadow: sm
+Full in-memory stack with `ThreadRunner` — CI-friendly, zero infrastructure.
+:::
+
+:::{grid-item-card} 7 · JSON Serialization
+:link: use_case_007_json_serializable
+:link-type: doc
+:shadow: sm
+Add `to_json` / `from_json` to any class for `JsonSerializer` compatibility.
+:::
+
+:::{grid-item-card} 9 · Client Data Store
+:link: use_case_009_client_data_store
+:link-type: doc
+:shadow: sm
+Automatically cache large arguments to reduce serialization overhead at scale.
+:::
+
+:::{grid-item-card} 10 · Trigger System
+:link: use_case_010_trigger_system
+:link-type: doc
+:shadow: sm
+Schedule tasks with cron or fire them on status changes, results, and events.
+:::
+
+:::{grid-item-card} 11 · Workflow System
+:link: use_case_011_workflow_system
+:link-type: doc
+:shadow: sm
+Deterministic, replayable, stateful workflows with automatic failure recovery.
+:::
+
+:::{grid-item-card} Invocation Status
+:link: invocation_status
+:link-type: doc
+:shadow: sm
+State machine lifecycle, ownership tracking, and recovery mechanics.
+:::
+::::
 
 ## Use Case 1: Basic Local Threaded Demonstration
+
+📖 {doc}`Full step-by-step guide <./use_case_001_basic_local_threaded>`
 
 Learn the basics of setting up and executing tasks using Pynenc in a local, non-distributed environment. This use case is ideal for understanding the fundamental workings of Pynenc, especially for development and testing purposes.
 
@@ -57,6 +142,8 @@ def add(x: int, y: int) -> int:
 For a detailed guide and example, see {doc}`./use_case_001_basic_local_threaded`.
 
 ## Use Case 2: Distributed System with Redis and Process Runner
+
+📖 {doc}`Full step-by-step guide <./use_case_002_basic_redis>`
 
 Explore setting up a distributed task processing system using `pynenc` with Redis. This use case demonstrates how to configure and run tasks in a distributed environment, leveraging the Redis plugin for task queuing and the ProcessRunner for executing tasks across multiple processes.
 
@@ -108,6 +195,8 @@ For a detailed guide and example, see {doc}`./use_case_002_basic_redis`.
 
 ## Use Case 3: Concurrency Control
 
+📖 {doc}`Full step-by-step guide <./use_case_003_concurrency_control>`
+
 Dive into the mechanics of concurrency control within Pynenc. This use case demonstrates various settings for concurrency control, such as disabling concurrent execution or enforcing task-level concurrency, to ensure tasks are executed according to specific requirements.
 
 ```python
@@ -142,6 +231,8 @@ For a detailed guide and examples, see {doc}`./use_case_003_concurrency_control`
 
 ## Use Case 4: Automatic Orchestration
 
+📖 {doc}`Full step-by-step guide <./use_case_004_auto_orchestration>`
+
 Delve into the advanced features of Pynenc with the Automatic Orchestration use case, showcasing the library's ability to manage task dependencies. This scenario uses the well-known Fibonacci sequence to illustrate how Pynenc automatically orchestrates the execution of dependent tasks, ensuring that tasks are executed in the correct sequence without manual intervention.
 
 ```python
@@ -163,6 +254,8 @@ This use case highlights how tasks that depend on the results of previous tasks 
 For a detailed guide and examples, see {doc}`./use_case_004_auto_orchestration`.
 
 ## Use Case 5: Unit Testing with Synchronous Mode
+
+📖 {doc}`Full step-by-step guide <./use_case_005_sync_unit_testing>`
 
 Discover the simplicity of unit testing Pynenc tasks using the synchronous execution mode. This approach facilitates testing by executing tasks sequentially within the test process, allowing for straightforward assertion of task outcomes without the need for an asynchronous execution environment.
 
@@ -203,6 +296,8 @@ This use case is instrumental in demonstrating how Pynenc's design accommodates 
 For a detailed guide and examples, see {doc}`./use_case_005_sync_unit_testing`.
 
 ## Use Case 6: Unit Testing with Mem Mode
+
+📖 {doc}`Full step-by-step guide <./use_case_006_mem_unit_testing>`
 
 Explore the efficiency of unit testing Pynenc tasks using the `Mem` mode, where all operational components such as broker, orchestrator, and state backend utilize in-memory implementations. This approach enables fast, isolated testing without the reliance on external infrastructure, making it ideal for rapid development cycles and CI/CD pipelines.
 
@@ -254,6 +349,8 @@ This use case also demonstrates configuring Pynenc through environment variables
 For a detailed guide and examples, see {doc}`./use_case_006_mem_unit_testing`.
 
 ## Use Case 7: Custom JSON Serialization with `JsonSerializable`
+
+📖 {doc}`Full step-by-step guide <./use_case_007_json_serializable>`
 
 When using `JsonSerializer`, any task argument or return value that is not a JSON primitive
 will raise a `TypeError` — unless the class implements the `JsonSerializable` protocol.
@@ -355,6 +452,8 @@ For more details on configuration options, refer to the {doc}`../configuration/i
 
 ## Use Case 9: Client Data Store
 
+📖 {doc}`Full step-by-step guide <./use_case_009_client_data_store>`
+
 Pynenc's client data store optimizes task execution by efficiently handling large serialized arguments.
 
 ```python
@@ -392,9 +491,11 @@ local_cache_size = 1000   # Keep 1000 most recent entries
 
 This use case demonstrates how Pynenc's argument caching can significantly improve performance in distributed systems by reducing network traffic and serialization overhead.
 
-For a detailed guide and examples, see {doc}`./use_case_009_argument_caching`.
+For a detailed guide and examples, see {doc}`./use_case_009_client_data_store`.
 
 ## Use Case 10: Trigger System
+
+📖 {doc}`Full step-by-step guide <./use_case_010_trigger_system>`
 
 Explore Pynenc's powerful trigger system, which enables declarative task scheduling and event-driven workflows. This feature allows you to automatically execute tasks in response to various conditions such as scheduled times, task status changes, results, exceptions, or custom events.
 
@@ -426,6 +527,8 @@ This use case demonstrates how to create self-managing workflows that respond to
 For a detailed guide and examples, see {doc}`./use_case_010_trigger_system`.
 
 ## Use Case 11: Workflow System
+
+📖 {doc}`Full step-by-step guide <./use_case_011_workflow_system>`
 
 Discover Pynenc's advanced workflow system for building sophisticated task orchestration with deterministic execution, state management, and automatic replay capabilities. The workflow system enables complex multi-step processes that can recover from failures and maintain consistency across distributed environments.
 
@@ -490,6 +593,8 @@ This use case demonstrates how to build robust, stateful workflows that can hand
 For a detailed guide and examples, see {doc}`./use_case_011_workflow_system`.
 
 ## Invocation Status System
+
+📖 {doc}`Full reference guide <./invocation_status>`
 
 Pynenc uses a declarative, type-safe state machine to manage the lifecycle of task invocations. This system provides:
 
