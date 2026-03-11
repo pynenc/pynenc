@@ -163,6 +163,8 @@ def tearDown(self):
     self.thread.join()
 ```
 
+![Running a local task in memory with ThreadRunner](https://github.com/user-attachments/assets/c4ae1c20-1c91-4848-a1bd-1445a4d40174)
+
 {doc}`usage_guide/use_case_005_sync_unit_testing` · {doc}`usage_guide/use_case_006_mem_unit_testing`
 
 ---

@@ -22,6 +22,7 @@ from pynenc.runner.runner_context import RunnerContext
 from pynenc.state_backend.base_state_backend import BaseStateBackend, InvocationHistory
 from pynenc.identifiers.task_id import TaskId
 from pynenc.types import Params, Result
+from pynenc.util.sqlite_utils import TableNames
 from pynenc.util.sqlite_utils import create_sqlite_connection as sqlite_conn
 from pynenc.util.sqlite_utils import (
     delete_tables_with_prefix,
@@ -33,24 +34,29 @@ if TYPE_CHECKING:
     from pynenc.app import Pynenc
 
 
-class Tables:
-    RESULTS = "state_backend_results"
-    EXCEPTIONS = "state_backend_exceptions"
-    INVOCATIONS = "state_backend_invocations"
-    RUNNER_CONTEXTS = "state_backend_runner_contexts"
-    HISTORY = "state_backend_history"
-    WORKFLOWS = "state_backend_workflows"
-    APP_INFO = "state_backend_app_info"
-    WORKFLOW_DATA = "state_backend_workflow_data"
-    WORKFLOW_SUB_INVOCATIONS = "state_backend_workflow_sub_invocations"
+class Tables(TableNames):
+    """Table names for state backend, scoped by app_id."""
+
+    def __init__(self, app_id: str) -> None:
+        super().__init__(app_id, "state_backend")
+        p = self.table_prefix
+        self.RESULTS = f"{p}_results"
+        self.EXCEPTIONS = f"{p}_exceptions"
+        self.INVOCATIONS = f"{p}_invocations"
+        self.RUNNER_CONTEXTS = f"{p}_runner_contexts"
+        self.HISTORY = f"{p}_history"
+        self.WORKFLOWS = f"{p}_workflows"
+        self.APP_INFO = f"{p}_app_info"
+        self.WORKFLOW_DATA = f"{p}_workflow_data"
+        self.WORKFLOW_SUB_INVOCATIONS = f"{p}_workflow_sub_invocations"
 
 
-def init_tables(sqlite_db_path: str) -> None:
+def init_tables(sqlite_db_path: str, tables: Tables) -> None:
     """Initialize SQLite tables for state backend."""
     with sqlite_conn(sqlite_db_path) as conn:
         conn.execute(
             f"""
-            CREATE TABLE IF NOT EXISTS {Tables.RESULTS} (
+            CREATE TABLE IF NOT EXISTS {tables.RESULTS} (
                 invocation_id TEXT PRIMARY KEY,
                 result_data BLOB NOT NULL
             )
@@ -58,7 +64,7 @@ def init_tables(sqlite_db_path: str) -> None:
         )
         conn.execute(
             f"""
-            CREATE TABLE IF NOT EXISTS {Tables.EXCEPTIONS} (
+            CREATE TABLE IF NOT EXISTS {tables.EXCEPTIONS} (
                 invocation_id TEXT PRIMARY KEY,
                 exception_data BLOB NOT NULL
             )
@@ -66,7 +72,7 @@ def init_tables(sqlite_db_path: str) -> None:
         )
         conn.execute(
             f"""
-            CREATE TABLE IF NOT EXISTS {Tables.INVOCATIONS} (
+            CREATE TABLE IF NOT EXISTS {tables.INVOCATIONS} (
                 invocation_id TEXT PRIMARY KEY,
                 call_id_key TEXT NOT NULL,
                 task_id_key TEXT NOT NULL,
@@ -81,11 +87,11 @@ def init_tables(sqlite_db_path: str) -> None:
         """
         )
         conn.execute(
-            f"CREATE INDEX IF NOT EXISTS idx_state_backend_invocations_parent ON {Tables.INVOCATIONS}(parent_invocation_id)"
+            f"CREATE INDEX IF NOT EXISTS idx_{tables.INVOCATIONS}_parent ON {tables.INVOCATIONS}(parent_invocation_id)"
         )
         conn.execute(
             f"""
-            CREATE TABLE IF NOT EXISTS {Tables.RUNNER_CONTEXTS} (
+            CREATE TABLE IF NOT EXISTS {tables.RUNNER_CONTEXTS} (
                 runner_id TEXT PRIMARY KEY,
                 runner_cls TEXT NOT NULL,
                 parent_ctx_id TEXT,
@@ -97,7 +103,7 @@ def init_tables(sqlite_db_path: str) -> None:
         )
         conn.execute(
             f"""
-            CREATE TABLE IF NOT EXISTS {Tables.HISTORY} (
+            CREATE TABLE IF NOT EXISTS {tables.HISTORY} (
                 invocation_id TEXT NOT NULL,
                 history_timestamp REAL NOT NULL,
                 history_status TEXT NOT NULL,
@@ -108,7 +114,7 @@ def init_tables(sqlite_db_path: str) -> None:
         )
         conn.execute(
             f"""
-            CREATE TABLE IF NOT EXISTS {Tables.WORKFLOWS} (
+            CREATE TABLE IF NOT EXISTS {tables.WORKFLOWS} (
                 workflow_id TEXT PRIMARY KEY,
                 workflow_type_key TEXT NOT NULL,
                 parent_workflow_id TEXT
@@ -116,11 +122,11 @@ def init_tables(sqlite_db_path: str) -> None:
         """
         )
         conn.execute(
-            f"CREATE INDEX IF NOT EXISTS idx_state_backend_workflows_type ON {Tables.WORKFLOWS}(workflow_type_key)"
+            f"CREATE INDEX IF NOT EXISTS idx_{tables.WORKFLOWS}_type ON {tables.WORKFLOWS}(workflow_type_key)"
         )
         conn.execute(
             f"""
-            CREATE TABLE IF NOT EXISTS {Tables.APP_INFO} (
+            CREATE TABLE IF NOT EXISTS {tables.APP_INFO} (
                 app_id TEXT PRIMARY KEY,
                 app_info_json TEXT NOT NULL
             )
@@ -128,7 +134,7 @@ def init_tables(sqlite_db_path: str) -> None:
         )
         conn.execute(
             f"""
-            CREATE TABLE IF NOT EXISTS {Tables.WORKFLOW_DATA} (
+            CREATE TABLE IF NOT EXISTS {tables.WORKFLOW_DATA} (
                 workflow_id TEXT NOT NULL,
                 data_key TEXT NOT NULL,
                 data_value BLOB NOT NULL,
@@ -138,7 +144,7 @@ def init_tables(sqlite_db_path: str) -> None:
         )
         conn.execute(
             f"""
-            CREATE TABLE IF NOT EXISTS {Tables.WORKFLOW_SUB_INVOCATIONS} (
+            CREATE TABLE IF NOT EXISTS {tables.WORKFLOW_SUB_INVOCATIONS} (
                 parent_workflow_id TEXT NOT NULL,
                 sub_invocation_id TEXT NOT NULL,
                 PRIMARY KEY (parent_workflow_id, sub_invocation_id)
@@ -164,6 +170,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
 
     def __init__(self, app: "Pynenc") -> None:
         super().__init__(app)
+        self.tables = Tables(app.app_id)
 
         # Use database path from configuration with validation
         self.sqlite_db_path = get_sqlite_sqlite_db_path(self.conf.sqlite_db_path)
@@ -172,7 +179,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
         self.app.logger.debug(
             f"Using SQLite database at {self.sqlite_db_path} for state backend."
         )
-        init_tables(self.sqlite_db_path)
+        init_tables(self.sqlite_db_path, self.tables)
 
     @cached_property
     def conf(self) -> ConfigStateBackendSQLite:
@@ -185,7 +192,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
         """Store app info"""
         with sqlite_conn(self.sqlite_db_path) as conn:
             conn.execute(
-                f"INSERT OR REPLACE INTO {Tables.APP_INFO} (app_id, app_info_json) VALUES (?, ?)",
+                f"INSERT OR REPLACE INTO {self.tables.APP_INFO} (app_id, app_info_json) VALUES (?, ?)",
                 (app_info.app_id, app_info.to_json()),
             )
             conn.commit()
@@ -196,7 +203,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
 
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
-                f"SELECT app_info_json FROM {Tables.APP_INFO} WHERE app_id = ?",
+                f"SELECT app_info_json FROM {self.tables.APP_INFO} WHERE app_id = ?",
                 (self.app.app_id,),
             )
             row = cursor.fetchone()
@@ -211,18 +218,24 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
         sqlite_db_path = get_sqlite_sqlite_db_path(default_conf.sqlite_db_path)
         apps = {}
         with sqlite_conn(sqlite_db_path) as conn:
+            # Find all app_info tables across all app_id prefixes
             cursor = conn.execute(
-                f"SELECT app_id, app_info_json FROM {Tables.APP_INFO}"
+                "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '%__state_backend_app_info'"
             )
-            for row in cursor.fetchall():
-                apps[row[0]] = AppInfo.from_json(row[1])
+            table_names = [row[0] for row in cursor.fetchall()]
+            cursor.close()
+            for table_name in table_names:
+                cursor = conn.execute(f"SELECT app_id, app_info_json FROM {table_name}")
+                for row in cursor.fetchall():
+                    apps[row[0]] = AppInfo.from_json(row[1])
+                cursor.close()
         return apps
 
     def store_workflow_run(self, workflow_identity: "WorkflowIdentity") -> None:
         """Store a workflow run for tracking and monitoring."""
         with sqlite_conn(self.sqlite_db_path) as conn:
             conn.execute(
-                f"INSERT OR REPLACE INTO {Tables.WORKFLOWS} (workflow_id, workflow_type_key, parent_workflow_id) VALUES (?, ?, ?)",
+                f"INSERT OR REPLACE INTO {self.tables.WORKFLOWS} (workflow_id, workflow_type_key, parent_workflow_id) VALUES (?, ?, ?)",
                 (
                     workflow_identity.workflow_id,
                     workflow_identity.workflow_type.key,
@@ -239,7 +252,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
             for inv_dto, call_dto in entries:
                 wf = inv_dto.workflow
                 conn.execute(
-                    f"""INSERT OR REPLACE INTO {Tables.INVOCATIONS}
+                    f"""INSERT OR REPLACE INTO {self.tables.INVOCATIONS}
                     (invocation_id, call_id_key, task_id_key, arguments_id,
                      serialized_arguments,
                      parent_invocation_id,
@@ -267,7 +280,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
             cursor = conn.execute(
                 f"""SELECT invocation_id, call_id_key, serialized_arguments, parent_invocation_id,
                            workflow_id, workflow_type_key, parent_workflow_id
-                    FROM {Tables.INVOCATIONS} WHERE invocation_id = ?""",
+                    FROM {self.tables.INVOCATIONS} WHERE invocation_id = ?""",
                 (invocation_id,),
             )
             row = cursor.fetchone()
@@ -315,7 +328,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
         """
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
-                f"SELECT invocation_id FROM {Tables.INVOCATIONS} WHERE parent_invocation_id = ?",
+                f"SELECT invocation_id FROM {self.tables.INVOCATIONS} WHERE parent_invocation_id = ?",
                 (parent_invocation_id,),
             )
             rows = cursor.fetchall()
@@ -339,7 +352,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
             for invocation_id in invocation_ids:
                 conn.execute(
                     f"""
-                    INSERT OR REPLACE INTO {Tables.HISTORY}
+                    INSERT OR REPLACE INTO {self.tables.HISTORY}
                     (invocation_id, history_timestamp, history_status, history_json)
                     VALUES (?, ?, ?, ?)
                     """,
@@ -357,7 +370,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
                 f"""
-                SELECT history_json FROM {Tables.HISTORY}
+                SELECT history_json FROM {self.tables.HISTORY}
                 WHERE invocation_id = ?
                 ORDER BY history_timestamp ASC
                 """,
@@ -371,7 +384,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
         """Retrieves the result of an invocation by ID."""
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
-                f"SELECT result_data FROM {Tables.RESULTS} WHERE invocation_id = ?",
+                f"SELECT result_data FROM {self.tables.RESULTS} WHERE invocation_id = ?",
                 (invocation_id,),
             )
             row = cursor.fetchone()
@@ -385,7 +398,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
         """Sets the result of an invocation by ID."""
         with sqlite_conn(self.sqlite_db_path) as conn:
             conn.execute(
-                f"INSERT OR REPLACE INTO {Tables.RESULTS} (invocation_id, result_data) VALUES (?, ?)",
+                f"INSERT OR REPLACE INTO {self.tables.RESULTS} (invocation_id, result_data) VALUES (?, ?)",
                 (invocation_id, serialized_result),
             )
             conn.commit()
@@ -399,7 +412,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
         """
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
-                f"SELECT exception_data FROM {Tables.EXCEPTIONS} WHERE invocation_id = ?",
+                f"SELECT exception_data FROM {self.tables.EXCEPTIONS} WHERE invocation_id = ?",
                 (invocation_id,),
             )
             row = cursor.fetchone()
@@ -414,7 +427,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
         """Sets the raised exception by invocation ID."""
         with sqlite_conn(self.sqlite_db_path) as conn:
             conn.execute(
-                f"INSERT OR REPLACE INTO {Tables.EXCEPTIONS} (invocation_id, exception_data) VALUES (?, ?)",
+                f"INSERT OR REPLACE INTO {self.tables.EXCEPTIONS} (invocation_id, exception_data) VALUES (?, ?)",
                 (invocation_id, serialized_exception),
             )
             conn.commit()
@@ -428,7 +441,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
             serialized_value = self.app.client_data_store.serialize(value)
             conn.execute(
                 f"""
-                INSERT OR REPLACE INTO {Tables.WORKFLOW_DATA} (workflow_id, data_key, data_value)
+                INSERT OR REPLACE INTO {self.tables.WORKFLOW_DATA} (workflow_id, data_key, data_value)
                 VALUES (?, ?, ?)
             """,
                 (workflow_identity.workflow_id, key, serialized_value),
@@ -442,7 +455,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
                 f"""
-                SELECT data_value FROM {Tables.WORKFLOW_DATA}
+                SELECT data_value FROM {self.tables.WORKFLOW_DATA}
                 WHERE workflow_id = ? AND data_key = ?
             """,
                 (workflow_identity.workflow_id, key),
@@ -457,7 +470,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
         """Retrieve all workflow IDs."""
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
-                f"SELECT DISTINCT workflow_type_key FROM {Tables.WORKFLOWS}"
+                f"SELECT DISTINCT workflow_type_key FROM {self.tables.WORKFLOWS}"
             )
             cursor_rows = cursor.fetchall()
             cursor.close()
@@ -480,7 +493,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
         filter = "WHERE workflow_type_key = ?" if workflow_type_key else ""
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
-                f"SELECT workflow_id, workflow_type_key, parent_workflow_id FROM {Tables.WORKFLOWS} {filter}",
+                f"SELECT workflow_id, workflow_type_key, parent_workflow_id FROM {self.tables.WORKFLOWS} {filter}",
                 (workflow_type_key,) if workflow_type_key else (),
             )
             cursor_rows = cursor.fetchall()
@@ -501,7 +514,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
         with sqlite_conn(self.sqlite_db_path) as conn:
             conn.execute(
                 f"""
-                INSERT OR REPLACE INTO {Tables.WORKFLOW_SUB_INVOCATIONS} (parent_workflow_id, sub_invocation_id)
+                INSERT OR REPLACE INTO {self.tables.WORKFLOW_SUB_INVOCATIONS} (parent_workflow_id, sub_invocation_id)
                 VALUES (?, ?)
             """,
                 (parent_workflow_id, sub_invocation_id),
@@ -515,7 +528,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
                 f"""
-                SELECT sub_invocation_id FROM {Tables.WORKFLOW_SUB_INVOCATIONS}
+                SELECT sub_invocation_id FROM {self.tables.WORKFLOW_SUB_INVOCATIONS}
                 WHERE parent_workflow_id = ?
             """,
                 (workflow_id,),
@@ -538,7 +551,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
                 cursor = conn.execute(
                     f"""
                     SELECT DISTINCT invocation_id
-                    FROM {Tables.HISTORY}
+                    FROM {self.tables.HISTORY}
                     WHERE history_timestamp >= ? AND history_timestamp <= ?
                     ORDER BY invocation_id
                     LIMIT ? OFFSET ?
@@ -567,7 +580,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
                 cursor = conn.execute(
                     f"""
                     SELECT history_json
-                    FROM {Tables.HISTORY}
+                    FROM {self.tables.HISTORY}
                     WHERE history_timestamp >= ? AND history_timestamp <= ?
                     ORDER BY history_timestamp ASC
                     LIMIT ? OFFSET ?
@@ -597,7 +610,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
             if runner_context.parent_ctx:
                 parent_ctx_id = runner_context.parent_ctx.runner_id
             conn.execute(
-                f"""REPLACE INTO {Tables.RUNNER_CONTEXTS}
+                f"""REPLACE INTO {self.tables.RUNNER_CONTEXTS}
                 (runner_id, runner_cls, parent_ctx_id, pid, hostname, thread_id)
                 VALUES (?, ?, ?, ?, ?, ?)""",
                 (
@@ -637,7 +650,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
         with sqlite_conn(self.sqlite_db_path) as conn:
             cur = conn.execute(
                 f"""SELECT runner_cls, parent_ctx_id, pid, hostname, thread_id
-                FROM {Tables.RUNNER_CONTEXTS}
+                FROM {self.tables.RUNNER_CONTEXTS}
                 WHERE runner_id = ?""",
                 (runner_id,),
             )
@@ -658,7 +671,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
         with sqlite_conn(self.sqlite_db_path) as conn:
             cur = conn.execute(
                 f"""SELECT runner_id, runner_cls, parent_ctx_id, pid, hostname, thread_id
-                FROM {Tables.RUNNER_CONTEXTS}
+                FROM {self.tables.RUNNER_CONTEXTS}
                 WHERE runner_id IN ({",".join(["?"] * len(runner_ids))})""",
                 tuple(runner_ids),
             )
@@ -674,7 +687,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
         with sqlite_conn(self.sqlite_db_path) as conn:
             cur = conn.execute(
                 f"""SELECT runner_id, runner_cls, parent_ctx_id, pid, hostname, thread_id
-                FROM {Tables.RUNNER_CONTEXTS}
+                FROM {self.tables.RUNNER_CONTEXTS}
                 WHERE runner_id LIKE ?""",
                 (f"%{partial_id}%",),
             )
@@ -700,7 +713,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         with sqlite_conn(self.sqlite_db_path) as conn:
             cur = conn.execute(
-                f"SELECT invocation_id FROM {Tables.INVOCATIONS} {where}",
+                f"SELECT invocation_id FROM {self.tables.INVOCATIONS} {where}",
                 tuple(params),
             )
             rows = cur.fetchall()
@@ -710,5 +723,5 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
 
     def purge(self) -> None:
         """Clear all state backend data"""
-        delete_tables_with_prefix(self.sqlite_db_path, "state_backend")
-        init_tables(self.sqlite_db_path)
+        delete_tables_with_prefix(self.sqlite_db_path, self.tables.table_prefix)
+        init_tables(self.sqlite_db_path, self.tables)

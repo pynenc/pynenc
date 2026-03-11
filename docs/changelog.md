@@ -4,6 +4,47 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-03-11
+
+### Changed
+
+- **Runner Initialization Architecture**:
+
+  - Moved all runner instance attributes from class-level annotations and `_on_start()` to `__init__()` with safe defaults, following the pattern already established by `ThreadRunner`
+  - `PersistentProcessRunner`: added `num_processes`, `manager`, `stop_event`, `_process_id_counter` to `__init__`; removed 3 `hasattr` guards
+  - `ProcessRunner`: added `wait_invocation`, `inv_id_to_runner_id`, `max_processes`, `manager` to `__init__`; removed `hasattr` guard; added `None` check on manager in `_on_stop`
+  - `MultiThreadRunner`: added `shared_status`, `max_processes`, `manager` to `__init__`; added `None` check on manager in `_on_stop`
+  - `ThreadRunner`: removed bare class-level annotations (already had `__init__`), added explicit type annotations to `threads` and `waiting_invocation_ids`
+  - Test fixtures cleaned up to remove manual attribute injection now handled by `__init__`
+
+- **Documentation Landing Pages**:
+
+  - Redesigned `docs/index.md` with improved layout and visual styling
+  - Expanded `docs/usage_guide/index.md` with more detailed content
+  - Added `docs/_static/custom.css` for custom Sphinx theme styling
+  - Updated `docs/conf.py` with new configuration options
+
+### Fixed
+
+- **Ensure app ID Isolation for all Backends**:
+
+  - Added unit and integration tests for app_id isolation across all backends
+  - SQLite components now prefix all table names with a sanitized `app_id`, ensuring full data isolation when multiple apps share the same database file (matching Redis behavior)
+  - Added `sanitize_table_prefix()` utility in `pynenc/util/sqlite_utils.py`
+  - Updated all 5 SQLite components: `SQLiteBroker`, `SQLiteClientDataStore`, `SQLiteOrchestrator`, `SQLiteStateBackend`, `SQLiteTrigger`
+  - `purge()` methods now only drop tables belonging to the calling app
+  - `discover_app_infos()` scans across all app-prefixed tables
+
+- **Runner Shutdown Safety**:
+
+  - Prevented `AttributeError` crashes when shutdown signals arrive before `_on_start()` completes, by ensuring all attributes exist after `__init__`
+  - Added new tests to validate shutdown paths are safe before initialization: `test_terminate_all_processes_before_on_start`, `test_on_stop_runner_loop_before_on_start`, `test_on_stop_before_on_start`
+
+- **CI/CD Pipeline**:
+
+  - Upgraded `dawidd6/action-download-artifact` from v3 to v4 in `smokeshow.yml`
+  - Added `dependabot[bot]` skip condition to `pr_test_release.yml` to prevent unnecessary TestPyPI deploys
+
 ## [0.1.0] - 2025-11-15
 
 ### Added

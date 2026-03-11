@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING
 from pynenc.client_data_store.base_client_data_store import BaseClientDataStore
 from pynenc.conf.config_client_data_store import ConfigClientDataStoreSQLite
 from pynenc.util.sqlite_utils import (
+    TableNames,
     delete_tables_with_prefix,
     get_sqlite_sqlite_db_path,
 )
@@ -26,10 +27,12 @@ if TYPE_CHECKING:
     from pynenc.app import Pynenc
 
 
-class Tables:
-    """Table names for client data store."""
+class Tables(TableNames):
+    """Table names for client data store, scoped by app_id."""
 
-    STORE = "client_data"
+    def __init__(self, app_id: str) -> None:
+        super().__init__(app_id, "client")
+        self.STORE = f"{self.table_prefix}_data"
 
 
 class SQLiteClientDataStore(BaseClientDataStore):
@@ -45,6 +48,7 @@ class SQLiteClientDataStore(BaseClientDataStore):
 
     def __init__(self, app: "Pynenc") -> None:
         super().__init__(app)
+        self.tables = Tables(app.app_id)
         self.sqlite_db_path = get_sqlite_sqlite_db_path(self.conf.sqlite_db_path)
         self._init_tables()
 
@@ -52,15 +56,15 @@ class SQLiteClientDataStore(BaseClientDataStore):
         """Create the client_data table if it doesn't exist."""
         with sqlite3.connect(self.sqlite_db_path) as conn:
             conn.execute(f"""
-                CREATE TABLE IF NOT EXISTS {Tables.STORE} (
+                CREATE TABLE IF NOT EXISTS {self.tables.STORE} (
                     data_key TEXT PRIMARY KEY,
                     data_value BLOB NOT NULL,
                     created_at REAL NOT NULL DEFAULT (julianday('now'))
                 )
             """)
             conn.execute(
-                f"CREATE INDEX IF NOT EXISTS idx_client_data_created "
-                f"ON {Tables.STORE}(created_at)"
+                f"CREATE INDEX IF NOT EXISTS idx_{self.tables.STORE}_created "
+                f"ON {self.tables.STORE}(created_at)"
             )
             conn.commit()
 
@@ -76,7 +80,7 @@ class SQLiteClientDataStore(BaseClientDataStore):
         """Store a key-value pair in SQLite."""
         with sqlite3.connect(self.sqlite_db_path) as conn:
             conn.execute(
-                f"INSERT OR REPLACE INTO {Tables.STORE} "
+                f"INSERT OR REPLACE INTO {self.tables.STORE} "
                 f"(data_key, data_value) VALUES (?, ?)",
                 (key, value.encode("utf-8")),
             )
@@ -92,7 +96,7 @@ class SQLiteClientDataStore(BaseClientDataStore):
         """
         with sqlite3.connect(self.sqlite_db_path) as conn:
             cursor = conn.execute(
-                f"SELECT data_value FROM {Tables.STORE} WHERE data_key = ?",
+                f"SELECT data_value FROM {self.tables.STORE} WHERE data_key = ?",
                 (key,),
             )
             if row := cursor.fetchone():
@@ -101,5 +105,5 @@ class SQLiteClientDataStore(BaseClientDataStore):
 
     def _purge(self) -> None:
         """Clear all stored client data."""
-        delete_tables_with_prefix(self.sqlite_db_path, "client_")
+        delete_tables_with_prefix(self.sqlite_db_path, self.tables.table_prefix)
         self._init_tables()

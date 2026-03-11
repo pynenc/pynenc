@@ -249,6 +249,8 @@ To get started with Pynenc, here's a simple example that demonstrates the creati
     direct_result = direct_add(1, 2)  # 3
    ```
 
+![Running a local task in memory with ThreadRunner](https://github.com/user-attachments/assets/c4ae1c20-1c91-4848-a1bd-1445a4d40174)
+
 ### Using the Trigger System
 
 Here's an example of creating and using triggers:

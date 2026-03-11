@@ -5,7 +5,9 @@ Provides small helpers for creating connections and simple cross-process
 operations used by the test orchestrator/state components.
 """
 
+import hashlib
 import logging
+import re
 import sqlite3
 import time
 from pathlib import Path
@@ -108,6 +110,43 @@ def get_sqlite_sqlite_db_path(sqlite_db_path: str) -> str:
     sqlite_db_path_obj = Path(sqlite_db_path)
     sqlite_db_path_obj.parent.mkdir(parents=True, exist_ok=True)
     return str(sqlite_db_path_obj)
+
+
+def sanitize_table_prefix(app_id: str) -> str:
+    """
+    Sanitize an app_id for safe use as a SQLite table name prefix.
+
+    Replaces any character that is not alphanumeric or underscore with an
+    underscore, prepends an underscore if the result starts with a digit,
+    and always appends an 8-character hash of the original app_id.
+
+    The hash prevents collisions when two different app_ids sanitize to the
+    same string (e.g. ``my-app`` and ``my_app``), and also protects against
+    a user accidentally choosing an app_id that looks like a previously
+    sanitized value.
+
+    :param str app_id: The application identifier to sanitize
+    :return: A string safe for use in SQLite table names
+    """
+    sanitized = re.sub(r"[^a-zA-Z0-9_]", "_", app_id)
+    if sanitized and sanitized[0].isdigit():
+        sanitized = f"_{sanitized}"
+    sanitized = sanitized or "_default"
+    hash_suffix = hashlib.sha256(app_id.encode()).hexdigest()[:8]
+    return f"{sanitized}_{hash_suffix}"
+
+
+class TableNames:
+    """Base class for app-scoped SQLite table name collections.
+
+    Subclasses call ``super().__init__(app_id, component)`` where *component*
+    is a short label such as ``"broker"`` or ``"state_backend"``.  The resulting
+    :attr:`table_prefix` is the single source of truth used both when creating
+    tables and when purging them, eliminating duplicated prefix strings.
+    """
+
+    def __init__(self, app_id: str, component: str) -> None:
+        self.table_prefix: str = f"{sanitize_table_prefix(app_id)}__{component}"
 
 
 def delete_tables_with_prefix(sqlite_db_path: str | Path, prefix: str) -> None:
