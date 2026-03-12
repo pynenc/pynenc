@@ -145,17 +145,19 @@ def test_cli_show_config_runner(capsys: CaptureFixture[str]) -> None:
 def test_cli_show_config_mem_runner(capsys: CaptureFixture[str]) -> None:
     """Check that modifying env var for RUNNER_CLS affects show_config command."""
     with patch.dict(os.environ, {"PYNENC__RUNNER_CLS": "ThreadRunner"}):
-        with patch(
-            "sys.argv",
-            [
-                "pynenc",
-                "--app",
-                "pynenc_tests.unit.cli.test_config_cli.app",
-                "runner",
-                "show_config",
-            ],
-        ):
-            main()
+        fresh_app = Pynenc()
+        with patch("pynenc.cli.main_cli.find_app_instance", return_value=fresh_app):
+            with patch(
+                "sys.argv",
+                [
+                    "pynenc",
+                    "--app",
+                    "pynenc_tests.unit.cli.test_config_cli.app",
+                    "runner",
+                    "show_config",
+                ],
+            ):
+                main()
 
     captured = capsys.readouterr()
     output = captured.out

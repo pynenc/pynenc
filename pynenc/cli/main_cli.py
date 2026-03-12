@@ -1,6 +1,7 @@
 import argparse
 import logging
 import sys
+import traceback
 
 from pynenc.cli.config_cli import add_config_subparser
 from pynenc.cli.monitor_cli import add_monitor_subparser
@@ -32,8 +33,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Pynenc Command Line Interface")
     parser.add_argument(
         "--app",
-        help="Specify the application module (e.g., 'core.src.api.backtes') "
-        "or file path (e.g., 'core/src/api/backtes.py')",
+        help=(
+            "Dotted path to the module containing your Pynenc() instance. "
+            "Examples: 'tasks.app' (loads tasks.py), "
+            "'mypackage.tasks' (imports mypackage.tasks), "
+            "'path/to/tasks.py' (loads file directly)"
+        ),
     )
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Increase output verbosity"
@@ -65,10 +70,13 @@ def main() -> None:
             args.app_instance = app_instance
         args.func(args)
     except ValueError as e:
-        logging.error(f"Failed to load application: {str(e)}")
+        logging.error(f"Failed to load application: {e}")
+        if args.verbose:
+            traceback.print_exc()
         sys.exit(1)
     except Exception as e:
-        logging.error(f"An unexpected error occurred: {str(e)}")
+        logging.error(f"An unexpected error occurred: {type(e).__name__}: {e}")
+        traceback.print_exc()
         sys.exit(1)
 
 

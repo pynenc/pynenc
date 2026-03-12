@@ -89,6 +89,9 @@ def test_cli_unexpected_exception() -> None:
                         main()
                     assert e.value.code == 1
                     output = log_capture.getvalue()
-                    assert "An unexpected error occurred: Unexpected error" in output
+                    assert (
+                        "An unexpected error occurred: Exception: Unexpected error"
+                        in output
+                    )
                 finally:
                     logging.getLogger().removeHandler(handler)
