@@ -4,7 +4,10 @@ Integration tests for core tasks across all backend combinations.
 Tests verify that core recovery tasks properly recover stuck invocations.
 """
 
+from __future__ import annotations
+
 import os
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 import threading
 from time import sleep
@@ -17,6 +20,10 @@ from pynenc.invocation import DistributedInvocation, InvocationStatus
 from pynenc.runner.runner_context import RunnerContext
 from pynenc_tests.conftest import check_all_status_transitions
 
+if TYPE_CHECKING:
+    from pynenc import Pynenc
+    from pynenc.identifiers.invocation_id import InvocationId
+
 
 @pytest.fixture
 def dead_runner_ctx() -> RunnerContext:
@@ -26,6 +33,24 @@ def dead_runner_ctx() -> RunnerContext:
         pid=99999,
         hostname="dead-host",
     )
+
+
+def _poll_for_status(
+    app: Pynenc,
+    invocation_id: InvocationId,
+    expected_status: InvocationStatus,
+    timeout: float = 10.0,
+    interval: float = 0.3,
+) -> bool:
+    """Poll the invocation history until expected_status appears or timeout."""
+    elapsed = 0.0
+    while elapsed < timeout:
+        history = app.state_backend.get_history(invocation_id)
+        if expected_status in [h.status_record.status for h in history]:
+            return True
+        sleep(interval)
+        elapsed += interval
+    return False
 
 
 def test_recover_pending_invocations(
@@ -73,13 +98,14 @@ def test_recover_pending_invocations(
         thread = threading.Thread(target=run_in_thread, daemon=True)
         thread.start()
 
-        sleep(1)  # Let runner initialize and perform recovery
-
-        # Verify the stuck invocation was recovered
-        history = app.state_backend.get_history(stuck_invocation.invocation_id)
-        assert InvocationStatus.PENDING_RECOVERY in [
-            h.status_record.status for h in history
-        ]
+        # Poll until recovery happens (backends with higher latency need more time)
+        found = _poll_for_status(
+            app, stuck_invocation.invocation_id, InvocationStatus.PENDING_RECOVERY
+        )
+        assert found, (
+            f"Expected PENDING_RECOVERY in history but got: "
+            f"{[h.status_record.status for h in app.state_backend.get_history(stuck_invocation.invocation_id)]}"
+        )
 
         app.runner.stop_runner_loop()
         check_all_status_transitions(app)
@@ -123,13 +149,14 @@ def test_recover_running_invocations(
         thread = threading.Thread(target=run_in_thread, daemon=True)
         thread.start()
 
-        sleep(1)  # Let runner initialize and perform recovery
-
-        # Verify the stuck invocation was recovered
-        history = app.state_backend.get_history(stuck_invocation.invocation_id)
-        assert InvocationStatus.RUNNING_RECOVERY in [
-            h.status_record.status for h in history
-        ]
+        # Poll until recovery happens (backends with higher latency need more time)
+        found = _poll_for_status(
+            app, stuck_invocation.invocation_id, InvocationStatus.RUNNING_RECOVERY
+        )
+        assert found, (
+            f"Expected RUNNING_RECOVERY in history but got: "
+            f"{[h.status_record.status for h in app.state_backend.get_history(stuck_invocation.invocation_id)]}"
+        )
 
         app.runner.stop_runner_loop()
         check_all_status_transitions(app)

@@ -265,10 +265,6 @@ class BaseOrchestrator(ABC):
         """
         Retrieves the status of a specific invocation id.
 
-        note::
-            This method should be cached specially final status that cannot change.
-            For filtering by status, use `filter_by_status` instead.
-
         :param InvocationId invocation_id: The id of the invocation whose status is to be retrieved.
         :return: The current status of the invocation.
         :rtype: InvocationStatus
