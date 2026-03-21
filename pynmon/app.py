@@ -5,18 +5,13 @@ Note: Pynmon requires Python <3.13 due to FastAPI/Pydantic v2 dependency limitat
 Core pynenc functionality supports Python 3.11+.
 """
 
-import sys
-
-if sys.version_info >= (3, 13):
-    raise RuntimeError(
-        "The pynmon monitoring UI requires Python <3.13 due to FastAPI/Pydantic limitations. "
-        "Core pynenc functionality supports Python 3.13+."
-    )
-
+import secrets
 import logging
 import os
+import sys
 import traceback
 from pathlib import Path
+from urllib.parse import urlparse
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
@@ -131,6 +126,36 @@ def _uvicorn_log_config() -> dict:
 # Initialize FastAPI app
 app = FastAPI(title="Pynenc Monitor")
 
+# CSRF token for form submissions
+_csrf_token: str = secrets.token_urlsafe(32)
+
+
+@app.middleware("http")
+async def csrf_middleware(request: Request, call_next):  # type: ignore[no-untyped-def]
+    """Validate CSRF token on state-changing requests (POST/PUT/DELETE/PATCH)."""
+    if request.method in ("POST", "PUT", "DELETE", "PATCH"):
+        # Check Origin header matches the request host
+        origin = request.headers.get("origin")
+        referer = request.headers.get("referer")
+        host = request.headers.get("host", "")
+
+        origin_ok = False
+        if origin:
+            parsed = urlparse(origin)
+            origin_ok = parsed.netloc == host
+        elif referer:
+            parsed = urlparse(referer)
+            origin_ok = parsed.netloc == host
+
+        if not origin_ok:
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "CSRF validation failed: origin mismatch"},
+            )
+
+    return await call_next(request)
+
+
 # Set up static files
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
@@ -139,7 +164,7 @@ app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 templates_dir = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(templates_dir))
 
-# Global reference to the monitored Pynenc app instance
+# Global reference to the monitored Pynenc app instance.
 all_pynenc_instances: dict[str, Pynenc] = {}
 pynenc_instance: Pynenc | None = None
 
@@ -183,7 +208,7 @@ async def switch_app(app_id: str) -> RedirectResponse:
     :return: Redirect to the homepage
     :raises HTTPException: If the requested app doesn't exist
     """
-    global pynenc_instance, all_pynenc_instances
+    global all_pynenc_instances, pynenc_instance
 
     if app_id not in all_pynenc_instances:
         raise HTTPException(status_code=404, detail=f"App '{app_id}' not found.")
@@ -198,6 +223,8 @@ async def switch_app(app_id: str) -> RedirectResponse:
 @app.post("/purge")
 async def purge_all() -> JSONResponse:
     """Purge all data from the app (broker, orchestrator, state backend, arg cache)."""
+    global pynenc_instance
+
     if not pynenc_instance:
         raise HTTPException(
             status_code=500,
@@ -274,7 +301,13 @@ def start_monitor(
     resolved_level = log_level or os.environ.get("PYNMON_LOG_LEVEL") or "info"
     configure_logging(resolved_level)
 
-    global pynenc_instance, all_pynenc_instances
+    if sys.version_info >= (3, 13):
+        raise RuntimeError(
+            "The pynmon monitoring UI requires Python <3.13 due to FastAPI/Pydantic limitations. "
+            "Core pynenc functionality supports Python 3.13+."
+        )
+
+    global all_pynenc_instances, pynenc_instance
 
     if not apps:
         raise ValueError("A Pynenc app instance must be provided")
@@ -290,7 +323,7 @@ def start_monitor(
     else:
         pynenc_instance = next(iter(all_pynenc_instances.values()))
 
-    logger.info(f"Primary app: {pynenc_instance.app_id}")
+    logger.info(f"Primary app: {pynenc_instance.app_id if pynenc_instance else 'None'}")
     logger.info(f"Available apps: {list(all_pynenc_instances.keys())}")
 
     setup_routes()
@@ -368,9 +401,9 @@ def get_active_app() -> Pynenc:
     if not pynenc_instance:
         if all_pynenc_instances:
             # Auto-select the first available instance
-            app_id, app = next(iter(all_pynenc_instances.items()))
-            pynenc_instance = app
+            app_id, pynenc_instance = next(iter(all_pynenc_instances.items()))
             logger.info(f"Auto-selected app: {app_id}")
+            return pynenc_instance
         else:
             raise HTTPException(
                 status_code=500,
@@ -382,5 +415,4 @@ def get_active_app() -> Pynenc:
 
 def get_all_apps() -> dict[str, Pynenc]:
     """Get all available Pynenc app instances."""
-    global all_pynenc_instances
     return all_pynenc_instances

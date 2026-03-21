@@ -290,14 +290,35 @@ For a complete guide on how to set up and run pynenc, visit our [samples library
 
 ## Monitoring with Pynmon
 
-Pynenc includes **Pynmon**, a built-in web-based monitoring interface that provides real-time visibility into your distributed task execution. Pynmon offers:
+Pynenc includes **Pynmon**, a built-in web-based monitoring interface that provides real-time visibility into your distributed task execution — no external tooling required.
 
-- **Dashboard Overview**: Quick summary of system health, active runners, and task statistics
-- **Timeline Visualization**: SVG-based timeline showing invocations and state transitions across all runners
-- **Runner Monitoring**: Track active runners with heartbeat status, hostname, PID, and uptime
-- **Task Browser**: Explore all registered tasks with execution history and statistics
-- **Invocation Details**: Drill down into individual task executions with full context and status history
-- **Workflow Tracking**: Visualize workflow hierarchies with parent-child relationships
+<p align="center">
+  <img src="docs/_static/pynmon_dashboard.png" alt="Pynmon dashboard showing application overview, invocation status, component architecture, and configuration" width="100%">
+</p>
+
+### Execution Timeline
+
+See exactly what ran across every runner and worker, at every moment. Status transitions are color-coded with connections between parent and child invocations. Click any invocation to inspect its full status history and the runner context that executed it.
+
+<p align="center">
+  <img src="docs/_static/pynenc_runners_timeline_detail.png" alt="Pynmon timeline comparing ThreadRunner, ProcessRunner, PersistentProcessRunner, and MultiThreadRunner side by side" width="100%">
+</p>
+
+### Family Tree & Invocation Details
+
+Navigate the full hierarchy of task calls as an interactive graph. Selecting a node cross-highlights it on the timeline, and vice versa — making it trivial to understand both the logical structure and the physical execution of complex workflows.
+
+<p align="center">
+  <img src="docs/_static/pynmon_family_tree.png" alt="Pynmon family tree overlaid on timeline with cross-highlighting between graph and execution view" width="100%">
+</p>
+
+### Log Explorer
+
+Paste your Pynenc log lines and the Log Explorer augments them with full context — parsing runner contexts, invocation IDs, and task references, resolving each to its detail page. It generates a mini-timeline of all invocations mentioned in the logs and highlights runners and workers with direct links.
+
+<p align="center">
+  <img src="docs/_static/pynmon_log_explorer.png" alt="Pynmon Log Explorer parsing log lines with augmented context, mini-timeline, and links to invocation and runner details" width="100%">
+</p>
 
 ### Starting the Monitor
 
@@ -319,39 +340,22 @@ pip install pynenc[monitor]
 
 ## Requirements
 
-Pynenc supports multiple backend options through its plugin system:
+- **Python 3.11+**
+- **Core package**: No external infrastructure needed — includes memory and SQLite backends for development and testing
+- **Production**: Install a backend plugin (`pynenc-redis`, `pynenc-mongodb`, or `pynenc-rabbitmq`) and ensure the corresponding service is running
 
-### Backend Options
+The plugin architecture lets you swap backends without changing application code.
 
-- **Memory Backend**: Built-in, no additional requirements (for development/testing, single-host only, not suitable for distributed systems; only compatible with ThreadRunner for memory save)
-- **SQLite Backend**: Built-in, no additional requirements (for testing on a single host, not suitable for distributed systems; compatible with any runner that shares the same database file)
-- **Redis Backend**: Requires `pynenc-redis` plugin and a Redis server
-- **MongoDB Backend**: Requires `pynenc-mongodb` plugin and a MongoDB server
-- **RabbitMQ Backend**: Requires `pynenc-rabbitmq` plugin and a RabbitMQ server
+## Contributing
 
-### Production Deployment
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, testing instructions, and pull request guidelines.
 
-For distributed systems, choose either:
+## Community & Support
 
-- **Redis**: Install `pynenc-redis` and ensure Redis server is running
-- **MongoDB**: Install `pynenc-mongodb` and ensure MongoDB server is running
-- **RabbitMQ**: Install `pynenc-rabbitmq` and ensure RabbitMQ server is running
-
-The plugin architecture allows you to switch between backends or add new ones without changing your application code.
-
-Future Updates:
-
-- Pynenc is being developed to support additional databases and message queues. This will expand its compatibility and usability in various distributed systems.
-
-## Contact or Support
-
-If you need help with Pynenc or want to discuss any aspects of its usage, feel free to reach out through the following channels:
-
-- **[GitHub Issues](https://github.com/pynenc/pynenc/issues)**: For bug reports, feature requests, or other technical queries, please use our GitHub Issues page. You can create a new issue or contribute to existing discussions.
-
-- **[GitHub Discussions](https://github.com/pynenc/pynenc/discussions)**: For more general questions, ideas exchange, or discussions about Pynenc, consider using GitHub Discussions on our repository. It's a great place to connect with other users and the development team.
-
-Remember, your feedback and contributions are essential in helping Pynenc grow and improve!
+- **[GitHub Issues](https://github.com/pynenc/pynenc/issues)** — Bug reports and feature requests
+- **[GitHub Discussions](https://github.com/pynenc/pynenc/discussions)** — Questions, ideas, and general conversation
+- **[Documentation](https://docs.pynenc.org)** — Guides, API reference, and configuration details
+- **[Samples Repository](https://github.com/pynenc/samples)** — Working examples for common use cases
 
 ## License
 

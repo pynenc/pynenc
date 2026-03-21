@@ -1,7 +1,6 @@
 import threading
 import time
 from typing import TYPE_CHECKING
-from unittest.mock import create_autospec
 
 import pytest
 
@@ -92,17 +91,25 @@ def test_conf_property() -> None:
     assert isinstance(mock_base_app.state_backend.conf, ConfigStateBackend)
 
 
-def test_wait_for_all_async_operations() -> None:
-    # Mock the threads for two dummy invocations
-    mock_thread1 = create_autospec(threading.Thread)
-    mock_thread2 = create_autospec(threading.Thread)
+def test_wait_for_all_async_operations_blocks_until_threads_finish() -> None:
+    """Verify wait_for_all_async_operations blocks until background threads complete."""
+    completed = []
+
+    def slow_work(label: str) -> None:
+        time.sleep(0.05)
+        completed.append(label)
+
+    t1 = threading.Thread(target=slow_work, args=("t1",))
+    t2 = threading.Thread(target=slow_work, args=("t2",))
+    t1.start()
+    t2.start()
+
     mock_base_app.state_backend.invocation_threads = {
-        "invocation1": [mock_thread1],
-        "invocation2": [mock_thread2],
+        "invocation1": [t1],
+        "invocation2": [t2],
     }
 
     mock_base_app.state_backend.wait_for_all_async_operations()
 
-    # Verify that join is called on all threads
-    mock_thread1.join.assert_called_once()
-    mock_thread2.join.assert_called_once()
+    assert "t1" in completed
+    assert "t2" in completed

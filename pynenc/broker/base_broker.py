@@ -13,38 +13,10 @@ class BaseBroker(ABC):
     """
     Abstract base class for message brokers in Pynenc's plugin system.
 
-    This class serves as the foundational interface for implementing various message brokers
-    across different backend systems. The plugin architecture allows for flexible integration
-    with multiple storage and messaging solutions, each providing their own broker implementation.
-
-    The broker is responsible for routing task invocations through a message queue system,
-    supporting both FIFO and priority-based queuing strategies depending on the implementation.
+    Routes task invocations through a message queue system, supporting both FIFO
+    and priority-based queuing depending on the implementation.
 
     :param Pynenc app: A reference to the Pynenc application instance.
-
-    ```{note}
-    Available broker implementations depend on installed plugins:
-    - **MemBroker**: Built-in memory-based broker for development and testing (single-host only, not suitable for distributed systems; only compatible with ThreadRunner for memory save)
-    - **SQLiteBroker**: Built-in SQLite-based broker for testing on a single host (not suitable for distributed systems; compatible with any runner that shares the same database file)
-    - **RedisBroker**: Available with `pynenc-redis` plugin for production Redis deployments
-    - **MongoBroker**: Available with `pynenc-mongodb` plugin for MongoDB-based systems
-    - **RabbitMQBroker**: Available with `pynenc-rabbitmq` plugin for message queue-based distributed systems
-    ```
-
-    ```{attention}
-    Plugin-specific brokers may have different capabilities and performance characteristics.
-    Consult the documentation for your chosen backend plugin for implementation-specific details.
-    ```
-
-    ```{hint}
-    The plugin system allows for easy extension with custom broker implementations.
-    Create a custom broker by subclassing BaseBroker and implementing the abstract methods.
-    ```
-
-    ```{seealso}
-    For production deployments, consider Redis or MongoDB plugins which provide
-    persistent, distributed message queuing capabilities.
-    ```
     """
 
     def __init__(self, app: "Pynenc") -> None:

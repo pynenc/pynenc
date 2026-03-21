@@ -6,7 +6,6 @@ It includes listing all workflows, viewing workflow runs, and workflow details.
 """
 
 import logging
-import traceback
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
@@ -48,7 +47,7 @@ async def workflows_list(request: Request) -> HTMLResponse:
         logger.info(f"Prepared {len(workflows_with_runs)} workflow entries for display")
 
     except Exception as e:
-        logger.error(f"Error retrieving workflows: {e}")
+        logger.exception(f"Error retrieving workflows: {e}")
         workflows_with_runs = []
 
     return templates.TemplateResponse(
@@ -88,7 +87,7 @@ async def refresh_workflows_list(request: Request) -> HTMLResponse:
         logger.info(f"Prepared {len(workflows_with_runs)} workflow entries for display")
 
     except Exception as e:
-        logger.error(f"Error refreshing workflows: {e}")
+        logger.exception(f"Error refreshing workflows: {e}")
         workflows_with_runs = []
 
     return templates.TemplateResponse(
@@ -117,7 +116,7 @@ async def workflow_runs_list(request: Request) -> HTMLResponse:
         )
 
     except Exception as e:
-        logger.error(f"Error retrieving workflow runs: {e}")
+        logger.exception(f"Error retrieving workflow runs: {e}")
         sorted_runs = []
 
     return templates.TemplateResponse(
@@ -148,7 +147,7 @@ async def refresh_workflow_runs_list(request: Request) -> HTMLResponse:
         )
 
     except Exception as e:
-        logger.error(f"Error refreshing workflow runs: {e}")
+        logger.exception(f"Error refreshing workflow runs: {e}")
         sorted_runs = []
 
     return templates.TemplateResponse(
@@ -200,8 +199,9 @@ async def workflow_detail(request: Request, workflow_type_key: str) -> HTMLRespo
         )
 
     except Exception as e:
-        logger.error(f"Error retrieving workflow details for {workflow_type_key}: {e}")
-        logger.error(f"Full traceback: {traceback.format_exc()}")
+        logger.exception(
+            f"Error retrieving workflow details for {workflow_type_key}: {e}"
+        )
 
         return templates.TemplateResponse(
             "error.html",
@@ -254,8 +254,9 @@ async def refresh_workflow_detail(
         )
 
     except Exception as e:
-        logger.error(f"Error refreshing workflow details for {workflow_type_key}: {e}")
-        logger.error(f"Full traceback: {traceback.format_exc()}")
+        logger.exception(
+            f"Error refreshing workflow details for {workflow_type_key}: {e}"
+        )
 
         return HTMLResponse(
             f'<div class="alert alert-danger">Error loading workflow: {str(e)}</div>',
@@ -299,8 +300,7 @@ async def debug_info(request: Request) -> HTMLResponse:
         )
 
     except Exception as e:
-        logger.error(f"Error in debug endpoint: {e}")
-        logger.error(f"Full traceback: {traceback.format_exc()}")
+        logger.exception(f"Error in debug endpoint: {e}")
 
         return HTMLResponse(
             f"""

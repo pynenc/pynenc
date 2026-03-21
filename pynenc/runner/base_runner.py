@@ -33,25 +33,10 @@ if TYPE_CHECKING:
 
 class BaseRunner(ABC):
     """
-    The BaseRunner class defines the interface for a runner that executes task invocations.
+    Abstract base class for runners that execute task invocations from the broker.
 
-    It interacts with various components of the Pynenc system, like the broker and orchestrator,
-    and is responsible for handling the execution and life cycle of task invocations.
-
-    - The runner's behavior can vary depending on the execution environment (e.g., subprocess, async, cloud function, multiprocessing).
-    - It is designed to be subclassed for specific execution environments.
-    """
-
-    """
-    The Runner will execute invocations from the broker.
-
-    - It requires an app because it needs to know about the broker, orchestrator, etc.
-    - The runner will affect the behavior of the task result, for example:
-      * In a subprocess environment, it may implement a pipe to communicate for pausing/resuming processes.
-      * In an async environment, the value should be an async function to wait for distributed results.
-      * In a cloud function environment aiming for speed with a single thread, it might not wait more than 'x' seconds and instead, create a 'callback', save the status, and convert the current execution into a task that will be called when the result is ready.
-      * In a multiprocessing environment in a Kubernetes pod with capabilities to create new pods, it may have different behaviors.
-      * For an asyncio worker, it runs several tasks in one processor, and the value should wait with async.
+    Requires an app instance to access the broker, orchestrator, and other components.
+    Subclass for specific execution environments (threading, multiprocessing, async, cloud).
     """
 
     def __init__(

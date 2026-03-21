@@ -1,6 +1,5 @@
 import logging
 import time
-import traceback
 from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Request
@@ -93,57 +92,61 @@ def find_call_and_invocations(
     """
     Find a call by its ID along with related invocations and task.
 
+    Uses the orchestrator's call-to-invocation index for direct lookup,
+    falling back to a full task scan if no index is available.
+
     :param app: The Pynenc application instance
     :param call_id: The ID of the call to find
     :param timeout: Maximum search time in seconds
     :return: Tuple containing (target_call, target_task, invocations)
     """
     start_time = time.time()
-    all_invocations = []
+    logger.info(f"Starting search for call ID: {call_id}")
+
+    # Fast path: use the orchestrator index to look up invocations by call_id
+    inv_ids = list(app.orchestrator.get_call_invocation_ids(call_id))
+    if inv_ids:
+        invocations = [app.state_backend.get_invocation(iid) for iid in inv_ids]
+        target_call = invocations[0].call if invocations else None
+        target_task = invocations[0].task if invocations else None
+        elapsed = time.time() - start_time
+        logger.info(
+            f"Found call {call_id} via index in {elapsed:.2f}s with {len(invocations)} invocations"
+        )
+        return target_call, target_task, invocations
+
+    # Slow path: scan all tasks (needed for backends without a call index)
+    all_invocations: list[DistributedInvocation] = []
     target_call = None
     target_task = None
-
-    # Log startup info
     task_count = len(app.tasks)
-    logger.info(f"Starting search for call ID: {call_id} across {task_count} tasks")
+    logger.info(f"No index match; scanning {task_count} tasks for call {call_id}")
 
-    # Search through all tasks to find a matching call
     for i, task in enumerate(app.tasks.values()):
-        # Check for timeout at the beginning of each task iteration
         if _check_timeout_for_call_search(start_time, timeout, i, task_count):
             break
 
-        logger.debug(f"Searching in task [{i + 1}/{task_count}]: {task.task_id}")
         try:
-            # Use a separate timeout for each task to prevent one slow task from consuming all the time
             elapsed = time.time() - start_time
-            task_timeout = min(3.0, timeout - elapsed)  # Max 3 seconds per task
+            task_timeout = min(3.0, timeout - elapsed)
 
             task_invocations, task_call, timeout_reached = _search_invocations_in_task(
                 app, task, call_id, task_timeout
             )
-
-            # Add any found invocations to our collection
             all_invocations.extend(task_invocations)
-
-            # Set target_call and target_task if we found them
             if task_call and target_call is None:
                 target_call = task_call
                 target_task = task
-
             if timeout_reached:
                 break
-
         except Exception as e:
-            logger.error(f"Error searching in task {task.task_id}: {str(e)}")
-            logger.error(traceback.format_exc())
+            logger.exception(f"Error searching in task {task.task_id}: {str(e)}")
             continue
 
-    # Log summary information
     elapsed = time.time() - start_time
     if target_call:
         logger.info(
-            f"Successfully found call {call_id} in {elapsed:.2f}s with {len(all_invocations)} related invocations"
+            f"Found call {call_id} in {elapsed:.2f}s with {len(all_invocations)} invocations"
         )
     else:
         logger.warning(f"Failed to find call {call_id} after {elapsed:.2f}s")
@@ -192,8 +195,9 @@ async def process_call_detail(
         return templates.TemplateResponse("calls/detail.html", context)
 
     except Exception as e:
-        logger.error(f"Unexpected error in call_detail ({request_source}): {str(e)}")
-        logger.error(traceback.format_exc())
+        logger.exception(
+            f"Unexpected error in call_detail ({request_source}): {str(e)}"
+        )
         return render_error_response(
             templates, request, "Error", f"An error occurred: {str(e)}", 500
         )
@@ -256,8 +260,7 @@ async def call_detail_by_query(request: Request) -> HTMLResponse:
 
         return await process_call_detail(request, call_id, "query param")
     except Exception as e:
-        logger.error(f"Unhandled exception in call_detail_by_query: {str(e)}")
-        logger.error(traceback.format_exc())
+        logger.exception(f"Unhandled exception in call_detail_by_query: {str(e)}")
         return templates.TemplateResponse(
             "shared/error.html",
             {

@@ -15,7 +15,7 @@ from pynenc.runner.runner_context import RunnerContext
 from pynenc_tests.conftest import MockPynenc
 
 
-class TestConfig(ConfigMultiThreadRunner):
+class StubMultiThreadConfig(ConfigMultiThreadRunner):
     min_processes = 2
     max_processes = 4
     enforce_max_processes = False
@@ -35,7 +35,7 @@ def app() -> MockPynenc:
 @pytest.fixture
 def multi_thread_runner(app: MockPynenc) -> MultiThreadRunner:
     runner = MultiThreadRunner(app)
-    runner.conf = TestConfig()
+    runner.conf = StubMultiThreadConfig()
     return runner
 
 
@@ -176,7 +176,7 @@ def test_waiting_for_results_without_invocation(
 
 def test_max_parallel_slots(multi_thread_runner: MultiThreadRunner) -> None:
     """Test max_parallel_slots returns the maximum of min_processes and max_processes."""
-    # Given min_processes=2 from TestConfig
+    # Given min_processes=2 from StubMultiThreadConfig
     multi_thread_runner.max_processes = 4  # Set max_processes explicitly
     assert multi_thread_runner.max_parallel_slots == 4
 

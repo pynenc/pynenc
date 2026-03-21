@@ -9,7 +9,7 @@ from collections.abc import Iterable
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from functools import cached_property
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from pynenc.conf.config_trigger import ConfigTriggerSQLite
 from pynenc.identifiers.task_id import TaskId
@@ -167,7 +167,7 @@ class SQLiteTrigger(BaseTrigger):
                 )
             conn.commit()
 
-    def _get_trigger(self, trigger_id: str) -> Optional["TriggerDefinitionDTO"]:
+    def _get_trigger(self, trigger_id: str) -> "TriggerDefinitionDTO | None":
         results = self._get_triggers([trigger_id])
         return results[0] if results else None
 

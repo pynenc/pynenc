@@ -13,7 +13,7 @@ Key components:
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import StrEnum, auto
+from enum import StrEnum
 from functools import cached_property
 from typing import Final
 
@@ -50,20 +50,20 @@ class InvocationStatus(StrEnum):
     :cvar RETRY: The task call finished with a retriable exception
     """
 
-    REGISTERED = auto()
-    CONCURRENCY_CONTROLLED = auto()
-    CONCURRENCY_CONTROLLED_FINAL = auto()
-    REROUTED = auto()
-    PENDING = auto()
-    PENDING_RECOVERY = auto()
-    RUNNING = auto()
-    RUNNING_RECOVERY = auto()
-    PAUSED = auto()
-    RESUMED = auto()
-    KILLED = auto()
-    SUCCESS = auto()
-    FAILED = auto()
-    RETRY = auto()
+    REGISTERED = "registered"
+    CONCURRENCY_CONTROLLED = "concurrency_controlled"
+    CONCURRENCY_CONTROLLED_FINAL = "concurrency_controlled_final"
+    REROUTED = "rerouted"
+    PENDING = "pending"
+    PENDING_RECOVERY = "pending_recovery"
+    RUNNING = "running"
+    RUNNING_RECOVERY = "running_recovery"
+    PAUSED = "paused"
+    RESUMED = "resumed"
+    KILLED = "killed"
+    SUCCESS = "success"
+    FAILED = "failed"
+    RETRY = "retry"
 
     def is_final(self) -> bool:
         """Check if the status terminates the invocation lifecycle."""

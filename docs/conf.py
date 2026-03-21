@@ -51,32 +51,6 @@ intersphinx_mapping = {
 # -- Autodoc settings ---------------------------------------------------
 autodoc2_render_plugin = "myst"
 autodoc2_packages = [{"path": "../pynenc"}]
-# autodoc2_hidden_objects = ["dunder", "private", "inherited"]
-
-# autodoc2_replace_annotations = [
-#     ("re.Pattern", "typing.Pattern"),
-#     ("markdown_it.MarkdownIt", "markdown_it.main.MarkdownIt"),
-# ]
-# autodoc2_replace_bases = [
-#     ("sphinx.directives.SphinxDirective", "sphinx.util.docutils.SphinxDirective"),
-# ]
-# autodoc2_docstring_parser_regexes = [
-#     ("myst_parser", "myst"),
-#     (r"myst_parser\.setup", "myst"),
-# ]
-# nitpicky = True
-# nitpick_ignore_regex = [
-#     (r"py:.*", r"docutils\..*"),
-#     (r"py:.*", r"pygments\..*"),
-#     (r"py:.*", r"typing\.Literal\[.*"),
-# ]
-# nitpick_ignore = [
-#     ("py:class", "pynenc.types.Params"),
-#     ("py:exc", "MarkupError"),
-#     ("py:class", "sphinx.util.typing.Inventory"),
-#     ("py:class", "sphinx.writers.html.HTMLTranslator"),
-#     ("py:obj", "sphinx.transforms.post_transforms.ReferencesResolver"),
-# ]
 
 
 # -- MyST settings ---------------------------------------------------
@@ -98,29 +72,6 @@ myst_enable_extensions = [
     "attrs_inline",
     "attrs_block",
 ]
-# myst_url_schemes = {
-#     "http": None,
-#     "https": None,
-#     "mailto": None,
-#     "ftp": None,
-#     "wiki": "https://en.wikipedia.org/wiki/{{path}}#{{fragment}}",
-#     "doi": "https://doi.org/{{path}}",
-#     "gh-pr": {
-#         "url": "https://github.com/executablebooks/MyST-Parser/pull/{{path}}#{{fragment}}",
-#         "title": "PR #{{path}}",
-#         "classes": ["github"],
-#     },
-#     "gh-issue": {
-#         "url": "https://github.com/executablebooks/MyST-Parser/issue/{{path}}#{{fragment}}",
-#         "title": "Issue #{{path}}",
-#         "classes": ["github"],
-#     },
-#     "gh-user": {
-#         "url": "https://github.com/{{path}}",
-#         "title": "@{{path}}",
-#         "classes": ["github"],
-#     },
-# }
 myst_number_code_blocks = ["typescript"]
 myst_heading_anchors = 2
 myst_footnote_transition = True
@@ -141,6 +92,7 @@ html_favicon = "_static/favicon.ico"
 language = "en"
 html_static_path = ["_static"]
 html_css_files = ["custom.css"]
+html_js_files = ["logo-animations.js", "lightbox.js"]
 html_theme_options: dict[str, Any] = {
     "light_css_variables": {
         "color-brand-primary": "#c04020",

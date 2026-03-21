@@ -128,7 +128,9 @@ def test_client_data_purge_success(app_client_data: "Pynenc") -> None:
         return_value=app_client_data,
     ):
         client = TestClient(pynmon_app)
-        response = client.post("/client-data-store/purge")
+        response = client.post(
+            "/client-data-store/purge", headers={"origin": "http://testserver"}
+        )
 
         assert response.status_code == 200
         data = response.json()

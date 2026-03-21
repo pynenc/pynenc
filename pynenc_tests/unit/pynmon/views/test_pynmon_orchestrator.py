@@ -162,7 +162,9 @@ def test_orchestrator_auto_purge_success(app_orchestrator: "Pynenc") -> None:
         "pynmon.views.orchestrator.get_pynenc_instance", return_value=app_orchestrator
     ):
         client = TestClient(pynmon_app)
-        response = client.post("/orchestrator/auto-purge")
+        response = client.post(
+            "/orchestrator/auto-purge", headers={"origin": "http://testserver"}
+        )
 
         assert response.status_code == 200
         data = response.json()

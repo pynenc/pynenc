@@ -7,18 +7,6 @@ from multiprocessing import Manager, Process
 from typing import TYPE_CHECKING, Any
 import uuid
 
-
-# Use 'spawn' method on macOS to avoid connection issues
-if (
-    hasattr(multiprocessing, "get_start_method")
-    and multiprocessing.get_start_method(allow_none=True) != "spawn"
-):
-    try:
-        multiprocessing.set_start_method("spawn", force=True)
-    except RuntimeError:
-        # Method already set and we're not in main process
-        pass
-
 from pynenc import context
 from pynenc.conf.config_runner import ConfigPersistentProcessRunner
 from pynenc.runner.base_runner import BaseRunner
@@ -91,9 +79,6 @@ def persistent_process_main(
                 invocation.run(runner_ctx)
             except Exception:
                 app.logger.exception(f"Error executing invocation:{invocation_id}")
-            # Do NOT clear invocation_id here: the outer finally needs it to attempt
-            # rerouting if stop_event was set while run() was in progress. If the
-            # invocation already reached a final status the reroute attempt is a no-op.
     except KeyboardInterrupt:
         app.logger.info(f"worker:{runner_id} received KeyboardInterrupt, exiting")
     except Exception as e:
@@ -169,8 +154,21 @@ class PersistentProcessRunner(BaseRunner):
             },
         )
 
+    @staticmethod
+    def _ensure_spawn_start_method() -> None:
+        """Set multiprocessing start method to 'spawn' if not already set (needed on macOS)."""
+        if (
+            hasattr(multiprocessing, "get_start_method")
+            and multiprocessing.get_start_method(allow_none=True) != "spawn"
+        ):
+            try:
+                multiprocessing.set_start_method("spawn", force=True)
+            except RuntimeError:
+                pass
+
     def _on_start(self) -> None:
         """Initializes the runner and spawns initial processes."""
+        self._ensure_spawn_start_method()
         self.num_processes = max(
             self.conf.min_parallel_slots, self.conf.num_processes or os.cpu_count() or 1
         )

@@ -4,9 +4,33 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.1] - 2026-03-11
+## [0.1.1] - 2026-03-21
+
+### Added
+
+- **Pynmon CSRF protection**: added an HTTP middleware that validates the `Origin`/`Referer` header on all state-changing requests (`POST`, `PUT`, `DELETE`, `PATCH`), rejecting cross-origin submissions with `403 Forbidden`
+
+- **Documentation — Monitoring section overhaul**:
+
+  - Expanded `docs/monitoring/index.md` with feature screenshots (dashboard, timeline, family tree, invocation details, log explorer) and prose descriptions of each Pynmon capability
+  - Extracted all HTTP endpoint tables into a dedicated `docs/monitoring/api.md` reference page; the page is now a sidebar submenu under "Monitoring with Pynmon"
+  - Added a "Built-in Monitoring" grid with screenshots to `docs/index.md`
+
+- **Documentation — FAQ expansion**: added eleven new Q&A entries covering runner selection (with timeline screenshot), sync vs. memory-stack testing, development-to-production scaling, serializer trade-offs, debugging stuck tasks, runner crash recovery, mixing plugins, workflow necessity, trigger vs. workflow choice, large argument handling, and common configuration mistakes
+
+- **Documentation — README overhaul**: replaced bullet-list Pynmon section with four illustrated subsections (Execution Timeline, Family Tree & Invocation Details, Log Explorer), added Pynmon screenshots, condensed Requirements and Contact sections, added Contributing and Community & Support sections
+
+- **Documentation — Lightbox**: added `docs/_static/lightbox.js` — a lightweight image lightbox that opens on click and closes via overlay click, `×` button, or `Escape` key; respects `prefers-reduced-motion`
 
 ### Changed
+
+- **Documentation — Logo path fix**: `docs/_static/logo-animations.js` now derives the logo URL from `document.currentScript.src` so floating logo animations work on subdirectory pages (e.g. `monitoring/index.html`, `getting_started/index.html`) instead of only at the root
+
+- **Documentation — Runners reference**: moved the "Choosing a Runner" section from the end of `docs/reference/runners.md` to immediately after "Common Configuration", so readers see guidance before diving into runner-specific details; added a Pynmon timeline screenshot to the section
+
+- **Documentation — Makefile**: merged `docs-serve` and `docs-preview` targets into a single `docs-serve` target that always rebuilds before serving
+
+- **Code quality sweep**: modernized type hints (`Optional`/`Union` → `X | None`), trimmed marketing docstrings, removed debug prints from tests, renamed mutating properties to methods, extracted helpers to reduce deep nesting, removed dead code, and moved module-level side effects to lazy initialization
 
 - **Runner Initialization Architecture**:
 
@@ -25,6 +49,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Updated `docs/conf.py` with new configuration options
 
 ### Fixed
+
+- **Thread-safe sync invocation context**: `sync_inv_context` in `pynenc/context.py` was a module-level dict shared across threads; replaced with thread-local storage via `_get_sync_inv_context_storage()` to eliminate data races when multiple threads run concurrent invocations
+
+- **MemBlockingControl thread safety and performance**: added an `RLock` around all mutations to `waiting_for`/`waited_by`, and introduced a maintained `_ready` set so `get_blocking_invocations` performs an O(1) lookup instead of scanning all `waited_by` keys on every orchestrator loop iteration
+
+- **MemStateBackend app-info registry**: moved `_APP_INFO_REGISTRY` from module-level to a class-level dict (`_app_info_registry`) protected by a `threading.Lock`, preventing test cross-pollution from the module-global and making concurrent access safe
 
 - **Ensure app ID Isolation for all Backends**:
 

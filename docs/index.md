@@ -169,6 +169,37 @@ def tearDown(self):
 
 ---
 
+## Built-in Monitoring
+
+Pynmon ships with Pynenc and gives you deep, real-time visibility into your distributed execution — no external tooling required.
+
+::::{grid} 1 2 2 2
+:gutter: 3
+
+:::{grid-item}
+
+```{image} _static/pynmon_dashboard.png
+:alt: Pynmon dashboard
+:width: 100%
+```
+
+:::
+
+:::{grid-item}
+
+```{image} _static/pynmon_timeline.png
+:alt: Pynmon execution timeline
+:width: 100%
+```
+
+:::
+
+::::
+
+{doc}`monitoring/index`
+
+---
+
 ## Where to Go Next
 
 ::::{grid} 1 2 2 3

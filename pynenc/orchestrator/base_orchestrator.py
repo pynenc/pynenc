@@ -3,7 +3,7 @@ from collections.abc import Iterator
 from datetime import datetime
 from functools import cached_property
 from time import time
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from pynenc import context
 from pynenc.conf.config_orchestrator import ConfigOrchestrator
@@ -75,6 +75,15 @@ class BaseOrchestrator(ABC):
     The orchestrator is responsible for managing task invocations, including tracking their status,
     handling retries, and implementing blocking control.
 
+    .. note:: **Coupling with StateBackend**
+
+       The orchestrator relies on ``app.state_backend`` for persisting invocation data,
+       results, exceptions, and history. Methods such as ``set_invocation_status``,
+       ``set_invocation_result``, and ``route_call`` delegate storage to the state backend.
+       This coupling is intentional: the orchestrator owns lifecycle transitions while the
+       state backend owns persistence. Future refactors may introduce an explicit interface
+       to formalize this contract.
+
     :param Pynenc app: The Pynenc application instance.
     """
 
@@ -114,7 +123,7 @@ class BaseOrchestrator(ABC):
 
         :param Task[Params, Result] task: The task for which to retrieve invocations.
         :param dict[str, str] | None key_serialized_arguments: Serialized arguments to filter invocations.
-        :param Optional[list[InvocationStatus]] statuses: The statuses to filter invocations.
+        :param list[InvocationStatus] | None statuses: The statuses to filter invocations.
         :return: An iterator over the matching invocation IDs.
         :rtype: Iterator[InvocationId]
         """
@@ -131,7 +140,7 @@ class BaseOrchestrator(ABC):
     @abstractmethod
     def get_invocation_ids_paginated(
         self,
-        task_id: Optional["TaskId"] = None,
+        task_id: "TaskId | None" = None,
         statuses: "list[InvocationStatus] | None" = None,
         limit: int = 100,
         offset: int = 0,
@@ -142,7 +151,7 @@ class BaseOrchestrator(ABC):
         This method provides efficient pagination for large datasets by using
         LIMIT/OFFSET semantics. Results are ordered by registration time (newest first).
 
-        :param Optional[TaskId] task_id: Optional task ID to filter by.
+        :param TaskId | None task_id: Optional task ID to filter by.
         :param list[InvocationStatus] | None statuses: Optional statuses to filter by.
         :param int limit: Maximum number of results to return.
         :param int offset: Number of results to skip.
@@ -152,7 +161,7 @@ class BaseOrchestrator(ABC):
     @abstractmethod
     def count_invocations(
         self,
-        task_id: Optional["TaskId"] = None,
+        task_id: "TaskId | None" = None,
         statuses: "list[InvocationStatus] | None" = None,
     ) -> int:
         """

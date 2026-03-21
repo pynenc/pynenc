@@ -123,11 +123,10 @@ class ThreadRunner(BaseRunner):
         """
         pass
 
-    @property
-    def available_threads(self) -> int:
+    def _reclaim_available_slots(self) -> int:
         """
-        Returns the number of available thread slots for new invocations.
-        Joins finished threads so they no longer count against the limit.
+        Joins finished threads and returns the number of available thread slots.
+
         :return: An integer representing available thread slots.
         """
         # Rebuild the threads dictionary by joining finished threads.
@@ -153,7 +152,7 @@ class ThreadRunner(BaseRunner):
         Handles the execution and monitoring of task invocations in separate threads.
         """
         invocations = self.app.orchestrator.get_invocations_to_run(
-            self.available_threads, self.runner_context
+            self._reclaim_available_slots(), self.runner_context
         )
 
         for invocation in invocations:

@@ -11,7 +11,7 @@ Key components:
 """
 
 import threading
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from pynenc.runner.runner_context import RunnerContext
 from pynenc.runner.base_runner import ExternalRunner
@@ -25,9 +25,17 @@ if TYPE_CHECKING:
     from pynenc.runner.base_runner import BaseRunner
     from pynenc.app import Pynenc
 
-# Sync invocation context (module-level, doesn't cross threads)
+# Sync invocation context uses thread-local storage for thread safety
 # - It is a dictionary with the format {app_id: invocation}
-sync_inv_context: dict[str, Optional["ConcurrentInvocation"]] = {}
+
+
+def _get_sync_inv_context_storage() -> dict[str, "ConcurrentInvocation | None"]:
+    """Get thread-local sync invocation context storage, creating if needed."""
+    storage = getattr(thread_local, "sync_inv_context", None)
+    if storage is None:
+        storage = {}
+        thread_local.sync_inv_context = storage
+    return storage
 
 
 # =============================================================================
@@ -37,19 +45,23 @@ sync_inv_context: dict[str, Optional["ConcurrentInvocation"]] = {}
 
 def _get_runner_context_storage() -> dict[str, RunnerContext]:
     """Get thread-local runner context storage, creating if needed."""
-    if not hasattr(thread_local, "runner_context"):
-        thread_local.runner_context = {}
-    return thread_local.runner_context
+    storage = getattr(thread_local, "runner_context", None)
+    if storage is None:
+        storage = {}
+        thread_local.runner_context = storage
+    return storage
 
 
-def _get_dist_inv_context_storage() -> dict[str, Optional["DistributedInvocation"]]:
+def _get_dist_inv_context_storage() -> dict[str, "DistributedInvocation | None"]:
     """Get thread-local distributed invocation context storage, creating if needed."""
-    if not hasattr(thread_local, "dist_inv_context"):
-        thread_local.dist_inv_context = {}
-    return thread_local.dist_inv_context
+    storage = getattr(thread_local, "dist_inv_context", None)
+    if storage is None:
+        storage = {}
+        thread_local.dist_inv_context = storage
+    return storage
 
 
-def _get_app_storage() -> Optional["Pynenc"]:
+def _get_app_storage() -> "Pynenc | None":
     """Get thread-local app storage."""
     return getattr(thread_local, "current_app", None)
 
@@ -118,7 +130,7 @@ get_current_runner_context = get_or_create_runner_context
 # =============================================================================
 
 
-def get_dist_invocation_context(app_id: str) -> Optional["DistributedInvocation"]:
+def get_dist_invocation_context(app_id: str) -> "DistributedInvocation | None":
     """
     Get the current distributed invocation context for the given app.
 
@@ -129,8 +141,8 @@ def get_dist_invocation_context(app_id: str) -> Optional["DistributedInvocation"
 
 
 def swap_dist_invocation_context(
-    app_id: str, invocation: Optional["DistributedInvocation"]
-) -> Optional["DistributedInvocation"]:
+    app_id: str, invocation: "DistributedInvocation | None"
+) -> "DistributedInvocation | None":
     """
     Set the current invocation context for the given app and returns the previous.
 
@@ -149,7 +161,7 @@ def swap_dist_invocation_context(
 # =============================================================================
 
 
-def get_current_app() -> Optional["Pynenc"]:
+def get_current_app() -> "Pynenc | None":
     """
     Get the current app from thread-local storage.
 
@@ -197,12 +209,14 @@ def set_runner_args(args: dict[str, Any] | None) -> None:
 
 def _get_runner_storage() -> dict[str, "BaseRunner"]:
     """Get thread-local runner storage, creating if needed."""
-    if not hasattr(thread_local, "current_runner"):
-        thread_local.current_runner = {}
-    return thread_local.current_runner
+    storage = getattr(thread_local, "current_runner", None)
+    if storage is None:
+        storage = {}
+        thread_local.current_runner = storage
+    return storage
 
 
-def get_current_runner(app_id: str) -> Optional["BaseRunner"]:
+def get_current_runner(app_id: str) -> "BaseRunner | None":
     """
     Retrieve the current runner for the given app_id from thread-local storage.
 

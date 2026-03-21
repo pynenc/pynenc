@@ -37,6 +37,23 @@ These fields apply to all runner types via `ConfigRunner`:
 | `runner_loop_sleep_time_sec`             | `float` | `0.1`   | Sleep between main loop iterations                                |
 | `min_parallel_slots`                     | `int`   | `1`     | Minimum number of concurrent execution slots                      |
 
+## Choosing a Runner
+
+```{image} ../_static/pynenc_runners_timeline_detail.png
+:alt: Pynmon timeline comparing all four runners processing short-lived tasks over a 2-second window
+:width: 100%
+```
+
+_The timeline above shows all four runners processing identical short-lived tasks. Orange = pending (waiting), green = completed (ran successfully). See {doc}`../faq` for a detailed breakdown of each runner's behavior in this scenario._
+
+- **Development/testing**: `ThreadRunner` with memory backends, or `dev_mode_force_sync_tasks=True` with no runner
+- **Production I/O-bound**: `MultiThreadRunner` — scales processes and threads
+- **Production CPU-bound**: `PersistentProcessRunner` — avoids process spawn overhead per task
+- **Fine-grained process isolation**: `ProcessRunner` — one process per invocation with OS-level pause/resume
+
+See {doc}`../configuration/index` for full configuration details.
+See {doc}`builder` for programmatic runner selection with the builder API.
+
 ## ThreadRunner
 
 Executes tasks in threads within a single process. Suitable for I/O-bound workloads and development.
@@ -196,13 +213,3 @@ Extends `DummyRunner` with hostname and PID tracking. Generates a `runner_id` of
 | **ProcessRunner**           | One process per task   | No                | CPU count           | No                 | SIGSTOP/SIGCONT    |
 | **PersistentProcessRunner** | Fixed process pool     | No                | `num_processes`     | No (respawns dead) | Sleep polling      |
 | **DummyRunner**             | None                   | N/A               | N/A                 | N/A                | N/A                |
-
-## Choosing a Runner
-
-- **Development/testing**: `ThreadRunner` with memory backends, or `dev_mode_force_sync_tasks=True` with no runner
-- **Production I/O-bound**: `MultiThreadRunner` — scales processes and threads
-- **Production CPU-bound**: `PersistentProcessRunner` — avoids process spawn overhead per task
-- **Fine-grained process isolation**: `ProcessRunner` — one process per invocation with OS-level pause/resume
-
-See {doc}`../configuration/index` for full configuration details.
-See {doc}`builder` for programmatic runner selection with the builder API.

@@ -133,7 +133,7 @@ def reset_mock_classes() -> Generator[None, None, None]:
         # Prevent multiton cross-test pollution: __setstate__ (called during
         # same-process pickle.loads) registers instances here; later tests with
         # the same app_id would get the stale instance with a cached _conf.
-        Pynenc._instances.clear()
+        Pynenc._clear_instances()
 
     # Clear leftovers from previous tests before this one starts.
     _reset_all()

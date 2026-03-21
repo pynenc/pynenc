@@ -70,6 +70,8 @@ async def invocations_list(
     page: int = 1,
 ) -> HTMLResponse:
     """Display invocations with optional filtering and pagination."""
+    limit = max(1, min(limit, 1000))
+    page = max(1, page)
     app = get_pynenc_instance()
     parsed_task_id = TaskId.from_key(task_id) if task_id else None
 
@@ -382,6 +384,8 @@ async def invocations_timeline(
         resolution_seconds = parse_resolution(resolution)
         # Empty string means "No limit" from the select; None or empty → unlimited
         limit_int: int | None = int(limit) if limit and limit.strip() else None
+        if limit_int is not None:
+            limit_int = max(1, min(limit_int, 5000))
 
         parsed_task_id = TaskId.from_key(task_id) if task_id else None
 
@@ -443,8 +447,7 @@ async def invocations_timeline(
             },
         )
     except Exception as e:
-        logger.error(f"Error in invocations_timeline: {str(e)}")
-        logger.error(traceback.format_exc())
+        logger.exception(f"Error in invocations_timeline: {str(e)}")
         return templates.TemplateResponse(
             "shared/error.html",
             {
@@ -487,7 +490,7 @@ def _get_invocation_result_and_exception(
                     )
                 )
     except Exception as e:
-        logger.error(f"Error retrieving result/exception: {str(e)}")
+        logger.exception(f"Error retrieving result/exception: {str(e)}")
         formatted_exception = f"Error retrieving result/exception: {str(e)}"
 
     return formatted_result, formatted_exception
@@ -560,8 +563,7 @@ def _get_formatted_invocation_history(
         )
         return formatted_history
     except Exception as e:
-        logger.error(f"Error retrieving history: {str(e)}")
-        logger.error(traceback.format_exc())
+        logger.exception(f"Error retrieving history: {str(e)}")
         return []
 
 
@@ -692,10 +694,7 @@ async def invocation_detail(
             status_code=404,
         )
     except Exception as e:
-        logger.error(f"Unexpected error in invocation_detail: {str(e)}")
-        import traceback
-
-        logger.error(traceback.format_exc())
+        logger.exception(f"Unexpected error in invocation_detail: {str(e)}")
         return templates.TemplateResponse(
             "shared/error.html",
             {
@@ -767,10 +766,9 @@ async def invocation_history(
 
         return JSONResponse(formatted_history)
     except Exception as e:
-        logger.error(
+        logger.exception(
             f"Error retrieving history for invocation {invocation_id}: {str(e)}"
         )
-        logger.error(traceback.format_exc())
         return JSONResponse({"error": str(e)}, 500)
 
 
@@ -815,10 +813,9 @@ async def invocation_api(
 
         return JSONResponse(invocation_data)
     except Exception as e:
-        logger.error(
+        logger.exception(
             f"Error retrieving API data for invocation {invocation_id}: {str(e)}"
         )
-        logger.error(traceback.format_exc())
         return JSONResponse({"error": str(e)}, 500)
 
 
@@ -853,8 +850,7 @@ async def rerun_invocation(invocation_id: "InvocationId") -> JSONResponse:
             status_code=404,
         )
     except Exception as e:
-        logger.error(f"Error re-running invocation {invocation_id}: {e}")
-        logger.error(traceback.format_exc())
+        logger.exception(f"Error re-running invocation {invocation_id}: {e}")
         return JSONResponse(
             {"success": False, "message": f"Error: {str(e)}"},
             status_code=500,
@@ -869,6 +865,7 @@ async def invocations_table(
     limit: int = 50,
 ) -> HTMLResponse:
     """Return just the invocations table for HTMX refresh."""
+    limit = max(1, min(limit, 1000))
     # This is essentially the same logic as invocations_list but returns only the table partial
     app = get_pynenc_instance()
     parsed_task_id = TaskId.from_key(task_id) if task_id else None

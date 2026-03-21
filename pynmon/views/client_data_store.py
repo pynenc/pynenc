@@ -43,10 +43,7 @@ async def client_data_view(request: Request) -> HTMLResponse:
             },
         )
     except Exception as e:
-        logger.error(f"Error in client_data_view: {str(e)}")
-        import traceback
-
-        logger.error(traceback.format_exc())
+        logger.exception(f"Error in client_data_view: {str(e)}")
         return templates.TemplateResponse(
             "shared/error.html",
             {
@@ -70,5 +67,5 @@ async def purge_client_data() -> JSONResponse:
             {"success": True, "message": "Client data store purged successfully"}
         )
     except Exception as e:
-        logger.error(f"Error purging client data store: {str(e)}")
+        logger.exception(f"Error purging client data store: {str(e)}")
         return JSONResponse({"success": False, "message": f"Error: {str(e)}"}, 500)

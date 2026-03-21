@@ -31,53 +31,20 @@ if TYPE_CHECKING:
 
 class Task(Generic[Params, Result]):
     """
-    **A task in the Pynenc library that represents a function that can be distributed.**
+    Represents a distributable function in the Pynenc system.
 
     :param Pynenc app: A reference to the Pynenc application.
     :param Callable func: The function to be run distributed.
     :param dict[str, Any] **options: The options to apply.
 
-    The `BaseTask` can be called normally and will return an instance of `BaseResult`.
-    The result will be an `AsyncResult` when running normally but can be `SyncResult`
-    when running eagerly in development with the `pynenc` app's `dev_mode_force_sync_tasks`
-    option set to `True` (or the 'PYNENC_DEV_MODE_FORCE_SYNC_TASK' environment variable set).
-    The option `dev_mode_force_sync_tasks` should only be used in development.
+    Calling the task returns a `BaseInvocation` whose concrete type depends on
+    the execution environment (e.g. `DistributedInvocation` or `ConcurrentInvocation`).
 
-    ```{hint}
-    Although it is possible to create a `BaseTask` instance directly,
-    it is recommended to use the decorator provided in the `pynenc` application, i.e., `@app.task(options...)`.
-    This is the expected way of instantiating a class and registering it in the app.
-    ```
+    Tasks cannot be created from functions defined in ``__main__`` because
+    workers cannot resolve ``__main__.task_name`` back to the originating module.
+    Use the ``@app.task`` decorator to create and register tasks.
 
-    ### Limitations
-    ```{attention}
-    This implementation does not support the creation of tasks
-    from functions defined in modules intended to run as standalone scripts.
-    ```
-    This applies to any module executed directly, where its `__name__` attribute becomes `"__main__"`.
-    This is not exclusive to modules with `if __name__ == "__main__"`
-    sections but includes any module run as the main program.
-    In such situations, `func.__module__` being `"__main__"`
-    poses a challenge for task instantiation and serialization.
-    When a task is executed in the initiator script, it is identified as `__main__.task_name`.
-
-    However, in a Pynenc worker's distributed environment, `__main__` refers to the worker itself.
-    As a result, the task identified as `__main__.task_name` cannot be found,
-    since the worker's `__main__` differs from that of the initiator script.
-    **To ensure simplicity and robustness in task management,
-    tasks defined in modules run as the main program are not supported.**
-
-    ### Examples
-    ```{code-block} python
-    @app.task(options)
-    def func():
-        pass
-
-    result = func()
-    ```
-
-    ### Raises
-    - **RuntimeError:** If an attempt is made to create a task from a function in the `__main__` module.
+    :raises RuntimeError: If the function is defined in the ``__main__`` module.
     """
 
     def __init__(self, app: Pynenc, func: Func, options: dict[str, Any]) -> None:
@@ -124,7 +91,7 @@ class Task(Generic[Params, Result]):
         """The invocation of the task"""
         if dist_inv := context.get_dist_invocation_context(self.app.app_id):
             return dist_inv
-        if sync_inv := context.sync_inv_context.get(self.app.app_id):
+        if sync_inv := context._get_sync_inv_context_storage().get(self.app.app_id):
             return sync_inv
         raise RuntimeError("Task has not been invoked yet")
 

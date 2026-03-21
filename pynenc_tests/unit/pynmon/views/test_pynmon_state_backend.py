@@ -121,7 +121,9 @@ def test_state_backend_purge_success(app_state_backend: "Pynenc") -> None:
         "pynmon.views.state_backend.get_pynenc_instance", return_value=app_state_backend
     ):
         client = TestClient(pynmon_app)
-        response = client.post("/state-backend/purge")
+        response = client.post(
+            "/state-backend/purge", headers={"origin": "http://testserver"}
+        )
 
         assert response.status_code == 200
         data = response.json()
