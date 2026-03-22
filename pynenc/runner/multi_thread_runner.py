@@ -198,13 +198,41 @@ class MultiThreadRunner(BaseRunner):
             f"Spawned ThreadRunner process worker:{child_runner_id} pid:{p.pid}"
         )
 
+    def _terminate_process(
+        self, proc: Process, runner_id: str, timeout: float = 10.0
+    ) -> None:
+        """
+        Terminate a child process with SIGKILL fallback.
+
+        Sends SIGTERM via proc.terminate(), waits up to timeout seconds,
+        then sends SIGKILL if the process is still alive.
+
+        :param proc: The child process to terminate
+        :param runner_id: The runner ID for logging
+        :param timeout: Seconds to wait before escalating to SIGKILL
+        """
+        try:
+            proc.terminate()
+        except OSError:
+            self.logger.debug(f"worker:{runner_id} already exited before terminate")
+            return
+        proc.join(timeout=timeout)
+        try:
+            if proc.is_alive():
+                self.logger.warning(
+                    f"worker:{runner_id} pid:{proc.pid} did not exit after {timeout}s, sending SIGKILL"
+                )
+                proc.kill()
+                proc.join(timeout=5)
+        except OSError:
+            self.logger.debug(f"worker:{runner_id} exited before SIGKILL")
+
     def _on_stop(self) -> None:
         """Stop all worker processes and shutdown the manager."""
         self.logger.info("Stopping MultiThreadRunner")
         for runner_id, proc in self.child_runner_ids.items():
             if proc.is_alive():
-                proc.terminate()
-                proc.join()
+                self._terminate_process(proc, runner_id)
                 self.logger.info(f"Terminated process worker:{runner_id}")
         if self.manager is not None:
             self.manager.shutdown()  # type: ignore
@@ -229,8 +257,7 @@ class MultiThreadRunner(BaseRunner):
         for runner_id, proc in list(self.child_runner_ids.items()):
             try:
                 if proc.is_alive():
-                    proc.terminate()
-                    proc.join()
+                    self._terminate_process(proc, runner_id)
                     self.child_runner_ids.pop(runner_id, None)
                     self._safe_remove_shared_state(runner_id)
                     self.logger.info(
@@ -296,8 +323,7 @@ class MultiThreadRunner(BaseRunner):
                 self.logger.info(
                     f"worker:{runner_id} idle_time:{idle_time} sec, terminating."
                 )
-                proc.terminate()
-                proc.join()
+                self._terminate_process(proc, runner_id)
                 ids_to_remove.append(runner_id)
         for runner_id in ids_to_remove:
             self.child_runner_ids.pop(runner_id, None)
@@ -306,7 +332,6 @@ class MultiThreadRunner(BaseRunner):
     def runner_loop_iteration(self) -> None:
         """Execute one iteration of the runner loop."""
         self._scale_up_processes()
-        time.sleep(self.conf.runner_loop_sleep_time_sec)
 
     def _waiting_for_results(
         self,

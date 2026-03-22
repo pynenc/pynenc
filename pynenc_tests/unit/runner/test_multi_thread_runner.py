@@ -127,10 +127,14 @@ def test_terminate_idle_processes_respects_min_processes(
             ProcessState.IDLE,
         )
 
-    # Patch terminate and join to avoid actual process operations
+    # Patch terminate and join to simulate successful termination
     for proc in multi_thread_runner.child_runner_ids.values():  # type: ignore
         proc.terminate = Mock()
-        proc.join = Mock()
+        proc.join = Mock(
+            side_effect=lambda timeout=None, p=proc: setattr(
+                p.is_alive, "return_value", False
+            )
+        )
 
     multi_thread_runner._terminate_idle_processes()
 
@@ -294,7 +298,9 @@ def test_terminate_idle_processes_skips_missing_status(
     proc2 = Mock(spec=Process)
     proc2.is_alive.return_value = True
     proc2.terminate = Mock()
-    proc2.join = Mock()
+    proc2.join = Mock(
+        side_effect=lambda timeout=None: setattr(proc2.is_alive, "return_value", False)
+    )
     multi_thread_runner.child_runner_ids["runner-2"] = proc2
     multi_thread_runner.shared_status["runner-2"] = ProcessStatus(
         current_time - 100,  # Old timestamp to ensure idle

@@ -55,6 +55,15 @@ def check_all_status_transitions(app: Pynenc) -> None:
     from pynenc.invocation.status import validate_transition
     from pynenc.exceptions import InvocationStatusTransitionError
 
+    # History is written asynchronously in threads; wait for all to flush
+    # before validating transitions.
+    for threads in app.state_backend.invocation_threads.values():
+        for t in threads:
+            try:
+                t.join(timeout=2.0)
+            except RuntimeError:
+                logger.debug("Skipping unstarted history thread during flush")
+
     violations: list[str] = []
     batch_size = 100
     offset = 0

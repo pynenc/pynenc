@@ -310,6 +310,8 @@ def test_runner_reroutes_on_real_os_signal(task_sleep: Task, signum: int) -> Non
         while invocation.status != InvocationStatus.RUNNING:
             assert time() - ini < 10, "Invocation did not reach RUNNING status in time"
             sleep(0.1)
+        # Give the subprocess's async history thread time to flush the RUNNING record
+        sleep(0.2)
 
         os.kill(proc.pid, signum)
         proc.join(timeout=30)

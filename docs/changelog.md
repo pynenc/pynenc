@@ -70,6 +70,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Prevented `AttributeError` crashes when shutdown signals arrive before `_on_start()` completes, by ensuring all attributes exist after `__init__`
   - Added new tests to validate shutdown paths are safe before initialization: `test_terminate_all_processes_before_on_start`, `test_on_stop_runner_loop_before_on_start`, `test_on_stop_before_on_start`
 
+- **Runner process lifecycle TOCTOU races**: guarded all `process.kill()`, `os.kill(SIGSTOP/SIGCONT)`, and Manager proxy access in `ProcessRunner` and `MultiThreadRunner` with `try/except OSError` to prevent crashes when a child process exits between a liveness check and the subsequent signal delivery
+
 - **CI/CD Pipeline**:
 
   - Upgraded `dawidd6/action-download-artifact` from v3 to v4 in `smokeshow.yml`
