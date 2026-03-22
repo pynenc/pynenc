@@ -88,13 +88,14 @@ for single-host, and `RedisTrigger` / `MongoTrigger` for production.
 {doc}`usage_guide/use_case_010_trigger_system`
 ::::
 
-::::{grid-item-card} Runner Recovery
+::::{grid-item-card} Runner Recovery & Core Services
 Workers register a **heartbeat** on a configurable interval. If a runner
 process dies, the orchestrator detects the missing heartbeat and
 automatically re-queues its invocations — tasks stuck in `RUNNING` become
-recoverable without operator intervention.
+recoverable without operator intervention. An **atomic service** framework
+ensures only one runner executes recovery and trigger evaluation at a time.
 
-{doc}`overview`
+{doc}`reference/core_services`
 ::::
 
 :::::
@@ -278,6 +279,7 @@ cli/index
 monitoring/index
 reference/builder
 reference/runners
+reference/core_services
 reference/serializers
 apidocs/index.rst
 ```

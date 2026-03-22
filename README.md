@@ -126,6 +126,12 @@ See the [Changelog](https://docs.pynenc.org/changelog.html) for the complete lis
   - **Task Integration**: Integration with existing Pynenc tasks using `force_new_workflow` decorator option.
   - **Failure Recovery**: Workflows can resume from exact points of failure with identical replay behavior.
 
+- **Core Services & Automatic Recovery**: Built-in recovery tasks automatically detect and re-queue stuck invocations:
+
+  - **Pending Recovery**: Invocations stuck in `PENDING` beyond a configurable timeout are re-routed through the broker.
+  - **Running Recovery**: Invocations owned by runners that stopped sending heartbeats are detected and re-queued.
+  - **Atomic Service Scheduling**: A time-slot distribution algorithm ensures only one runner executes global services (trigger evaluation, recovery) per cycle, preventing race conditions in multi-runner deployments.
+
 - **Automatic Task Prioritization**: The broker prioritizes tasks by counting how many other tasks depend on them. The task blocking the most others is selected first.
 
 - **Automatic Task Pausing**: Tasks waiting for dependencies are paused, freeing their runner slots. Higher-priority tasks (those with more dependents waiting) run instead, preventing thread-pool exhaustion and deadlocks.
