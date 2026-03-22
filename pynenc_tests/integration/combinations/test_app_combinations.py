@@ -19,10 +19,14 @@ def test_task_execution(task_sum: Task) -> None:
     def run_in_thread() -> None:
         app.runner.run()
 
-    invocation = task_sum(1, 2)
     thread = threading.Thread(target=run_in_thread, daemon=True)
     thread.start()
+
+    # Warm-up: run a task to ensure runner and workers are fully initialized
+    assert task_sum(0, 0).result == 0
+
     ini = time()
+    invocation = task_sum(1, 2)
     assert invocation.result == 3
     elapsed = time() - ini
     time_limit = 1.5
