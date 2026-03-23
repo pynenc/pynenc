@@ -12,6 +12,7 @@ Key components:
 - Validation system for plugin configurations
 """
 
+import logging
 import warnings
 from collections.abc import Callable, Iterable
 from typing import TYPE_CHECKING, Any
@@ -71,7 +72,9 @@ class PynencBuilder:
     ```
     """
 
-    # Plugin registration system
+    # Plugin registration system — intentionally class-level so all instances
+    # share discovered plugins.  Mutation happens only during class-level
+    # _load_plugins (guarded by _plugins_loaded), never per-instance.
     _plugin_methods: dict[str, Callable] = {}
     _plugin_validators: list[Callable] = []
     _plugins_loaded = False
@@ -131,8 +134,9 @@ class PynencBuilder:
             for ep in plugin_entries:
                 cls._register_plugin_from_entry_point(ep)
         except Exception:
-            # Silently continue if plugin loading fails
-            pass
+            logging.getLogger(__name__).debug(
+                "Failed to discover plugins via importlib entry points", exc_info=True
+            )
 
     @classmethod
     def _load_plugins_pkg_resources(cls) -> None:
@@ -144,8 +148,9 @@ class PynencBuilder:
             for entry_point in pkg_resources.iter_entry_points("pynenc.plugins"):
                 cls._register_plugin_from_entry_point(entry_point)
         except Exception:
-            # Silently continue if plugin loading fails
-            pass
+            logging.getLogger(__name__).debug(
+                "Failed to discover plugins via pkg_resources", exc_info=True
+            )
 
     @classmethod
     def _register_plugin_from_entry_point(cls, entry_point: Any) -> None:
@@ -210,11 +215,18 @@ class PynencBuilder:
             plugin_method = self._plugin_methods[name]
             return lambda *args, **kwargs: plugin_method(self, *args, **kwargs)
 
-        # Provide helpful error message suggesting plugin installation
-        raise AttributeError(
-            f"'{self.__class__.__name__}' object has no attribute '{name}'. "
-            f"This method may be provided by a plugin. Check available plugins and ensure they are installed."
+        available = (
+            ", ".join(sorted(self._plugin_methods)) if self._plugin_methods else "none"
         )
+        raise AttributeError(
+            f"'{self.__class__.__name__}' has no attribute '{name}'. "
+            f"Available plugin methods: [{available}]. "
+            f"Install a backend plugin (pynenc-redis, pynenc-mongodb, pynenc-rabbitmq) to add more."
+        )
+
+    def __dir__(self) -> list[str]:
+        """Include plugin methods in dir() for discoverability."""
+        return sorted(set(super().__dir__()) | set(self._plugin_methods))
 
     def app_id(self, app_id: str) -> "PynencBuilder":
         """

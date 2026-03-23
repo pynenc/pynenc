@@ -82,6 +82,7 @@ publish: ## Publish a release to PyPI.
 .PHONY: docs
 docs:
 	@echo "Building documentation..."
+	rm -rf docs/_build
 	uv run --group docs sphinx-build -b html docs docs/_build/html
 	@echo "Docs built — open docs/_build/html/index.html in a browser."
 

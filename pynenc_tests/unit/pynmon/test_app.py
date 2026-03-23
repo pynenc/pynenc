@@ -5,7 +5,6 @@ Tests core app functionality including endpoints, error handling, and app manage
 """
 
 import sys
-from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -29,9 +28,6 @@ from pynmon.app import (
     setup_routes,
     start_monitor,
 )
-
-if TYPE_CHECKING:
-    pass
 
 
 # ################################################################################### #
@@ -142,7 +138,7 @@ def test_purge_success() -> None:
 
     with patch.object(pynmon_module, "pynenc_instance", mock_app):
         client = TestClient(pynmon_app)
-        response = client.post("/purge")
+        response = client.post("/purge", headers={"origin": "http://testserver"})
 
         assert response.status_code == 200
         data = response.json()
@@ -154,7 +150,7 @@ def test_purge_no_app_configured() -> None:
     """Test purge endpoint when no app is configured."""
     with patch.object(pynmon_module, "pynenc_instance", None):
         client = TestClient(pynmon_app, raise_server_exceptions=False)
-        response = client.post("/purge")
+        response = client.post("/purge", headers={"origin": "http://testserver"})
 
         assert response.status_code == 500
         assert "No Pynenc application" in response.json()["detail"]
@@ -167,7 +163,7 @@ def test_purge_error_during_purge() -> None:
 
     with patch.object(pynmon_module, "pynenc_instance", mock_app):
         client = TestClient(pynmon_app)
-        response = client.post("/purge")
+        response = client.post("/purge", headers={"origin": "http://testserver"})
 
         assert response.status_code == 500
         data = response.json()

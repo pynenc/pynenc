@@ -2,13 +2,13 @@
 
 ## Overview
 
-This guide introduces the `mem_unit_test` sample, demonstrating the effectiveness of unit testing Pynenc tasks using entirely in-memory components. By configuring Pynenc to use in-memory brokers, orchestrators, and state backends, developers can perform rapid and isolated testing of task logic without the complexities of an asynchronous execution environment.
+This guide introduces the `mem_unit_testing` sample, demonstrating the effectiveness of unit testing Pynenc tasks using entirely in-memory components. By configuring Pynenc to use in-memory brokers, orchestrators, and state backends, developers can perform rapid and isolated testing of task logic without the complexities of an asynchronous execution environment.
 
-The full source code for this demonstration is available on GitHub: [mem_unit_test](https://github.com/pynenc/samples/tree/main/mem_unit_test).
+The full source code for this demonstration is available on GitHub: [mem_unit_testing](https://github.com/pynenc/samples/tree/main/mem_unit_testing).
 
 ## Scenario
 
-The primary goal of the `mem_unit_test` scenario is to showcase unit testing of Pynenc tasks using in-memory components, ensuring tests are executed quickly and deterministically. This approach is especially suited for environments where speed and test isolation are paramount.
+The primary goal of the `mem_unit_testing` scenario is to showcase unit testing of Pynenc tasks using in-memory components, ensuring tests are executed quickly and deterministically. This approach is especially suited for environments where speed and test isolation are paramount.
 
 ## Setup
 
@@ -105,4 +105,4 @@ This setup allows tests to run as if they were part of a distributed Pynenc envi
 
 ## Conclusion
 
-The `mem_unit_test` sample underscores Pynenc's adaptability for unit testing, providing a streamlined approach for verifying task logic. By utilizing in-memory components, developers can execute tasks synchronously within tests, offering a fast and reliable method for ensuring the accuracy and stability of task implementations.
+The `mem_unit_testing` sample underscores Pynenc's adaptability for unit testing, providing a streamlined approach for verifying task logic. By utilizing in-memory components, developers can execute tasks synchronously within tests, offering a fast and reliable method for ensuring the accuracy and stability of task implementations.

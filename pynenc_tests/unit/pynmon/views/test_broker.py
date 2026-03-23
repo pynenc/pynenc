@@ -80,9 +80,6 @@ def test_broker_queue_shows_pending_invocations(app_broker: "Pynenc") -> None:
     from pynenc.call import Call
     from pynenc.invocation import DistributedInvocation
 
-    # Debug: Check initial state
-    print(f"Initial queue count: {app_broker.broker.count_invocations()}")
-
     # Create calls for our tasks
     call1: Call = Call(task_one, Arguments({"x": 1}))
     call2: Call = Call(task_two, Arguments({"duration": 5}))
@@ -91,19 +88,12 @@ def test_broker_queue_shows_pending_invocations(app_broker: "Pynenc") -> None:
     invocation1: DistributedInvocation = DistributedInvocation.isolated(call1)
     invocation2: DistributedInvocation = DistributedInvocation.isolated(call2)
 
-    print(
-        f"Created invocations: {invocation1.invocation_id[:8]}, {invocation2.invocation_id[:8]}"
-    )
-
     # Manually route them to the broker to ensure they are queued
     app_broker.broker.route_invocation(invocation1.invocation_id)
     app_broker.broker.route_invocation(invocation2.invocation_id)
 
-    print(f"Queue count after routing: {app_broker.broker.count_invocations()}")
-
     # Test retrieve directly
     retrieved_id = app_broker.broker.retrieve_invocation()
-    print(f"Retrieved: {retrieved_id[:8] if retrieved_id else None}")
 
     # Re-route for the actual test
     if retrieved_id:
@@ -147,7 +137,9 @@ def test_broker_purge_clears_queue(app_broker: "Pynenc") -> None:
         assert "task_one" in response.text
 
         # Purge the queue
-        purge_response = client.post("/broker/purge")
+        purge_response = client.post(
+            "/broker/purge", headers={"origin": "http://testserver"}
+        )
         assert purge_response.status_code == 200
         assert purge_response.json()["success"] is True
 

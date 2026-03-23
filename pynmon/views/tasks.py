@@ -1,6 +1,5 @@
 import logging
 import time
-import traceback
 from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Request
@@ -55,7 +54,7 @@ def _get_task_calls(
         )
 
     except Exception as e:
-        logger.error(f"Error processing invocations: {e}")
+        logger.exception(f"Error processing invocations: {e}")
 
     return calls
 
@@ -183,8 +182,7 @@ async def task_detail(request: Request, task_id_key: str) -> HTMLResponse:
             },
         )
     except Exception as e:
-        logger.error(f"Unexpected error in task_detail: {str(e)}")
-        logger.error(traceback.format_exc())
+        logger.exception(f"Unexpected error in task_detail: {str(e)}")
         return templates.TemplateResponse(
             "shared/error.html",
             {

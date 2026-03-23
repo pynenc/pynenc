@@ -16,7 +16,7 @@ from collections import defaultdict
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from pynenc.arguments import Arguments
 from pynenc.conf.config_trigger import ConfigTrigger
@@ -323,7 +323,7 @@ class BaseTrigger(ABC):
     def report_tasks_status(
         self,
         invocation_ids: list["InvocationId"],
-        status: Optional["InvocationStatus"] = None,
+        status: "InvocationStatus | None" = None,
     ) -> None:
         """
         Report status changes for multiple tasks to the trigger system in batch.

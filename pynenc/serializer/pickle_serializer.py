@@ -11,6 +11,14 @@ class PickleSerializer(BaseSerializer):
 
     This class provides methods to serialize and deserialize objects to and from strings using pickle,
     with the serialized data encoded in base64 for safe text transmission.
+
+    ```{warning}
+    Pickle can execute arbitrary code during deserialization.  Prefer
+    ``JsonSerializer`` or ``JsonPickleSerializer`` when possible — they are
+    safer and produce human-readable output.  Use ``PickleSerializer`` when you
+    need fast prototyping, binary payloads, or operate in a trusted environment
+    where security risks have been assessed.
+    ```
     """
 
     @staticmethod

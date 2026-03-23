@@ -24,6 +24,7 @@ from pynenc.orchestrator.base_orchestrator import (
     BaseOrchestrator,
 )
 from pynenc.orchestrator.atomic_service import ActiveRunnerInfo
+from pynenc.util.sqlite_utils import TableNames
 from pynenc.util.sqlite_utils import create_sqlite_connection as sqlite_conn
 from pynenc.util.sqlite_utils import (
     delete_tables_with_prefix,
@@ -38,11 +39,16 @@ if TYPE_CHECKING:
     from pynenc.types import Params, Result
 
 
-class Tables:
-    INVOCATIONS = "orchestrator_invocations"
-    INVOCATION_ARGS = "orchestrator_invocation_args"
-    BLOCKING_EDGES = "orchestrator_blocking_edges"
-    RUNNER_HEARTBEATS = "orchestrator_runner_heartbeats"
+class Tables(TableNames):
+    """Table names for orchestrator, scoped by app_id."""
+
+    def __init__(self, app_id: str) -> None:
+        super().__init__(app_id, "orchestrator")
+        p = self.table_prefix
+        self.INVOCATIONS = f"{p}_invocations"
+        self.INVOCATION_ARGS = f"{p}_invocation_args"
+        self.BLOCKING_EDGES = f"{p}_blocking_edges"
+        self.RUNNER_HEARTBEATS = f"{p}_runner_heartbeats"
 
 
 class SQLiteBlockingControl(BaseBlockingControl):
@@ -57,9 +63,10 @@ class SQLiteBlockingControl(BaseBlockingControl):
     - waited_by: Tracks which invocations are being waited on by others
     """
 
-    def __init__(self, app: "Pynenc", sqlite_db_path: str) -> None:
+    def __init__(self, app: "Pynenc", sqlite_db_path: str, tables: Tables) -> None:
         self.app = app
         self.sqlite_db_path = sqlite_db_path
+        self.tables = tables
         self._init_tables()
 
     def _init_tables(self) -> None:
@@ -67,7 +74,7 @@ class SQLiteBlockingControl(BaseBlockingControl):
         with sqlite_conn(self.sqlite_db_path) as conn:
             conn.execute(
                 f"""
-                CREATE TABLE IF NOT EXISTS {Tables.BLOCKING_EDGES} (
+                CREATE TABLE IF NOT EXISTS {self.tables.BLOCKING_EDGES} (
                     waiter_id TEXT NOT NULL,
                     waited_id TEXT NOT NULL,
                     PRIMARY KEY (waiter_id, waited_id)
@@ -75,10 +82,10 @@ class SQLiteBlockingControl(BaseBlockingControl):
             """
             )
             conn.execute(
-                f"CREATE INDEX IF NOT EXISTS idx_blocking_waited_id ON {Tables.BLOCKING_EDGES}(waited_id)"
+                f"CREATE INDEX IF NOT EXISTS idx_{self.tables.BLOCKING_EDGES}_waited_id ON {self.tables.BLOCKING_EDGES}(waited_id)"
             )
             conn.execute(
-                f"CREATE INDEX IF NOT EXISTS idx_blocking_waiter_id ON {Tables.BLOCKING_EDGES}(waiter_id)"
+                f"CREATE INDEX IF NOT EXISTS idx_{self.tables.BLOCKING_EDGES}_waiter_id ON {self.tables.BLOCKING_EDGES}(waiter_id)"
             )
             conn.commit()
 
@@ -92,11 +99,11 @@ class SQLiteBlockingControl(BaseBlockingControl):
         with sqlite_conn(self.sqlite_db_path) as conn:
             for waited_id in result_invocation_ids:
                 conn.execute(
-                    f"INSERT OR IGNORE INTO {Tables.BLOCKING_EDGES} (waiter_id, waited_id) VALUES (?, ?)",
+                    f"INSERT OR IGNORE INTO {self.tables.BLOCKING_EDGES} (waiter_id, waited_id) VALUES (?, ?)",
                     (waiter_id, waited_id),
                 )
                 conn.execute(
-                    f"INSERT OR IGNORE INTO {Tables.BLOCKING_EDGES} (waiter_id, waited_id) VALUES (?, ?)",
+                    f"INSERT OR IGNORE INTO {self.tables.BLOCKING_EDGES} (waiter_id, waited_id) VALUES (?, ?)",
                     (waiter_id, waited_id),
                 )
             conn.commit()
@@ -105,7 +112,7 @@ class SQLiteBlockingControl(BaseBlockingControl):
         """Removes an invocation from the graph, along with any dependencies related to it."""
         with sqlite_conn(self.sqlite_db_path) as conn:
             conn.execute(
-                f"DELETE FROM {Tables.BLOCKING_EDGES} WHERE waited_id = ?",
+                f"DELETE FROM {self.tables.BLOCKING_EDGES} WHERE waited_id = ?",
                 (waited_invocation_id,),
             )
             conn.commit()
@@ -120,10 +127,10 @@ class SQLiteBlockingControl(BaseBlockingControl):
         placeholders = ",".join("?" for _ in available_statuses)
         query = f"""
             SELECT DISTINCT b.waited_id
-            FROM {Tables.BLOCKING_EDGES} b
-            JOIN {Tables.INVOCATIONS} i ON b.waited_id = i.invocation_id
+            FROM {self.tables.BLOCKING_EDGES} b
+            JOIN {self.tables.INVOCATIONS} i ON b.waited_id = i.invocation_id
             WHERE b.waited_id NOT IN (
-                SELECT waiter_id FROM {Tables.BLOCKING_EDGES}
+                SELECT waiter_id FROM {self.tables.BLOCKING_EDGES}
             )
             AND i.status IN ({placeholders})
             LIMIT ?
@@ -153,6 +160,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
 
     def __init__(self, app: "Pynenc") -> None:
         super().__init__(app)
+        self.tables = Tables(app.app_id)
 
         # Use database path from configuration with validation
         self.sqlite_db_path = get_sqlite_sqlite_db_path(self.conf.sqlite_db_path)
@@ -161,14 +169,16 @@ class SQLiteOrchestrator(BaseOrchestrator):
         self._init_tables()
 
         # Initialize control components
-        self._blocking_control = SQLiteBlockingControl(app, self.sqlite_db_path)
+        self._blocking_control = SQLiteBlockingControl(
+            app, self.sqlite_db_path, self.tables
+        )
 
     def _init_tables(self) -> None:
         """Initialize SQLite tables for orchestrator state."""
         with sqlite_conn(self.sqlite_db_path) as conn:
             conn.execute(
                 f"""
-                CREATE TABLE IF NOT EXISTS {Tables.INVOCATIONS} (
+                CREATE TABLE IF NOT EXISTS {self.tables.INVOCATIONS} (
                     invocation_id TEXT PRIMARY KEY,
                     task_id_key TEXT NOT NULL,
                     call_id_key TEXT NOT NULL,
@@ -181,18 +191,18 @@ class SQLiteOrchestrator(BaseOrchestrator):
             """
             )
             conn.execute(
-                f"CREATE INDEX IF NOT EXISTS idx_orchestrator_task_id ON {Tables.INVOCATIONS}(task_id_key)"
+                f"CREATE INDEX IF NOT EXISTS idx_{self.tables.INVOCATIONS}_task_id ON {self.tables.INVOCATIONS}(task_id_key)"
             )
             conn.execute(
-                f"CREATE INDEX IF NOT EXISTS idx_orchestrator_call_id ON {Tables.INVOCATIONS}(call_id_key)"
+                f"CREATE INDEX IF NOT EXISTS idx_{self.tables.INVOCATIONS}_call_id ON {self.tables.INVOCATIONS}(call_id_key)"
             )
             conn.execute(
-                f"CREATE INDEX IF NOT EXISTS idx_orchestrator_status ON {Tables.INVOCATIONS}(status)"
+                f"CREATE INDEX IF NOT EXISTS idx_{self.tables.INVOCATIONS}_status ON {self.tables.INVOCATIONS}(status)"
             )
 
             conn.execute(
                 f"""
-                CREATE TABLE IF NOT EXISTS {Tables.INVOCATION_ARGS} (
+                CREATE TABLE IF NOT EXISTS {self.tables.INVOCATION_ARGS} (
                     invocation_id TEXT NOT NULL,
                     arg_key TEXT NOT NULL,
                     arg_value TEXT NOT NULL,
@@ -202,13 +212,13 @@ class SQLiteOrchestrator(BaseOrchestrator):
             )
             conn.execute(
                 f"""
-                CREATE INDEX IF NOT EXISTS idx_orchestrator_args_key_value ON {Tables.INVOCATION_ARGS}(arg_key, arg_value)
+                CREATE INDEX IF NOT EXISTS idx_{self.tables.INVOCATION_ARGS}_key_value ON {self.tables.INVOCATION_ARGS}(arg_key, arg_value)
             """
             )
 
             conn.execute(
                 f"""
-                CREATE TABLE IF NOT EXISTS {Tables.RUNNER_HEARTBEATS} (
+                CREATE TABLE IF NOT EXISTS {self.tables.RUNNER_HEARTBEATS} (
                     runner_id TEXT PRIMARY KEY,
                     creation_timestamp REAL NOT NULL,
                     allow_to_run_atomic_service INTEGER NOT NULL,
@@ -219,10 +229,10 @@ class SQLiteOrchestrator(BaseOrchestrator):
             """
             )
             conn.execute(
-                f"CREATE INDEX IF NOT EXISTS idx_runner_heartbeat ON {Tables.RUNNER_HEARTBEATS}(last_heartbeat)"
+                f"CREATE INDEX IF NOT EXISTS idx_{self.tables.RUNNER_HEARTBEATS}_heartbeat ON {self.tables.RUNNER_HEARTBEATS}(last_heartbeat)"
             )
             conn.execute(
-                f"CREATE INDEX IF NOT EXISTS idx_runner_creation ON {Tables.RUNNER_HEARTBEATS}(creation_timestamp)"
+                f"CREATE INDEX IF NOT EXISTS idx_{self.tables.RUNNER_HEARTBEATS}_creation ON {self.tables.RUNNER_HEARTBEATS}(creation_timestamp)"
             )
 
             conn.commit()
@@ -250,7 +260,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
             for invocation in invocations:
                 conn.execute(
                     f"""
-                    INSERT INTO {Tables.INVOCATIONS} (
+                    INSERT INTO {self.tables.INVOCATIONS} (
                     invocation_id, task_id_key, call_id_key, status, status_runner_id, status_timestamp
                 ) VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT(invocation_id) DO NOTHING
@@ -281,7 +291,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
         :param list[InvocationStatus] | None statuses: The statuses to filter invocations.
         :return: An iterator over matching invocation IDs.
         """
-        query = f"SELECT i.invocation_id FROM {Tables.INVOCATIONS} i"
+        query = f"SELECT i.invocation_id FROM {self.tables.INVOCATIONS} i"
         joins = []
         params = []
         if key_serialized_arguments:
@@ -289,7 +299,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
             for k, v in key_serialized_arguments.items():
                 alias = f"a{idx}"
                 joins.append(
-                    f"JOIN {Tables.INVOCATION_ARGS} {alias} ON i.invocation_id = {alias}.invocation_id AND {alias}.arg_key = ? AND {alias}.arg_value = ?"
+                    f"JOIN {self.tables.INVOCATION_ARGS} {alias} ON i.invocation_id = {alias}.invocation_id AND {alias}.arg_key = ? AND {alias}.arg_value = ?"
                 )
                 params.extend([k, v])
                 idx += 1
@@ -312,7 +322,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
         """Retrieves all invocation ids for a given task id."""
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
-                f"SELECT invocation_id FROM {Tables.INVOCATIONS} WHERE task_id_key = ?",
+                f"SELECT invocation_id FROM {self.tables.INVOCATIONS} WHERE task_id_key = ?",
                 (task_id.key,),
             )
             cursor_rows = cursor.fetchall()
@@ -336,7 +346,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
         :param int offset: Number of results to skip.
         :return: List of matching invocation IDs.
         """
-        query = f"SELECT invocation_id FROM {Tables.INVOCATIONS}"
+        query = f"SELECT invocation_id FROM {self.tables.INVOCATIONS}"
         wheres = []
         params: list = []
 
@@ -374,7 +384,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
         :param list[InvocationStatus] | None statuses: Optional statuses to filter by.
         :return: The total count of matching invocations.
         """
-        query = f"SELECT COUNT(*) FROM {Tables.INVOCATIONS}"
+        query = f"SELECT COUNT(*) FROM {self.tables.INVOCATIONS}"
         wheres = []
         params: list = []
 
@@ -400,7 +410,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
         """Retrieves all invocation ids for a given call id."""
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
-                f"SELECT invocation_id FROM {Tables.INVOCATIONS} WHERE call_id_key = ?",
+                f"SELECT invocation_id FROM {self.tables.INVOCATIONS} WHERE call_id_key = ?",
                 (call_id.key,),
             )
             cursor_rows = cursor.fetchall()
@@ -427,7 +437,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
             # truly atomic across all concurrent SQLite connections.
             conn.execute("BEGIN IMMEDIATE")
             cursor = conn.execute(
-                f"SELECT status, status_runner_id, status_timestamp FROM {Tables.INVOCATIONS} WHERE invocation_id = ?",
+                f"SELECT status, status_runner_id, status_timestamp FROM {self.tables.INVOCATIONS} WHERE invocation_id = ?",
                 (invocation_id,),
             )
             row = cursor.fetchone()
@@ -441,7 +451,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
             new_record = status_record_transition(prev_status_record, status, runner_id)
 
             conn.execute(
-                f"""UPDATE {Tables.INVOCATIONS}
+                f"""UPDATE {self.tables.INVOCATIONS}
                         SET status = ?,
                             status_runner_id = ?,
                             status_timestamp = ?
@@ -463,7 +473,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
         with sqlite_conn(self.sqlite_db_path) as conn:
             for key, value in invocation.call.serialized_arguments.items():
                 conn.execute(
-                    f"INSERT OR REPLACE INTO {Tables.INVOCATION_ARGS} (invocation_id, arg_key, arg_value) VALUES (?, ?, ?)",
+                    f"INSERT OR REPLACE INTO {self.tables.INVOCATION_ARGS} (invocation_id, arg_key, arg_value) VALUES (?, ?, ?)",
                     (invocation.invocation_id, key, value),
                 )
             conn.commit()
@@ -474,7 +484,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
         """
         with sqlite_conn(self.sqlite_db_path) as conn:
             conn.execute(
-                f"UPDATE {Tables.INVOCATIONS} SET auto_purge_timestamp = ? WHERE invocation_id = ?",
+                f"UPDATE {self.tables.INVOCATIONS} SET auto_purge_timestamp = ? WHERE invocation_id = ?",
                 (time(), invocation_id),
             )
             conn.commit()
@@ -486,7 +496,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
         threshold = time() - self.conf.auto_final_invocation_purge_hours * 3600
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
-                f"SELECT invocation_id FROM {Tables.INVOCATIONS} WHERE auto_purge_timestamp IS NOT NULL AND auto_purge_timestamp <= ?",
+                f"SELECT invocation_id FROM {self.tables.INVOCATIONS} WHERE auto_purge_timestamp IS NOT NULL AND auto_purge_timestamp <= ?",
                 (threshold,),
             )
             to_purge = [row[0] for row in cursor.fetchall()]
@@ -494,11 +504,11 @@ class SQLiteOrchestrator(BaseOrchestrator):
             for invocation_id in to_purge:
                 self.release_waiters(invocation_id)
                 conn.execute(
-                    f"DELETE FROM {Tables.INVOCATIONS} WHERE invocation_id = ?",
+                    f"DELETE FROM {self.tables.INVOCATIONS} WHERE invocation_id = ?",
                     (invocation_id,),
                 )
                 conn.execute(
-                    f"DELETE FROM {Tables.INVOCATION_ARGS} WHERE invocation_id = ?",
+                    f"DELETE FROM {self.tables.INVOCATION_ARGS} WHERE invocation_id = ?",
                     (invocation_id,),
                 )
             conn.commit()
@@ -515,7 +525,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
                 f"""SELECT status, status_timestamp, status_runner_id
-                    FROM {Tables.INVOCATIONS}
+                    FROM {self.tables.INVOCATIONS}
                     WHERE invocation_id = ?""",
                 (invocation_id,),
             )
@@ -536,7 +546,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
         """
         with sqlite_conn(self.sqlite_db_path) as conn:
             conn.execute(
-                f"UPDATE {Tables.INVOCATIONS} SET retry_count = retry_count + 1 WHERE invocation_id = ?",
+                f"UPDATE {self.tables.INVOCATIONS} SET retry_count = retry_count + 1 WHERE invocation_id = ?",
                 (invocation_id,),
             )
             conn.commit()
@@ -550,7 +560,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
         """
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
-                f"SELECT retry_count FROM {Tables.INVOCATIONS} WHERE invocation_id = ?",
+                f"SELECT retry_count FROM {self.tables.INVOCATIONS} WHERE invocation_id = ?",
                 (invocation_id,),
             )
             row = cursor.fetchone()
@@ -575,7 +585,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
             placeholders = ",".join(["?" for _ in invocation_ids])
             status_placeholders = ",".join(["?" for _ in status_filter])
             sql = f"""
-                SELECT invocation_id FROM {Tables.INVOCATIONS}
+                SELECT invocation_id FROM {self.tables.INVOCATIONS}
                 WHERE invocation_id IN ({placeholders}) AND status IN ({status_placeholders})
             """
             params = invocation_ids + [s.value for s in status_filter]
@@ -595,7 +605,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
             for runner_id in runner_ids:
                 conn.execute(
                     f"""
-                    INSERT INTO {Tables.RUNNER_HEARTBEATS} (
+                    INSERT INTO {self.tables.RUNNER_HEARTBEATS} (
                         runner_id, creation_timestamp, last_heartbeat, allow_to_run_atomic_service
                     ) VALUES (?, ?, ?, ?)
                     ON CONFLICT(runner_id) DO UPDATE SET
@@ -623,7 +633,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
                 f"""
                 SELECT runner_id, creation_timestamp, last_heartbeat,
                        allow_to_run_atomic_service, last_service_start, last_service_end
-                FROM {Tables.RUNNER_HEARTBEATS}
+                FROM {self.tables.RUNNER_HEARTBEATS}
                 WHERE last_heartbeat >= ?
                 AND (? IS NULL OR allow_to_run_atomic_service = ?)
                 ORDER BY creation_timestamp ASC
@@ -666,7 +676,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
         with sqlite_conn(self.sqlite_db_path) as conn:
             conn.execute(
                 f"""
-                UPDATE {Tables.RUNNER_HEARTBEATS}
+                UPDATE {self.tables.RUNNER_HEARTBEATS}
                 SET last_service_start = ?, last_service_end = ?
                 WHERE runner_id = ?
                 """,
@@ -684,7 +694,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
             cursor = conn.execute(
                 f"""
                 SELECT invocation_id
-                FROM {Tables.INVOCATIONS}
+                FROM {self.tables.INVOCATIONS}
                 WHERE status = ? AND status_timestamp <= ?
                 """,
                 (InvocationStatus.PENDING.value, cutoff_time),
@@ -708,8 +718,8 @@ class SQLiteOrchestrator(BaseOrchestrator):
             cursor = conn.execute(
                 f"""
                 SELECT i.invocation_id
-                FROM {Tables.INVOCATIONS} i
-                LEFT JOIN {Tables.RUNNER_HEARTBEATS} r ON i.status_runner_id = r.runner_id
+                FROM {self.tables.INVOCATIONS} i
+                LEFT JOIN {self.tables.RUNNER_HEARTBEATS} r ON i.status_runner_id = r.runner_id
                 WHERE i.status = ?
                   AND i.status_runner_id IS NOT NULL
                   AND (r.runner_id IS NULL OR r.last_heartbeat < ?)
@@ -726,5 +736,5 @@ class SQLiteOrchestrator(BaseOrchestrator):
         """
         Clear all orchestrator state.
         """
-        delete_tables_with_prefix(self.sqlite_db_path, "orchestrator_")
+        delete_tables_with_prefix(self.sqlite_db_path, self.tables.table_prefix)
         self._init_tables()

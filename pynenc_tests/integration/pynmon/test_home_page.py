@@ -7,6 +7,7 @@ and real Pynenc app integration.
 To debug: Set KEEP_ALIVE = 1 and run any test, then open http://localhost:8081
 """
 
+import re
 from typing import TYPE_CHECKING
 
 from pynenc.builder import PynencBuilder
@@ -35,7 +36,7 @@ def add_task(x: int, y: int) -> int:
 
 def test_home_page_renders_successfully(pynmon_client: "PynmonClient") -> None:
     """
-    Test that the home page renders successfully.
+    Test that the home page renders a valid HTML document.
 
     :param pynmon_client: HTTP client for the actual pynmon server
     """
@@ -43,6 +44,13 @@ def test_home_page_renders_successfully(pynmon_client: "PynmonClient") -> None:
 
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
+
+    content = response.text
+    # Structural: valid HTML document skeleton
+    assert "<!DOCTYPE html>" in content or "<html" in content
+    assert "</html>" in content
+    assert "<head>" in content
+    assert "<body" in content
 
 
 def test_home_page_displays_app_info(pynmon_client: "PynmonClient") -> None:
@@ -65,7 +73,7 @@ def test_home_page_displays_app_info(pynmon_client: "PynmonClient") -> None:
 
 def test_home_page_has_navigation_links(pynmon_client: "PynmonClient") -> None:
     """
-    Test that the home page includes navigation links to other sections.
+    Test that the home page includes navigation links as <a> elements.
 
     :param pynmon_client: HTTP client for the actual pynmon server
     """
@@ -74,16 +82,18 @@ def test_home_page_has_navigation_links(pynmon_client: "PynmonClient") -> None:
     assert response.status_code == 200
     content = response.text
 
-    # Check for navigation links to main sections
+    # Structural: navigation links exist as proper <a href="..."> elements
     expected_links = ["/broker", "/orchestrator", "/tasks", "/invocations"]
-
     for link in expected_links:
-        assert link in content
+        pattern = rf'<a\s[^>]*href="[^"]*{re.escape(link)}[^"]*"'
+        assert re.search(pattern, content), (
+            f"Expected <a href> for '{link}' not found in HTML"
+        )
 
 
 def test_home_page_purge_button_present(pynmon_client: "PynmonClient") -> None:
     """
-    Test that the home page includes the purge all data button.
+    Test that the home page has a purge button wired with hx-post.
 
     :param pynmon_client: HTTP client for the actual pynmon server
     """
@@ -92,9 +102,12 @@ def test_home_page_purge_button_present(pynmon_client: "PynmonClient") -> None:
     assert response.status_code == 200
     content = response.text
 
-    # Check for purge functionality
+    # Structural: an element with hx-post pointing to /purge
+    assert re.search(r'hx-post="[^"]*/?purge"', content), (
+        "Expected hx-post purge element not found"
+    )
+    # The button or its container should have visible text
     assert "Purge All Application Data" in content or "Purge All" in content
-    assert "hx-post" in content  # HTMX purge functionality
 
 
 def test_home_page_app_selector_present(pynmon_client: "PynmonClient") -> None:

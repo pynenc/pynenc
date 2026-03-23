@@ -3,7 +3,7 @@ from collections.abc import Callable, Iterable
 from collections import defaultdict
 from functools import wraps
 from logging import Logger
-from typing import TYPE_CHECKING, Any, ClassVar, Optional, Union, overload
+from typing import TYPE_CHECKING, Any, ClassVar, overload
 
 from pynenc import context
 from pynenc.app_info import AppInfo
@@ -32,15 +32,15 @@ if TYPE_CHECKING:
     from pynenc.types import Args, Func, Params, Result
 
     # Type for the parallel function that generates arguments for parallel processing
-    ParallelFuncReturn = Union[  # noqa: UP007 # Use `X | Y` for type annotations
+    ParallelFuncReturn = (  # noqa: UP007
         # Option 1: Just return an iterable of arguments (any format)
-        Iterable[tuple | dict | Arguments],
+        Iterable[tuple | dict | Arguments]
         # Option 2: Return a tuple of (common_args, param_iter) for optimized processing of large shared data
         # This approach pre-serializes common_args once, reducing overhead for large arguments
         # tuple.0 Common arguments shared by all tasks
         # tuple.1 Iterable of dictionaries with task-specific arguments
-        tuple[dict[str, Any], Iterable[dict]],
-    ]
+        | tuple[dict[str, Any], Iterable[dict]]
+    )
     ParallelFunc = Callable[[Args], ParallelFuncReturn]
 
     # Type for the aggregation function that combines results
@@ -114,6 +114,11 @@ class Pynenc:
     # returns the same (already-configured) instance.
     _instances: ClassVar[dict[str, "Pynenc"]] = {}
 
+    @classmethod
+    def _clear_instances(cls) -> None:
+        """Remove all cached multiton instances. Intended for test teardown."""
+        cls._instances.clear()
+
     def __new__(
         cls,
         config_values: dict[str, Any] | None = None,
@@ -186,7 +191,7 @@ class Pynenc:
     def _store_deferred_trigger(
         self,
         task: "Task",
-        triggers: Union["TriggerBuilder", list["TriggerBuilder"], None],
+        triggers: "TriggerBuilder | list[TriggerBuilder] | None",
     ) -> None:
         """Store triggers to be registered later by the runner.
 
@@ -427,7 +432,7 @@ class Pynenc:
         on_diff_non_key_args_raise: bool | None = None,
         call_result_cache: bool | None = None,
         disable_cache_args: tuple[str, ...] | None = None,
-        triggers: Union["TriggerBuilder", list["TriggerBuilder"]] | None = None,
+        triggers: "TriggerBuilder | list[TriggerBuilder] | None" = None,
         force_new_workflow: bool | None = None,
         reroute_on_concurrency_control: bool | None = None,
     ) -> "Task": ...
@@ -446,14 +451,14 @@ class Pynenc:
         on_diff_non_key_args_raise: bool | None = None,
         call_result_cache: bool | None = None,
         disable_cache_args: tuple[str, ...] | None = None,
-        triggers: Union["TriggerBuilder", list["TriggerBuilder"]] | None = None,
+        triggers: "TriggerBuilder | list[TriggerBuilder] | None" = None,
         force_new_workflow: bool | None = None,
         reroute_on_concurrency_control: bool | None = None,
     ) -> Callable[["Func"], "Task"]: ...
 
     def task(
         self,
-        func: Optional["Func"] = None,
+        func: "Func | None" = None,
         *,
         parallel_batch_size: int | None = None,
         retry_for: tuple[type[Exception], ...] | None = None,
@@ -464,7 +469,7 @@ class Pynenc:
         on_diff_non_key_args_raise: bool | None = None,
         call_result_cache: bool | None = None,
         disable_cache_args: tuple[str, ...] | None = None,
-        triggers: Union["TriggerBuilder", list["TriggerBuilder"]] | None = None,
+        triggers: "TriggerBuilder | list[TriggerBuilder] | None" = None,
         force_new_workflow: bool | None = None,
         reroute_on_concurrency_control: bool | None = None,
     ) -> "Task | Callable[[Func], Task]":
@@ -472,12 +477,12 @@ class Pynenc:
         The task decorator converts the function into an instance of a BaseTask. It accepts any kind of options,
         however these options will be validated with the options class assigned to the class.
 
-        :param Optional[Callable] func:
+        :param Func | None func:
             The function to be converted into a Task instance.
         :param int | None parallel_batch_size:
             If set to 0, auto parallelization is disabled. If greater than 0, tasks with iterable
             arguments are automatically split into chunks.
-        :param Optional[Tuple[Exception, ...]] retry_for:
+        :param tuple[type[Exception], ...] | None retry_for:
             Exceptions for which the task should be retried.
         :param int | None max_retries:
             The maximum number of retries for a task.
@@ -485,7 +490,7 @@ class Pynenc:
             Controls the concurrency behavior of the task.
         :param ConcurrencyControlType | None registration_concurrency:
             Manages task registration concurrency.
-        :param Optional[Tuple[str, ...]] key_arguments:
+        :param tuple[str, ...] | None key_arguments:
             Key arguments for concurrency control.
         :param bool | None on_diff_non_key_args_raise:
             If True, raises an exception for task invocations with matching key arguments but
@@ -495,7 +500,7 @@ class Pynenc:
             otherwise it will trigger a new invocation as expected.
         :param tuple[str, ...] | None disable_cache_args:
             Arguments to exclude from caching, it will accept "*" to disable caching for all arguments.
-        :param Union[TriggerBuilder, list[TriggerBuilder]] | None triggers:
+        :param TriggerBuilder | list[TriggerBuilder] | None triggers:
             Trigger definitions that determine when this task should execute automatically.
             Can be a single TriggerBuilder or a list of builders for multiple trigger conditions.
         :param bool | None force_new_workflow:
@@ -640,7 +645,7 @@ class Pynenc:
 
     def direct_task(
         self,
-        func: Optional["Func[Params, Result]"] = None,
+        func: "Func[Params, Result] | None" = None,
         *,
         parallel_func: "ParallelFunc | None" = None,
         aggregate_func: "AggregateFunc | None" = None,
@@ -668,9 +673,9 @@ class Pynenc:
         It also supports parallel execution via the parallel_func parameter, which takes a function
         that generates arguments for parallel processing, and aggregate_func, which combines the results.
 
-        :param Optional[Func] func:
+        :param Func | None func:
             The function to be converted into a Task instance that returns results directly.
-        :param Optional[ParallelFunc] parallel_func:
+        :param ParallelFunc | None parallel_func:
             Function that takes a dict of key arguments and returns either:
 
             1. An iterable of parameters for parallel execution (can be tuples, dicts, or Arguments)
@@ -694,12 +699,12 @@ class Pynenc:
 
                This second approach provides major performance benefits when dealing with large shared
                arguments (20MB+) as they're serialized only once instead of for each parallel task.
-        :param Optional[AggregateFunc] aggregate_func:
+        :param AggregateFunc | None aggregate_func:
             Function that takes a list of results and aggregates them into a single result.
         :param int | None parallel_batch_size:
             If set to 0, auto parallelization is disabled. If greater than 0, tasks with iterable
             arguments are automatically split into chunks.
-        :param Optional[Tuple[Exception, ...]] retry_for:
+        :param tuple[Exception, ...] | None retry_for:
             Exceptions for which the task should be retried.
         :param int | None max_retries:
             The maximum number of retries for a task.
@@ -707,7 +712,7 @@ class Pynenc:
             Controls the concurrency behavior of the task.
         :param ConcurrencyControlType | None registration_concurrency:
             Manages task registration concurrency.
-        :param Optional[Tuple[str, ...]] key_arguments:
+        :param tuple[str, ...] | None key_arguments:
             Key arguments for concurrency control.
         :param bool | None on_diff_non_key_args_raise:
             If True, raises an exception for task invocations with matching key arguments but

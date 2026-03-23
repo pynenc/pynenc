@@ -7,18 +7,6 @@ from multiprocessing import Manager, Process
 from typing import TYPE_CHECKING, Any
 import uuid
 
-
-# Use 'spawn' method on macOS to avoid connection issues
-if (
-    hasattr(multiprocessing, "get_start_method")
-    and multiprocessing.get_start_method(allow_none=True) != "spawn"
-):
-    try:
-        multiprocessing.set_start_method("spawn", force=True)
-    except RuntimeError:
-        # Method already set and we're not in main process
-        pass
-
 from pynenc import context
 from pynenc.conf.config_runner import ConfigPersistentProcessRunner
 from pynenc.runner.base_runner import BaseRunner
@@ -91,9 +79,6 @@ def persistent_process_main(
                 invocation.run(runner_ctx)
             except Exception:
                 app.logger.exception(f"Error executing invocation:{invocation_id}")
-            # Do NOT clear invocation_id here: the outer finally needs it to attempt
-            # rerouting if stop_event was set while run() was in progress. If the
-            # invocation already reached a final status the reroute attempt is a no-op.
     except KeyboardInterrupt:
         app.logger.info(f"worker:{runner_id} received KeyboardInterrupt, exiting")
     except Exception as e:
@@ -116,10 +101,18 @@ class PersistentProcessRunner(BaseRunner):
     parent-based health reporting via OS-level process checks.
     """
 
-    child_runner_ids: dict[str, Process]  # Maps child runner_id to Process
-    manager: Manager  # type: ignore
-    num_processes: int
-    stop_event: "Event"
+    def __init__(
+        self,
+        app: "Pynenc",
+        runner_cache: dict | None = None,
+        runner_context: RunnerContext | None = None,
+    ) -> None:
+        self.child_runner_ids: dict[str, Process] = {}
+        self.num_processes: int = 0
+        self.manager: Manager | None = None  # type: ignore
+        self.stop_event: Event | None = None  # type: ignore
+        self._process_id_counter: int = 0
+        super().__init__(app, runner_cache, runner_context)
 
     @cached_property
     def conf(self) -> ConfigPersistentProcessRunner:
@@ -144,8 +137,6 @@ class PersistentProcessRunner(BaseRunner):
 
         :return: List of runner_ids for child workers with alive processes.
         """
-        if not hasattr(self, "child_runner_ids"):
-            return []
         return [
             runner_id
             for runner_id, proc in self.child_runner_ids.items()
@@ -159,20 +150,32 @@ class PersistentProcessRunner(BaseRunner):
             self.runner_id,
             signum,
             processes={
-                rid: (proc, None)
-                for rid, proc in getattr(self, "child_runner_ids", {}).items()
+                rid: (proc, None) for rid, proc in self.child_runner_ids.items()
             },
         )
 
+    @staticmethod
+    def _ensure_spawn_start_method() -> None:
+        """Set multiprocessing start method to 'spawn' if not already set (needed on macOS)."""
+        if (
+            hasattr(multiprocessing, "get_start_method")
+            and multiprocessing.get_start_method(allow_none=True) != "spawn"
+        ):
+            try:
+                multiprocessing.set_start_method("spawn", force=True)
+            except RuntimeError:
+                pass
+
     def _on_start(self) -> None:
         """Initializes the runner and spawns initial processes."""
+        self._ensure_spawn_start_method()
         self.num_processes = max(
             self.conf.min_parallel_slots, self.conf.num_processes or os.cpu_count() or 1
         )
         self.logger.info(f"Creating {self.num_processes} processes")
         warn_missing_main_guard()
         self.child_runner_ids = {}  # Track runner_id -> Process for health reporting
-        self._process_id_counter: int = 0
+        self._process_id_counter = 0
         self.manager = Manager()
         self.runner_cache = self._runner_cache or self.manager.dict()  # type: ignore
         self.stop_event = self.manager.Event()  # type: ignore
@@ -188,7 +191,7 @@ class PersistentProcessRunner(BaseRunner):
 
         :return: The runner_id of the spawned child, or None if spawn failed.
         """
-        if not hasattr(self, "running") or not self.running:
+        if not self.running:
             raise RuntimeError("Trying to spawn new process after stopping loop")
 
         # Pre-generate child runner_id so parent can track it
@@ -220,8 +223,7 @@ class PersistentProcessRunner(BaseRunner):
 
     def _terminate_all_processes(self) -> None:
         """Terminates all running processes with graceful shutdown attempt."""
-        # Check if stop_event is initialized first
-        if hasattr(self, "stop_event"):
+        if self.stop_event is not None:
             try:
                 self.stop_event.set()  # Signal all processes to stop
             except Exception as e:
@@ -248,8 +250,7 @@ class PersistentProcessRunner(BaseRunner):
         try:
             self._terminate_all_processes()
 
-            # Check if manager is initialized
-            if hasattr(self, "manager"):
+            if self.manager is not None:
                 try:
                     self.manager.shutdown()  # type: ignore
                 except Exception as e:

@@ -47,7 +47,7 @@ import uvicorn
 from pynmon.app import _uvicorn_log_config
 from pynmon.app import all_pynenc_instances
 from pynmon.app import app as pynmon_app
-from pynmon.app import pynenc_instance
+import pynmon.app as pynmon_module
 
 logger: Logger = create_test_logger("conftest")
 
@@ -129,7 +129,7 @@ def pynmon_server(request: "FixtureRequest") -> "Generator[str, None, None]":
 
     # Store original global state
     original_all_instances = all_pynenc_instances.copy()
-    original_instance = pynenc_instance
+    original_pynenc_instance = pynmon_module.pynenc_instance
 
     # Set up pynmon global variables
     all_pynenc_instances.clear()
@@ -138,7 +138,7 @@ def pynmon_server(request: "FixtureRequest") -> "Generator[str, None, None]":
     # Set the active instance
     import pynmon.app
 
-    pynmon.app.pynenc_instance = test_app
+    pynmon_module.pynenc_instance = test_app
 
     # Ensure routes are set up
     pynmon.app.setup_routes()
@@ -257,4 +257,4 @@ def pynmon_server(request: "FixtureRequest") -> "Generator[str, None, None]":
         # Restore original global state
         all_pynenc_instances.clear()
         all_pynenc_instances.update(original_all_instances)
-        pynmon.app.pynenc_instance = original_instance
+        pynmon_module.pynenc_instance = original_pynenc_instance

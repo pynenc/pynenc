@@ -22,12 +22,7 @@ def add(x: int, y: int) -> int:
 
 
 def test_route_default() -> None:
-    """Test that the orchestrator will route the task by default
-
-    If there are no options:
-     - The orchestrator will forward the task to the broker
-     - The broker should return a new Invocation and report the change of status to the orchestrator
-    """
+    """Default task invocation should register, route via broker, persist history, and notify triggers."""
     mock_base_app.orchestrator._register_new_invocations.return_value = (
         InvocationStatusRecord(status=InvocationStatus.REGISTERED)
     )
@@ -57,9 +52,7 @@ def add_single_inv(x: int, y: int) -> int:
 
 
 def test_registration_concurrency(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test that the when `task.options.registration_concurrency` is set the orchestrator
-    will only route the task if do not exists a Pending instance
-    """
+    """With TASK registration concurrency, duplicate calls reuse the existing invocation."""
     # Get existing invocation doesn't find any pending match
     monkeypatch.setattr(
         type(mock_base_app.orchestrator),
@@ -94,22 +87,13 @@ def test_registration_concurrency(monkeypatch: pytest.MonkeyPatch) -> None:
     assert third_invocation.invocation_id != next_invocation.invocation_id
 
 
-def set_invocation_exception() -> None:
-    raise NotImplementedError()
-    # if failed in self.app.state_backend.set_exception(invocation, exception)
-    # then the status did not change and the code gets waiting forever
-    # check that it will
-
-
 @mock_base_app.task(running_concurrency=ConcurrencyControlType.DISABLED)
 def dummy_run_disable_concurrency() -> None:
     pass
 
 
 def test_running_concurrency_disabled() -> None:
-    """Test that when `task.options.running_concurrency` is disabled
-    _is_authorize_by_concurrency_control will always return True
-    """
+    """With DISABLED running concurrency, invocations are always authorized to run."""
     running_invocation = dummy_run_disable_concurrency()
     to_run_invocation = dummy_run_disable_concurrency()
     assert isinstance(to_run_invocation, DistributedInvocation)
@@ -133,10 +117,7 @@ def dummy_run_task_concurrency() -> None:
 
 
 def test_running_concurrency_task_control() -> None:
-    """Test that when `task.options.running_concurrency` is set the orchestrator
-    get_invocations_to_run will only return the invocation is there's no other running
-    for the same task
-    """
+    """With TASK running concurrency, a second invocation is blocked while one is running."""
     # It will return False
     running_invocation = dummy_run_task_concurrency()
     to_run_invocation = dummy_run_task_concurrency()
@@ -279,7 +260,7 @@ def test_get_blocking_invocations_to_run_handles_lock(
 
 
 def test_waiting_for_results_empty_invocations() -> None:
-    """Test that waiting_for_results logs warning when called with empty result_invocations."""
+    """Calling waiting_for_results with an empty list should warn and skip blocking control."""
     # Create a mock invocation as the caller
     mock_caller = Mock(spec=str)
 

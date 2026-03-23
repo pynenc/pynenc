@@ -1,4 +1,5 @@
 import asyncio
+from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -7,10 +8,13 @@ from pynenc.invocation.status import InvocationStatus
 from pynmon.app import get_pynenc_instance, templates
 from pynmon.util.formatting import cron_to_human
 
+if TYPE_CHECKING:
+    from pynenc.app import Pynenc
+
 router = APIRouter(prefix="/orchestrator", tags=["orchestrator"])
 
 
-def _collect_status_counts(app) -> dict[str, int]:  # type: ignore[no-untyped-def]
+def _collect_status_counts(app: "Pynenc") -> dict[str, int]:
     """Synchronous helper that counts invocations per status (CPU-bound)."""
     status_counts: dict[str, int] = {}
     for status in InvocationStatus:

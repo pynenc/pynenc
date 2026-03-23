@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import pathlib
+from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
@@ -8,6 +9,9 @@ from fastapi.templating import Jinja2Templates
 
 from pynenc.invocation.status import InvocationStatus
 from pynmon.app import get_active_app, get_all_apps
+
+if TYPE_CHECKING:
+    from pynenc.app import Pynenc
 
 logger = logging.getLogger("pynmon.views.home")
 router = APIRouter()
@@ -17,7 +21,7 @@ base_dir = pathlib.Path(__file__).parent.parent
 templates = Jinja2Templates(directory=str(base_dir / "templates"))
 
 
-def _collect_component_info(app) -> list[dict[str, str]]:  # type: ignore[no-untyped-def]
+def _collect_component_info(app: "Pynenc") -> list[dict[str, str]]:
     """Build a list of component cards for the dashboard."""
     return [
         {
@@ -72,7 +76,7 @@ def _collect_component_info(app) -> list[dict[str, str]]:  # type: ignore[no-unt
     ]
 
 
-def _collect_config_summary(app) -> dict[str, str | bool | float]:  # type: ignore[no-untyped-def]
+def _collect_config_summary(app: "Pynenc") -> dict[str, str | bool | float]:
     """Collect key configuration values from ConfigPynenc."""
     conf = app.conf
     return {
@@ -89,7 +93,7 @@ def _collect_config_summary(app) -> dict[str, str | bool | float]:  # type: igno
     }
 
 
-def _collect_invocation_summary(app) -> dict[str, int]:  # type: ignore[no-untyped-def]
+def _collect_invocation_summary(app: "Pynenc") -> dict[str, int]:
     """Collect invocation counts grouped by meaningful categories.
 
     Uses orchestrator.count_invocations for lightweight indexed lookups.

@@ -105,90 +105,67 @@ def test_invocations_list_shows_invocations(app: "Pynenc") -> None:
         assert "multiply_task" in content
 
 
-def test_invocations_list_with_status_filter(app: "Pynenc") -> None:
-    """Test that invocations list actually filters by status."""
-    # Clear any existing invocations
-    app.purge()
-
-    # Create invocations with different statuses
+def _create_invocations_with_statuses(
+    app: "Pynenc",
+) -> tuple["DistributedInvocation", "DistributedInvocation", "DistributedInvocation"]:
+    """Create three invocations with REGISTERED, SUCCESS, and FAILED statuses."""
     call1: Call = Call(add_task, Arguments({"x": 1, "y": 1}))
     call2: Call = Call(add_task, Arguments({"x": 2, "y": 2}))
     call3: Call = Call(add_task, Arguments({"x": 3, "y": 3}))
 
-    invocation1: DistributedInvocation = DistributedInvocation.isolated(call1)
-    invocation2: DistributedInvocation = DistributedInvocation.isolated(call2)
-    invocation3: DistributedInvocation = DistributedInvocation.isolated(call3)
+    inv1: DistributedInvocation = DistributedInvocation.isolated(call1)
+    inv2: DistributedInvocation = DistributedInvocation.isolated(call2)
+    inv3: DistributedInvocation = DistributedInvocation.isolated(call3)
 
-    # register invocations in the orchestrator
-    app.orchestrator.register_new_invocations([invocation1, invocation2, invocation3])
-    # Set different statuses (to registered)
+    app.orchestrator.register_new_invocations([inv1, inv2, inv3])
     runner_ctx = RunnerContext.from_runner(app.runner)
-    app.orchestrator.set_invocation_status(
-        invocation2.invocation_id, InvocationStatus.PENDING, runner_ctx
-    )
-    app.orchestrator.set_invocation_status(
-        invocation2.invocation_id, InvocationStatus.RUNNING, runner_ctx
-    )
-    app.orchestrator.set_invocation_status(
-        invocation2.invocation_id, InvocationStatus.SUCCESS, runner_ctx
-    )
-    app.orchestrator.set_invocation_status(
-        invocation3.invocation_id, InvocationStatus.PENDING, runner_ctx
-    )
-    app.orchestrator.set_invocation_status(
-        invocation3.invocation_id, InvocationStatus.RUNNING, runner_ctx
-    )
-    app.orchestrator.set_invocation_status(
-        invocation3.invocation_id, InvocationStatus.FAILED, runner_ctx
-    )
+    for status in (
+        InvocationStatus.PENDING,
+        InvocationStatus.RUNNING,
+        InvocationStatus.SUCCESS,
+    ):
+        app.orchestrator.set_invocation_status(inv2.invocation_id, status, runner_ctx)
+    for status in (
+        InvocationStatus.PENDING,
+        InvocationStatus.RUNNING,
+        InvocationStatus.FAILED,
+    ):
+        app.orchestrator.set_invocation_status(inv3.invocation_id, status, runner_ctx)
+    return inv1, inv2, inv3
 
-    # Setup routes before creating test client
+
+def test_invocations_list_with_status_filter(app: "Pynenc") -> None:
+    """Test that invocations list actually filters by status."""
+    import re
+
+    app.purge()
+    _create_invocations_with_statuses(app)
+
     setup_routes()
 
-    # Patch pynmon to use our test app
     with patch("pynmon.views.invocations.get_pynenc_instance", return_value=app):
         client = TestClient(pynmon_app)
 
-        # Test filtering by SUCCESS status - should only show invocation2
         response = client.get("/invocations/?status=success")
         assert response.status_code == 200
         content = response.text
 
-        # Debug: print first 2000 chars of content to see what's there
-        print("Response content snippet:")
-        print(content[:2000])
-        print("..." if len(content) > 2000 else "")
-
-        # Verify filtering worked by checking status badges
-        # Should contain the SUCCESS status badge (handle whitespace in template)
-        import re
-
-        success_badge_pattern = r"bg-success[^>]*>[^<]*SUCCESS[^<]*</span>"
-        assert re.search(success_badge_pattern, content), (
+        # Should contain only the SUCCESS status badge
+        assert re.search(r"bg-success[^>]*>[^<]*SUCCESS[^<]*</span>", content), (
             "Expected SUCCESS badge not found"
         )
-
-        # Should NOT contain REGISTERED or FAILED status badges
-        registered_badge_pattern = r"bg-dark[^>]*>[^<]*REGISTERED[^<]*</span>"
-        failed_badge_pattern = r"bg-danger[^>]*>[^<]*FAILED[^<]*</span>"
-        assert not re.search(registered_badge_pattern, content), (
+        assert not re.search(r"bg-dark[^>]*>[^<]*REGISTERED[^<]*</span>", content), (
             "REGISTERED badge should not be present"
         )
-        assert not re.search(failed_badge_pattern, content), (
+        assert not re.search(r"bg-danger[^>]*>[^<]*FAILED[^<]*</span>", content), (
             "FAILED badge should not be present"
         )
 
-        # Also verify we have exactly one invocation by checking the invocation count
-        # Count the number of invocation detail links
-        import re
-
+        # Exactly one invocation (2 links: ID column + Details button)
         detail_links = re.findall(r"/invocations/[a-f0-9-]+", content)
-        # Each invocation has 2 links: one in ID column, one in Details button
         assert len(detail_links) == 2, (
             f"Expected 2 links (ID + Details) for 1 invocation, found {len(detail_links)}"
         )
-
-        # Verify both links point to the same invocation (the SUCCESS one)
         unique_invocation_ids = {link.split("/")[-1] for link in detail_links}
         assert len(unique_invocation_ids) == 1, (
             f"Expected links for 1 unique invocation, found {len(unique_invocation_ids)}"
@@ -432,3 +409,65 @@ def test_invocation_history_endpoint(app: "Pynenc") -> None:
         data = response.json()
         # Should be a list (even if empty)
         assert isinstance(data, list)
+
+
+# ################################################################################### #
+# PARAMETRIZED ERROR-CASE TESTS
+# ################################################################################### #
+
+
+@pytest.mark.parametrize(
+    "status_value",
+    ["nonexistent", "INVALID_STATUS", "12345", "success; DROP TABLE"],
+)
+def test_invocations_list_should_return_empty_for_invalid_status(
+    app: "Pynenc", status_value: str
+) -> None:
+    """Test that invalid status filter values produce a valid (empty) response."""
+    app.purge()
+    _create_invocations_with_statuses(app)
+    setup_routes()
+
+    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=app):
+        client = TestClient(pynmon_app)
+        response = client.get(f"/invocations/?status={status_value}")
+
+        assert response.status_code == 200
+        assert "text/html" in response.headers["content-type"]
+
+
+@pytest.mark.parametrize(
+    "limit,page,expected_status",
+    [
+        (0, 1, 200),  # zero limit → clamped to 1
+        (-5, 1, 200),  # negative limit → clamped to 1
+        (50, 0, 200),  # zero page → clamped to 1
+        (50, -1, 200),  # negative page → clamped to 1
+        (9999, 1, 200),  # very large limit → clamped to 1000
+    ],
+)
+def test_invocations_list_should_handle_pagination_edge_cases(
+    app: "Pynenc", limit: int, page: int, expected_status: int
+) -> None:
+    """Test that pagination edge cases are handled gracefully."""
+    app.purge()
+    setup_routes()
+
+    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=app):
+        client = TestClient(pynmon_app)
+        response = client.get(f"/invocations/?limit={limit}&page={page}")
+        assert response.status_code == expected_status
+
+
+def test_invocations_list_should_handle_missing_task_id_key(app: "Pynenc") -> None:
+    """Test that a non-existent task_id key returns a valid empty page."""
+    app.purge()
+    _create_invocations_with_statuses(app)
+    setup_routes()
+
+    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=app):
+        client = TestClient(pynmon_app)
+        response = client.get("/invocations/?task_id=nonexistent.module:no_func")
+
+        assert response.status_code == 200
+        assert "text/html" in response.headers["content-type"]

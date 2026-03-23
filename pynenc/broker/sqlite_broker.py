@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from pynenc.broker.base_broker import BaseBroker
 from pynenc.conf.config_broker import ConfigBrokerSQLite
 from pynenc.identifiers.invocation_id import InvocationId
+from pynenc.util.sqlite_utils import TableNames
 from pynenc.util.sqlite_utils import create_sqlite_connection as sqlite_conn
 from pynenc.util.sqlite_utils import (
     delete_tables_with_prefix,
@@ -21,8 +22,12 @@ if TYPE_CHECKING:
     from pynenc.app import Pynenc
 
 
-class Tables:
-    QUEUE = "broker_message_queue"
+class Tables(TableNames):
+    """Table names for broker, scoped by app_id."""
+
+    def __init__(self, app_id: str) -> None:
+        super().__init__(app_id, "broker")
+        self.QUEUE = f"{self.table_prefix}_message_queue"
 
 
 class SQLiteBroker(BaseBroker):
@@ -41,6 +46,7 @@ class SQLiteBroker(BaseBroker):
 
     def __init__(self, app: "Pynenc") -> None:
         super().__init__(app)
+        self.tables = Tables(app.app_id)
 
         # Use database path from configuration with validation
         self.sqlite_db_path = get_sqlite_sqlite_db_path(self.conf.sqlite_db_path)
@@ -53,7 +59,7 @@ class SQLiteBroker(BaseBroker):
         with sqlite_conn(self.sqlite_db_path) as conn:
             conn.execute(
                 f"""
-                CREATE TABLE IF NOT EXISTS {Tables.QUEUE} (
+                CREATE TABLE IF NOT EXISTS {self.tables.QUEUE} (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     invocation_id TEXT NOT NULL,
                     created_at REAL NOT NULL DEFAULT (julianday('now'))
@@ -62,7 +68,7 @@ class SQLiteBroker(BaseBroker):
             )
             conn.execute(
                 f"""
-                CREATE INDEX IF NOT EXISTS idx_created_at ON {Tables.QUEUE}(created_at)
+                CREATE INDEX IF NOT EXISTS idx_{self.tables.QUEUE}_created_at ON {self.tables.QUEUE}(created_at)
             """
             )
             conn.commit()
@@ -78,7 +84,7 @@ class SQLiteBroker(BaseBroker):
         """Send a message (invocation ID) to the queue."""
         with sqlite_conn(self.sqlite_db_path) as conn:
             conn.execute(
-                f"INSERT INTO {Tables.QUEUE} (invocation_id, created_at) VALUES (?, julianday('now'))",
+                f"INSERT INTO {self.tables.QUEUE} (invocation_id, created_at) VALUES (?, julianday('now'))",
                 (invocation_id,),
             )
             conn.commit()
@@ -101,24 +107,24 @@ class SQLiteBroker(BaseBroker):
         with sqlite_conn(self.sqlite_db_path) as conn:
             conn.execute("BEGIN IMMEDIATE")  # Lock for atomicity
             cursor = conn.execute(
-                f"SELECT id, invocation_id FROM {Tables.QUEUE} ORDER BY created_at ASC LIMIT 1"
+                f"SELECT id, invocation_id FROM {self.tables.QUEUE} ORDER BY created_at ASC LIMIT 1"
             )
             row = cursor.fetchone()
             cursor.close()
             if not row:
                 return None
             message_id, invocation_id = row
-            conn.execute(f"DELETE FROM {Tables.QUEUE} WHERE id = ?", (message_id,))
+            conn.execute(f"DELETE FROM {self.tables.QUEUE} WHERE id = ?", (message_id,))
             conn.commit()
             return InvocationId(invocation_id)
 
     def count_invocations(self) -> int:
         """Count the number of invocations in the queue."""
         with sqlite_conn(self.sqlite_db_path) as conn:
-            cursor = conn.execute(f"SELECT COUNT(*) FROM {Tables.QUEUE}")
+            cursor = conn.execute(f"SELECT COUNT(*) FROM {self.tables.QUEUE}")
             return cursor.fetchone()[0]
 
     def purge(self) -> None:
         """Clear all broker messages."""
-        delete_tables_with_prefix(self.sqlite_db_path, "broker_")
+        delete_tables_with_prefix(self.sqlite_db_path, self.tables.table_prefix)
         self._init_tables()

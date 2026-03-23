@@ -1,6 +1,6 @@
 import argparse
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
@@ -25,4 +25,4 @@ class PynencCLINamespace(argparse.Namespace):
 
     app: str | None = None
     verbose: bool | None = None
-    app_instance: Optional["Pynenc"] = None
+    app_instance: "Pynenc | None" = None

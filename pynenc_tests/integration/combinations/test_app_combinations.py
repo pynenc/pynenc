@@ -19,10 +19,14 @@ def test_task_execution(task_sum: Task) -> None:
     def run_in_thread() -> None:
         app.runner.run()
 
-    invocation = task_sum(1, 2)
     thread = threading.Thread(target=run_in_thread, daemon=True)
     thread.start()
+
+    # Warm-up: run a task to ensure runner and workers are fully initialized
+    assert task_sum(0, 0).result == 0
+
     ini = time()
+    invocation = task_sum(1, 2)
     assert invocation.result == 3
     elapsed = time() - ini
     time_limit = 1.5
@@ -306,6 +310,8 @@ def test_runner_reroutes_on_real_os_signal(task_sleep: Task, signum: int) -> Non
         while invocation.status != InvocationStatus.RUNNING:
             assert time() - ini < 10, "Invocation did not reach RUNNING status in time"
             sleep(0.1)
+        # Give the subprocess's async history thread time to flush the RUNNING record
+        sleep(0.2)
 
         os.kill(proc.pid, signum)
         proc.join(timeout=30)

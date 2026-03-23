@@ -1,4 +1,3 @@
-import logging
 import multiprocessing
 from collections.abc import Generator
 from dataclasses import dataclass
@@ -19,7 +18,6 @@ from pynenc.trigger import MemTrigger, SQLiteTrigger
 from pynenc.util.subclasses import get_all_subclasses
 from pynenc_tests import util
 from pynenc_tests.integration.combinations import tasks, tasks_async
-from pynenc_tests.util.multiprocesses import _cleanup_multiprocessing_children
 from pynenc_tests.util.subclasses import get_runner_subclasses
 
 if TYPE_CHECKING:
@@ -136,6 +134,9 @@ def app_combination_instance(
     monkeypatch.setenv("PYNENC__RUNNER_CLS", components.runner.__name__)
     monkeypatch.setenv("PYNENC__LOGGING_LEVEL", "debug")
     monkeypatch.setenv("PYNENC__PRINT_ARGUMENTS", "False")
+    # Fast loop/poll intervals for tests (default 0.1s is too slow)
+    monkeypatch.setenv("PYNENC__RUNNER_LOOP_SLEEP_TIME_SEC", "0.01")
+    monkeypatch.setenv("PYNENC__INVOCATION_WAIT_RESULTS_SLEEP_TIME_SEC", "0.01")
 
     # Set shared SQLite database path for SQLite components
     if any(
@@ -162,47 +163,18 @@ def app(app_combination_instance: Pynenc) -> Generator[Pynenc, None, None]:
     """
     yield app_combination_instance
 
+    # Each test is isolated (unique app_id + temp DB), so teardown is fire-and-forget.
     try:
-        # Signal the runner to stop (idempotent if already stopped by the test)
         app_combination_instance.runner.stop_runner_loop()
-    except Exception as e:
-        logging.warning("Compatibility fixture failed to stop runner after test: %s", e)
+    except Exception:
+        pass
 
-    try:
-        # Wait for the runner's run() loop to fully exit before dropping tables.
-        # Without this, background threads may still be mid-iteration and hit
-        # 'no such table' after purge() drops the schema.
-        if not app_combination_instance.runner.wait_until_stopped(timeout=3.0):
-            logging.warning(
-                "Runner did not stop within timeout; proceeding with purge anyway"
-            )
-    except Exception as e:
-        logging.warning(
-            "Compatibility fixture failed while waiting for runner stop: %s", e
-        )
-
-    try:
-        # Gracefully terminate and join any remaining multiprocessing children
-        # spawned by process-based runners before brute-force cleanup.
-        for child in multiprocessing.active_children():
-            child.terminate()
-        for child in multiprocessing.active_children():
-            child.join(timeout=5)
-    except Exception as e:
-        logging.warning("Compatibility fixture failed to join active children: %s", e)
-
-    try:
-        _cleanup_multiprocessing_children()
-    except Exception as e:
-        logging.warning(
-            "Compatibility fixture failed to cleanup multiprocessing children after test: %s",
-            e,
-        )
-
-    try:
-        app_combination_instance.purge()
-    except Exception as e:
-        logging.warning("Compatibility fixture failed to purge app after test: %s", e)
+    # Kill child processes immediately — no need to wait since DB is per-test
+    for child in multiprocessing.active_children():
+        try:
+            child.kill()
+        except Exception:
+            pass
 
 
 def replace_tasks_app(app: Pynenc) -> None:

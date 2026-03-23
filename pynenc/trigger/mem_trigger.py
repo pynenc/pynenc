@@ -9,7 +9,7 @@ import threading
 from collections import defaultdict
 from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from pynenc.trigger.base_trigger import BaseTrigger
 from pynenc.trigger.conditions import ConditionContext, TriggerCondition, ValidCondition
@@ -87,7 +87,7 @@ class MemTrigger(BaseTrigger):
         for condition_id in trigger.condition_ids:
             self._condition_triggers[condition_id].append(trigger.trigger_id)
 
-    def _get_trigger(self, trigger_id: str) -> Optional["TriggerDefinitionDTO"]:
+    def _get_trigger(self, trigger_id: str) -> "TriggerDefinitionDTO | None":
         """
         Get a trigger definition by ID from the in-memory store.
 

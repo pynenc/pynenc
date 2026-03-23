@@ -1,5 +1,5 @@
 import inspect
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from pynenc.conf.config_pynenc import ArgumentPrintMode, ConfigPynenc
 
@@ -15,13 +15,13 @@ class Arguments:
     This class facilitates the handling of arguments by providing functionalities such as
     generating a unique identifier for a set of arguments, and supporting hashability and equality checks.
 
-    :param Optional[Args] kwargs:
+    :param Args | None kwargs:
         Keyword arguments to initialize the Arguments object.
         Defaults to an empty dictionary if None is provided.
     """
 
     def __init__(
-        self, kwargs: Optional["Args"] = None, *, app: Optional["Pynenc"] = None
+        self, kwargs: "Args | None" = None, *, app: "Pynenc | None" = None
     ) -> None:
         self.kwargs: Args = kwargs or {}
         self._app = app

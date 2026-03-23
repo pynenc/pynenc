@@ -21,7 +21,7 @@ jobs:
       - run: pip install smokeshow
 
       - name: Download coverage artifact
-        uses: dawidd6/action-download-artifact@v3
+        uses: dawidd6/action-download-artifact@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           workflow: combined_tests.yml

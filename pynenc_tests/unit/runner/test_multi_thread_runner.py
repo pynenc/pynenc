@@ -15,7 +15,7 @@ from pynenc.runner.runner_context import RunnerContext
 from pynenc_tests.conftest import MockPynenc
 
 
-class TestConfig(ConfigMultiThreadRunner):
+class StubMultiThreadConfig(ConfigMultiThreadRunner):
     min_processes = 2
     max_processes = 4
     enforce_max_processes = False
@@ -35,9 +35,7 @@ def app() -> MockPynenc:
 @pytest.fixture
 def multi_thread_runner(app: MockPynenc) -> MultiThreadRunner:
     runner = MultiThreadRunner(app)
-    runner.conf = TestConfig()
-    runner.child_runner_ids = {}
-    runner.shared_status = {}
+    runner.conf = StubMultiThreadConfig()
     return runner
 
 
@@ -129,10 +127,14 @@ def test_terminate_idle_processes_respects_min_processes(
             ProcessState.IDLE,
         )
 
-    # Patch terminate and join to avoid actual process operations
+    # Patch terminate and join to simulate successful termination
     for proc in multi_thread_runner.child_runner_ids.values():  # type: ignore
         proc.terminate = Mock()
-        proc.join = Mock()
+        proc.join = Mock(
+            side_effect=lambda timeout=None, p=proc: setattr(
+                p.is_alive, "return_value", False
+            )
+        )
 
     multi_thread_runner._terminate_idle_processes()
 
@@ -178,7 +180,7 @@ def test_waiting_for_results_without_invocation(
 
 def test_max_parallel_slots(multi_thread_runner: MultiThreadRunner) -> None:
     """Test max_parallel_slots returns the maximum of min_processes and max_processes."""
-    # Given min_processes=2 from TestConfig
+    # Given min_processes=2 from StubMultiThreadConfig
     multi_thread_runner.max_processes = 4  # Set max_processes explicitly
     assert multi_thread_runner.max_parallel_slots == 4
 
@@ -296,7 +298,9 @@ def test_terminate_idle_processes_skips_missing_status(
     proc2 = Mock(spec=Process)
     proc2.is_alive.return_value = True
     proc2.terminate = Mock()
-    proc2.join = Mock()
+    proc2.join = Mock(
+        side_effect=lambda timeout=None: setattr(proc2.is_alive, "return_value", False)
+    )
     multi_thread_runner.child_runner_ids["runner-2"] = proc2
     multi_thread_runner.shared_status["runner-2"] = ProcessStatus(
         current_time - 100,  # Old timestamp to ensure idle

@@ -454,7 +454,7 @@ def test_unknown_method_should_raise_helpful_error() -> None:
     """Test that unknown methods raise helpful error messages."""
     builder = PynencBuilder()
 
-    with pytest.raises(AttributeError, match="This method may be provided by a plugin"):
+    with pytest.raises(AttributeError, match="has no attribute 'unknown_method'"):
         builder.unknown_method()
 
 

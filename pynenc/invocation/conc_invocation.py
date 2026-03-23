@@ -71,11 +71,13 @@ class ConcurrentInvocation(BaseInvocation[Params, Result]):
         """
         if self._is_result_cached:
             return self._cached_result
-        previous_invocation_context = context.sync_inv_context.get(self.app.app_id)
+        previous_invocation_context = context._get_sync_inv_context_storage().get(
+            self.app.app_id
+        )
         try:
             self.task.logger.info(f"Sync invocation:{self.invocation_id} started")
             self._status = InvocationStatus.RUNNING
-            context.sync_inv_context[self.app.app_id] = self
+            context._get_sync_inv_context_storage()[self.app.app_id] = self
             result = run_task_sync(self.task.func, **self.arguments.kwargs)
             self._status = InvocationStatus.SUCCESS
             self.task.logger.info(f"Sync invocation:{self.invocation_id} finished")
@@ -96,7 +98,9 @@ class ConcurrentInvocation(BaseInvocation[Params, Result]):
             self._status = InvocationStatus.FAILED
             raise exc
         finally:
-            context.sync_inv_context[self.app.app_id] = previous_invocation_context
+            context._get_sync_inv_context_storage()[self.app.app_id] = (
+                previous_invocation_context
+            )
 
     async def async_result(self) -> Result:
         loop = asyncio.get_running_loop()

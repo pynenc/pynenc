@@ -34,27 +34,16 @@ def parent_workflow(numbers: list[int]) -> dict:
 
 def test_sub_invocation_tracking(runner: None) -> None:
     """Test that sub-invocations are properly tracked."""
-    print("Testing sub-invocation tracking...")
-
     # Execute the parent workflow
     invocation = parent_workflow([1, 2, 3, 4])
     result = invocation.result
-
-    print(f"Workflow result: {result}")
-    print(f"Workflow ID: {result['workflow_id']}")
 
     # Check that sub-invocations were tracked
     sub_invocations = list(
         app.state_backend.get_workflow_sub_invocations(result["workflow_id"])
     )
 
-    print(f"Sub-invocations tracked: {len(sub_invocations)}")
-    for sub_id in sub_invocations:
-        print(f"  - {sub_id}")
-
     # Should have 4 sub-invocations (one for each child_task call)
     assert len(sub_invocations) == 4, (
         f"Expected 4 sub-invocations, got {len(sub_invocations)}"
     )
-
-    print("✅ Sub-invocation tracking is working correctly!")

@@ -5,17 +5,45 @@ Reference for all Pynenc CLI commands and options.
 ## Basic Usage
 
 ```bash
-pynenc --app <app_module> <command> [options]
+pynenc --app <module.attr> <command> [options]
 ```
 
-The `--app` option specifies the Python module containing your `Pynenc` instance. It accepts a module path (e.g., `myapp.tasks.app`) or a file path (e.g., `myapp/tasks.py`).
+The `--app` option tells Pynenc where to find your `Pynenc()` instance. It accepts:
+
+| Format           | Example            | How it works                                                                |
+| ---------------- | ------------------ | --------------------------------------------------------------------------- |
+| `module.attr`    | `tasks.app`        | Loads `tasks.py` from the current directory and finds the `Pynenc` instance |
+| `package.module` | `mypackage.tasks`  | Standard Python import via `importlib.import_module`                        |
+| File path        | `path/to/tasks.py` | Loads the file directly                                                     |
+
+**Common pattern** — create a `tasks.py` file:
+
+```python
+from pynenc import Pynenc
+
+app = Pynenc()
+
+@app.task
+def add(x: int, y: int) -> int:
+    return x + y
+```
+
+Then run with:
+
+```bash
+pynenc --app tasks.app runner start
+```
+
+```{note}
+The colon format (`module:variable`) is **not** supported. Use dot notation: `tasks.app` not `tasks:app`.
+```
 
 ## Global Options
 
-| Option            | Description                                                               |
-| ----------------- | ------------------------------------------------------------------------- |
-| `--app MODULE`    | Application module or file path (required for `runner` and `show_config`) |
-| `-v`, `--verbose` | Enable debug-level logging output                                         |
+| Option            | Description                                                                              |
+| ----------------- | ---------------------------------------------------------------------------------------- |
+| `--app MODULE`    | Dotted path to module with `Pynenc()` instance (required for `runner` and `show_config`) |
+| `-v`, `--verbose` | Enable debug-level logging output                                                        |
 
 ## Commands
 

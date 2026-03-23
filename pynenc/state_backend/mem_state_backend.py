@@ -1,4 +1,5 @@
 import itertools
+import threading
 from collections import defaultdict
 from collections.abc import Iterator
 from datetime import datetime
@@ -19,9 +20,6 @@ if TYPE_CHECKING:
     from pynenc.workflow import WorkflowIdentity
 
 
-_APP_INFO_REGISTRY: dict[str, "AppInfo"] = {}
-
-
 class MemStateBackend(BaseStateBackend[Params, Result]):
     """
     A memory-based implementation of the state backend.
@@ -34,6 +32,11 @@ class MemStateBackend(BaseStateBackend[Params, Result]):
     for production systems. Its use should be limited to testing or demonstration purposes only.
     ```
     """
+
+    # Class-level registry shared across instances, protected by a lock.
+    # Process-wide so that discover_app_infos (a @staticmethod) can find all apps.
+    _app_info_registry: dict[str, "AppInfo"] = {}
+    _registry_lock: threading.Lock = threading.Lock()
 
     def __init__(self, app: "Pynenc") -> None:
         self._cache: dict[str, tuple[InvocationDTO, CallDTO]] = {}
@@ -203,7 +206,8 @@ class MemStateBackend(BaseStateBackend[Params, Result]):
 
         :param app_info: The app information to store
         """
-        _APP_INFO_REGISTRY[app_info.app_id] = app_info
+        with MemStateBackend._registry_lock:
+            MemStateBackend._app_info_registry[app_info.app_id] = app_info
 
     def get_app_info(self) -> "AppInfo":
         """
@@ -213,13 +217,15 @@ class MemStateBackend(BaseStateBackend[Params, Result]):
         :raises ValueError: If app info is not found
         """
         app_id = self.app.app_id
-        if app_id not in _APP_INFO_REGISTRY:
-            raise ValueError(f"No app info found for app_id '{app_id}'")
-        return _APP_INFO_REGISTRY[app_id]
+        with MemStateBackend._registry_lock:
+            if app_id not in MemStateBackend._app_info_registry:
+                raise ValueError(f"No app info found for app_id '{app_id}'")
+            return MemStateBackend._app_info_registry[app_id]
 
     @staticmethod
     def discover_app_infos() -> dict[str, "AppInfo"]:
-        return _APP_INFO_REGISTRY
+        with MemStateBackend._registry_lock:
+            return dict(MemStateBackend._app_info_registry)
 
     def store_workflow_run(self, workflow_identity: "WorkflowIdentity") -> None:
         """

@@ -2,6 +2,51 @@
 
 Reference for Pynmon, the built-in web monitoring interface for Pynenc.
 
+## Why Pynmon?
+
+Setting up a distributed task system is the easy part — even easier with Pynenc. The hard part is **understanding what happened** when things go wrong. Which task called which? Where did it run? Why is it stuck? Pynmon gives you deep, real-time visibility into your distributed execution without any external tooling.
+
+```{image} ../_static/pynmon_dashboard.png
+:alt: Pynmon dashboard showing application overview, invocation status summary, component architecture, configuration, and quick navigation
+:width: 100%
+```
+
+### Execution Timeline
+
+See exactly what ran across every runner and worker, at every moment. Status transitions are color-coded — orange for pending, green for completed, blue for running — with connections between parent and child invocations. Click any invocation to inspect its full status history and the runner context that executed it.
+
+```{image} ../_static/pynmon_timeline.png
+:alt: Pynmon invocation timeline showing task execution across multiple runners with status transitions and parent-child connections
+:width: 100%
+```
+
+### Family Tree
+
+Navigate the full hierarchy of task calls as an interactive graph. When a grandparent task spawns parents that spawn children, the family tree displays the entire chain. Selecting a node cross-highlights it on the timeline, and vice versa — making it trivial to understand both the logical structure and the physical execution of complex workflows.
+
+```{image} ../_static/pynmon_family_tree.png
+:alt: Pynmon family tree showing invocation hierarchy with cross-highlighting to the execution timeline
+:width: 100%
+```
+
+### Invocation Details
+
+Every invocation has a detail page showing its status, arguments, result or exception, workflow membership, full status history with timestamps, runner context, and the family tree — all in one place.
+
+```{image} ../_static/pynmon_inv_details.png
+:alt: Pynmon invocation detail page showing status history, arguments, result, workflow information, and family tree
+:width: 100%
+```
+
+### Log Explorer
+
+Paste your Pynenc log lines and the Log Explorer augments them with full context. It parses runner contexts, invocation IDs, and task references from the logs, resolving each to its detail page. It generates a mini-timeline of all invocations mentioned in the logs — including their parents — and highlights runners and workers with direct links. Turn opaque log lines into a navigable map of your distributed execution.
+
+```{image} ../_static/pynmon_log_explorer.png
+:alt: Pynmon Log Explorer parsing log lines with augmented context, mini-timeline, and links to invocation and runner details
+:width: 100%
+```
+
 ## Overview
 
 Pynmon provides real-time visibility into your distributed task execution through a web interface built with FastAPI, Jinja2, and HTMX. It connects to the same backends as your Pynenc application and displays live data about tasks, invocations, runners, and workflows.
@@ -33,147 +78,11 @@ pynenc monitor --log-level debug
 | `--port`      | `8000`      | Server bind port    |
 | `--log-level` | `info`      | Logging verbosity   |
 
-## Dashboard Pages
+For a full list of HTTP endpoints, see {doc}`api`.
 
-### Home (`/`)
+```{toctree}
+:hidden:
+:maxdepth: 1
 
-System overview showing application info, component types, and aggregate status counts for all invocations.
-
-### Broker (`/broker/`)
-
-Displays the broker implementation type and count of pending invocations. Includes a queue view showing queued invocation IDs.
-
-| Endpoint              | Description                   |
-| --------------------- | ----------------------------- |
-| `GET /broker/`        | Broker overview               |
-| `GET /broker/queue`   | Queue contents                |
-| `GET /broker/refresh` | HTMX partial refresh          |
-| `POST /broker/purge`  | Purge all pending invocations |
-
-### Orchestrator (`/orchestrator/`)
-
-Shows invocation status counts, blocking invocations, and active runner information.
-
-| Endpoint                        | Description                              |
-| ------------------------------- | ---------------------------------------- |
-| `GET /orchestrator/`            | Orchestrator overview with status counts |
-| `GET /orchestrator/refresh`     | HTMX partial refresh                     |
-| `POST /orchestrator/auto-purge` | Auto-purge orchestrator data             |
-
-### Runners (`/runners/`)
-
-Lists active runners with heartbeat status, hostname, PID, creation time, and uptime. Individual runner detail pages show full context.
-
-| Endpoint                               | Description                       |
-| -------------------------------------- | --------------------------------- |
-| `GET /runners/`                        | Active runners overview           |
-| `GET /runners/refresh`                 | HTMX partial refresh              |
-| `GET /runners/{runner_id}`             | Runner detail                     |
-| `GET /runners/atomic-service/timeline` | Atomic service execution timeline |
-
-### Tasks (`/tasks/`)
-
-Browse all registered tasks with execution statistics. Task detail pages show all calls and invocations for a specific task.
-
-| Endpoint                   | Description                            |
-| -------------------------- | -------------------------------------- |
-| `GET /tasks/`              | List all registered tasks              |
-| `GET /tasks/refresh`       | HTMX partial refresh                   |
-| `GET /tasks/{task_id_key}` | Task detail with calls and invocations |
-
-### Invocations (`/invocations/`)
-
-Paginated list of all invocations with status, task, and workflow filters. Includes a timeline visualization and individual invocation detail pages with full status history.
-
-| Endpoint                            | Description                            |
-| ----------------------------------- | -------------------------------------- |
-| `GET /invocations/`                 | Paginated invocation list with filters |
-| `GET /invocations/timeline`         | SVG timeline visualization             |
-| `GET /invocations/table`            | HTMX partial table refresh             |
-| `GET /invocations/{id}`             | Invocation detail with history         |
-| `GET /invocations/{id}/history`     | Status history (JSON)                  |
-| `GET /invocations/{id}/api`         | Invocation data (JSON)                 |
-| `GET /invocations/{id}/family-tree` | Family tree SVG partial                |
-| `POST /invocations/{id}/rerun`      | Re-run the same call                   |
-
-### Calls (`/calls/`)
-
-View details for specific task calls, including serialized arguments and associated invocations.
-
-| Endpoint                   | Description                    |
-| -------------------------- | ------------------------------ |
-| `GET /calls/?call_id_key=` | Call detail by query parameter |
-| `GET /calls/{call_id_key}` | Call detail by path            |
-
-### Workflows (`/workflows/`)
-
-Browse workflow types, view individual runs, and explore workflow hierarchies.
-
-| Endpoint                            | Description            |
-| ----------------------------------- | ---------------------- |
-| `GET /workflows/`                   | List workflow types    |
-| `GET /workflows/refresh`            | HTMX partial refresh   |
-| `GET /workflows/runs`               | List all workflow runs |
-| `GET /workflows/runs/refresh`       | HTMX partial refresh   |
-| `GET /workflows/{type_key}`         | Workflow type detail   |
-| `GET /workflows/{type_key}/refresh` | HTMX partial refresh   |
-
-### State Backend (`/state-backend/`)
-
-Displays state backend implementation type and provides a purge action.
-
-| Endpoint                    | Description            |
-| --------------------------- | ---------------------- |
-| `GET /state-backend/`       | State backend overview |
-| `POST /state-backend/purge` | Purge all state data   |
-
-### Client Data Store (`/client-data-store/`)
-
-Shows client data store configuration and provides a purge action.
-
-| Endpoint                        | Description                |
-| ------------------------------- | -------------------------- |
-| `GET /client-data-store/`       | Client data store overview |
-| `POST /client-data-store/purge` | Purge all cached data      |
-
-### Log Explorer (`/log-explorer/`)
-
-Paste Pynenc log lines for contextual analysis. The explorer parses runner contexts, invocation IDs, and task references, linking them to the appropriate detail pages and generating mini-timeline visualizations.
-
-| Endpoint             | Description            |
-| -------------------- | ---------------------- |
-| `GET /log-explorer/` | Log explorer interface |
-
-## Timeline Visualization
-
-The timeline view (`/invocations/timeline`) renders an SVG-based visualization of invocation lifecycle across runners. It supports:
-
-- **Time range selection**: Predefined ranges (1min, 5min, 1h, etc.) or custom date ranges
-- **Filtering**: By task, workflow, or workflow type
-- **Resolution control**: Adjustable time resolution for different zoom levels
-- **Collapse external**: Option to collapse external runner invocations
-- **Detail panel**: Click an invocation on the timeline to view status history and runner context
-- **Family tree integration**: Cross-highlighting between timeline and family tree views
-
-## Family Tree
-
-The family tree (`/invocations/{id}/family-tree`) displays parent-child invocation hierarchies as an interactive SVG:
-
-- Time-ordered grid layout showing invocation relationships
-- Progressive expansion with "load more" for large trees
-- Floating draggable panel with resize, collapse, and zoom controls
-- Cross-highlighting with the timeline view
-
-## App Switching
-
-When multiple Pynenc applications share the same backend, use the app selector in the navigation to switch between them:
-
+api
 ```
-GET /switch-app/{app_id}
-```
-
-## Global Actions
-
-| Endpoint      | Description                                                             |
-| ------------- | ----------------------------------------------------------------------- |
-| `POST /purge` | Purge all data (broker, orchestrator, state backend, client data store) |

@@ -89,10 +89,58 @@ def _check_monitor_dependencies() -> bool:
     return True
 
 
-def get_all_available_apps(args: PynencCLINamespace) -> dict[str, "AppInfo"]:
-    """Get all available apps in the current environment."""
-    if not args.app_instance:
-        from pynenc.app import Pynenc
+def _discover_apps_from_instance(app: "Pynenc") -> dict[str, "AppInfo"]:
+    """
+    Discover apps using an instantiated app's state backend.
 
+    Best approach: the instance already has the correct config (e.g. custom
+    sqlite_db_path set via the builder or config file).
+
+    :param Pynenc app: The live application instance.
+    :return: Dictionary mapping app_id to AppInfo.
+    """
+    from pynenc.app_info import AppInfo as _AppInfo
+
+    try:
+        info = app.state_backend.get_app_info()
+        return {info.app_id: info}
+    except (KeyError, ValueError):
+        pass
+
+    # App info not yet stored — build a minimal entry from the live instance
+    info = _AppInfo.from_app(app)
+    return {info.app_id: info}
+
+
+def _discover_apps_from_config() -> dict[str, "AppInfo"]:
+    """
+    Discover apps using the default state backend configuration.
+
+    Fallback approach when no ``--app`` is provided: relies on config from
+    environment variables or ``pyproject.toml``.
+
+    :return: Dictionary mapping app_id to AppInfo, or empty dict on failure.
+    """
+    from pynenc.app import Pynenc
+
+    try:
         return Pynenc().state_backend.discover_app_infos()
-    return args.app_instance.state_backend.discover_app_infos()
+    except (ValueError, KeyError):
+        return {}
+
+
+def get_all_available_apps(args: PynencCLINamespace) -> dict[str, "AppInfo"]:
+    """
+    Get all available apps in the current environment.
+
+    Two strategies:
+
+    1. **Instance-based** (``--app`` provided): Uses the instantiated app's
+       state backend, which has the correct configuration (custom db path, etc.).
+    2. **Config-based** (no ``--app``): Creates a default ``Pynenc()`` instance
+       and queries its state backend using configuration from environment
+       variables or ``pyproject.toml``.
+    """
+    if args.app_instance:
+        return _discover_apps_from_instance(args.app_instance)
+    return _discover_apps_from_config()

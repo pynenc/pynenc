@@ -76,9 +76,6 @@ def split_metadata(
         new_metadata.backtest_metadata.start_date = date(2024, month, start_day)
         new_metadata.backtest_metadata.end_date = date(2024, month, end_day)
 
-        print(
-            f"Created chunk {i + 1}: {new_metadata.backtest_metadata.start_date} to {new_metadata.backtest_metadata.end_date}"
-        )
         metadata_chunks.append({"metadata": new_metadata})
 
     return metadata_chunks
@@ -125,10 +122,6 @@ def test_parallelize_with_deepcopy() -> None:
 
         # This assertion will fail if all invocations have the same date
         expected_start, expected_end = expected_dates[i]
-
-        print(
-            f"Invocation {i} dates: {metadata.backtest_metadata.start_date} to {metadata.backtest_metadata.end_date}"
-        )
 
         assert metadata.backtest_metadata.start_date == expected_start, (
             f"Invocation {i} has wrong start date: "

@@ -4,7 +4,7 @@ from collections import OrderedDict, defaultdict, deque
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from time import time
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from pynenc.invocation.status import (
     InvocationStatus,
@@ -37,8 +37,11 @@ class MemBlockingControl(BaseBlockingControl):
 
     def __init__(self, app: "Pynenc") -> None:
         self.app = app
+        self._lock = threading.RLock()
         self.waiting_for: dict[InvocationId, set[InvocationId]] = defaultdict(set)
         self.waited_by: dict[InvocationId, set[InvocationId]] = OrderedDict()
+        # Maintained set of "ready" invocations: waited on by others but not waiting themselves
+        self._ready: set[InvocationId] = set()
 
     def waiting_for_results(
         self,
@@ -52,11 +55,17 @@ class MemBlockingControl(BaseBlockingControl):
         :param list[InvocationId] result_invocation_ids: The IDs of the invocations being waited on.
         """
         waiter_id = caller_invocation_id
-        for waited_id in result_invocation_ids:
-            self.waiting_for[waiter_id].add(waited_id)
-            if waited_id not in self.waited_by:
-                self.waited_by[waited_id] = set()
-            self.waited_by[waited_id].add(waiter_id)
+        with self._lock:
+            for waited_id in result_invocation_ids:
+                self.waiting_for[waiter_id].add(waited_id)
+                if waited_id not in self.waited_by:
+                    self.waited_by[waited_id] = set()
+                self.waited_by[waited_id].add(waiter_id)
+                # waited_id is ready if it's not itself waiting
+                if waited_id not in self.waiting_for:
+                    self._ready.add(waited_id)
+            # waiter_id is now waiting, so it can't be ready
+            self._ready.discard(waiter_id)
 
     def release_waiters(self, waited_invocation_id: "InvocationId") -> None:
         """
@@ -64,12 +73,17 @@ class MemBlockingControl(BaseBlockingControl):
 
         :param InvocationId waited_invocation_id: The ID of the invocation that has finished and will no longer block other invocations.
         """
-        for waiter_id in self.waited_by.get(waited_invocation_id, []):
-            self.waiting_for[waiter_id].discard(waited_invocation_id)
-            if not self.waiting_for[waiter_id]:
-                del self.waiting_for[waiter_id]
-        self.waited_by.pop(waited_invocation_id, None)
-        self.waiting_for.pop(waited_invocation_id, None)
+        with self._lock:
+            for waiter_id in self.waited_by.get(waited_invocation_id, []):
+                self.waiting_for[waiter_id].discard(waited_invocation_id)
+                if not self.waiting_for[waiter_id]:
+                    del self.waiting_for[waiter_id]
+                    # waiter_id no longer waiting; if it's waited on, it's now ready
+                    if waiter_id in self.waited_by:
+                        self._ready.add(waiter_id)
+            self.waited_by.pop(waited_invocation_id, None)
+            self.waiting_for.pop(waited_invocation_id, None)
+            self._ready.discard(waited_invocation_id)
 
     def get_blocking_invocations(
         self, max_num_invocations: int
@@ -77,20 +91,22 @@ class MemBlockingControl(BaseBlockingControl):
         """
         Retrieves invocations that are blocking others but are not themselves waiting for any results.
 
+        Uses a maintained ready set for O(1) lookup instead of scanning all keys.
+
         :param int max_num_invocations: The maximum number of blocking invocations to retrieve.
-        :return: An iterator over invocations that are blocking others (older firsts).
+        :return: An iterator over invocations that are blocking others.
         :rtype: Iterator["InvocationId"]
         """
-        # Create a snapshot of the keys to avoid mutation during iteration
-        for inv_id in list(self.waited_by.keys()):
-            if inv_id not in self.waiting_for:
-                if self.app.orchestrator.get_invocation_status(
-                    inv_id
-                ).is_available_for_run():
-                    max_num_invocations -= 1
-                    yield inv_id
-                    if max_num_invocations == 0:
-                        return
+        with self._lock:
+            candidates = list(self._ready)
+        for inv_id in candidates:
+            if self.app.orchestrator.get_invocation_status(
+                inv_id
+            ).is_available_for_run():
+                max_num_invocations -= 1
+                yield inv_id
+                if max_num_invocations == 0:
+                    return
 
 
 class ArgPair:
@@ -99,14 +115,16 @@ class ArgPair:
     def __init__(self, key: str, value: Any) -> None:
         self.key = key
         self.value = value
+        self._hash: int | None = None
 
     def __hash__(self) -> int:
-        """Generate a hash that works with serialized values"""
-        # For string values (like serialized JSON), use the string value directly
-        if isinstance(self.value, str):
-            return hash((self.key, self.value))
-        # For other types, use pickle for consistent hashing
-        return hash((self.key, pickle.dumps(self.value)))
+        """Generate a hash that works with serialized values, cached after first call."""
+        if self._hash is None:
+            if isinstance(self.value, str):
+                self._hash = hash((self.key, self.value))
+            else:
+                self._hash = hash((self.key, pickle.dumps(self.value)))
+        return self._hash
 
     def __eq__(self, other: Any) -> bool:
         """Equality check that works with serialized values"""
@@ -296,7 +314,7 @@ class MemOrchestrator(BaseOrchestrator):
 
     def get_invocation_ids_paginated(
         self,
-        task_id: Optional["TaskId"] = None,
+        task_id: "TaskId | None" = None,
         statuses: list[InvocationStatus] | None = None,
         limit: int = 100,
         offset: int = 0,
@@ -338,7 +356,7 @@ class MemOrchestrator(BaseOrchestrator):
 
     def count_invocations(
         self,
-        task_id: Optional["TaskId"] = None,
+        task_id: "TaskId | None" = None,
         statuses: list[InvocationStatus] | None = None,
     ) -> int:
         """
