@@ -2,7 +2,7 @@
 :alt: Pynenc
 :align: center
 :height: 90px
-:class: hero-logo
+:class: hero-logo no-scaled-link
 :::
 
 # Pynenc
