@@ -27,6 +27,7 @@
     <a href="https://github.com/pynenc/pynenc/stargazers">
         <img src="https://img.shields.io/github/stars/pynenc/pynenc?style=social" alt="GitHub Repo stars">
     </a>
+    <a href="https://codspeed.io/pynenc/pynenc?utm_source=badge"><img src="https://img.shields.io/endpoint?url=https://codspeed.io/badge.json" alt="CodSpeed"/></a>
     <a href="https://github.com/pynenc/pynenc/network/members">
         <img src="https://img.shields.io/github/forks/pynenc/pynenc?style=social" alt="GitHub forks">
     </a>

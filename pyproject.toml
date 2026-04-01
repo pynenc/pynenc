@@ -63,6 +63,7 @@ pynenc = "pynenc.__main__:main"
 [dependency-groups]
 dev = [
     "black==23.11.0",
+    "pytest-codspeed>=4.3.0",
 ]
 docs = [
     "sphinx>=8.0,<9",
