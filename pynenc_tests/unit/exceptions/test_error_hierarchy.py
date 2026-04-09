@@ -67,12 +67,9 @@ from pynenc.exceptions import (
     ],
     ids=lambda x: x.__name__ if isinstance(x, type) else None,
 )
-def test_pynenc_exception_hierarchy(
-    exc_cls: type, parents: list[type]
-) -> None:
+def test_pynenc_exception_hierarchy(exc_cls: type, parents: list[type]) -> None:
     """Every pynenc exception must be a subclass of its documented parents."""
     for parent in parents:
         assert issubclass(exc_cls, parent), (
             f"{exc_cls.__name__} is not a subclass of {parent.__name__}"
         )
-

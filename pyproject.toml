@@ -112,6 +112,9 @@ lint.ignore = [
     # "B008",  # do not perform function calls in argument defaults
     "C901",  # too complex
     # "W191", # indentation contains tabs
+    "UP040", # type alias uses TypeAlias annotation instead of type keyword
+    "UP046", # generic class uses Generic subclass instead of type parameters
+    "UP047", # generic function should use type parameters
 ]
 
 [tool.mypy]

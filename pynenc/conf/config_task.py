@@ -238,9 +238,7 @@ class ConfigTask(ConfigPynencBase):
         """:return: a new options from a dictionary"""
         return json.loads(options_json, object_pairs_hook=options_deserializer)
 
-    def get_extra_qualifiers(
-        self, config_cls: type["ConfigRoot"]
-    ) -> list[str] | None:
+    def get_extra_qualifiers(self, config_cls: type["ConfigRoot"]) -> list[str] | None:
         return [self.task_id.config_key]
 
     def get_extra_env_keys(

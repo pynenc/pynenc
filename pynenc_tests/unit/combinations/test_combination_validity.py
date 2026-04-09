@@ -23,6 +23,7 @@ from pynenc_tests.integration.combinations.conftest import (
 # Helper: class-to-expected-family lookup
 # ---------------------------------------------------------------------------
 
+
 def _expected_family(components: AppComponents) -> BackendFamily:
     """Derive the expected BackendFamily purely from the component classes.
 

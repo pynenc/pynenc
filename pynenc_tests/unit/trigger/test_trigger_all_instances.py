@@ -285,8 +285,9 @@ def test_distributed_cron_execution(trigger: "BaseTrigger") -> None:
         with patch.object(
             CronCondition,
             "is_satisfied_by",
-            side_effect=lambda ctx: ctx.last_execution == time1
-            and ctx.timestamp == time3,
+            side_effect=lambda ctx: (
+                ctx.last_execution == time1 and ctx.timestamp == time3
+            ),
         ):
             assert (
                 trigger._should_trigger_cron_condition(cron_condition, time3)
