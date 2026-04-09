@@ -9,6 +9,8 @@ import threading
 import time
 from typing import TYPE_CHECKING
 
+import pytest
+
 from pynenc.builder import PynencBuilder
 from pynenc.runner.thread_runner import ThreadRunner
 from pynenc_tests.conftest import check_all_status_transitions
@@ -63,6 +65,7 @@ def child_task(family_id: str) -> None:
     time.sleep(0.02)
 
 
+@pytest.mark.slow
 def test_complex_timeline(pynmon_client: "PynmonClient") -> None:
     """Test The complex timeline."""
     # Purge any existing data

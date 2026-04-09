@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 logger = create_test_logger(__name__)
 
 
+@pytest.mark.slow
 def test_batch_parallelization_overhead(task_process_large_shared_arg: Task) -> None:
     """
     Test that client_data enables fast parallel start for large shared arguments.
@@ -74,6 +75,7 @@ def test_batch_parallelization_overhead(task_process_large_shared_arg: Task) -> 
     )
 
 
+@pytest.mark.slow
 def test_client_data_effect_on_task_start(task_process_large_shared_arg: Task) -> None:
     """
     Test that client_data speeds up task start time for large arguments.

@@ -1,6 +1,5 @@
 import importlib
 import json
-import os
 from enum import StrEnum, auto
 from typing import Any, TypeVar, TYPE_CHECKING
 
@@ -11,6 +10,8 @@ from pynenc.conf.constants import ENV_PREFIX, ENV_SEPARATOR
 from pynenc.exceptions import RetryError
 
 if TYPE_CHECKING:
+    from cistell.root import ConfigRoot
+
     from pynenc.identifiers.task_id import TaskId
 
 
@@ -237,37 +238,18 @@ class ConfigTask(ConfigPynencBase):
         """:return: a new options from a dictionary"""
         return json.loads(options_json, object_pairs_hook=options_deserializer)
 
-    # SPECIFIC CONFIG FOR TASK OPTIONS, SO IT CAN BE INCLUDED IN ENV VARS, CONFIG FILES or TASK decorator
+    def get_extra_qualifiers(
+        self, config_cls: type["ConfigRoot"]
+    ) -> list[str] | None:
+        return [self.task_id.config_key]
 
-    def init_config_value_key_from_mapping(
-        self, source: str, config_id: str, key: str, mapping: dict, conf_mapping: dict
-    ) -> None:
-        super().init_config_value_key_from_mapping(
-            source, config_id, key, mapping, conf_mapping
+    def get_extra_env_keys(
+        self, field_name: str, config_cls: type["ConfigRoot"]
+    ) -> list[str] | None:
+        task_env_key = (
+            f"{ENV_PREFIX}{ENV_SEPARATOR}"
+            f"{self.__class__.__name__.upper()}{ENV_SEPARATOR}"
+            f"{self.task_id.module.upper()}#{self.task_id.func_name.upper()}"
+            f"{ENV_SEPARATOR}{field_name.upper()}"
         )
-        task_key = f"{source}##{config_id}##{self.task_id.config_key}##{key}"
-        # task_id specific mapping always within task config level
-        # Config files use dot notation: "module_name.task_name"
-        task_config_key = self.task_id.config_key
-        if task_key not in self._mapped_keys and task_config_key in conf_mapping:
-            if key in conf_mapping[task_config_key]:
-                setattr(self, key, conf_mapping[task_config_key][key])
-                self._mapped_keys.add(task_key)
-
-    def init_config_value_from_env_vars(
-        self, config_cls: type[ConfigPynencBase]
-    ) -> None:
-        super().init_config_value_from_env_vars(config_cls)
-        # specific env vars for task options
-        # Env vars use "#" between module and func: MODULE#FUNC__SETTING
-        config_key = f"{ENV_PREFIX}{ENV_SEPARATOR}{self.__class__.__name__.upper()}{ENV_SEPARATOR}"
-        task_key = (
-            config_key
-            + self.task_id.module.upper()
-            + "#"
-            + self.task_id.func_name.upper()
-        )
-        for key in self.config_cls_to_fields.get(config_cls.__name__, []):
-            env_key = f"{task_key}{ENV_SEPARATOR}{key.upper()}"
-            if env_key in os.environ:
-                setattr(self, key, os.environ[env_key])
+        return [task_env_key]

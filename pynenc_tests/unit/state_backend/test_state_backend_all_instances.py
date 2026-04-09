@@ -166,21 +166,28 @@ def test_add_and_get_ordered_histories(app_instance: "Pynenc") -> None:
     invocation_id = InvocationId("inv-xyz")
     runner_context_id = "test-runner-id"
 
+    base_time = datetime(2026, 1, 1, tzinfo=UTC)
+
     hist1 = InvocationHistory(
         invocation_id=invocation_id,
         status_record=InvocationStatusRecord(status=InvocationStatus.REGISTERED),
         runner_context_id=runner_context_id,
     )
+    hist1._timestamp = base_time
+
     hist2 = InvocationHistory(
         invocation_id=invocation_id,
         status_record=InvocationStatusRecord(status=InvocationStatus.RUNNING),
         runner_context_id=runner_context_id,
     )
+    hist2._timestamp = base_time + timedelta(seconds=1)
+
     hist3 = InvocationHistory(
         invocation_id=invocation_id,
         status_record=InvocationStatusRecord(status=InvocationStatus.FAILED),
         runner_context_id=runner_context_id,
     )
+    hist3._timestamp = base_time + timedelta(seconds=2)
 
     backend._add_histories([invocation_id], hist1)
     backend._add_histories([invocation_id], hist3)

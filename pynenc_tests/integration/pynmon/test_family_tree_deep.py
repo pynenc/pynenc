@@ -207,6 +207,7 @@ def cleanup_temp_db() -> Generator[None, None, None]:
             pass
 
 
+@pytest.mark.slow
 def test_deep_family_tree(pynmon_client: "PynmonClient") -> None:
     """Generate a deep randomised family tree and verify the timeline renders.
 

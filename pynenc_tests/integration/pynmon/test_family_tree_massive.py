@@ -161,6 +161,7 @@ def cleanup_temp_db() -> Generator[None, None, None]:
             pass
 
 
+@pytest.mark.slow
 def test_massive_family_tree_should_truncate_beyond_limits(
     pynmon_client: "PynmonClient",
 ) -> None:

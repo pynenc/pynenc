@@ -125,6 +125,10 @@ def test_basic_running_concurrency_check(app_fixture: "Pynenc") -> None:
 def test_running_concurrency_no_reroute(app_fixture: "Pynenc") -> None:
     """
     Test that concurrency control without reroute marks blocked invocations as CONCURRENCY_CONTROLLED_FINAL.
+
+    Uses a 1.0s task sleep to give SQLite backends enough margin: processing all
+    5 invocations through the concurrency gate takes ~300ms on SQLite; the first
+    task must still be running when the last invocation reaches the gate.
     """
     app_fixture.purge()
 
@@ -137,11 +141,11 @@ def test_running_concurrency_no_reroute(app_fixture: "Pynenc") -> None:
 
     logger.info("Testing concurrency control without reroute")
 
-    # Create multiple invocations
-    invocations = [sleep_with_running_concurrency_no_reroute(0.3) for _ in range(5)]
+    # Create multiple invocations — 1.0s sleep gives SQLite enough headroom
+    invocations = [sleep_with_running_concurrency_no_reroute(1.0) for _ in range(5)]
 
-    # Give runner time to process (task sleeps 0.3s + runner overhead)
-    time.sleep(0.8)
+    # Give runner time to process: task sleeps 1.0s + runner overhead
+    time.sleep(1.5)
 
     # Check statuses - only one should have run (SUCCESS), others should be CONCURRENCY_CONTROLLED_FINAL
     statuses = [

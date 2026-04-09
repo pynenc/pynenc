@@ -191,6 +191,8 @@ def test_set_pynenc_exceptions(
             "from_status": InvocationStatus.REGISTERED,
             "to_status": InvocationStatus.RUNNING,
             "allowed_statuses": {InvocationStatus.PENDING},
+            "runner_cls": "FakeRunner",
+            "backend_names": ["FakeBackend"],
             "previous_status_record": InvocationStatusRecord(
                 status=InvocationStatus.PENDING
             ),

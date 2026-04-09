@@ -221,7 +221,7 @@ class PynencBuilder:
         raise AttributeError(
             f"'{self.__class__.__name__}' has no attribute '{name}'. "
             f"Available plugin methods: [{available}]. "
-            f"Install a backend plugin (pynenc-redis, pynenc-mongodb, pynenc-rabbitmq) to add more."
+            f"Install a backend plugin (pynenc-redis, pynenc-mongodb, pynenc-rabbitmq, pynenc-rustvello) to add more."
         )
 
     def __dir__(self) -> list[str]:

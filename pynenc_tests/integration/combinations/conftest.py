@@ -1,6 +1,7 @@
 import multiprocessing
 from collections.abc import Generator
 from dataclasses import dataclass
+from enum import Enum
 from typing import TYPE_CHECKING
 
 import pytest
@@ -26,7 +27,27 @@ if TYPE_CHECKING:
     from pynenc.task import Task
 
 
-# Replace namedtuple with a typed frozen dataclass that exposes combination_id
+class BackendFamily(Enum):
+    """Identifies the storage family of a component set.
+
+    Using an explicit enum avoids the class-name string-sniffing that caused
+    ``"SQLite" in "RustSqliteStateBackend"`` to silently return ``False``
+    (case mismatch) and mis-classify Rust-SQLite combinations as in-memory.
+    """
+
+    MEM = "Mem"
+    SQLITE = "SQLite"
+
+    @property
+    def label(self) -> str:
+        """Human-readable label used in test IDs."""
+        return self.value
+
+    @property
+    def is_sqlite(self) -> bool:
+        return self == BackendFamily.SQLITE
+
+
 @dataclass(frozen=True)
 class AppComponents:
     client_data_store: type
@@ -36,22 +57,22 @@ class AppComponents:
     trigger: type
     serializer: type
     runner: type
-
-    @property
-    def backend_type(self) -> str:
-        """Determine backend type from component classes."""
-        return "SQLite" if "SQLite" in self.state_backend.__name__ else "Mem"
+    family: BackendFamily
 
     @property
     def combination_id(self) -> str:
-        """Compute a stable identifier for the component combination in columnar format."""
-        backend = self.backend_type
+        """Stable identifier used as the pytest parametrize ID."""
         runner = self.runner.__name__.replace("Runner", "")
         serializer = self.serializer.__name__.replace("Serializer", "")
-        return f"{backend} {runner} {serializer}"
+        return f"{self.family.label} {runner} {serializer}"
 
 
-# Define component class tuples for cleaner code
+# ---------------------------------------------------------------------------
+# Component class bundles — one tuple per backend family.
+# Each tuple matches the AppComponents field order:
+#   (client_data_store, broker, orchestrator, state_backend, trigger)
+# ---------------------------------------------------------------------------
+
 MEM_CLASSES = (
     MemClientDataStore,
     MemBroker,
@@ -87,8 +108,16 @@ def build_test_combinations() -> list[AppComponents]:
     for i, runner_cls in enumerate(runners):
         serializer_cls = serializers[i % len(serializers)]
         if runner_cls.mem_compatible():
-            combinations.append(AppComponents(*MEM_CLASSES, serializer_cls, runner_cls))
-        combinations.append(AppComponents(*SQLITE_CLASSES, serializer_cls, runner_cls))
+            combinations.append(
+                AppComponents(
+                    *MEM_CLASSES, serializer_cls, runner_cls, BackendFamily.MEM
+                )
+            )
+        combinations.append(
+            AppComponents(
+                *SQLITE_CLASSES, serializer_cls, runner_cls, BackendFamily.SQLITE
+            )
+        )
     return combinations
 
 
@@ -138,16 +167,8 @@ def app_combination_instance(
     monkeypatch.setenv("PYNENC__RUNNER_LOOP_SLEEP_TIME_SEC", "0.01")
     monkeypatch.setenv("PYNENC__INVOCATION_WAIT_RESULTS_SLEEP_TIME_SEC", "0.01")
 
-    # Set shared SQLite database path for SQLite components
-    if any(
-        cls.__name__.startswith("SQLite")
-        for cls in [
-            components.client_data_store,
-            components.broker,
-            components.orchestrator,
-            components.state_backend,
-        ]
-    ):
+    # Set shared SQLite database path for SQLite-family combinations.
+    if components.family.is_sqlite:
         monkeypatch.setenv("PYNENC__SQLITE_DB_PATH", temp_sqlite_db_path)
 
     return Pynenc()
@@ -181,6 +202,9 @@ def replace_tasks_app(app: Pynenc) -> None:
     """Replace the .app attribute for all tasks in tasks and tasks_async modules.
 
     Also clears the cached `conf` property so tasks pick up the new app's config.
+    Registers each task in the new app's ``_tasks`` dict so that Rust-backed
+    runners (which build a fixed task registry at startup from ``app.tasks``)
+    can discover them.
     """
     for mod in [tasks, tasks_async]:
         for attr in dir(mod):
@@ -190,6 +214,9 @@ def replace_tasks_app(app: Pynenc) -> None:
                 obj.app = app
                 # Reset conf so it's re-computed with new app's config_values
                 obj._conf = None
+                # Register in the new app so Rust runners find the task
+                if hasattr(obj, "task_id"):
+                    app._tasks[obj.task_id] = obj
 
 
 @pytest.fixture(scope="function")
