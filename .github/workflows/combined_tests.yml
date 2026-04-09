@@ -18,7 +18,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11.7"
+          python-version: "3.12"
 
       - name: Cache uv
         uses: actions/cache@v4
@@ -30,10 +30,7 @@ jobs:
         run: uv sync --extra monitor --extra tests
 
       - name: Run unit tests with coverage
-        run: uv run coverage run -m pytest pynenc_tests/unit
-
-      - run: uv run coverage report
-      - run: uv run coverage html --show-contexts --title "Unit Test Coverage for ${{ github.sha }}"
+        run: uv run pytest pynenc_tests/unit --cov --cov-report=html:htmlcov --cov-report=term
 
       - name: Upload unit test coverage HTML
         uses: actions/upload-artifact@v4
@@ -54,7 +51,7 @@ jobs:
 
   integration-tests:
     runs-on: ubuntu-latest
-    container: python:3.11.7
+    container: python:3.12
     steps:
       - uses: actions/checkout@v4
 
@@ -72,11 +69,8 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra monitor --extra tests
 
-      - name: Run integration tests with coverage
-        run: uv run coverage run -m pytest pynenc_tests/integration
-
-      - run: uv run coverage report
-      - run: uv run coverage html --show-contexts --title "Integration Test Coverage for ${{ github.sha }}"
+      - name: Run integration tests with coverage (parallel)
+        run: uv run pytest pynenc_tests/integration -n auto --dist loadfile --cov --cov-report=html:htmlcov --cov-report=term -m "not slow"
 
       - name: Upload integration test coverage HTML
         uses: actions/upload-artifact@v4
@@ -95,8 +89,42 @@ jobs:
           name: coverage-data-integration
           path: coverage.integration
 
+  slow-tests:
+    runs-on: ubuntu-latest
+    container: python:3.12
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-${{ hashFiles('pyproject.toml') }}
+
+      - name: Install dependencies
+        run: uv sync --extra monitor --extra tests
+
+      - name: Run slow tests with coverage
+        run: uv run pytest pynenc_tests/integration -n auto --dist loadfile --cov --cov-report=term -m "slow"
+
+      - name: Prepare slow coverage file for upload
+        run: |
+          cp .coverage coverage.slow
+          ls -la coverage.slow
+
+      - name: Upload slow test coverage data
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-data-slow
+          path: coverage.slow
+
   all-tests-completed:
-    needs: [unit-tests, integration-tests]
+    needs: [unit-tests, integration-tests, slow-tests]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -108,7 +136,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11.7"
+          python-version: "3.12"
 
       - name: Install dependencies
         run: uv sync --extra monitor --extra tests
@@ -124,7 +152,7 @@ jobs:
         run: find . -type f -name 'coverage.*'
 
       - name: Combine coverage data
-        run: uv run coverage combine coverage.unit coverage.integration
+        run: uv run coverage combine coverage.unit coverage.integration coverage.slow
 
       - run: uv run coverage report
       - run: uv run coverage html --show-contexts --title "Combined Test Coverage"
