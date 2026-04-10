@@ -182,6 +182,14 @@ def app(app_combination_instance: Pynenc) -> Generator[Pynenc, None, None]:
     :param Pynenc app_combination_instance: The parametrized app instance created by the core fixture.
     :return: Yields the Pynenc instance for the test and performs post-test cleanup.
     """
+    # Eagerly initialize all lazy components while still single-threaded.
+    # Tests spawn runner threads that access these concurrently; without this,
+    # two threads can race on the lazy property and create separate instances.
+    _ = app_combination_instance.orchestrator
+    _ = app_combination_instance.broker
+    _ = app_combination_instance.state_backend
+    _ = app_combination_instance.serializer
+
     yield app_combination_instance
 
     # Each test is isolated (unique app_id + temp DB), so teardown is fire-and-forget.
