@@ -345,9 +345,11 @@ class MemOrchestrator(BaseOrchestrator):
         # Sort by status timestamp (newest first) for consistent pagination
         sorted_ids = sorted(
             candidates,
-            key=lambda inv_id: self.invocation_status_record.get(
-                inv_id, InvocationStatusRecord(InvocationStatus.REGISTERED)
-            ).timestamp,
+            key=lambda inv_id: (
+                self.invocation_status_record.get(
+                    inv_id, InvocationStatusRecord(InvocationStatus.REGISTERED)
+                ).timestamp
+            ),
             reverse=True,
         )
 

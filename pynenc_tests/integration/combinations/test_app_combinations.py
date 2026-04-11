@@ -243,10 +243,19 @@ def test_runner_kills_and_reroutes_running_invocation_on_stop(task_sleep: Task) 
     app.runner.stop_runner_loop()
     thread.join(timeout=10)
 
-    statuses = [
-        h.status_record.status
-        for h in app.state_backend.get_history(invocation.invocation_id)
-    ]
+    # Poll for REROUTED: the state write races with the runner thread exit,
+    # especially on SQLite where REROUTED is written after the join returns.
+    ini = time()
+    statuses: list = []
+    while InvocationStatus.REROUTED not in statuses:
+        assert time() - ini < 10, "REROUTED not written within 10s of thread join"
+        statuses = [
+            h.status_record.status
+            for h in app.state_backend.get_history(invocation.invocation_id)
+        ]
+        if InvocationStatus.REROUTED not in statuses:
+            sleep(0.05)
+
     assert InvocationStatus.RUNNING in statuses
     assert InvocationStatus.KILLED in statuses
     assert InvocationStatus.REROUTED in statuses
@@ -256,15 +265,10 @@ def test_runner_kills_and_reroutes_running_invocation_on_stop(task_sleep: Task) 
 def _subprocess_runner_main() -> None:
     """Entry point for subprocess runner worker in real signal tests."""
     from pynenc import Pynenc
-    from pynenc_tests.integration.combinations import tasks, tasks_async
+    from pynenc_tests.integration.combinations.conftest import replace_tasks_app
 
     app = Pynenc()
-    for mod in (tasks, tasks_async):
-        for attr in dir(mod):
-            obj = getattr(mod, attr)
-            if hasattr(obj, "app"):
-                obj.app = app
-                obj.__dict__.pop("conf", None)
+    replace_tasks_app(app)
     app.runner.run()
 
 

@@ -189,9 +189,9 @@ def compute_sub_lanes(
         # Sort by first entry timestamp
         sorted_invs = sorted(
             invocations,
-            key=lambda inv: inv.sorted_entries[0].timestamp
-            if inv.entries
-            else datetime.max,
+            key=lambda inv: (
+                inv.sorted_entries[0].timestamp if inv.entries else datetime.max
+            ),
         )
 
         sub_lanes: list[SubLaneOccupancy] = []

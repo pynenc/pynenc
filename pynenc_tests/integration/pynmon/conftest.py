@@ -189,7 +189,7 @@ def pynmon_server(request: "FixtureRequest") -> "Generator[str, None, None]":
     server_thread.start()
 
     # Wait for server to start and verify it's responding
-    max_retries = 20  # Increased from 10 for slower CI
+    max_retries = 50
     for i in range(max_retries):
         # Check if server thread encountered an error
         if server_error is not None:
@@ -198,8 +198,8 @@ def pynmon_server(request: "FixtureRequest") -> "Generator[str, None, None]":
             ) from server_error
 
         try:
-            time.sleep(1)  # Increased from 0.5 for CI
-            response = requests.get(f"http://127.0.0.1:{port}/", timeout=5)
+            time.sleep(0.1)
+            response = requests.get(f"http://127.0.0.1:{port}/", timeout=2)
             if response.status_code == 200:
                 logger.info(f"Server started successfully on port {port}")
                 break

@@ -131,6 +131,7 @@ def get_test_config(
 MIN_CPUS_FOR_PERFORMANCE_TEST = 4
 
 
+@pytest.mark.slow
 def test_distributed_cpu_work_performance(task_distribute_cpu_work: Task) -> None:
     """
     Test the performance of distribute_cpu_work using parallelize with a CPU multiplier.

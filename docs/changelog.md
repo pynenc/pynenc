@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-04-08
+
+### Breaking
+
+- **Dropped Python 3.11 support**: `requires-python` bumped from `>=3.11.6` to `>=3.12`
+
+### Changed
+
+- **cistell dependency**: updated from `cistell>=0.0.7` to `cistell>=0.1.2`
+- **ConfigTask**: simplified task-specific config resolution using cistell 0.1.2's `extra_qualifiers` and `extra_env_keys` hooks
+
+### Fixed
+
+- **test_add_and_get_ordered_histories**: fixed flaky timestamp collision by using explicit timestamps
+
+### CI/Testing
+
+- **Parallel test execution**: added `pytest-xdist` and `pytest-cov`, integration tests now run with `-n auto --dist loadfile`
+- **Slow test markers**: tagged 7 performance/pynmon tests with `@pytest.mark.slow`; main CI runs `-m "not slow"` for faster feedback
+- **Slow tests job**: added a separate parallel CI job that runs slow tests and merges coverage into the combined report
+- **Pynmon fixture optimization**: reduced server startup sleep and increased retry count for faster CI
+- **Dropped Python 3.11 from compatibility matrix**: `test_compatibility.yml` now tests 3.12+ only
+- **New unit tests**: added `test_combination_validity.py` and `test_error_hierarchy.py`
+
 ## [0.1.1] - 2026-03-21
 
 ### Added

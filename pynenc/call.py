@@ -14,6 +14,7 @@ Key components:
 """
 
 import hashlib
+import json
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, Generic
 
@@ -30,12 +31,33 @@ if TYPE_CHECKING:
 
 
 def compute_args_id(serialized_args: dict[str, str]) -> str:
-    """Compute deterministic argument hash from serialized form."""
+    """Compute a deterministic hash of a call's serialized arguments.
+
+    This is the canonical pynenc implementation. For each key (in sorted
+    order) the SHA256 hasher is updated with the bytes::
+
+        JSON(key) + b"=" + JSON(value) + b";"
+
+    where JSON denotes ``json.dumps(s, ensure_ascii=False)``.  This format
+    matches rustvello's Rust implementation exactly, enabling heterogeneous
+    clusters (Python workers + Rust workers) to agree on every invocation's
+    ``args_id``.
+
+    The ``pynenc-rustvello`` plugin (and any future Rust/Go/JS binding) must
+    produce byte-identical output for the same input — enforced by
+    cross-system tests, not by importing rustvello here.
+    """
     if not serialized_args:
         return "no_args"
-    sorted_items = sorted(serialized_args.items())
-    args_str = "".join([f"{k}:{v}" for k, v in sorted_items])
-    return hashlib.sha256(args_str.encode()).hexdigest()
+    hasher = hashlib.sha256()
+    for k in sorted(serialized_args.keys()):
+        ek = json.dumps(k, ensure_ascii=False)
+        ev = json.dumps(serialized_args[k], ensure_ascii=False)
+        hasher.update(ek.encode("utf-8"))
+        hasher.update(b"=")
+        hasher.update(ev.encode("utf-8"))
+        hasher.update(b";")
+    return hasher.hexdigest()
 
 
 class Call(Generic[Params, Result]):
