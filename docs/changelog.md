@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - **Fix `pynenc monitor` crash during app hydration**: broadened exception handling in `import_app.py` module scanning so that lazy-loading modules (e.g. `six.moves` raising `ModuleNotFoundError` for `_gdbm`) no longer crash the entire discovery flow. Expected exceptions (`ImportError`, `AttributeError`, `TypeError`) are silently skipped; unexpected ones are logged at debug/warning level so they surface for debugging without crashing the monitor. This allows `Pynenc.from_info()` config-based fallback to execute when direct import fails. Improved `pynenc monitor` CLI output with actionable error hints.
 
+- **Fix `pynenc monitor` invocations tab crash**: `extract_module_info` was using `app.__module__` which always resolves to `"pynenc.app"` (where the class is defined) instead of the user module where `app = Pynenc()` was written. This caused `AppInfo` to store the wrong module name in the database, making `_import_app_from_module` fail when the monitor later tried to deserialize invocations. Rewrote `extract_module_info` to scan loaded user modules by identity and return a 3-tuple `(module_name, module_filepath, app_variable)`. Updated `AppInfo.from_app` to use the discovered module name. Also ensured CWD is on `sys.path` in `start_monitor_command` so user task modules are importable when running via the `pynenc` entry point.
+
 ### Changed
 
 - **CI: unlocked-deps test job**: added a CI job that resolves dependencies without the lock file (`uv sync --no-lock`) to catch transitive dependency breakage before downstream users do

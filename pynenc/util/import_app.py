@@ -16,7 +16,6 @@ Key components:
 
 import importlib
 import importlib.util
-import inspect
 import logging
 import os
 import sys
@@ -226,31 +225,84 @@ def find_app_instance(app_spec: str | None) -> Pynenc:
     return _find_pynenc_in_module(module)
 
 
-def extract_module_info(app: "Pynenc") -> tuple[str | None, str | None]:
+def _find_app_in_user_modules(
+    app: "Pynenc",
+) -> tuple[str, str, str] | None:
     """
-    Extract module filepath and app variable name from a Pynenc instance.
+    Scan loaded non-pynenc modules for one that holds ``app`` as a top-level variable.
+
+    The ``Pynenc`` class is defined in ``pynenc.app``, so ``app.__module__``
+    always returns ``"pynenc.app"`` — not the user module where
+    ``app = Pynenc()`` was written.  This helper finds the correct user module
+    by identity-checking attributes across all loaded modules.
+
+    :param Pynenc app: The application instance to locate.
+    :return: ``(module_name, module_filepath, variable_name)`` or ``None``.
+    """
+    for mod_name, mod in list(sys.modules.items()):
+        if mod_name.startswith("_") or mod_name == "__main__":
+            continue
+        if mod_name.startswith("pynenc.") or mod_name == "pynenc":
+            continue
+        if not hasattr(mod, "__file__") or mod.__file__ is None:
+            continue
+        if variable := _find_app_variable_in_module(mod, app):
+            return mod_name, mod.__file__, variable
+    return None
+
+
+def _find_app_variable_in_module(module: types.ModuleType, app: "Pynenc") -> str | None:
+    """
+    Return the public attribute name in ``module`` whose value is ``app``.
+
+    :param types.ModuleType module: Module to inspect.
+    :param Pynenc app: The instance to match by identity.
+    :return: Attribute name, or ``None`` if not found.
+    """
+    try:
+        names = dir(module)
+    except (ImportError, TypeError):
+        return None
+    for name in names:
+        if name.startswith("_"):
+            continue
+        try:
+            if getattr(module, name) is app:
+                return name
+        except (AttributeError, TypeError, ImportError):
+            continue
+        except Exception:
+            continue
+    return None
+
+
+def extract_module_info(
+    app: "Pynenc",
+) -> tuple[str | None, str | None, str | None]:
+    """
+    Extract module name, filepath, and app variable name from a Pynenc instance.
+
+    Scans loaded user modules to find the one that holds ``app`` as a
+    top-level variable.  Falls back to ``app.__module__`` when no user
+    module claims it (e.g. during unit tests).
 
     :param Pynenc app: Pynenc application instance.
-    :return: Tuple of (module_filepath, app_variable_name).
+    :return: Tuple of (module_name, module_filepath, app_variable_name).
     """
-    module_filepath: str | None = None
-    app_variable: str | None = None
-
     try:
-        if app.__module__ == "__main__":
-            return None, None
+        if result := _find_app_in_user_modules(app):
+            return result
 
-        module = sys.modules.get(app.__module__)
-        if module and hasattr(module, "__file__"):
-            module_filepath = module.__file__
-            for name, val in inspect.getmembers(module):
-                if val is app and not name.startswith("_"):
-                    app_variable = name
-                    break
+        # Fallback: use app.__module__ (may be "pynenc.app" in tests)
+        if app.__module__ != "__main__":
+            module = sys.modules.get(app.__module__)
+            if module and hasattr(module, "__file__"):
+                var_name = _find_app_variable_in_module(module, app)
+                return app.__module__, module.__file__, var_name
     except Exception:
         pass
 
-    return module_filepath, app_variable
+    return None, None, None
 
 
 def _import_app_from_module(app_info: AppInfo) -> Pynenc | None:

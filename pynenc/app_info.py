@@ -58,12 +58,12 @@ class AppInfo:
         """
         from pynenc.util.import_app import extract_module_info
 
-        module_filepath, app_variable = extract_module_info(app)
+        module_name, module_filepath, app_variable = extract_module_info(app)
         return cls(
             app_id=app.app_id,
             config_values=app.config_values,
             config_filepath=app.config_filepath,
-            module=app.__module__,
+            module=module_name or app.__module__,
             module_filepath=module_filepath,
             app_variable=app_variable,
         )

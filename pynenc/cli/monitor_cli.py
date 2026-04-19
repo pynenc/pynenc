@@ -1,5 +1,6 @@
 import argparse
 import importlib.util
+import os
 import sys
 from typing import TYPE_CHECKING
 
@@ -33,6 +34,12 @@ def add_monitor_subparser(subparsers: argparse._SubParsersAction) -> None:
 
 def start_monitor_command(args: PynencCLINamespace) -> None:
     """Execute the monitor command, starting the web interface."""
+    # Ensure CWD is on sys.path so user task modules (e.g. tasks.py) are
+    # importable when the monitor deserializes invocations.
+    cwd = os.getcwd()
+    if cwd not in sys.path:
+        sys.path.insert(0, cwd)
+
     # Check Python version compatibility
     if sys.version_info >= (3, 13):
         print("Error: Pynmon monitoring UI requires Python <3.13")
