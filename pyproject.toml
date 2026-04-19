@@ -63,10 +63,10 @@ pynenc = "pynenc.__main__:main"
 
 [dependency-groups]
 dev = [
-    "black==23.11.0",
+    "black==26.3.1",
 ]
 docs = [
-    "sphinx>=8.0,<9",
+    "sphinx>=8.0,<10",
     "myst-parser>=4.0",
     "furo>=2024",
     "sphinx-copybutton>=0.5.2",

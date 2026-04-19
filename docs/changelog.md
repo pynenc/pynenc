@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - **CI: unlocked-deps test job**: added a CI job that resolves dependencies without the lock file (`uv sync --no-lock`) to catch transitive dependency breakage before downstream users do
 - **Updated `uv.lock`**: upgraded FastAPI 0.118.3 → 0.136.0 and Starlette 0.48.0 → 1.0.0
+- **Dependency bumps**: black 23.11.0 → 26.3.1, sphinx `>=8.0,<9` → `>=8.0,<10`
 
 ## [0.2.0] - 2026-04-08
 
