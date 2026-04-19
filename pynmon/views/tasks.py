@@ -70,13 +70,9 @@ async def tasks_list(request: Request) -> HTMLResponse:
     logger.info(f"Found {len(tasks)} tasks")
 
     return templates.TemplateResponse(
+        request,
         "tasks/list.html",
-        {
-            "request": request,
-            "title": "Tasks Monitor",
-            "app_id": app.app_id,
-            "tasks": tasks,
-        },
+        context={"title": "Tasks Monitor", "app_id": app.app_id, "tasks": tasks},
     )
 
 
@@ -91,11 +87,9 @@ async def refresh_tasks_list(request: Request) -> HTMLResponse:
     logger.info(f"Found {len(tasks)} tasks")
 
     return templates.TemplateResponse(
+        request,
         "tasks/partials/list_content.html",
-        {
-            "request": request,
-            "tasks": tasks,
-        },
+        context={"tasks": tasks},
     )
 
 
@@ -104,9 +98,9 @@ async def task_detail(request: Request, task_id_key: str) -> HTMLResponse:
     """Display detailed information about a specific task."""
     if not task_id_key:
         return templates.TemplateResponse(
+            request,
             "shared/error.html",
-            {
-                "request": request,
+            context={
                 "title": "Missing Task ID",
                 "message": "No task_id was provided. Please check the URL and try again.",
             },
@@ -118,9 +112,9 @@ async def task_detail(request: Request, task_id_key: str) -> HTMLResponse:
     except ValueError as e:
         logger.warning(f"Invalid task ID format: {task_id_key} - {str(e)}")
         return templates.TemplateResponse(
+            request,
             "shared/error.html",
-            {
-                "request": request,
+            context={
                 "title": "Invalid Task ID Format",
                 "message": f"The provided task ID is not properly formatted: {str(e)}",
             },
@@ -141,9 +135,9 @@ async def task_detail(request: Request, task_id_key: str) -> HTMLResponse:
                 f"No task found with ID: {task_id} - {type(e).__name__}: {e}"
             )
             return templates.TemplateResponse(
+                request,
                 "shared/error.html",
-                {
-                    "request": request,
+                context={
                     "title": "Task Not Found",
                     "message": f"No task found with ID: {task_id}",
                 },
@@ -153,9 +147,9 @@ async def task_detail(request: Request, task_id_key: str) -> HTMLResponse:
         if not task:
             logger.warning(f"No task found with ID: {task_id}")
             return templates.TemplateResponse(
+                request,
                 "shared/error.html",
-                {
-                    "request": request,
+                context={
                     "title": "Task Not Found",
                     "message": f"No task found with ID: {task_id}",
                 },
@@ -171,9 +165,9 @@ async def task_detail(request: Request, task_id_key: str) -> HTMLResponse:
 
         logger.info(f"Rendering template with {len(calls)} calls")
         return templates.TemplateResponse(
+            request,
             "tasks/detail.html",
-            {
-                "request": request,
+            context={
                 "title": "Task Details",
                 "app_id": app.app_id,
                 "task": task,
@@ -184,12 +178,9 @@ async def task_detail(request: Request, task_id_key: str) -> HTMLResponse:
     except Exception as e:
         logger.exception(f"Unexpected error in task_detail: {str(e)}")
         return templates.TemplateResponse(
+            request,
             "shared/error.html",
-            {
-                "request": request,
-                "title": "Error",
-                "message": f"An error occurred: {str(e)}",
-            },
+            context={"title": "Error", "message": f"An error occurred: {str(e)}"},
             status_code=500,
         )
     finally:

@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-04-19
+
+### Fixed
+
+- **Fix pynmon Starlette 1.x template rendering crash**: migrated all `TemplateResponse` calls from the deprecated `(name, context_dict)` convention to the request-first `(request, name, context={...})` API. The old calling style was removed in Starlette 1.0, causing `TypeError: unhashable type: dict` on the home page and all other pynmon views. The new API is supported by Starlette 0.28+ so no minimum version bump is needed.
+
+- **Fix `pynenc monitor` crash during app hydration**: broadened exception handling in `import_app.py` module scanning so that lazy-loading modules (e.g. `six.moves` raising `ModuleNotFoundError` for `_gdbm`) no longer crash the entire discovery flow. Expected exceptions (`ImportError`, `AttributeError`, `TypeError`) are silently skipped; unexpected ones are logged at debug/warning level so they surface for debugging without crashing the monitor. This allows `Pynenc.from_info()` config-based fallback to execute when direct import fails. Improved `pynenc monitor` CLI output with actionable error hints.
+
+### Changed
+
+- **CI: unlocked-deps test job**: added a CI job that resolves dependencies without the lock file (`uv sync --no-lock`) to catch transitive dependency breakage before downstream users do
+- **Updated `uv.lock`**: upgraded FastAPI 0.118.3 → 0.136.0 and Starlette 0.48.0 → 1.0.0
+
 ## [0.2.0] - 2026-04-08
 
 ### Breaking

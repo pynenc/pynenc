@@ -128,9 +128,9 @@ async def invocations_list(
     )
 
     return templates.TemplateResponse(
+        request,
         "invocations/list.html",
-        {
-            "request": request,
+        context={
             "title": "Invocations Monitor",
             "app_id": app.app_id,
             "invocations": all_invocations,
@@ -423,9 +423,9 @@ async def invocations_timeline(
         )
 
         return templates.TemplateResponse(
+            request,
             "invocations/timeline.html",
-            {
-                "request": request,
+            context={
                 "title": "Invocations Timeline",
                 "app_id": app.app_id,
                 "svg_content": svg_content,
@@ -449,9 +449,9 @@ async def invocations_timeline(
     except Exception as e:
         logger.exception(f"Error in invocations_timeline: {str(e)}")
         return templates.TemplateResponse(
+            request,
             "shared/error.html",
-            {
-                "request": request,
+            context={
                 "title": "Error",
                 "message": f"An error occurred while generating the timeline: {str(e)}",
             },
@@ -662,9 +662,9 @@ async def invocation_detail(
             f"Rendering invocation detail template in {time.time() - start_time:.2f}s"
         )
         return templates.TemplateResponse(
+            request,
             "invocations/detail.html",
-            {
-                "request": request,
+            context={
                 "title": "Invocation Details",
                 "app_id": app.app_id,
                 "invocation": invocation,
@@ -685,9 +685,9 @@ async def invocation_detail(
     except InvocationNotFoundError:
         logger.warning(f"No invocation found with ID: {invocation_id}")
         return templates.TemplateResponse(
+            request,
             "shared/error.html",
-            {
-                "request": request,
+            context={
                 "title": "Invocation Not Found",
                 "message": f"No invocation found with ID: {invocation_id}",
             },
@@ -696,12 +696,9 @@ async def invocation_detail(
     except Exception as e:
         logger.exception(f"Unexpected error in invocation_detail: {str(e)}")
         return templates.TemplateResponse(
+            request,
             "shared/error.html",
-            {
-                "request": request,
-                "title": "Error",
-                "message": f"An error occurred: {str(e)}",
-            },
+            context={"title": "Error", "message": f"An error occurred: {str(e)}"},
             status_code=500,
         )
     finally:
@@ -913,9 +910,7 @@ async def invocations_table(
     all_invocations = await asyncio.to_thread(_fetch_table_invocations)
 
     return templates.TemplateResponse(
+        request,
         "invocations/partials/table.html",
-        {
-            "request": request,
-            "invocations": all_invocations,
-        },
+        context={"invocations": all_invocations},
     )
