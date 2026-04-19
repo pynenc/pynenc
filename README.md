@@ -42,13 +42,12 @@
 
 Pynenc addresses the complex challenges of task management in distributed environments, offering a robust solution for developers looking to efficiently orchestrate asynchronous tasks across multiple systems. By combining intuitive configuration with advanced features like automatic task prioritization, Pynenc empowers developers to build scalable and reliable distributed applications with ease.
 
-## 🆕 What's New in v0.1.0
+## 🆕 What's New in v0.2.1
 
-- **Plugin Architecture**: Modular backend system with Redis, MongoDB, and RabbitMQ as separate plugins
-- **Invocation State Machine**: Declarative, type-safe status management with ownership tracking and automatic recovery
-- **Runner Heartbeat & Recovery**: Automatic detection of stuck invocations and recovery from inactive runners
-- **Enhanced Monitoring (Pynmon)**: SVG-based timeline visualization, runner monitoring, and workflow tracking
-- **Fluent Builder API**: Extensible `PynencBuilder` with plugin-provided methods for seamless configuration
+- **Pynmon compatibility**: migrated `TemplateResponse` calls to the Starlette 1.x API, fixing crashes on all pynmon views
+- **Monitor stability**: broadened exception handling in app hydration so that lazy-loading modules no longer crash `pynenc monitor`
+- **Invocations tab fix**: `extract_module_info` now correctly resolves the user module instead of the pynenc core module
+- **Dependency bumps**: FastAPI 0.136.0, Starlette 1.0.0, black 26.3.1, sphinx &lt;10
 
 See the [Changelog](https://docs.pynenc.org/changelog.html) for the complete list of changes.
 

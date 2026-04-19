@@ -108,9 +108,7 @@
 
   /* ── Scroll-reveal for grid items and cards ── */
   function setupScrollReveal() {
-    const items = document.querySelectorAll(
-      ".sd-card, .sd-grid-item, article section"
-    );
+    const items = document.querySelectorAll(".sd-card, .sd-grid-item");
     if (!items.length) return;
 
     const observer = new IntersectionObserver(
