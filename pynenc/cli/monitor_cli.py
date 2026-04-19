@@ -1,5 +1,6 @@
 import argparse
 import importlib.util
+import os
 import sys
 from typing import TYPE_CHECKING
 
@@ -33,6 +34,12 @@ def add_monitor_subparser(subparsers: argparse._SubParsersAction) -> None:
 
 def start_monitor_command(args: PynencCLINamespace) -> None:
     """Execute the monitor command, starting the web interface."""
+    # Ensure CWD is on sys.path so user task modules (e.g. tasks.py) are
+    # importable when the monitor deserializes invocations.
+    cwd = os.getcwd()
+    if cwd not in sys.path:
+        sys.path.insert(0, cwd)
+
     # Check Python version compatibility
     if sys.version_info >= (3, 13):
         print("Error: Pynmon monitoring UI requires Python <3.13")
@@ -69,15 +76,23 @@ def start_monitor_command(args: PynencCLINamespace) -> None:
         selected_app = args.app_instance
 
     print(
-        f"Starting monitoring for app: {selected_app.app_id if selected_app else 'None'}"
+        f"Starting monitoring for app: {selected_app.app_id if selected_app else 'auto-discover'}"
     )
-    start_monitor(
-        apps=apps,
-        selected_app=selected_app,
-        host=args.host,
-        port=args.port,
-        log_level=getattr(args, "log_level", None),
-    )
+    try:
+        start_monitor(
+            apps=apps,
+            selected_app=selected_app,
+            host=args.host,
+            port=args.port,
+            log_level=getattr(args, "log_level", None),
+        )
+    except ValueError as exc:
+        print(f"\nError: {exc}\n")
+        print("Hint: make sure the app's state backend is accessible from")
+        print("this environment (e.g. the SQLite DB exists).\n")
+        print("  • Specify the app explicitly:  pynenc --app tasks monitor")
+        print("  • Run with verbose mode for details:  pynenc -v monitor")
+        sys.exit(1)
 
 
 def _check_monitor_dependencies() -> bool:

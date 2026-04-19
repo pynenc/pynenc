@@ -84,7 +84,7 @@ docs:
 	@echo "Building documentation..."
 	rm -rf docs/_build
 	uv sync --all-extras --group docs
-        uv run --group docs python -m sphinx -b html docs docs/_build/html
+	uv run --group docs python -m sphinx -b html docs docs/_build/html
 	@echo "Docs built — open docs/_build/html/index.html in a browser."
 
 .PHONY: docs-serve

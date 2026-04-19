@@ -384,7 +384,8 @@ def hydrate_app_instances(
             else:
                 logger.warning(f"Failed to hydrate app: {app_id}")
         except Exception as e:
-            logger.error(f"Error hydrating app {app_id}: {e}", exc_info=True)
+            logger.warning("Could not hydrate app %s: %s", app_id, e)
+            logger.debug("Hydration traceback for %s:", app_id, exc_info=True)
 
     return instances
 

@@ -192,7 +192,7 @@ async def process_call_detail(
         logger.info(
             f"Rendering call detail template with {len(invocations)} invocations"
         )
-        return templates.TemplateResponse("calls/detail.html", context)
+        return templates.TemplateResponse(request, "calls/detail.html", context=context)
 
     except Exception as e:
         logger.exception(
@@ -220,7 +220,6 @@ def _create_call_detail_context(
     formatted_args, raw_args = format_serialized_arguments(serialized)
 
     return {
-        "request": request,
         "app_id": app.app_id,
         "call": target_call,
         "task": target_task,
@@ -262,9 +261,9 @@ async def call_detail_by_query(request: Request) -> HTMLResponse:
     except Exception as e:
         logger.exception(f"Unhandled exception in call_detail_by_query: {str(e)}")
         return templates.TemplateResponse(
+            request,
             "shared/error.html",
-            {
-                "request": request,
+            context={
                 "title": "Unexpected Error",
                 "message": f"An unexpected error occurred: {str(e)}",
             },

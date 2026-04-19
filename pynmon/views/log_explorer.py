@@ -116,9 +116,9 @@ async def log_explorer(
     app = get_pynenc_instance()
     analysis = await _analyse_logs(app, log) if log.strip() else None
     return templates.TemplateResponse(
+        request,
         "log_explorer/index.html",
-        {
-            "request": request,
+        context={
             "title": "Log Explorer",
             "app_id": app.app_id,
             "log": log,

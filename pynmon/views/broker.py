@@ -20,9 +20,9 @@ async def broker_view(request: Request) -> HTMLResponse:
     }
 
     return templates.TemplateResponse(
+        request,
         "broker/overview.html",
-        {
-            "request": request,
+        context={
             "title": "Broker Monitor",
             "app_id": app.app_id,
             "broker_info": broker_info,
@@ -52,9 +52,9 @@ async def queue_view(
         app.broker.route_invocation(invocation.invocation_id)
 
     return templates.TemplateResponse(
+        request,
         "broker/queue.html",
-        {
-            "request": request,
+        context={
             "title": "Broker Queue",
             "app_id": app.app_id,
             "pending_invocations": pending_invocations,
@@ -72,13 +72,13 @@ async def refresh_broker(request: Request) -> HTMLResponse:
     pending_count = app.broker.count_invocations()
 
     return templates.TemplateResponse(
+        request,
         "broker/partials/info.html",
-        {
-            "request": request,
+        context={
             "broker_info": {
                 "type": app.broker.__class__.__name__,
                 "pending_count": pending_count,
-            },
+            }
         },
     )
 

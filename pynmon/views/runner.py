@@ -36,12 +36,9 @@ async def runners_index(request: Request) -> HTMLResponse:
         runners_info["error"] = str(e)
 
     return templates.TemplateResponse(
+        request,
         "runners.html",
-        {
-            "request": request,
-            "runners_info": runners_info,
-            "app_id": pynenc.app_id,
-        },
+        context={"runners_info": runners_info, "app_id": pynenc.app_id},
     )
 
 
@@ -58,13 +55,15 @@ async def refresh_runners(request: Request) -> HTMLResponse:
             runners = await pynenc.broker.get_runners()
         else:
             return templates.TemplateResponse(
+                request,
                 "components/not_implemented.html",
-                {"request": request, "feature": "Runner listing"},
+                context={"feature": "Runner listing"},
             )
     except Exception as e:
         error = str(e)
 
     return templates.TemplateResponse(
+        request,
         "components/runner_list.html",
-        {"request": request, "runners": runners, "error": error},
+        context={"runners": runners, "error": error},
     )

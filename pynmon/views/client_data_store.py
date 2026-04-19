@@ -34,9 +34,9 @@ async def client_data_view(request: Request) -> HTMLResponse:
             f"Rendering client data store template in {time.time() - start_time:.2f}s"
         )
         return templates.TemplateResponse(
+            request,
             "client_data_store/overview.html",
-            {
-                "request": request,
+            context={
                 "title": "Client Data Store Monitor",
                 "app_id": app.app_id,
                 "client_data_store_info": client_data_store_info,
@@ -45,9 +45,9 @@ async def client_data_view(request: Request) -> HTMLResponse:
     except Exception as e:
         logger.exception(f"Error in client_data_view: {str(e)}")
         return templates.TemplateResponse(
+            request,
             "shared/error.html",
-            {
-                "request": request,
+            context={
                 "title": "Error",
                 "message": f"An error occurred in the client data store view: {str(e)}",
             },
