@@ -132,9 +132,9 @@ async def index(request: Request) -> HTMLResponse:
 
     if not all_apps or not active_app:
         return templates.TemplateResponse(
+            request,
             "critical_error.html",
-            {
-                "request": request,
+            context={
                 "title": "No App Configured",
                 "message": "No Pynenc application is configured for monitoring.",
             },
@@ -156,9 +156,9 @@ async def index(request: Request) -> HTMLResponse:
     registered_tasks = len(active_app.tasks)
 
     return templates.TemplateResponse(
+        request,
         "index.html",
-        {
-            "request": request,
+        context={
             "app_id": active_app.app_id,
             "all_apps": list(all_apps.keys()),
             "components": components,

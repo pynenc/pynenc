@@ -37,12 +37,9 @@ def render_error_response(
     :return: HTMLResponse with error template
     """
     return templates.TemplateResponse(
+        request,
         "shared/error.html",
-        {
-            "request": request,
-            "title": title,
-            "message": message,
-        },
+        context={"title": title, "message": message},
         status_code=status_code,
     )
 

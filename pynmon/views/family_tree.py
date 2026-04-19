@@ -75,9 +75,9 @@ async def invocation_family_tree(
     svg_content = await asyncio.to_thread(_build_svg, invocation_id, expand_ids)
     template = "partials/family_tree_bare.html" if bare else "partials/family_tree.html"
     return templates.TemplateResponse(
+        request,
         template,
-        {
-            "request": request,
+        context={
             "family_tree_svg": svg_content,
         },
     )

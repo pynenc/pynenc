@@ -19,6 +19,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - **test_add_and_get_ordered_histories**: fixed flaky timestamp collision by using explicit timestamps
 
+- **Fix pynmon Starlette 1.x template rendering crash**: migrated all `TemplateResponse` calls from the deprecated `(name, context_dict)` convention to the request-first `(request, name, context={...})` API. The old calling style was removed in Starlette 1.0, causing `TypeError: unhashable type: dict` on the home page and all other pynmon views. The new API is supported by Starlette 0.28+ so no minimum version bump is needed.
+
+- **Fix `pynenc monitor` crash during app hydration**: broadened exception handling in `import_app.py` module scanning so that lazy-loading modules (e.g. `six.moves` raising `ModuleNotFoundError` for `_gdbm`) no longer crash the entire discovery flow. Expected exceptions (`ImportError`, `AttributeError`, `TypeError`) are silently skipped; unexpected ones are logged at debug/warning level so they surface for debugging without crashing the monitor. This allows `Pynenc.from_info()` config-based fallback to execute when direct import fails. Improved `pynenc monitor` CLI output with actionable error hints.
+
 ### CI/Testing
 
 - **Parallel test execution**: added `pytest-xdist` and `pytest-cov`, integration tests now run with `-n auto --dist loadfile`
@@ -27,6 +31,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **Pynmon fixture optimization**: reduced server startup sleep and increased retry count for faster CI
 - **Dropped Python 3.11 from compatibility matrix**: `test_compatibility.yml` now tests 3.12+ only
 - **New unit tests**: added `test_combination_validity.py` and `test_error_hierarchy.py`
+- **CI: unlocked-deps test job**: added a CI job that resolves dependencies without the lock file (`uv sync --no-lock`) to catch transitive dependency breakage before downstream users do
+- **Updated `uv.lock`**: upgraded FastAPI 0.118.3 → 0.136.0 and Starlette 0.48.0 → 1.0.0
 
 ## [0.1.1] - 2026-03-21
 

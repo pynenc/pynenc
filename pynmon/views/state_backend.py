@@ -35,9 +35,9 @@ async def state_backend_view(request: Request) -> HTMLResponse:
             f"Rendering state backend template in {time.time() - start_time:.2f}s"
         )
         return templates.TemplateResponse(
+            request,
             "state_backend/overview.html",
-            {
-                "request": request,
+            context={
                 "title": "State Backend Monitor",
                 "app_id": app.app_id,
                 "state_backend_info": state_backend_info,
@@ -47,9 +47,9 @@ async def state_backend_view(request: Request) -> HTMLResponse:
     except Exception as e:
         logger.exception(f"Error in state_backend_view: {str(e)}")
         return templates.TemplateResponse(
+            request,
             "shared/error.html",
-            {
-                "request": request,
+            context={
                 "title": "Error",
                 "message": f"An error occurred in the state backend view: {str(e)}",
             },

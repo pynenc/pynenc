@@ -51,9 +51,9 @@ async def workflows_list(request: Request) -> HTMLResponse:
         workflows_with_runs = []
 
     return templates.TemplateResponse(
+        request,
         "workflows/list.html",
-        {
-            "request": request,
+        context={
             "title": "Workflows Monitor",
             "app_id": app.app_id,
             "workflows": workflows_with_runs,
@@ -91,11 +91,9 @@ async def refresh_workflows_list(request: Request) -> HTMLResponse:
         workflows_with_runs = []
 
     return templates.TemplateResponse(
+        request,
         "workflows/partials/list_content.html",
-        {
-            "request": request,
-            "workflows": workflows_with_runs,
-        },
+        context={"workflows": workflows_with_runs},
     )
 
 
@@ -120,9 +118,9 @@ async def workflow_runs_list(request: Request) -> HTMLResponse:
         sorted_runs = []
 
     return templates.TemplateResponse(
+        request,
         "workflows/runs.html",
-        {
-            "request": request,
+        context={
             "title": "Workflow Runs",
             "app_id": app.app_id,
             "workflow_runs": sorted_runs,
@@ -151,11 +149,9 @@ async def refresh_workflow_runs_list(request: Request) -> HTMLResponse:
         sorted_runs = []
 
     return templates.TemplateResponse(
+        request,
         "workflows/partials/runs_content.html",
-        {
-            "request": request,
-            "workflow_runs": sorted_runs,
-        },
+        context={"workflow_runs": sorted_runs},
     )
 
 
@@ -186,9 +182,9 @@ async def workflow_detail(request: Request, workflow_type_key: str) -> HTMLRespo
         task_extra = format_task_extra_info(task) if task else None
 
         return templates.TemplateResponse(
+            request,
             "workflows/detail.html",
-            {
-                "request": request,
+            context={
                 "title": "Workflow Details",
                 "app_id": app.app_id,
                 "workflow_type": workflow_type,
@@ -204,9 +200,9 @@ async def workflow_detail(request: Request, workflow_type_key: str) -> HTMLRespo
         )
 
         return templates.TemplateResponse(
+            request,
             "error.html",
-            {
-                "request": request,
+            context={
                 "title": "Error",
                 "app_id": app.app_id,
                 "error_title": "Workflow Not Found",
@@ -243,9 +239,9 @@ async def refresh_workflow_detail(
         task_extra = format_task_extra_info(task) if task else None
 
         return templates.TemplateResponse(
+            request,
             "workflows/partials/detail_content.html",
-            {
-                "request": request,
+            context={
                 "workflow_type": workflow_type,
                 "workflow_runs": sorted_runs,
                 "task": task,

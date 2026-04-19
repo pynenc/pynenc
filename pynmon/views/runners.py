@@ -126,9 +126,9 @@ async def runners_view(request: Request) -> HTMLResponse:
     runner_config = _collect_runner_config(app)
 
     return templates.TemplateResponse(
+        request,
         "runners/overview.html",
-        {
-            "request": request,
+        context={
             "title": "Active Runners",
             "app_id": app.app_id,
             "enriched_runners": enriched_runners,
@@ -157,11 +157,9 @@ async def refresh_runners(request: Request) -> HTMLResponse:
     ]
 
     return templates.TemplateResponse(
+        request,
         "runners/partials/runners_table.html",
-        {
-            "request": request,
-            "enriched_runners": enriched_runners,
-        },
+        context={"enriched_runners": enriched_runners},
     )
 
 
@@ -194,9 +192,9 @@ async def runner_detail(request: Request, runner_id: str) -> HTMLResponse:
         }
 
     return templates.TemplateResponse(
+        request,
         "runners/detail.html",
-        {
-            "request": request,
+        context={
             "title": f"Runner {runner_id[:8]}",
             "app_id": app.app_id,
             "runner_info": runner_info,
@@ -240,9 +238,9 @@ async def atomic_service_timeline(request: Request) -> HTMLResponse:
             )
 
     return templates.TemplateResponse(
+        request,
         "runners/atomic_service_timeline.html",
-        {
-            "request": request,
+        context={
             "title": "Atomic Service Timeline",
             "app_id": app.app_id,
             "timeline_data": timeline_data,

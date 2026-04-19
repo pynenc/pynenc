@@ -317,7 +317,16 @@ def _find_pynenc_by_id_in_module(
             continue
         try:
             attr = getattr(module, attr_name)
-        except (AttributeError, TypeError):
+        except (AttributeError, TypeError, ImportError):
+            continue
+        except Exception as e:
+            logger.debug(
+                "Unexpected %s accessing %s.%s — skipping",
+                type(e).__name__,
+                mod_name,
+                attr_name,
+                exc_info=True,
+            )
             continue
         if isinstance(attr, Pynenc) and attr.app_id == app_id:
             logger.info("Found app %s in module %s", app_id, mod_name)
@@ -340,5 +349,14 @@ def create_app_from_info(app_info: AppInfo) -> Pynenc | None:
     if app := _import_app_from_module(app_info):
         return app
     if app_info.module != "__main__":
-        return _scan_loaded_modules(app_info.app_id)
+        try:
+            return _scan_loaded_modules(app_info.app_id)
+        except (ImportError, AttributeError, TypeError):
+            logger.debug("Module scan failed for %s", app_info.app_id, exc_info=True)
+        except Exception:
+            logger.warning(
+                "Unexpected error scanning modules for %s",
+                app_info.app_id,
+                exc_info=True,
+            )
     return None

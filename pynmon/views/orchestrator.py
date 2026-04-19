@@ -72,9 +72,9 @@ async def orchestrator_view(request: Request) -> HTMLResponse:
     active_runners = await asyncio.to_thread(app.orchestrator.get_active_runners)
 
     return templates.TemplateResponse(
+        request,
         "orchestrator/overview.html",
-        {
-            "request": request,
+        context={
             "title": "Orchestrator Monitor",
             "app_id": app.app_id,
             "orchestrator_info": orchestrator_info,
@@ -99,9 +99,9 @@ async def refresh_orchestrator(request: Request) -> HTMLResponse:
     )
 
     return templates.TemplateResponse(
+        request,
         "orchestrator/partials/stats.html",
-        {
-            "request": request,
+        context={
             "status_counts": status_counts,
             "blocking_invocations": blocking_invocations,
         },
