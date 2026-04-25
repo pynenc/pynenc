@@ -135,7 +135,17 @@ See the [Changelog](https://docs.pynenc.org/changelog.html) for the complete lis
 
 - **Automatic Task Pausing**: Tasks waiting for dependencies are paused, freeing their runner slots. Higher-priority tasks (those with more dependents waiting) run instead, preventing thread-pool exhaustion and deadlocks.
 
-- **Direct Task Execution**: Use `@app.direct_task` for tasks that return results directly instead of invocations.
+- **Incremental Migration with `@app.direct_task`**: For codebases adopting pynenc gradually, the `@app.direct_task` decorator preserves the calling contract of a regular Python function — the caller waits, gets back the value, exception handling is unchanged. Combined with `PYNENC__DEV_MODE_FORCE_SYNC_TASKS=True`, decorated functions run inline during development; remove the variable in production to distribute to workers. No call site has to be rewritten.
+
+  ```python
+  @app.direct_task
+  def analyze(data: str) -> dict:
+      return expensive_computation(data)
+
+  result = analyze(my_data)  # returns the value directly — no Invocation
+  ```
+
+  See the [direct_task_demo](https://github.com/pynenc/samples/tree/main/direct_task_demo) sample and the [usage guide](https://docs.pynenc.org/usage_guide/use_case_008_direct_task.html) for the migration pattern in detail.
 
 ## Installation
 

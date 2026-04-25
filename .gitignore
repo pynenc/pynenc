@@ -171,3 +171,6 @@ docs/apidocs/
 
 # Investigation notes
 00_*.md
+
+# Local scratch — not tracked
+local/

@@ -98,6 +98,16 @@ ensures only one runner executes recovery and trigger evaluation at a time.
 {doc}`reference/core_services`
 ::::
 
+::::{grid-item-card} Zero-Refactoring Distribution
+Decorate any function with `@app.direct_task` — the caller keeps the same
+call syntax and gets the return value directly, no `Invocation`, no
+`.result`. Toggle sync execution with a single environment variable for
+local development. Distribute to workers in production without changing a
+line of call-site code.
+
+{doc}`usage_guide/use_case_008_direct_task`
+::::
+
 :::::
 
 ---

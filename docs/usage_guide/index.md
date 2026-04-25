@@ -14,6 +14,7 @@ This Usage Guide is designed to provide you with detailed instructions and pract
 ./use_case_005_sync_unit_testing
 ./use_case_006_mem_unit_testing
 ./use_case_007_json_serializable
+./use_case_008_direct_task
 ./use_case_009_client_data_store
 ./use_case_010_trigger_system
 ./use_case_011_workflow_system
@@ -90,6 +91,13 @@ Full in-memory stack with `ThreadRunner` — CI-friendly, zero infrastructure.
 :link-type: doc
 :shadow: sm
 Add `to_json` / `from_json` to any class for `JsonSerializer` compatibility.
+:::
+
+:::{grid-item-card} 8 · Direct Task
+:link: use_case_008_direct_task
+:link-type: doc
+:shadow: sm
+Distribute existing functions with `@app.direct_task` — no call-site changes.
 :::
 
 :::{grid-item-card} 9 · Client Data Store
@@ -398,6 +406,34 @@ Because `JsonSerializable` is `@runtime_checkable`, compliance can be verified a
 runtime with a standard `isinstance` check.
 
 For a detailed guide and examples, see {doc}`./use_case_007_json_serializable`.
+
+## Use Case: Direct Task — Distribute Without Refactoring
+
+📖 {doc}`Full step-by-step guide <./use_case_008_direct_task>`
+
+`@app.direct_task` lets you distribute existing Python functions across workers
+without changing their call sites. The decorated function still returns its value
+directly — no `Invocation`, no `.result`. Toggle sync execution with
+`PYNENC__DEV_MODE_FORCE_SYNC_TASKS=True` to make the decorator transparent during
+local development.
+
+```python
+from pynenc import Pynenc
+
+app = Pynenc()
+
+@app.direct_task
+def analyze_item(item: str) -> dict:
+    return {"item": item, "length": len(item)}
+
+# Caller is unchanged — returns the dict directly
+result = analyze_item("apple")
+```
+
+For caller-side parallelism, use a `ThreadPoolExecutor`. For single-call fan-out,
+declare `parallel_func` and `aggregate_func` on the decorator.
+
+For a detailed guide and examples, see {doc}`./use_case_008_direct_task`.
 
 ## Use Case 8: Customizing Data Serialization
 
