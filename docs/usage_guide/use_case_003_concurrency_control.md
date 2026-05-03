@@ -162,6 +162,58 @@ def run_with_running_concurrency_control() -> None:
 
 Each demonstration section aims to clearly illustrate how different concurrency configurations affect task execution within Pynenc.
 
+## Per-key Concurrency with `KEYS` and `key_arguments`
+
+The `TASK`-level controls above apply globally — they treat _every_ invocation
+of a task as competing for the same slot. In real systems you usually want
+something narrower: serialise only the calls that share a key, and let
+everything else run in parallel.
+
+`ConcurrencyControlType.KEYS` combined with `key_arguments=("...",)` does
+exactly that. The orchestrator looks only at the named arguments when
+deciding whether two invocations conflict.
+
+```python
+from pynenc import Pynenc
+from pynenc.conf.config_task import ConcurrencyControlType
+
+app = Pynenc()
+
+@app.task(
+    running_concurrency=ConcurrencyControlType.KEYS,
+    key_arguments=("account_id",),
+    reroute_on_concurrency_control=True,
+)
+def call_external_api(account_id: str, payload: dict) -> str:
+    ...
+```
+
+With this configuration:
+
+- At most **one running invocation per `account_id`** at any time.
+- Different `account_id` values run **in parallel** across all your workers.
+- Blocked invocations are re-queued (`reroute_on_concurrency_control=True`)
+  rather than discarded.
+
+This is the right primitive for third-party APIs that limit concurrency per
+account, per tenant, or per resource — without needing an external lock
+service or a per-tenant worker pool.
+
+`registration_concurrency=KEYS` works the same way but at enqueue time:
+duplicate invocations for the same key are deduped before they ever reach a
+worker. Useful when something keeps re-triggering the same logical job and
+you only need it done once per key.
+
+The full runnable example, with a FastAPI server that detects collisions, is
+in the [`concurrency_demo`](https://github.com/pynenc/samples/tree/main/concurrency_demo)
+sample.
+
+```{note}
+Today's primitive enforces *exactly one* in-flight invocation per key.
+Multi-slot per key (e.g. "up to 5 in flight per account") and time-window
+rate limits (e.g. "100 per minute per account") are on the roadmap.
+```
+
 ## Conclusion
 
 The `concurrency_control` sample introduces concurrency management within Pynenc clearly and practically. By using task-specific settings or global defaults via `PynencBuilder`, developers gain powerful and flexible options for controlling concurrent task execution.

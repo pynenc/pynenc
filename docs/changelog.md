@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2026-05-03
+
+### Fixed
+
+- **Concurrency control argument resolution** (`pynenc/call.py`): Renamed `serialized_args_for_concurrency_check` to `serialized_args_for_concurrency_control(mode)`
+  and made it accept an explicit `ConcurrencyControlType` argument. Previously, running-concurrency checks inadvertently used the `registration_concurrency`
+  config instead of `running_concurrency`, causing incorrect key filtering when the two modes were configured differently.
+- **Monitoring timeline crash** (`pynmon/util/svg/builder.py`): Added `KeyError` to the `add_history_batch` exception handler so history entries that reference
+  a `runner_context_id` outside the queried time window are skipped silently instead of crashing the timeline endpoint with a 500 error.
+- **Concurrency-blocked log level** (`pynenc/orchestrator/base_orchestrator.py`):
+  Downgraded the "invocation deferred by concurrency control" message from `ERROR` to `DEBUG`. Blocking a same-key invocation is expected behaviour, not an error condition.
+- **Worker shutdown signal hardening** (`pynenc/runner/persistent_process_runner.py`, `pynenc/runner/multi_thread_runner.py`):
+  Added `signal.signal(SIGTERM, SIG_IGN)` at the start of the worker `finally` cleanup block in both
+  `PersistentProcessRunner` and `MultiThreadRunner` worker processes. Previously, a second SIGTERM from
+  the parent's `_terminate_all_processes` (sent when `process.join(timeout=5)` expired) could interrupt
+  `_kill_and_reroute` mid-execution via a re-entrant `KeyboardInterrupt`, leaving the invocation
+  stranded in RUNNING status. This was a pre-existing race condition unrelated to the concurrency changes.
+
+### Added
+
+- **`KEYS` concurrency documentation** (`docs/usage_guide/use_case_003_concurrency_control.md`):
+  New section explaining `ConcurrencyControlType.KEYS` with `key_arguments`, covering
+  both `running_concurrency` and `registration_concurrency` modes, with a runnable
+  reference to the `concurrency_demo` sample.
+- **Integration tests** (`pynenc_tests/integration/orchestrator/test_invocation_running_concurrency.py`):
+  New tests covering per-key running concurrency behaviour.
+
 ## [0.2.1] - 2026-04-19
 
 ### Fixed

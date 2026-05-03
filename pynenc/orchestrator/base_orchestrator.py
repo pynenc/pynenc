@@ -553,7 +553,7 @@ class BaseOrchestrator(ABC):
                 ```
 
                 ```{note}
-                The function call.serialized_args_for_concurrency_check is used to determine the arguments
+                The function call.serialized_args_for_concurrency_control is used to determine the arguments
                 that are relevant for checking existing running invocations based on the task's running_concurrency option.
                 ```
 
@@ -566,15 +566,19 @@ class BaseOrchestrator(ABC):
         running_invocation = next(
             self.get_existing_invocations(
                 task=invocation.call.task,
-                key_serialized_arguments=invocation.call.serialized_args_for_concurrency_check,
+                key_serialized_arguments=invocation.call.serialized_args_for_concurrency_control(
+                    invocation.task.conf.running_concurrency
+                ),
                 statuses=statuses,
             ),
             None,
         )
         if not running_invocation:
             return True
-        invocation.task.logger.error(
-            f"invocation:{invocation.invocation_id} cannot run because invocation:{running_invocation} is already in status:{statuses}"
+        invocation.task.logger.info(
+            f"invocation:{invocation.invocation_id} deferred by concurrency_control: "
+            f"invocation:{running_invocation} already in status:{statuses} "
+            f"(concurrency_control={invocation.task.conf.running_concurrency.value})"
         )
         return False
 
@@ -796,7 +800,7 @@ class BaseOrchestrator(ABC):
 
         ```
         ```{note}
-            The function call.serialized_args_for_concurrency_check is used to get the arguments
+            The function call.serialized_args_for_concurrency_control is used to get the arguments
             that are used to check for existing invocations based on the task's registration_concurrency option.
         ```
 
@@ -816,7 +820,9 @@ class BaseOrchestrator(ABC):
                 task=call.task,
                 # we filter here by TASK, all Arguments, or defined keys based in the config
                 # TODO Make it explicit
-                key_serialized_arguments=call.serialized_args_for_concurrency_check,
+                key_serialized_arguments=call.serialized_args_for_concurrency_control(
+                    call.task.conf.registration_concurrency
+                ),
                 statuses=[InvocationStatus.REGISTERED],
             ),
             None,
@@ -824,7 +830,7 @@ class BaseOrchestrator(ABC):
         if not invocation_id:
             call.task.logger.debug(
                 f"No matching registered invocation found for {call.task} "
-                f"and key args {call.serialized_args_for_concurrency_check}"
+                f"and key args {call.serialized_args_for_concurrency_control(call.task.conf.registration_concurrency)}"
             )
             return self._route_new_call_invocation(call)
 

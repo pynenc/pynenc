@@ -42,7 +42,7 @@
 
 Pynenc addresses the complex challenges of task management in distributed environments, offering a robust solution for developers looking to efficiently orchestrate asynchronous tasks across multiple systems. By combining intuitive configuration with advanced features like automatic task prioritization, Pynenc empowers developers to build scalable and reliable distributed applications with ease.
 
-## 🆕 What's New in v0.2.1
+## 🆕 What's New in v0.2.2
 
 - **Pynmon compatibility**: migrated `TemplateResponse` calls to the Starlette 1.x API, fixing crashes on all pynmon views
 - **Monitor stability**: broadened exception handling in app hydration so that lazy-loading modules no longer crash `pynenc monitor`
@@ -95,7 +95,7 @@ See the [Changelog](https://docs.pynenc.org/changelog.html) for the complete lis
 
   - **Task-Level Concurrency**: Ensures only one instance of a specific task is in a running state at any given time.
   - **Argument-Level Concurrency**: Limits concurrent execution based on the arguments of the task, allowing only one task with a unique set of arguments to be running or pending.
-  - **Key Argument-Level Concurrency**: Further refines control by focusing on key arguments, ensuring uniqueness in task execution based on specified key arguments.
+  - **Key Argument-Level Concurrency**: Pick a subset of arguments (e.g. `key_arguments=("account_id",)`) and serialise only invocations that share that key — perfect for per-tenant external API calls. Different keys still run fully in parallel. See the [`concurrency_demo`](https://github.com/pynenc/samples/tree/main/concurrency_demo) sample for a runnable FastAPI-based walkthrough.
 
   This structured approach to concurrency management in Pynenc allows for precise control over task execution, ensuring efficient handling of tasks without overloading the system and adhering to specified constraints.
 
