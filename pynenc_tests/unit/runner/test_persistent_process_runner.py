@@ -72,10 +72,14 @@ def mock_manager() -> Generator[Mock, None, None]:
 def test_persistent_process_main_handles_sigterm(
     app: MockPynenc, mock_manager: Mock
 ) -> None:
+    """The registered SIGTERM handler sets stop_event and raises KeyboardInterrupt.
+
+    Setting stop_event causes the loop to exit on the next iteration check;
+    raising KeyboardInterrupt exits the current iteration immediately.
+    """
     runner_cache: dict[str, Any] = {}
     stop_event = mock_manager.return_value.Event.return_value
 
-    # Create a parent RunnerContext and serialize to JSON
     parent_runner_ctx = RunnerContext(
         runner_cls="PersistentProcessRunner",
         runner_id="PersistentProcessRunner@test-host-123",
@@ -84,13 +88,16 @@ def test_persistent_process_main_handles_sigterm(
     )
     child_runner_id = "test-child-runner-id"
 
-    def simulate_sigterm(signum: int, frame: Any) -> None:
-        stop_event.set()
+    registered_handler: Callable[[int, Any], None] | None = None
 
-    with patch("signal.signal") as mock_signal:
-        mock_signal.side_effect = lambda signum, handler: simulate_sigterm(signum, None)
+    def capture_handler(signum: int, handler: Any) -> None:
+        nonlocal registered_handler
+        if callable(handler):
+            registered_handler = handler
+
+    with patch("signal.signal", side_effect=capture_handler):
         with patch.object(app.orchestrator, "get_invocations_to_run", return_value=[]):
-            stop_event.is_set.side_effect = [False, True]  # Ensure loop exits
+            stop_event.is_set.return_value = True  # exit loop immediately
             persistent_process_main(
                 app,
                 runner_cache=runner_cache,
@@ -98,8 +105,14 @@ def test_persistent_process_main_handles_sigterm(
                 parent_runner_ctx_json=parent_runner_ctx.to_json(),
                 child_runner_id=child_runner_id,
             )
-            mock_signal.assert_called_once_with(signal.SIGTERM, ANY)
-            stop_event.set.assert_called_once()
+
+    assert registered_handler is not None, "SIGTERM handler was not registered"
+
+    # Call the real handler and verify its purpose: sets stop_event + interrupts execution
+    stop_event.reset_mock()
+    with pytest.raises(KeyboardInterrupt):
+        registered_handler(signal.SIGTERM, None)
+    stop_event.set.assert_called_once()
 
 
 # ---- PersistentProcessRunner Tests ----
@@ -242,11 +255,15 @@ def test_mem_compatible(runner: PersistentProcessRunner) -> None:
 def test_persistent_process_main_handle_terminate(
     app: MockPynenc, mock_manager: Mock
 ) -> None:
-    """Test that SIGTERM triggers the handle_terminate function"""
+    """SIGTERM is blocked (SIG_IGN) during the cleanup finally block.
+
+    The parent's _terminate_all_processes sends a second SIGTERM when join(timeout=5)
+    expires. Without SIG_IGN, that second signal would raise KeyboardInterrupt inside
+    _kill_and_reroute and leave the invocation stranded in RUNNING status.
+    """
     runner_cache: dict[str, Any] = {}
     stop_event = mock_manager.return_value.Event.return_value
 
-    # Create a parent RunnerContext and serialize to JSON
     parent_runner_ctx = RunnerContext(
         runner_cls="PersistentProcessRunner",
         runner_id="PersistentProcessRunner@test-host-123",
@@ -255,13 +272,8 @@ def test_persistent_process_main_handle_terminate(
     )
     child_runner_id = "test-child-runner-id"
 
-    def simulate_sigterm(signum: int, frame: Any) -> None:
-        stop_event.set()
-
     with patch("signal.signal") as mock_signal:
-        mock_signal.side_effect = simulate_sigterm
         with patch.object(app.orchestrator, "get_invocations_to_run", return_value=[]):
-            # First iteration runs, second triggers SIGTERM effect
             stop_event.is_set.side_effect = [False, True]
             persistent_process_main(
                 app,
@@ -270,7 +282,8 @@ def test_persistent_process_main_handle_terminate(
                 parent_runner_ctx_json=parent_runner_ctx.to_json(),
                 child_runner_id=child_runner_id,
             )
-            mock_signal.assert_called_once_with(signal.SIGTERM, ANY)
+        # The finally block must have set SIGTERM → SIG_IGN to protect cleanup
+        mock_signal.assert_called_with(signal.SIGTERM, signal.SIG_IGN)
 
 
 def test_on_stop_runner_loop(
@@ -331,7 +344,9 @@ def test_persistent_process_main_sigterm_calls_handle_terminate(
 
     def capture_handler(signum: int, handler: Callable[[int, Any], None]) -> None:
         nonlocal registered_handler
-        registered_handler = handler
+        # Only capture callable handlers; SIG_IGN (set in finally) is not callable
+        if callable(handler):
+            registered_handler = handler
 
     with patch("signal.signal") as mock_signal:
         mock_signal.side_effect = capture_handler
@@ -370,7 +385,10 @@ def test_persistent_process_main_sigterm_calls_handle_terminate(
             process_thread.join(timeout=1.0)
             assert not process_thread.is_alive(), "Process thread failed to terminate"
 
-            mock_signal.assert_called_once_with(signal.SIGTERM, ANY)
+            # Two calls expected: initial handler registration + SIG_IGN in finally
+            assert mock_signal.call_count == 2
+            mock_signal.assert_any_call(signal.SIGTERM, ANY)
+            mock_signal.assert_called_with(signal.SIGTERM, signal.SIG_IGN)
             stop_event.set.assert_called_once()
 
 
