@@ -98,3 +98,40 @@ def test_running_concurrency_type_task(
     app.broker.route_invocations([trying_to_run_invocation.invocation_id])
     invocations_to_run = list(app.orchestrator.get_invocations_to_run(10, runner_ctx))
     assert invocations_to_run == []
+
+
+def test_running_concurrency_keys_uses_key_arguments(task_key_arg_io: "Task") -> None:
+    """KEYS running concurrency blocks only matching keys, not every task call."""
+    app = task_key_arg_io.app
+    runner_ctx = RunnerContext.from_runner(app.runner)
+
+    task_key_arg_io.conf.running_concurrency = config_task.ConcurrencyControlType.KEYS
+    task_key_arg_io.conf.key_arguments = ("key",)
+
+    fake_running_invocation = task_key_arg_io("account-a", "fetch_profile")
+    blocked_same_key_invocation = task_key_arg_io("account-a", "list_invoices")
+    allowed_other_key_invocation = task_key_arg_io("account-b", "fetch_profile")
+
+    assert isinstance(fake_running_invocation, DistributedInvocation)
+    assert isinstance(blocked_same_key_invocation, DistributedInvocation)
+    assert isinstance(allowed_other_key_invocation, DistributedInvocation)
+
+    app.orchestrator.set_invocation_status(
+        fake_running_invocation.invocation_id, InvocationStatus.PENDING, runner_ctx
+    )
+    app.orchestrator.set_invocation_status(
+        fake_running_invocation.invocation_id, InvocationStatus.RUNNING, runner_ctx
+    )
+
+    app.broker.purge()
+    app.broker.route_invocations(
+        [
+            blocked_same_key_invocation.invocation_id,
+            allowed_other_key_invocation.invocation_id,
+        ]
+    )
+
+    invocations_to_run = list(app.orchestrator.get_invocations_to_run(10, runner_ctx))
+
+    assert blocked_same_key_invocation not in invocations_to_run
+    assert invocations_to_run == [allowed_other_key_invocation]

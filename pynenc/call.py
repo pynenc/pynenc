@@ -144,20 +144,22 @@ class Call(Generic[Params, Result]):
         """Set of argument keys for this call."""
         return set(self.arguments.kwargs.keys())
 
-    @property
-    def serialized_args_for_concurrency_check(self) -> dict[str, str] | None:
+    def serialized_args_for_concurrency_control(
+        self, concurrency_control: ConcurrencyControlType
+    ) -> dict[str, str] | None:
         """
-        Determines the call arguments required for the task concurrency check.
+        Determines the serialized arguments required for one concurrency mode.
 
-        :return: A dictionary of serialized argument strings required for concurrency control, or None if concurrency control is disabled.
+        :param ConcurrencyControlType concurrency_control: The concurrency mode to evaluate.
+        :return: Serialized arguments required by the mode, or None when no argument filter is needed.
         """
-        if self.task.conf.registration_concurrency == ConcurrencyControlType.DISABLED:
+        if concurrency_control == ConcurrencyControlType.DISABLED:
             return None
-        if self.task.conf.registration_concurrency == ConcurrencyControlType.TASK:
+        if concurrency_control == ConcurrencyControlType.TASK:
             return None
-        if self.task.conf.registration_concurrency == ConcurrencyControlType.ARGUMENTS:
+        if concurrency_control == ConcurrencyControlType.ARGUMENTS:
             return self.serialized_arguments
-        if self.task.conf.registration_concurrency == ConcurrencyControlType.KEYS:
+        if concurrency_control == ConcurrencyControlType.KEYS:
             # TODO cache serialization of each argument independently?
             # So we do not serialize all the arguments for the key if not needed
             return {
@@ -309,10 +311,11 @@ class PreSerializedCall(Call[Params, Result]):
             }
         return self._serialized_arguments
 
-    @property
-    def serialized_args_for_concurrency_check(self) -> dict[str, str] | None:
+    def serialized_args_for_concurrency_control(
+        self, concurrency_control: ConcurrencyControlType
+    ) -> dict[str, str] | None:
         raise NotImplementedError(
-            "RoutingParallelCall does not support serialized_args_for_concurrency_check "
+            "RoutingParallelCall does not support serialized_args_for_concurrency_control "
             "(intended for batch routing only)"
         )
 

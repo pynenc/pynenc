@@ -108,7 +108,7 @@ class TimelineDataBuilder:
             try:
                 runner_context = runner_contexts[history.runner_context_id]
                 self._add_history_entry(history, runner_context)
-            except (AttributeError, TypeError, ValueError):
+            except (AttributeError, TypeError, ValueError, KeyError):
                 continue
 
     def _add_history_entry(

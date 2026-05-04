@@ -88,6 +88,9 @@ def thread_runner_process_main(
             f"ThreadRunner process worker:{child_runner_id} interrupted, shutting down"
         )
     finally:
+        # Ignore further signals during cleanup so a second SIGTERM from the
+        # parent's _terminate_all_processes cannot interrupt _kill_and_reroute.
+        _signal.signal(_signal.SIGTERM, _signal.SIG_IGN)
         runner._on_stop()
 
 

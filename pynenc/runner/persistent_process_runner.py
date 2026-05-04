@@ -84,6 +84,9 @@ def persistent_process_main(
     except Exception as e:
         app.logger.exception(f"worker:{runner_id} error: {e}")
     finally:
+        # Ignore further signals during cleanup so a second SIGTERM from the
+        # parent's _terminate_all_processes cannot interrupt the reroute call.
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
         if invocation_id:
             app.logger.warning(
                 f"worker:{runner_id} shutting down with active invocation:{invocation_id}, rerouting"

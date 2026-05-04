@@ -124,7 +124,7 @@ def test_serialized_args_for_concurrency_check_returns_none(
 
     call: Call = Call(task=mock_task, arguments=mock_arguments)
 
-    assert call.serialized_args_for_concurrency_check is None
+    assert call.serialized_args_for_concurrency_control(concurrency_type) is None
 
 
 # def test_call_getstate(mock_task: MagicMock, mock_arguments: MagicMock) -> None:
