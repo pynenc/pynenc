@@ -31,6 +31,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **Integration tests** (`pynenc_tests/integration/orchestrator/test_invocation_running_concurrency.py`):
   New tests covering per-key running concurrency behaviour.
 
+### Changed
+
+- **Rewritten use_case_003 concurrency control page** (`docs/usage_guide/use_case_003_concurrency_control.md`):
+  Full rewrite with 4-scope comparison table, per-key worked example, all four concurrency_demo
+  scenario logs and timeline images, `PynencBuilder` defaults reference, and roadmap section.
+
 ## [0.2.1] - 2026-04-19
 
 ### Fixed

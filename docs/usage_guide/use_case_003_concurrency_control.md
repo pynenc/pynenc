@@ -2,218 +2,256 @@
 
 ## Overview
 
-This guide provides a detailed look at the `concurrency_control` sample, showcasing concurrency control mechanisms within Pynenc for task processing. It demonstrates how tasks can be managed and executed according to specific concurrency requirements.
+Pynenc lets you cap how many invocations of a task can be **registered** or
+**running** at the same time, without an external lock service. The
+orchestrator already tracks every invocation it accepts; checking whether a
+new one would conflict with an existing one is the same kind of lookup.
 
-The full source code is available on GitHub: [concurrency_control](https://github.com/pynenc/samples/tree/main/concurrency_control).
+This guide covers:
 
-## Scenario
+- The four concurrency _scopes_ (`DISABLED`, `TASK`, `ARGUMENTS`, `KEYS`).
+- The two _flags_ that apply them (`registration_concurrency` at enqueue
+  time, `running_concurrency` at run time).
+- `key_arguments` for narrowing the conflict check to a subset of
+  arguments.
+- `reroute_on_concurrency_control` for choosing what happens to blocked
+  invocations.
+- A runnable demo, [`concurrency_demo`](https://github.com/pynenc/samples/tree/main/concurrency_demo),
+  that visualises all of this on a pynmon timeline.
 
-This example explores various concurrency control methods, including disabling concurrency for task registration and execution, and enforcing task-level concurrency control during registration and runtime. It illustrates configuring Pynenc for handling concurrency effectively.
+## Concurrency scopes
 
-## Setup
+`ConcurrencyControlType` defines _what counts as a duplicate_:
 
-### Requirements
+| Scope       | What blocks what                                                                                       |
+| ----------- | ------------------------------------------------------------------------------------------------------ |
+| `DISABLED`  | Nothing. The default. Every invocation is independent.                                                 |
+| `TASK`      | At most one invocation of _this task_ at a time. Arguments are ignored.                                |
+| `ARGUMENTS` | At most one invocation per _full_ argument tuple. Same args = duplicate; any difference = independent. |
+| `KEYS`      | At most one invocation per _subset_ of arguments. The subset is declared with `key_arguments=(...)`.   |
 
-- Python 3.11 or higher.
-- Installed Pynenc library.
+The same enum value goes on both flags. The flag decides _when_ the check
+happens:
 
-### Project Files
+- **`registration_concurrency`** — checked when an invocation is enqueued.
+  A duplicate is collapsed into a `ReusedInvocation` pointing to the
+  existing one. The producer never gets a separate invocation back.
+- **`running_concurrency`** — checked when a worker tries to execute an
+  invocation. A blocked invocation transitions to
+  `CONCURRENCY_CONTROLLED`; what happens next depends on
+  `reroute_on_concurrency_control`.
 
-- `tasks.py`: Defines tasks with different concurrency control settings.
-- `sample.py`: Demonstrates how concurrency control settings impact task execution.
+`reroute_on_concurrency_control` (default `True`):
 
-## Demonstration
+- `True` — the blocked invocation is requeued (`REROUTED`) and retried
+  later, so it eventually runs once the slot frees up.
+- `False` — the blocked invocation is discarded permanently
+  (`CONCURRENCY_CONTROLLED_FINAL`); `inv.result` raises `KeyError`.
 
-### Defining Tasks with Concurrency Control
-
-In `tasks.py`, tasks are defined with concurrency control settings. You can specify concurrency directly per task or globally using `PynencBuilder`.
-
-#### Option 1: Direct Initialization (Task-Specific Controls)
+## Choosing a scope
 
 ```python
-from pynenc import Pynenc, ConcurrencyControlType
-from typing import NamedTuple
-import time
+from pynenc import Pynenc
+from pynenc.conf.config_task import ConcurrencyControlType as Mode
 
 app = Pynenc()
 
-@app.task(registration_concurrency=ConcurrencyControlType.DISABLED)
-def get_own_invocation_id() -> str:
-    return get_own_invocation_id.invocation.invocation_id
 
-@app.task(registration_concurrency=ConcurrencyControlType.TASK)
-def get_own_invocation_id_registration_concurrency() -> str:
-    return get_own_invocation_id_registration_concurrency.invocation.invocation_id
+# TASK — at most one nightly cleanup running, regardless of arguments.
+@app.task(running_concurrency=Mode.TASK)
+def nightly_cleanup(target: str) -> None: ...
 
-class SleepResult(NamedTuple):
-    start: float
-    end: float
 
-@app.task(running_concurrency=ConcurrencyControlType.DISABLED)
-def sleep_without_running_concurrency(seconds: float) -> SleepResult:
-    start = time.time()
-    time.sleep(seconds)
-    return SleepResult(start=start, end=time.time())
+# ARGUMENTS — same export request collapses; different exports run in parallel.
+@app.task(registration_concurrency=Mode.ARGUMENTS)
+def export_report(report_id: str, format: str) -> str: ...
 
-@app.task(running_concurrency=ConcurrencyControlType.TASK)
-def sleep_with_running_concurrency(seconds: float) -> SleepResult:
-    start = time.time()
-    time.sleep(seconds)
-    return SleepResult(start=start, end=time.time())
+
+# KEYS — serialise on account_id; the `op` argument is ignored when checking.
+@app.task(
+    running_concurrency=Mode.KEYS,
+    key_arguments=("account_id",),
+)
+def call_external_api(account_id: str, op: str) -> str: ...
 ```
 
-#### Option 2: Using PynencBuilder (Default Concurrency Controls)
+Pick the scope that matches the rule you actually need:
 
-Alternatively, use `PynencBuilder` to configure default concurrency controls for all tasks, with the option to override them individually. This builder configuration can coexist with other configuration methods such as `pyproject.toml`, environment variables, YAML, and JSON.
+- _"Only one of these tasks ever runs at a time."_ → `TASK`.
+- _"Don't run the same job twice."_ → `ARGUMENTS`.
+- _"Don't run two jobs that share this key."_ → `KEYS` + `key_arguments`.
+
+## Per-key concurrency: the common case
+
+The most common production need is **per-tenant** or **per-account**
+concurrency: parallelism _across_ tenants, serialisation _within_ each
+tenant. That is exactly what `KEYS` is for.
 
 ```python
-from pynenc import Pynenc, ConcurrencyControlType
+@app.task(
+    running_concurrency=Mode.KEYS,
+    key_arguments=("account_id",),
+    reroute_on_concurrency_control=True,
+)
+def call_external_api(account_id: str, op: str, payload: dict) -> str:
+    ...
+```
+
+With this:
+
+- At most **one running invocation per `account_id`** at any time.
+- Different `account_id` values run **in parallel** across all your
+  workers.
+- Blocked invocations are re-queued and complete once the slot opens.
+
+Set `reroute_on_concurrency_control=False` instead when the right policy
+is _"if a call for this account is already running, drop the new one"_.
+Queue depth stays flat, no retry storm.
+
+Add `registration_concurrency=Mode.KEYS` when duplicate enqueues for the
+same key should collapse before they ever reach a worker — useful when an
+event bus or scheduler may fire the same logical job many times.
+
+## Worked example: `concurrency_demo`
+
+The [`concurrency_demo`](https://github.com/pynenc/samples/tree/main/concurrency_demo)
+sample runs four scenarios against a tiny FastAPI server that records a
+`COLLISION` whenever two requests for the same account overlap. Run it
+with:
+
+```bash
+git clone https://github.com/pynenc/samples
+cd samples/concurrency_demo
+uv sync
+uv run python sample.py
+```
+
+All four scenarios on a single pynmon timeline:
+
+```{image} ../_static/use_case_003-all-tests-timeline.png
+:alt: All four concurrency scenarios on one pynmon invocation timeline
+:align: center
+```
+
+### A — no concurrency control
+
+Baseline. Eight worker threads pick up four invocations per account in
+parallel; the provider records nine collisions.
+
+```text
+=== A. unsafe — no concurrency control ===
+  12 enqueued -> 12 calls, 9 collisions, 1.42s
+   X acme     calls=4  collisions=3
+   X globex   calls=4  collisions=3
+   X initech  calls=4  collisions=3
+```
+
+```{image} ../_static/use_case_003-tests-A-call-unsafe.png
+:alt: Scenario A timeline — 12 invocations running in parallel, 9 collisions
+:align: center
+```
+
+### B — `running_concurrency=KEYS`, `reroute=True`
+
+Same 12 calls, zero collisions. The orchestrator refuses to start a second
+invocation while one with the same `account_id` is running; blocked
+invocations are rerouted until their slot opens.
+
+```text
+=== B. keyed — running_concurrency=KEYS, reroute=True ===
+  12 enqueued -> 12 calls, 0 collisions, 2.14s
+  OK acme     calls=4  collisions=0
+  OK globex   calls=4  collisions=0
+  OK initech  calls=4  collisions=0
+```
+
+```{image} ../_static/use_case_003-tests-B-call-keyed.png
+:alt: Scenario B timeline — three serial lanes (one per account), parallel across accounts
+:align: center
+```
+
+### C — `running_concurrency=KEYS`, `reroute=False`
+
+Same guard, opposite policy. Blocked invocations land in
+`CONCURRENCY_CONTROLLED_FINAL` and are dropped. Only the first call per
+account ever reaches the provider.
+
+```text
+=== C. drop — running_concurrency=KEYS, reroute=False ===
+  12 enqueued -> 3 calls (9 dropped), 0 collisions, 0.67s
+  OK acme     calls=1  collisions=0
+  OK globex   calls=1  collisions=0
+  OK initech  calls=1  collisions=0
+```
+
+```{image} ../_static/use_case_003-tests-C-call-keyed-drop.png
+:alt: Scenario C timeline — three running invocations, the rest dropped to CONCURRENCY_CONTROLLED_FINAL
+:align: center
+```
+
+### D — `registration_concurrency=KEYS` + `running_concurrency=KEYS`
+
+Dedupe at the door. 24 enqueues collapse to 3 invocations _before_ a
+worker ever sees them, because every duplicate registration returns a
+`ReusedInvocation` pointing at the first.
+
+```text
+=== D. dedupe — registration + running KEYS ===
+  24 enqueued -> 3 calls (21 deduped), 0 collisions, 0.57s
+  OK acme     calls=1  collisions=0
+  OK globex   calls=1  collisions=0
+  OK initech  calls=1  collisions=0
+```
+
+```{image} ../_static/use_case_003-tests-D-call-refresh-once.png
+:alt: Scenario D timeline — 24 enqueues collapse to 3 invocations at registration time
+:align: center
+```
+
+## Configuring defaults with `PynencBuilder`
+
+Concurrency settings can also be set as app-wide defaults and overridden
+per task:
+
+```python
+from pynenc import ConcurrencyControlType as Mode
 from pynenc.builder import PynencBuilder
-from typing import NamedTuple
-import time
 
 app = (
     PynencBuilder()
     .concurrency_control(
-        running_concurrency=ConcurrencyControlType.DISABLED,  # Default running concurrency
-        registration_concurrency=ConcurrencyControlType.DISABLED  # Default registration concurrency
+        running_concurrency=Mode.DISABLED,
+        registration_concurrency=Mode.DISABLED,
     )
     .build()
 )
 
-@app.task  # Inherits DISABLED concurrency for both running and registration
-def get_own_invocation_id() -> str:
-    return get_own_invocation_id.invocation.invocation_id
 
-@app.task(registration_concurrency=ConcurrencyControlType.TASK)  # Overrides default registration concurrency
-def get_own_invocation_id_registration_concurrency() -> str:
-    return get_own_invocation_id_registration_concurrency.invocation.invocation_id
+@app.task  # inherits app defaults
+def fast_path() -> None: ...
 
-class SleepResult(NamedTuple):
-    start: float
-    end: float
 
-@app.task  # Inherits DISABLED running concurrency
-def sleep_without_running_concurrency(seconds: float) -> SleepResult:
-    start = time.time()
-    time.sleep(seconds)
-    return SleepResult(start=start, end=time.time())
-
-@app.task(running_concurrency=ConcurrencyControlType.TASK)  # Overrides default running concurrency
-def sleep_with_running_concurrency(seconds: float) -> SleepResult:
-    start = time.time()
-    time.sleep(seconds)
-    return SleepResult(start=start, end=time.time())
+@app.task(running_concurrency=Mode.TASK)  # overrides only running
+def heavy_singleton() -> None: ...
 ```
 
-- `get_own_invocation_id` uses default (`DISABLED`) concurrency.
-- `get_own_invocation_id_registration_concurrency` explicitly overrides default registration concurrency to `TASK`.
-- `sleep_without_running_concurrency` and `sleep_with_running_concurrency` highlight inherited versus overridden concurrency controls for running tasks.
+Builder defaults compose with all other configuration sources
+(`pyproject.toml`, environment variables, YAML, JSON).
 
-Using `PynencBuilder.concurrency_control()`, you define global defaults easily, applying consistency across tasks while retaining flexibility.
+## Roadmap
 
-### Executing Tasks with Concurrency Controls
+The current primitive enforces _exactly one_ in-flight or registered
+invocation per scope. Two extensions that build on the same orchestrator
+machinery are on the roadmap:
 
-The `sample.py` script demonstrates how concurrency settings influence task execution:
+- **Multi-slot concurrency** — _"up to N in flight per key"_.
+- **Time-window rate limits** — _"at most M per minute per key"_.
 
-#### Running Without Concurrency Control
+## Related
 
-Illustrates execution without enforced concurrency, creating separate invocation IDs per call.
-
-```python
-def run_without_concurrency_control() -> None:
-    invocations = [tasks.get_own_invocation_id() for _ in range(10)]
-    logger.info(f"Invocation ids: " + ", ".join(i.invocation_id for i in invocations))
-```
-
-#### Running with Registration Concurrency Control
-
-Demonstrates that registration concurrency control (`TASK`) routes multiple calls to a single invocation.
-
-```python
-def run_with_registration_concurrency_control() -> None:
-    invocations = [tasks.get_own_invocation_id_registration_concurrency() for _ in range(3)]
-    unique_invocation_ids = set(i.invocation_id for i in invocations)
-    logger.info(f"Unique invocation_id: {unique_invocation_ids}")
-```
-
-#### Running with Execution (Running) Concurrency Control
-
-Demonstrates the difference between parallel and sequential execution based on running concurrency settings.
-
-```python
-def run_with_running_concurrency_control() -> None:
-    # Without concurrency control: parallel execution
-    no_control_invocations = [
-        tasks.sleep_without_running_concurrency(0.1) for _ in range(10)
-    ]
-    no_control_results = [i.result for i in no_control_invocations]
-    if not any_run_in_parallel(no_control_results):
-        raise ValueError(f"Expected parallel execution, got {no_control_results}")
-
-    # With concurrency control: sequential execution
-    controlled_invocations = [
-        tasks.sleep_with_running_concurrency(0.1) for _ in range(10)
-    ]
-    controlled_results = [i.result for i in controlled_invocations]
-    if any_run_in_parallel(controlled_results):
-        raise ValueError(f"Expected sequential execution, got {controlled_results}")
-```
-
-Each demonstration section aims to clearly illustrate how different concurrency configurations affect task execution within Pynenc.
-
-## Per-key Concurrency with `KEYS` and `key_arguments`
-
-The `TASK`-level controls above apply globally — they treat _every_ invocation
-of a task as competing for the same slot. In real systems you usually want
-something narrower: serialise only the calls that share a key, and let
-everything else run in parallel.
-
-`ConcurrencyControlType.KEYS` combined with `key_arguments=("...",)` does
-exactly that. The orchestrator looks only at the named arguments when
-deciding whether two invocations conflict.
-
-```python
-from pynenc import Pynenc
-from pynenc.conf.config_task import ConcurrencyControlType
-
-app = Pynenc()
-
-@app.task(
-    running_concurrency=ConcurrencyControlType.KEYS,
-    key_arguments=("account_id",),
-    reroute_on_concurrency_control=True,
-)
-def call_external_api(account_id: str, payload: dict) -> str:
-    ...
-```
-
-With this configuration:
-
-- At most **one running invocation per `account_id`** at any time.
-- Different `account_id` values run **in parallel** across all your workers.
-- Blocked invocations are re-queued (`reroute_on_concurrency_control=True`)
-  rather than discarded.
-
-This is the right primitive for third-party APIs that limit concurrency per
-account, per tenant, or per resource — without needing an external lock
-service or a per-tenant worker pool.
-
-`registration_concurrency=KEYS` works the same way but at enqueue time:
-duplicate invocations for the same key are deduped before they ever reach a
-worker. Useful when something keeps re-triggering the same logical job and
-you only need it done once per key.
-
-The full runnable example, with a FastAPI server that detects collisions, is
-in the [`concurrency_demo`](https://github.com/pynenc/samples/tree/main/concurrency_demo)
-sample.
-
-```{note}
-Today's primitive enforces *exactly one* in-flight invocation per key.
-Multi-slot per key (e.g. "up to 5 in flight per account") and time-window
-rate limits (e.g. "100 per minute per account") are on the roadmap.
-```
-
-## Conclusion
-
-The `concurrency_control` sample introduces concurrency management within Pynenc clearly and practically. By using task-specific settings or global defaults via `PynencBuilder`, developers gain powerful and flexible options for controlling concurrent task execution.
+- Sample: [`concurrency_demo`](https://github.com/pynenc/samples/tree/main/concurrency_demo)
+  (FastAPI provider stand-in, four scenarios, pynmon-friendly).
+- Reference: `pynenc.conf.config_task.ConcurrencyControlType`,
+  `pynenc.conf.config_task.ConfigTask`.
+- Related state: invocation status `CONCURRENCY_CONTROLLED`,
+  `CONCURRENCY_CONTROLLED_FINAL`, `REROUTED`.
