@@ -30,6 +30,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   reference to the `concurrency_demo` sample.
 - **Integration tests** (`pynenc_tests/integration/orchestrator/test_invocation_running_concurrency.py`):
   New tests covering per-key running concurrency behaviour.
+- **Test fix** (`pynenc_tests/integration/combinations/test_app_combinations.py`):
+  `test_runner_kills_and_reroutes_running_invocation_on_stop` now waits for `RUNNING` to appear
+  in the state backend history table (not just in the orchestrator status table) before calling
+  `stop_runner_loop()`. This eliminates a race where `SIGKILL` arrived between the two writes in
+  `set_invocation_status()` — after `_atomic_status_transition()` committed but before
+  `add_history()` persisted — causing the test to fail with a missing `RUNNING` history entry.
 
 ### Changed
 

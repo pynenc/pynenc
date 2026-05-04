@@ -236,8 +236,20 @@ def test_runner_kills_and_reroutes_running_invocation_on_stop(task_sleep: Task) 
     assert isinstance(invocation, DistributedInvocation)
 
     ini = time()
-    while invocation.status != InvocationStatus.RUNNING:
-        assert time() - ini < 5, "Invocation did not reach RUNNING status in time"
+    while True:
+        # Wait until RUNNING appears in history — not just in orchestrator status.
+        # invocation.status reads the INVOCATIONS table; add_history() writes to the
+        # history table in a background thread. We must wait for that thread to flush
+        # before calling stop_runner_loop(), otherwise SIGKILL can arrive between the
+        # two writes and the RUNNING history record is lost with the child process.
+        if invocation.status == InvocationStatus.RUNNING:
+            history_statuses = [
+                h.status_record.status
+                for h in app.state_backend.get_history(invocation.invocation_id)
+            ]
+            if InvocationStatus.RUNNING in history_statuses:
+                break
+        assert time() - ini < 5, "Invocation did not reach RUNNING in history in time"
         sleep(0.05)
 
     app.runner.stop_runner_loop()
