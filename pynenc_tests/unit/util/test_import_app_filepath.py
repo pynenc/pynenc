@@ -62,11 +62,13 @@ def test_exec_module_failure_propagates() -> None:
             find_app_instance(SOME_APP_PATH)
 
 
-def test_empty_string_raises() -> None:
-    with pytest.raises(ValueError, match="No --app value provided"):
-        find_app_instance("")
+def test_empty_string_auto_discovery_requires_local_app(tmp_path: Path) -> None:
+    with patch("os.getcwd", return_value=str(tmp_path)):
+        with pytest.raises(ValueError, match="No Pynenc.*instance found"):
+            find_app_instance("")
 
 
-def test_none_input_raises() -> None:
-    with pytest.raises(ValueError, match="No --app value provided"):
-        find_app_instance(None)  # type: ignore[arg-type]
+def test_none_input_auto_discovery_requires_local_app(tmp_path: Path) -> None:
+    with patch("os.getcwd", return_value=str(tmp_path)):
+        with pytest.raises(ValueError, match="No Pynenc.*instance found"):
+            find_app_instance(None)

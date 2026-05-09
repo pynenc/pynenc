@@ -31,7 +31,7 @@ class InvocationStatus(StrEnum):
     :attr:`~pynenc.conf.config_pynenc.ConfigPynenc.max_pending_seconds`.
 
     ```{note}
-    FAILED, RETRY, and SUCCESS are final statuses that terminate the invocation lifecycle.
+    SUCCESS, FAILED, and CONCURRENCY_CONTROLLED_FINAL are final statuses that terminate the invocation lifecycle.
     ```
 
     :cvar REGISTERED: The task call has been routed and is registered
@@ -242,15 +242,12 @@ _CONFIG: Final[StatusConfiguration] = StatusConfiguration(
             releases_ownership=True,
         ),
         InvocationStatus.PENDING: StatusDefinition(
-            # An invocation can FAILED without running by the CYCLE-CONTROL mechanism
-            # to avoid deadlocks.
             # PENDING_RECOVERY is for timeout recovery without ownership validation
             allowed_transitions=frozenset(
                 {
                     InvocationStatus.RUNNING,
                     InvocationStatus.KILLED,
                     InvocationStatus.REROUTED,
-                    InvocationStatus.FAILED,
                     InvocationStatus.PENDING_RECOVERY,
                 }
             ),

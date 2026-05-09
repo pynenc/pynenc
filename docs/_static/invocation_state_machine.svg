@@ -1,0 +1,230 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="760" viewBox="0 0 1600 760" role="img" aria-labelledby="title desc">
+<title id="title">Pynenc invocation status state machine</title>
+<desc id="desc">Generated from pynenc.invocation.status. Shows allowed transitions, ownership, recovery, and final states.</desc>
+<rect width="1600" height="760" rx="18" fill="#fbf8f5"/>
+<text x="48" y="48" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="24" font-weight="700" fill="#2f221d">Invocation status state machine</text>
+<text x="48" y="74" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13" fill="#735d52">Generated from pynenc.invocation.status</text>
+<defs>
+<filter id="shadow" x="-15%" y="-25%" width="130%" height="160%">
+<feDropShadow dx="0" dy="6" stdDeviation="5" flood-color="#3a241a" flood-opacity="0.13"/>
+</filter>
+<marker id="arrow-start" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+<path d="M0,0 L0,6 L8,3 z" fill="#b95a3d"/>
+</marker>
+<marker id="arrow-available" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+<path d="M0,0 L0,6 L8,3 z" fill="#39835a"/>
+</marker>
+<marker id="arrow-owned" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+<path d="M0,0 L0,6 L8,3 z" fill="#c66a2e"/>
+</marker>
+<marker id="arrow-recovery" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+<path d="M0,0 L0,6 L8,3 z" fill="#4f75c8"/>
+</marker>
+<marker id="arrow-concurrency" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+<path d="M0,0 L0,6 L8,3 z" fill="#c7506e"/>
+</marker>
+<marker id="arrow-final" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+<path d="M0,0 L0,6 L8,3 z" fill="#677084"/>
+</marker>
+</defs>
+<g data-edge="START->REGISTERED">
+<line x1="92.0" y1="300.0" x2="162.0" y2="300.0" stroke="#fbf8f5" stroke-width="3.05" stroke-linecap="round" opacity="0.65"/>
+<line x1="92.0" y1="300.0" x2="162.0" y2="300.0" stroke="#39835a" stroke-width="1.65" stroke-linecap="round" marker-end="url(#arrow-available)" opacity="0.88"/>
+</g>
+<g data-edge="CONCURRENCY_CONTROLLED->REROUTED">
+<line x1="558.0" y1="115.0" x2="602.0" y2="115.0" stroke="#fbf8f5" stroke-width="3.05" stroke-linecap="round" opacity="0.65"/>
+<line x1="558.0" y1="115.0" x2="602.0" y2="115.0" stroke="#39835a" stroke-width="1.65" stroke-linecap="round" marker-end="url(#arrow-available)" opacity="0.88"/>
+</g>
+<g data-edge="KILLED->REROUTED">
+<line x1="1072.0" y1="503.0" x2="778.0" y2="143.0" stroke="#fbf8f5" stroke-width="3.05" stroke-linecap="round" opacity="0.65"/>
+<line x1="1072.0" y1="503.0" x2="778.0" y2="143.0" stroke="#39835a" stroke-width="1.65" stroke-linecap="round" marker-end="url(#arrow-available)" opacity="0.88"/>
+</g>
+<g data-edge="PAUSED->KILLED">
+<line x1="982.0" y1="154.0" x2="1202.0" y2="456.0" stroke="#fbf8f5" stroke-width="3.05" stroke-linecap="round" opacity="0.65"/>
+<line x1="982.0" y1="154.0" x2="1202.0" y2="456.0" stroke="#b95a3d" stroke-width="1.65" stroke-linecap="round" marker-end="url(#arrow-start)" opacity="0.88"/>
+</g>
+<g data-edge="PAUSED->RESUMED">
+<line x1="1018.0" y1="115.0" x2="1072.0" y2="115.0" stroke="#fbf8f5" stroke-width="3.05" stroke-linecap="round" opacity="0.65"/>
+<line x1="1018.0" y1="115.0" x2="1072.0" y2="115.0" stroke="#c66a2e" stroke-width="1.65" stroke-linecap="round" marker-end="url(#arrow-owned)" opacity="0.88"/>
+</g>
+<g data-edge="PENDING->KILLED">
+<line x1="524.0" y1="329.0" x2="1072.0" y2="503.0" stroke="#fbf8f5" stroke-width="3.05" stroke-linecap="round" opacity="0.65"/>
+<line x1="524.0" y1="329.0" x2="1072.0" y2="503.0" stroke="#b95a3d" stroke-width="1.65" stroke-linecap="round" marker-end="url(#arrow-start)" opacity="0.88"/>
+</g>
+<g data-edge="PENDING->PENDING_RECOVERY">
+<line x1="428.0" y1="329.0" x2="428.0" y2="581.0" stroke="#fbf8f5" stroke-width="3.25" stroke-linecap="round" opacity="0.65"/>
+<line x1="428.0" y1="329.0" x2="428.0" y2="581.0" stroke="#4f75c8" stroke-width="1.85" stroke-linecap="round" marker-end="url(#arrow-recovery)" opacity="0.88"/>
+</g>
+<g data-edge="PENDING->REROUTED">
+<line x1="518.0" y1="271.0" x2="646.0" y2="154.0" stroke="#fbf8f5" stroke-width="3.05" stroke-linecap="round" opacity="0.65"/>
+<line x1="518.0" y1="271.0" x2="646.0" y2="154.0" stroke="#39835a" stroke-width="1.65" stroke-linecap="round" marker-end="url(#arrow-available)" opacity="0.88"/>
+</g>
+<g data-edge="PENDING->RUNNING">
+<line x1="558.0" y1="300.0" x2="612.0" y2="300.0" stroke="#fbf8f5" stroke-width="3.05" stroke-linecap="round" opacity="0.65"/>
+<line x1="558.0" y1="300.0" x2="612.0" y2="300.0" stroke="#c66a2e" stroke-width="1.65" stroke-linecap="round" marker-end="url(#arrow-owned)" opacity="0.88"/>
+</g>
+<g data-edge="PENDING_RECOVERY->REROUTED">
+<line x1="554.0" y1="581.0" x2="606.0" y2="154.0" stroke="#fbf8f5" stroke-width="3.05" stroke-linecap="round" opacity="0.65"/>
+<line x1="554.0" y1="581.0" x2="606.0" y2="154.0" stroke="#39835a" stroke-width="1.65" stroke-linecap="round" marker-end="url(#arrow-available)" opacity="0.88"/>
+</g>
+<g data-edge="REGISTERED->CONCURRENCY_CONTROLLED">
+<line x1="338.0" y1="278.0" x2="382.0" y2="143.0" stroke="#fbf8f5" stroke-width="3.25" stroke-linecap="round" opacity="0.65"/>
+<line x1="338.0" y1="278.0" x2="382.0" y2="143.0" stroke="#c7506e" stroke-width="1.85" stroke-linecap="round" marker-end="url(#arrow-concurrency)" opacity="0.88"/>
+</g>
+<g data-edge="REGISTERED->CONCURRENCY_CONTROLLED_FINAL">
+<line x1="250.0" y1="329.0" x2="250.0" y2="456.0" stroke="#fbf8f5" stroke-width="3.05" stroke-linecap="round" opacity="0.65"/>
+<line x1="250.0" y1="329.0" x2="250.0" y2="456.0" stroke="#677084" stroke-width="1.65" stroke-linecap="round" marker-end="url(#arrow-final)" opacity="0.88"/>
+</g>
+<g data-edge="REGISTERED->PENDING">
+<line x1="338.0" y1="300.0" x2="382.0" y2="300.0" stroke="#fbf8f5" stroke-width="3.05" stroke-linecap="round" opacity="0.65"/>
+<line x1="338.0" y1="300.0" x2="382.0" y2="300.0" stroke="#c66a2e" stroke-width="1.65" stroke-linecap="round" marker-end="url(#arrow-owned)" opacity="0.88"/>
+</g>
+<g data-edge="REROUTED->CONCURRENCY_CONTROLLED">
+<line x1="602.0" y1="135.0" x2="558.0" y2="135.0" stroke="#fbf8f5" stroke-width="3.25" stroke-linecap="round" opacity="0.65"/>
+<line x1="602.0" y1="135.0" x2="558.0" y2="135.0" stroke="#c7506e" stroke-width="1.85" stroke-linecap="round" marker-end="url(#arrow-concurrency)" opacity="0.88"/>
+</g>
+<g data-edge="REROUTED->PENDING">
+<line x1="642.0" y1="154.0" x2="514.0" y2="271.0" stroke="#fbf8f5" stroke-width="3.05" stroke-linecap="round" opacity="0.65"/>
+<line x1="642.0" y1="154.0" x2="514.0" y2="271.0" stroke="#c66a2e" stroke-width="1.65" stroke-linecap="round" marker-end="url(#arrow-owned)" opacity="0.88"/>
+</g>
+<g data-edge="RESUMED->FAILED">
+<line x1="1248.0" y1="149.0" x2="1342.0" y2="405.0" stroke="#fbf8f5" stroke-width="3.05" stroke-linecap="round" opacity="0.65"/>
+<line x1="1248.0" y1="149.0" x2="1342.0" y2="405.0" stroke="#677084" stroke-width="1.65" stroke-linecap="round" marker-end="url(#arrow-final)" opacity="0.88"/>
+</g>
+<g data-edge="RESUMED->KILLED">
+<line x1="1188.0" y1="154.0" x2="1132.0" y2="456.0" stroke="#fbf8f5" stroke-width="3.05" stroke-linecap="round" opacity="0.65"/>
+<line x1="1188.0" y1="154.0" x2="1132.0" y2="456.0" stroke="#b95a3d" stroke-width="1.65" stroke-linecap="round" marker-end="url(#arrow-start)" opacity="0.88"/>
+</g>
+<g data-edge="RESUMED->PAUSED">
+<line x1="1072.0" y1="135.0" x2="1018.0" y2="135.0" stroke="#fbf8f5" stroke-width="3.05" stroke-linecap="round" opacity="0.65"/>
+<line x1="1072.0" y1="135.0" x2="1018.0" y2="135.0" stroke="#c66a2e" stroke-width="1.65" stroke-linecap="round" marker-end="url(#arrow-owned)" opacity="0.88"/>
+</g>
+<g data-edge="RESUMED->RETRY">
+<line x1="1114.0" y1="154.0" x2="788.0" y2="503.0" stroke="#fbf8f5" stroke-width="3.05" stroke-linecap="round" opacity="0.65"/>
+<line x1="1114.0" y1="154.0" x2="788.0" y2="503.0" stroke="#39835a" stroke-width="1.65" stroke-linecap="round" marker-end="url(#arrow-available)" opacity="0.88"/>
+</g>
+<g data-edge="RESUMED->SUCCESS">
+<line x1="1248.0" y1="101.0" x2="1342.0" y2="215.0" stroke="#fbf8f5" stroke-width="3.05" stroke-linecap="round" opacity="0.65"/>
+<line x1="1248.0" y1="101.0" x2="1342.0" y2="215.0" stroke="#677084" stroke-width="1.65" stroke-linecap="round" marker-end="url(#arrow-final)" opacity="0.88"/>
+</g>
+<g data-edge="RETRY->PENDING">
+<line x1="612.0" y1="467.0" x2="478.0" y2="329.0" stroke="#fbf8f5" stroke-width="3.05" stroke-linecap="round" opacity="0.65"/>
+<line x1="612.0" y1="467.0" x2="478.0" y2="329.0" stroke="#c66a2e" stroke-width="1.65" stroke-linecap="round" marker-end="url(#arrow-owned)" opacity="0.88"/>
+</g>
+<g data-edge="RUNNING->FAILED">
+<line x1="788.0" y1="324.0" x2="1342.0" y2="405.0" stroke="#fbf8f5" stroke-width="3.05" stroke-linecap="round" opacity="0.65"/>
+<line x1="788.0" y1="324.0" x2="1342.0" y2="405.0" stroke="#677084" stroke-width="1.65" stroke-linecap="round" marker-end="url(#arrow-final)" opacity="0.88"/>
+</g>
+<g data-edge="RUNNING->KILLED">
+<line x1="752.0" y1="329.0" x2="1072.0" y2="467.0" stroke="#fbf8f5" stroke-width="3.05" stroke-linecap="round" opacity="0.65"/>
+<line x1="752.0" y1="329.0" x2="1072.0" y2="467.0" stroke="#b95a3d" stroke-width="1.65" stroke-linecap="round" marker-end="url(#arrow-start)" opacity="0.88"/>
+</g>
+<g data-edge="RUNNING->PAUSED">
+<line x1="748.0" y1="271.0" x2="882.0" y2="154.0" stroke="#fbf8f5" stroke-width="3.05" stroke-linecap="round" opacity="0.65"/>
+<line x1="748.0" y1="271.0" x2="882.0" y2="154.0" stroke="#c66a2e" stroke-width="1.65" stroke-linecap="round" marker-end="url(#arrow-owned)" opacity="0.88"/>
+</g>
+<g data-edge="RUNNING->RETRY">
+<line x1="662.0" y1="329.0" x2="740.0" y2="456.0" stroke="#fbf8f5" stroke-width="3.05" stroke-linecap="round" opacity="0.65"/>
+<line x1="662.0" y1="329.0" x2="740.0" y2="456.0" stroke="#39835a" stroke-width="1.65" stroke-linecap="round" marker-end="url(#arrow-available)" opacity="0.88"/>
+</g>
+<g data-edge="RUNNING->RUNNING_RECOVERY">
+<line x1="764.0" y1="329.0" x2="842.0" y2="590.0" stroke="#fbf8f5" stroke-width="3.25" stroke-linecap="round" opacity="0.65"/>
+<line x1="764.0" y1="329.0" x2="842.0" y2="590.0" stroke="#4f75c8" stroke-width="1.85" stroke-linecap="round" marker-end="url(#arrow-recovery)" opacity="0.88"/>
+</g>
+<g data-edge="RUNNING->SUCCESS">
+<line x1="788.0" y1="276.0" x2="1342.0" y2="215.0" stroke="#fbf8f5" stroke-width="3.05" stroke-linecap="round" opacity="0.65"/>
+<line x1="788.0" y1="276.0" x2="1342.0" y2="215.0" stroke="#677084" stroke-width="1.65" stroke-linecap="round" marker-end="url(#arrow-final)" opacity="0.88"/>
+</g>
+<g data-edge="RUNNING_RECOVERY->REROUTED">
+<line x1="842.0" y1="610.0" x2="778.0" y2="143.0" stroke="#fbf8f5" stroke-width="3.05" stroke-linecap="round" opacity="0.65"/>
+<line x1="842.0" y1="610.0" x2="778.0" y2="143.0" stroke="#39835a" stroke-width="1.65" stroke-linecap="round" marker-end="url(#arrow-available)" opacity="0.88"/>
+</g>
+<circle cx="70" cy="300" r="22" fill="#f7f1ec" stroke="#b95a3d" stroke-width="2" filter="url(#shadow)"/>
+<text x="70" y="304" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui" font-size="11" font-weight="700" fill="#4f3228">START</text>
+<g data-status="REGISTERED">
+<rect x="162" y="271" width="176" height="58" rx="10" fill="#eaf7f0" stroke="#39835a" stroke-width="2" filter="url(#shadow)"/>
+<text x="250" y="302" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13" font-weight="700" fill="#244c36">REGISTERED</text>
+<text x="250" y="322" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="10" fill="#244c36" opacity="0.78">available / releases owner</text>
+</g>
+<g data-status="CONCURRENCY_CONTROLLED">
+<rect x="382" y="96" width="176" height="58" rx="10" fill="#fff0f4" stroke="#c7506e" stroke-width="2" filter="url(#shadow)"/>
+<text x="470" y="118" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13" font-weight="700" fill="#6c2b3d">CONCURRENCY</text>
+<text x="470" y="133" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13" font-weight="700" fill="#6c2b3d">CONTROLLED</text>
+<text x="470" y="147" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="10" fill="#6c2b3d" opacity="0.78">releases owner</text>
+</g>
+<g data-status="REROUTED">
+<rect x="602" y="96" width="176" height="58" rx="10" fill="#eaf7f0" stroke="#39835a" stroke-width="2" filter="url(#shadow)"/>
+<text x="690" y="127" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13" font-weight="700" fill="#244c36">REROUTED</text>
+<text x="690" y="147" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="10" fill="#244c36" opacity="0.78">available / releases owner</text>
+</g>
+<g data-status="PAUSED">
+<rect x="842" y="96" width="176" height="58" rx="10" fill="#fff3e6" stroke="#c66a2e" stroke-width="2" filter="url(#shadow)"/>
+<text x="930" y="127" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13" font-weight="700" fill="#5c351f">PAUSED</text>
+<text x="930" y="147" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="10" fill="#5c351f" opacity="0.78">owned</text>
+</g>
+<g data-status="RESUMED">
+<rect x="1072" y="96" width="176" height="58" rx="10" fill="#fff3e6" stroke="#c66a2e" stroke-width="2" filter="url(#shadow)"/>
+<text x="1160" y="127" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13" font-weight="700" fill="#5c351f">RESUMED</text>
+<text x="1160" y="147" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="10" fill="#5c351f" opacity="0.78">owned</text>
+</g>
+<g data-status="PENDING">
+<rect x="382" y="271" width="176" height="58" rx="10" fill="#fff3e6" stroke="#c66a2e" stroke-width="2" filter="url(#shadow)"/>
+<text x="470" y="302" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13" font-weight="700" fill="#5c351f">PENDING</text>
+<text x="470" y="322" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="10" fill="#5c351f" opacity="0.78">owned</text>
+</g>
+<g data-status="RUNNING">
+<rect x="612" y="271" width="176" height="58" rx="10" fill="#fff3e6" stroke="#c66a2e" stroke-width="2" filter="url(#shadow)"/>
+<text x="700" y="302" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13" font-weight="700" fill="#5c351f">RUNNING</text>
+<text x="700" y="322" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="10" fill="#5c351f" opacity="0.78">owned</text>
+</g>
+<g data-status="SUCCESS">
+<rect x="1342" y="206" width="176" height="58" rx="10" fill="#f1f3f7" stroke="#677084" stroke-width="2" filter="url(#shadow)"/>
+<rect x="1347" y="211" width="166" height="48" rx="7" fill="none" stroke="#677084" stroke-width="1.2" opacity="0.55"/>
+<text x="1430" y="237" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13" font-weight="700" fill="#333b4a">SUCCESS</text>
+<text x="1430" y="257" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="10" fill="#333b4a" opacity="0.78">final</text>
+</g>
+<g data-status="FAILED">
+<rect x="1342" y="356" width="176" height="58" rx="10" fill="#f1f3f7" stroke="#677084" stroke-width="2" filter="url(#shadow)"/>
+<rect x="1347" y="361" width="166" height="48" rx="7" fill="none" stroke="#677084" stroke-width="1.2" opacity="0.55"/>
+<text x="1430" y="387" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13" font-weight="700" fill="#333b4a">FAILED</text>
+<text x="1430" y="407" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="10" fill="#333b4a" opacity="0.78">final</text>
+</g>
+<g data-status="CONCURRENCY_CONTROLLED_FINAL">
+<rect x="162" y="456" width="176" height="58" rx="10" fill="#f1f3f7" stroke="#677084" stroke-width="2" filter="url(#shadow)"/>
+<rect x="167" y="461" width="166" height="48" rx="7" fill="none" stroke="#677084" stroke-width="1.2" opacity="0.55"/>
+<text x="250" y="478" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13" font-weight="700" fill="#333b4a">CONCURRENCY</text>
+<text x="250" y="493" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13" font-weight="700" fill="#333b4a">CONTROLLED_FINAL</text>
+<text x="250" y="507" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="10" fill="#333b4a" opacity="0.78">final</text>
+</g>
+<g data-status="RETRY">
+<rect x="612" y="456" width="176" height="58" rx="10" fill="#eaf7f0" stroke="#39835a" stroke-width="2" filter="url(#shadow)"/>
+<text x="700" y="487" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13" font-weight="700" fill="#244c36">RETRY</text>
+<text x="700" y="507" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="10" fill="#244c36" opacity="0.78">available / releases owner</text>
+</g>
+<g data-status="KILLED">
+<rect x="1072" y="456" width="176" height="58" rx="10" fill="#f7f1ec" stroke="#b95a3d" stroke-width="2" filter="url(#shadow)"/>
+<text x="1160" y="487" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13" font-weight="700" fill="#4f3228">KILLED</text>
+<text x="1160" y="507" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="10" fill="#4f3228" opacity="0.78">releases owner</text>
+</g>
+<g data-status="PENDING_RECOVERY">
+<rect x="382" y="581" width="176" height="58" rx="10" fill="#edf4ff" stroke="#4f75c8" stroke-width="2" filter="url(#shadow)"/>
+<text x="470" y="612" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13" font-weight="700" fill="#273d70">PENDING_RECOVERY</text>
+<text x="470" y="632" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="10" fill="#273d70" opacity="0.78">recovery / releases owner</text>
+</g>
+<g data-status="RUNNING_RECOVERY">
+<rect x="842" y="581" width="176" height="58" rx="10" fill="#edf4ff" stroke="#4f75c8" stroke-width="2" filter="url(#shadow)"/>
+<text x="930" y="612" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13" font-weight="700" fill="#273d70">RUNNING_RECOVERY</text>
+<text x="930" y="632" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="10" fill="#273d70" opacity="0.78">recovery / releases owner</text>
+</g>
+<text x="48" y="680" font-family="Inter, ui-sans-serif, system-ui" font-size="13" font-weight="700" fill="#4f3228">Legend</text>
+<rect x="48" y="687" width="28" height="18" rx="5" fill="#eaf7f0" stroke="#39835a" stroke-width="1.5"/>
+<text x="86" y="700" font-family="Inter, ui-sans-serif, system-ui" font-size="12" fill="#244c36">available for runners</text>
+<rect x="318" y="687" width="28" height="18" rx="5" fill="#fff3e6" stroke="#c66a2e" stroke-width="1.5"/>
+<text x="356" y="700" font-family="Inter, ui-sans-serif, system-ui" font-size="12" fill="#5c351f">runner-owned</text>
+<rect x="588" y="687" width="28" height="18" rx="5" fill="#edf4ff" stroke="#4f75c8" stroke-width="1.5"/>
+<text x="626" y="700" font-family="Inter, ui-sans-serif, system-ui" font-size="12" fill="#273d70">recovery override</text>
+<rect x="858" y="687" width="28" height="18" rx="5" fill="#fff0f4" stroke="#c7506e" stroke-width="1.5"/>
+<text x="896" y="700" font-family="Inter, ui-sans-serif, system-ui" font-size="12" fill="#6c2b3d">concurrency control</text>
+<rect x="1128" y="687" width="28" height="18" rx="5" fill="#f1f3f7" stroke="#677084" stroke-width="1.5"/>
+<text x="1166" y="700" font-family="Inter, ui-sans-serif, system-ui" font-size="12" fill="#333b4a">final status</text>
+</svg>

@@ -41,3 +41,12 @@ repos:
       - id: mypy
         additional_dependencies:
           ["types-PyYAML", "types-requests", "types-setuptools"]
+
+  - repo: local
+    hooks:
+      - id: invocation-state-machine-svg
+        name: invocation state machine SVG is current
+        entry: uv run pynenc status render --format svg --check
+        language: system
+        pass_filenames: false
+        files: ^(pynenc/invocation/status\.py|pynenc/invocation/status_graph\.py|pynenc/cli/status_cli\.py|docs/_static/invocation_state_machine\.svg)$

@@ -5,10 +5,10 @@ Reference for all Pynenc CLI commands and options.
 ## Basic Usage
 
 ```bash
-pynenc --app <module.attr> <command> [options]
+pynenc <command> [options]
 ```
 
-The `--app` option tells Pynenc where to find your `Pynenc()` instance. It accepts:
+When the current directory contains exactly one importable Python file with a `Pynenc()` instance, the CLI can find it automatically. Use `--app` when a project has more than one app or when you run the command from another directory. It accepts:
 
 | Format           | Example            | How it works                                                                |
 | ---------------- | ------------------ | --------------------------------------------------------------------------- |
@@ -31,7 +31,7 @@ def add(x: int, y: int) -> int:
 Then run with:
 
 ```bash
-pynenc --app tasks.app runner start
+pynenc runner start
 ```
 
 ```{note}
@@ -40,16 +40,22 @@ The colon format (`module:variable`) is **not** supported. Use dot notation: `ta
 
 ## Global Options
 
-| Option            | Description                                                                              |
-| ----------------- | ---------------------------------------------------------------------------------------- |
-| `--app MODULE`    | Dotted path to module with `Pynenc()` instance (required for `runner` and `show_config`) |
-| `-v`, `--verbose` | Enable debug-level logging output                                                        |
+| Option            | Description                                                                                                |
+| ----------------- | ---------------------------------------------------------------------------------------------------------- |
+| `--app MODULE`    | Dotted path to module with `Pynenc()` instance. Optional when exactly one local app can be auto-discovered |
+| `-v`, `--verbose` | Enable debug-level logging output                                                                          |
 
 ## Commands
 
 ### `runner start`
 
 Start a task runner for the specified application.
+
+```bash
+pynenc runner start
+```
+
+If auto-discovery finds more than one app, specify the one to run:
 
 ```bash
 pynenc --app myapp.tasks.app runner start
@@ -62,7 +68,7 @@ To stop the runner, send `SIGINT` (`Ctrl+C`) or `SIGTERM`. The runner shuts down
 **Example with environment variable override**:
 
 ```bash
-PYNENC__RUNNER_CLS=ThreadRunner pynenc --app myapp.tasks.app runner start
+PYNENC__RUNNER_CLS=ThreadRunner pynenc runner start
 ```
 
 ### `runner show_config`
@@ -70,7 +76,7 @@ PYNENC__RUNNER_CLS=ThreadRunner pynenc --app myapp.tasks.app runner start
 Display the runner configuration for the application.
 
 ```bash
-pynenc --app myapp.tasks.app runner show_config
+pynenc runner show_config
 ```
 
 ### `show_config`
@@ -78,7 +84,17 @@ pynenc --app myapp.tasks.app runner show_config
 Display the full application configuration, including all components and their settings.
 
 ```bash
-pynenc --app myapp.tasks.app show_config
+pynenc show_config
+```
+
+### `status render`
+
+Render the built-in invocation status state machine. This command does not need
+an app instance because it reads the status configuration from pynenc itself.
+
+```bash
+pynenc status render
+pynenc status render --format svg --output docs/_static/invocation_state_machine.svg
 ```
 
 ### `monitor`

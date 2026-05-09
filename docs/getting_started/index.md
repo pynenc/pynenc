@@ -59,7 +59,13 @@ The task runs in the calling thread. No runner process is needed.
 For actual distributed execution, start a runner in one terminal:
 
 ```bash
-pynenc --app=tasks.app runner start
+pynenc runner start
+```
+
+The CLI auto-discovers the app when the current directory contains exactly one importable Python file with a `Pynenc()` instance. In this tutorial that is `tasks.py`. If a project has more than one app, or if you run the command from another directory, pass it explicitly:
+
+```bash
+pynenc --app tasks.app runner start
 ```
 
 In another terminal or script:
@@ -129,7 +135,7 @@ app = (
 Start the runner:
 
 ```bash
-pynenc --app=tasks.app runner start
+pynenc runner start
 ```
 
 Your tasks now route through Redis.
@@ -140,8 +146,10 @@ Install the monitoring extra and start Pynmon:
 
 ```bash
 pip install pynenc[monitor]
-pynenc --app=tasks.app monitor
+pynenc monitor
 ```
+
+If more than one app is available, choose one with `--app tasks.app`.
 
 Open `http://localhost:8000` to see invocations, runners, and task timelines.
 

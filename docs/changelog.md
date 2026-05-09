@@ -4,6 +4,61 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] - 2026-05-09
+
+### Added
+
+- **Invocation status state machine renderer** (`pynenc/invocation/status_graph.py`,
+  `pynenc/cli/status_cli.py`): New `pynenc status render` CLI command that produces a
+  text or SVG diagram of the invocation status state machine directly from
+  `pynenc.invocation.status`. The diagram is now committed to the repository at
+  `docs/_static/invocation_state_machine.svg` and embedded in the README, the docs
+  landing page, and the invocation status guide. A pre-commit hook
+  (`invocation-state-machine-svg`) and a unit test
+  (`pynenc_tests/unit/docs/test_invocation_state_machine_svg.py`) keep the SVG and the
+  status configuration in sync.
+- **CLI app auto-discovery** (`pynenc/util/import_app.py`, `pynenc/cli/main_cli.py`):
+  When `--app` is omitted, the CLI scans top-level Python files in the current
+  directory and uses the only `Pynenc()` instance it finds. Multiple matches still
+  require an explicit `--app`. The discovery scanner skips dunder/setup/conftest
+  files, prefers `tasks.py`/`app.py`/`pynenc_app.py`, and only imports files whose
+  source mentions `Pynenc` to avoid executing unrelated scripts. The same flow also
+  fuels `pynenc monitor` when a local app exists.
+- **CLI namespace `requires_app` flag** (`pynenc/cli/namespace.py`): Subcommands now
+  declare whether they need an app instance via
+  `parser.set_defaults(requires_app=...)` instead of relying on `getattr` fallbacks.
+  `status render` opts out so it can run without any user app.
+- **Tests**: Added unit coverage for monitor auto-discovery
+  (`pynenc_tests/unit/cli/test_main_cli.py`), the runner CLI auto-discovered label
+  (`pynenc_tests/unit/cli/test_runner_cli.py`), and the new auto-discovery branches
+  in `pynenc_tests/unit/util/test_find_app_instance.py` and
+  `test_import_app_filepath.py`.
+
+### Changed
+
+- **Removed `PENDING -> FAILED` transition** (`pynenc/invocation/status.py`):
+  The legacy "cycle-control fail without running" transition was removed.
+- **`distribute_calls` type narrowing** (`pynenc/task.py`): The helper now creates a
+  `ConcurrentInvocationGroup` or `DistributedInvocationGroup` via explicit branches
+  with `isinstance` checks, replacing the previous truthy filter and dynamic class
+  selection. Mismatches now raise `TypeError` instead of silently producing the
+  wrong invocation group.
+- **Documentation refresh** (`README.md`, `docs/getting_started/index.md`,
+  `docs/cli/index.md`, `docs/usage_guide/invocation_status.md`, `docs/index.md`):
+  Examples now show `pynenc runner start` / `pynenc monitor` (auto-discovery) and
+  fall back to `--app` only when more than one app exists. The invocation status
+  guide and landing page embed the new state machine SVG. The `KILLED` row and the
+  ownership-release description were rewritten to match the current state machine.
+- **Sphinx intersphinx mapping** (`docs/conf.py`): Renamed the `pynenc-mongodb`
+  entry to `pynenc-mongo` to match the published plugin name.
+
+### Fixed
+
+- **Hardened multi-thread shutdown** (`pynenc/runner/multi_thread_runner.py`):
+  The worker SIGTERM handler now installs `SIG_IGN` for SIGTERM as its first
+  action so a second termination signal cannot re-enter shutdown logging while it
+  is collecting process information.
+
 ## [0.2.2] - 2026-05-03
 
 ### Fixed

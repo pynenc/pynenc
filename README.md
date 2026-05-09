@@ -42,12 +42,12 @@
 
 Pynenc addresses the complex challenges of task management in distributed environments, offering a robust solution for developers looking to efficiently orchestrate asynchronous tasks across multiple systems. By combining intuitive configuration with advanced features like automatic task prioritization, Pynenc empowers developers to build scalable and reliable distributed applications with ease.
 
-## 🆕 What's New in v0.2.2
+## 🆕 What's New in v0.2.3
 
-- **Pynmon compatibility**: migrated `TemplateResponse` calls to the Starlette 1.x API, fixing crashes on all pynmon views
-- **Monitor stability**: broadened exception handling in app hydration so that lazy-loading modules no longer crash `pynenc monitor`
-- **Invocations tab fix**: `extract_module_info` now correctly resolves the user module instead of the pynenc core module
-- **Dependency bumps**: FastAPI 0.136.0, Starlette 1.0.0, black 26.3.1, sphinx &lt;10
+- **Invocation status state machine diagram**: `pynenc status render` generates a text or SVG view of the state machine directly from `pynenc.invocation.status`. The SVG is committed under `docs/_static/` and embedded in the README, the docs landing page, and the invocation status guide. A pre-commit hook keeps it aligned with the implementation
+- **CLI app auto-discovery**: when the current directory contains a single Python file with a `Pynenc()` instance, `pynenc runner start` and `pynenc monitor` no longer require `--app`. Use `--app` only when more than one app is available or when running from another directory
+- **Dropped `PENDING -> FAILED` transition**: cycle-control is deprecated and the status unnecessary
+- **Hardened multi-thread shutdown**: worker SIGTERM handlers ignore repeated signals so a second termination cannot re-enter shutdown logging
 
 See the [Changelog](https://docs.pynenc.org/changelog.html) for the complete list of changes.
 
@@ -90,6 +90,10 @@ See the [Changelog](https://docs.pynenc.org/changelog.html) for the complete lis
   - Automatic recovery of stuck PENDING and RUNNING invocations
   - Runner heartbeat monitoring to detect inactive runners
   - Comprehensive state transitions with validation
+
+  <p align="center">
+    <img src="docs/_static/invocation_state_machine.svg" alt="Pynenc invocation status state machine" width="100%">
+  </p>
 
 - **Configurable Concurrency Management**: Pynenc offers versatile concurrency control mechanisms at various levels:
 
@@ -246,10 +250,16 @@ To get started with Pynenc, here's a simple example that demonstrates the creati
      Start a runner in a separate terminal or script:
 
      ```bash
-     pynenc --app=tasks.app runner start
+     pynenc runner start
      ```
 
-     Check for the [basic_redis_example](https://github.com/pynenc/samples/tree/main/basic_redis_example) (requires `pynenc-redis` plugin)
+   The CLI auto-discovers the app when the current directory contains exactly one importable file with a `Pynenc()` instance. If your project has multiple apps, select one explicitly:
+
+   ```bash
+   pynenc --app tasks.app runner start
+   ```
+
+   Check for the [basic_redis_example](https://github.com/pynenc/samples/tree/main/basic_redis_example) (requires `pynenc-redis` plugin)
 
    - **Synchronously:**
      For test or local demonstration, to try synchronous execution, you can set the environment variable `PYNENC__DEV_MODE_FORCE_SYNC_TASKS=True` to force tasks to run in the same thread.
@@ -338,6 +348,12 @@ Paste your Pynenc log lines and the Log Explorer augments them with full context
 ### Starting the Monitor
 
 The monitor requires a Pynenc app defined in your codebase:
+
+```bash
+pynenc monitor --host 127.0.0.1 --port 8000
+```
+
+If more than one app is available, specify the one to inspect:
 
 ```bash
 pynenc --app your_app_module monitor --host 127.0.0.1 --port 8000

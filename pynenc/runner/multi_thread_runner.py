@@ -63,6 +63,10 @@ def thread_runner_process_main(
     app.logger.info(f"ThreadRunner process worker:{child_runner_id} started")
 
     def _handle_signal(signum: int, frame: Any) -> None:
+        # A second SIGTERM can arrive while shutdown diagnostics are collecting
+        # process information. Ignore repeated signals so logging cannot be
+        # re-entered from inside imports or stdlib helpers.
+        _signal.signal(_signal.SIGTERM, _signal.SIG_IGN)
         runner._log_shutdown(signum)
         raise KeyboardInterrupt  # trigger _on_stop via finally block
 

@@ -47,3 +47,18 @@ def test_start_runner() -> None:
                 "Starting runner for app: tests.unit.cli.test_runner_cli.app"
             )
         mock_run.assert_called()
+
+
+def test_start_runner_with_auto_discovered_app_label() -> None:
+    """Runner command can print the auto-discovered app label."""
+    args = PynencCLINamespace()
+    args.app = "auto-discovered app_id=test-app"
+    args.app_instance = app
+
+    with patch.object(app.runner, "run", new_callable=MagicMock) as mock_run:
+        with patch("pynenc.cli.runner_cli.print") as mock_print:
+            start_runner_command(args)
+            mock_print.assert_called_with(
+                "Starting runner for app: auto-discovered app_id=test-app"
+            )
+        mock_run.assert_called()

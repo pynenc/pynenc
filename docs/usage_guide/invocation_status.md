@@ -6,6 +6,14 @@ The invocation status system is a core component of Pynenc that manages the life
 
 Every task invocation in Pynenc progresses through a series of states from registration to completion. The status system enforces valid state transitions, tracks which runner owns each invocation, and enables automatic recovery when runners become unresponsive.
 
+The diagram below is generated from `pynenc/invocation/status.py`. If a status or transition changes, `pynenc status render --format svg --output docs/_static/invocation_state_machine.svg` updates this SVG and the tests check that it stays aligned with the implementation.
+
+```{image} ../_static/invocation_state_machine.svg
+:alt: Pynenc invocation status state machine
+:width: 100%
+:class: shadow
+```
+
 ## All Invocation Statuses
 
 | Status                         | Description                                                                |
@@ -15,7 +23,7 @@ Every task invocation in Pynenc progresses through a series of states from regis
 | `RUNNING`                      | Task is currently executing (owned by runner)                              |
 | `PAUSED`                       | Task execution is paused (owned by runner)                                 |
 | `RESUMED`                      | Task execution has been resumed after pause (owned by runner)              |
-| `KILLED`                       | Task execution was terminated                                              |
+| `KILLED`                       | Task execution was terminated and can be rerouted                          |
 | `RETRY`                        | Task finished with a retriable exception, available for re-execution       |
 | `SUCCESS`                      | Task completed successfully (final)                                        |
 | `FAILED`                       | Task finished with an exception (final)                                    |
@@ -82,7 +90,7 @@ The status system tracks which runner owns each invocation:
 
 - **Ownership Acquisition**: When a runner picks up an invocation (REGISTERED → PENDING), it acquires ownership.
 - **Ownership Validation**: Transitions from owned statuses (PENDING, RUNNING, etc.) require the requesting runner to be the owner.
-- **Ownership Release**: Final statuses and rerouted statuses release ownership, making the invocation available for other runners.
+- **Ownership Release**: Statuses such as `REROUTED`, `RETRY`, `KILLED`, recovery states, and final states release ownership before the next transition.
 - **Ownership Override**: Recovery statuses (PENDING_RECOVERY, RUNNING_RECOVERY) bypass ownership validation to recover stuck invocations.
 
 ## Runner Heartbeat and Recovery
@@ -144,7 +152,7 @@ When `reroute_on_concurrency_control=False`, blocked invocations receive CONCURR
 
 Use Pynmon to visualize invocation status transitions:
 
-1. Start the monitor: `pynenc --app your_app monitor`
+1. Start the monitor: `pynenc monitor` when the app can be discovered, or `pynenc --app your_app monitor` when you need to select one explicitly
 2. Navigate to the Timeline view to see status changes over time
 3. Click on individual invocations to see their full status history
 
