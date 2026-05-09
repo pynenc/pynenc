@@ -44,7 +44,7 @@ intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
     "redis": ("https://redis-py.readthedocs.io/en/stable/", None),
     "pynenc-redis": ("https://pynenc-redis.readthedocs.io/en/latest/", None),
-    "pynenc-mongodb": ("https://pynenc-mongodb.readthedocs.io/en/latest/", None),
+    "pynenc-mongo": ("https://pynenc-mongo.readthedocs.io/en/latest/", None),
     "pynenc-rabbitmq": ("https://pynenc-rabbitmq.readthedocs.io/en/latest/", None),
 }
 

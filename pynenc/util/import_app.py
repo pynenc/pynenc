@@ -4,6 +4,8 @@ Utilities for discovering and loading Pynenc application instances.
 The CLI uses ``--app`` to locate the user's ``Pynenc`` instance.  Accepted
 formats (see :func:`find_app_instance`):
 
+- **auto-discovery** -- no ``--app`` scans the current directory and succeeds
+    when exactly one importable Python file defines a ``Pynenc`` instance.
 - **module.attr** -- ``tasks.app`` imports ``tasks`` module, finds the ``Pynenc`` instance.
 - **package.module** -- ``mypackage.tasks`` standard Python import.
 - **file path** -- ``path/to/tasks.py`` loads the file directly.
@@ -20,6 +22,7 @@ import logging
 import os
 import sys
 import types
+from pathlib import Path
 
 from pynenc.app import Pynenc
 from pynenc.app_info import AppInfo
@@ -27,12 +30,13 @@ from pynenc.app_info import AppInfo
 logger = logging.getLogger(__name__)
 
 APP_FORMAT_HELP = (
-    "The --app value must be a dotted path to the module containing your "
-    "Pynenc() instance.\n"
+    "Run from a directory with exactly one importable Python file defining a "
+    "Pynenc() instance, or pass --app explicitly.\n"
     "\n"
     "Examples:\n"
+    "  pynenc runner start                       # auto-discovers a single local app\n"
     "  pynenc --app tasks.app runner start       # loads tasks.py, finds Pynenc instance\n"
-    "  pynenc --app mypackage.tasks runner start  # imports mypackage.tasks\n"
+    "  pynenc --app mypackage.tasks runner start # imports mypackage.tasks\n"
     "  pynenc --app path/to/tasks.py runner start # loads file directly\n"
 )
 
@@ -71,15 +75,118 @@ def _find_pynenc_in_module(module: types.ModuleType) -> Pynenc:
     :return: The first ``Pynenc`` instance found.
     :raises ValueError: If no instance is found.
     """
-    for name in dir(module):
-        obj = getattr(module, name)
-        if isinstance(obj, Pynenc):
-            return obj
+    if instances := _find_pynenc_instances_in_module(module):
+        return instances[0][1]
 
     module_name = getattr(module, "__name__", "unknown")
     raise ValueError(
         f"No Pynenc() instance found in module '{module_name}'.\n"
         f"Make sure the file defines a variable like:  app = Pynenc()\n\n"
+        + APP_FORMAT_HELP
+    )
+
+
+def _find_pynenc_instances_in_module(
+    module: types.ModuleType,
+) -> list[tuple[str, Pynenc]]:
+    """
+    Scan a loaded module for public ``Pynenc`` instances.
+
+    :param types.ModuleType module: The module to scan.
+    :return: ``(variable_name, app)`` pairs, de-duplicated by object identity.
+    """
+    instances: list[tuple[str, Pynenc]] = []
+    seen: set[int] = set()
+    for name in dir(module):
+        if name.startswith("_"):
+            continue
+        try:
+            obj = getattr(module, name)
+        except (AttributeError, ImportError, TypeError):
+            continue
+        except Exception:
+            logger.debug(
+                "Unexpected error while inspecting %s.%s",
+                getattr(module, "__name__", "unknown"),
+                name,
+                exc_info=True,
+            )
+            continue
+        if isinstance(obj, Pynenc) and id(obj) not in seen:
+            seen.add(id(obj))
+            instances.append((name, obj))
+    return instances
+
+
+def _iter_auto_discovery_files() -> list[Path]:
+    """Return top-level Python files to inspect for local app auto-discovery."""
+    cwd = Path(os.getcwd())
+    candidates = [
+        path
+        for path in cwd.glob("*.py")
+        if path.is_file()
+        and not path.name.startswith("_")
+        and path.name not in {"setup.py", "conftest.py"}
+        and _looks_like_pynenc_app_source(path)
+    ]
+
+    preferred_names = {"tasks.py": 0, "app.py": 1, "pynenc_app.py": 2}
+    return sorted(
+        candidates, key=lambda path: (preferred_names.get(path.name, 99), path.name)
+    )
+
+
+def _looks_like_pynenc_app_source(path: Path) -> bool:
+    """Cheaply filter out helper scripts before importing app candidates."""
+    try:
+        source = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        source = path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return False
+    return "Pynenc" in source
+
+
+def _find_single_app_in_current_directory() -> Pynenc:
+    """
+    Auto-discover a single local ``Pynenc`` instance.
+
+    This intentionally scans only top-level Python files in the current working
+    directory. If that finds zero or multiple apps, the caller must pass
+    ``--app`` explicitly.
+
+    :return: The discovered ``Pynenc`` instance.
+    :raises ValueError: If discovery finds zero or multiple apps.
+    """
+    discovered: list[tuple[str, str, Pynenc]] = []
+    for path in _iter_auto_discovery_files():
+        try:
+            module = _load_module_from_file(str(path))
+        except Exception as exc:
+            logger.debug("Skipping %s during app auto-discovery: %s", path, exc)
+            continue
+        for variable_name, app in _find_pynenc_instances_in_module(module):
+            discovered.append((path.stem, variable_name, app))
+
+    if len(discovered) == 1:
+        module_name, variable_name, app = discovered[0]
+        logger.info("Auto-discovered Pynenc app at %s.%s", module_name, variable_name)
+        return app
+
+    if not discovered:
+        raise ValueError(
+            "No Pynenc() instance found in the current directory.\n"
+            "Run from the directory that contains your tasks.py/app.py file, "
+            "or specify the app explicitly with --app.\n\n" + APP_FORMAT_HELP
+        )
+
+    locations = "\n".join(
+        f"  - {module}.{variable}" for module, variable, _ in discovered
+    )
+    raise ValueError(
+        "Multiple Pynenc() instances found in the current directory:\n"
+        f"{locations}\n"
+        "Specify the one to use with --app, for example: --app tasks.app\n\n"
         + APP_FORMAT_HELP
     )
 
@@ -196,11 +303,15 @@ def _resolve_dotted_path(app_spec: str) -> types.ModuleType:
 # ---------------------------------------------------------------------------
 
 
-def find_app_instance(app_spec: str | None) -> Pynenc:
+def find_app_instance(app_spec: str | None = None) -> Pynenc:
     """
     Find and load a ``Pynenc`` application instance.
 
-    Accepted ``--app`` formats:
+    If ``app_spec`` is empty, pynenc scans top-level Python files in the
+    current directory and succeeds only when it finds exactly one ``Pynenc``
+    instance.
+
+    Accepted explicit ``--app`` formats:
 
     - ``tasks.app`` -- loads ``tasks.py`` from the current directory,
       scans for a ``Pynenc()`` instance.
@@ -209,10 +320,11 @@ def find_app_instance(app_spec: str | None) -> Pynenc:
 
     :param str | None app_spec: The ``--app`` value from the CLI.
     :return: The ``Pynenc`` application instance.
-    :raises ValueError: If the spec is missing, malformed, or has no Pynenc instance.
+    :raises ValueError: If discovery fails, the spec is malformed, or the target has no Pynenc instance.
     """
     if not app_spec:
-        raise ValueError(f"No --app value provided.\n\n{APP_FORMAT_HELP}")
+        logger.debug("No --app provided; trying local app auto-discovery")
+        return _find_single_app_in_current_directory()
 
     logger.debug("Resolving --app '%s'", app_spec)
     _validate_app_spec(app_spec)

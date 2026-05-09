@@ -50,9 +50,16 @@ def test_cli_with_app() -> None:
             assert "command" in line
 
 
-def test_cli_value_error() -> None:
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["pynenc", "runner", "start"],
+        ["pynenc", "--app", "nonexistent.app", "runner", "start"],
+    ],
+)
+def test_cli_value_error(argv: list[str]) -> None:
     """Test CLI handles ValueError from find_app_instance"""
-    with patch("sys.argv", ["pynenc", "--app", "nonexistent.app", "runner", "start"]):
+    with patch("sys.argv", argv):
         with patch("pynenc.cli.main_cli.find_app_instance") as mock_find_app:
             mock_find_app.side_effect = ValueError("Invalid application module")
             log_capture = StringIO()
@@ -95,3 +102,28 @@ def test_cli_unexpected_exception() -> None:
                     )
                 finally:
                     logging.getLogger().removeHandler(handler)
+
+
+def test_monitor_auto_discovers_local_app() -> None:
+    """Monitor uses local single-app discovery when --app is omitted."""
+    with patch("sys.argv", ["pynenc", "monitor"]):
+        with patch("pynenc.cli.main_cli.find_app_instance", return_value=app):
+            with patch("pynenc.cli.monitor_cli.start_monitor_command") as mock_monitor:
+                main()
+
+    args = mock_monitor.call_args.args[0]
+    assert args.app_instance is app
+    assert args.app == f"auto-discovered app_id={app.app_id}"
+
+
+def test_status_render_does_not_load_app() -> None:
+    """Status rendering inspects the built-in state machine without an app."""
+    with patch("sys.argv", ["pynenc", "status", "render"]):
+        with patch("pynenc.cli.main_cli.find_app_instance") as mock_find_app:
+            with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+                main()
+
+    mock_find_app.assert_not_called()
+    output = mock_stdout.getvalue()
+    assert "START -> REGISTERED" in output
+    assert "PENDING -> FAILED" not in output

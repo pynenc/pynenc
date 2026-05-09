@@ -112,6 +112,23 @@ line of call-site code.
 
 ---
 
+## Invocation State Machine
+
+Every invocation moves through the same validated status graph. The diagram is
+generated from `pynenc.invocation.status`, so the documentation follows the
+implementation when states or transitions change.
+
+:::{image} \_static/invocation_state_machine.svg
+:alt: Pynenc invocation status state machine
+:width: 100%
+:class: shadow
+:::
+
+See {doc}`usage_guide/invocation_status` for the state definitions,
+ownership rules, and recovery transitions.
+
+---
+
 ## Pluggable Backends
 
 The core ships with in-memory and SQLite backends. Production backends are

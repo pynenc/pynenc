@@ -2,12 +2,49 @@ import argparse
 import logging
 import sys
 import traceback
+from typing import TYPE_CHECKING
 
 from pynenc.cli.config_cli import add_config_subparser
 from pynenc.cli.monitor_cli import add_monitor_subparser
 from pynenc.cli.namespace import PynencCLINamespace
 from pynenc.cli.runner_cli import add_runner_subparser
+from pynenc.cli.status_cli import add_status_subparser
 from pynenc.util.import_app import find_app_instance
+
+if TYPE_CHECKING:
+    from pynenc.app import Pynenc
+
+
+def _set_auto_discovered_app_label(
+    args: PynencCLINamespace, app_instance: "Pynenc"
+) -> None:
+    args.app_instance = app_instance
+    if not args.app:
+        args.app = f"auto-discovered app_id={app_instance.app_id}"
+
+
+def _try_find_monitor_app() -> "Pynenc | None":
+    """Try monitor auto-discovery without failing the command when no local app exists."""
+    try:
+        return find_app_instance(None)
+    except ValueError:
+        return None
+
+
+def _resolve_app_for_command(args: PynencCLINamespace) -> None:
+    """Attach app instance to args when the selected command requires one."""
+    if not args.requires_app:
+        return
+
+    if args.command == "monitor" and not args.app:
+        app_instance = _try_find_monitor_app()
+        if app_instance is None:
+            return
+        _set_auto_discovered_app_label(args, app_instance)
+        return
+
+    app_instance = find_app_instance(args.app)
+    _set_auto_discovered_app_label(args, app_instance)
 
 
 def main() -> None:
@@ -18,8 +55,9 @@ def main() -> None:
     sets up logging, and executes the appropriate subcommand function based on the user input.
 
     The CLI supports various subcommands for different functionalities, such as running tasks
-    and configuring the application. The `--app` parameter is required for most commands, but optional for monitoring which can
-    auto-discover apps.
+    and configuring the application. The `--app` parameter is optional when the
+    current directory contains exactly one importable `Pynenc()` instance; use it
+    explicitly when more than one app exists or when running outside the app directory.
 
     The main steps include:
     - Parsing command line arguments with `argparse`.
@@ -35,6 +73,7 @@ def main() -> None:
         "--app",
         help=(
             "Dotted path to the module containing your Pynenc() instance. "
+            "Optional when the current directory contains exactly one local app. "
             "Examples: 'tasks.app' (loads tasks.py), "
             "'mypackage.tasks' (imports mypackage.tasks), "
             "'path/to/tasks.py' (loads file directly)"
@@ -51,6 +90,7 @@ def main() -> None:
     add_runner_subparser(subparsers)
     add_config_subparser(subparsers)
     add_monitor_subparser(subparsers)
+    add_status_subparser(subparsers)
 
     # Parse the arguments into custom namespace PynencCLINamespace
     args = PynencCLINamespace()
@@ -60,14 +100,8 @@ def main() -> None:
     log_level = logging.DEBUG if args.verbose else logging.WARNING
     logging.basicConfig(level=log_level, format="%(levelname)s: %(message)s")
 
-    # Only require --app for non-monitor commands
-    if args.command != "monitor" and not args.app:
-        parser.error("the --app argument is required for this command")
-
     try:
-        if args.app:
-            app_instance = find_app_instance(args.app)
-            args.app_instance = app_instance
+        _resolve_app_for_command(args)
         args.func(args)
     except ValueError as e:
         logging.error(f"Failed to load application: {e}")

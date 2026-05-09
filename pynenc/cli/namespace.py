@@ -25,4 +25,5 @@ class PynencCLINamespace(argparse.Namespace):
 
     app: str | None = None
     verbose: bool | None = None
+    requires_app: bool = True
     app_instance: "Pynenc | None" = None

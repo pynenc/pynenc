@@ -19,6 +19,7 @@ from pynenc.invocation.conc_invocation import (
     ConcurrentInvocationGroup,
 )
 from pynenc.invocation.dist_invocation import (
+    DistributedInvocation,
     DistributedInvocationGroup,
 )
 from pynenc.identifiers.task_id import TaskId
@@ -447,20 +448,24 @@ def distribute_calls(
     # Prepare arguments with common_args merged in
     all_args = prepare_arguments(task, param_list, common_args)
 
-    # Standard processing - distribute calls normally
-    invocations = []
+    if task.app.conf.dev_mode_force_sync_tasks:
+        concurrent_invocations: list[ConcurrentInvocation] = []
+        for args in all_args:
+            invocation = task._call(args)
+            if not isinstance(invocation, ConcurrentInvocation):
+                raise TypeError(
+                    "dev_mode_force_sync_tasks must create ConcurrentInvocation"
+                )
+            concurrent_invocations.append(invocation)
+        return ConcurrentInvocationGroup(task, concurrent_invocations)
+
+    distributed_invocations: list[DistributedInvocation] = []
     for args in all_args:
         invocation = task._call(args)
-        if invocation:
-            invocations.append(invocation)
-
-    group_cls: type[BaseInvocationGroup]
-    if task.app.conf.dev_mode_force_sync_tasks:
-        group_cls = ConcurrentInvocationGroup
-    else:
-        group_cls = DistributedInvocationGroup
-
-    return group_cls(task, invocations)
+        if not isinstance(invocation, DistributedInvocation):
+            raise TypeError("distributed mode must create DistributedInvocation")
+        distributed_invocations.append(invocation)
+    return DistributedInvocationGroup(task, distributed_invocations)
 
 
 def distribute_batch_calls(
