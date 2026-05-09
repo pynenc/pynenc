@@ -13,10 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   text or SVG diagram of the invocation status state machine directly from
   `pynenc.invocation.status`. The diagram is now committed to the repository at
   `docs/_static/invocation_state_machine.svg` and embedded in the README, the docs
-  landing page, and the invocation status guide. A pre-commit hook
-  (`invocation-state-machine-svg`) and a unit test
-  (`pynenc_tests/unit/docs/test_invocation_state_machine_svg.py`) keep the SVG and the
-  status configuration in sync.
+  landing page, and the invocation status guide.
 - **CLI app auto-discovery** (`pynenc/util/import_app.py`, `pynenc/cli/main_cli.py`):
   When `--app` is omitted, the CLI scans top-level Python files in the current
   directory and uses the only `Pynenc()` instance it finds. Multiple matches still
