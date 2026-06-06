@@ -131,9 +131,15 @@ Trigger configuration (`pynenc.conf.config_trigger.ConfigTrigger`).
 | `trigger_run_max_records`    | `int`  | `0`     | Soft cap on the total number of stored trigger runs (`0` disables capacity-based purging; only age-based purging applies) |
 
 `trigger_task_modules` belongs to the main app configuration because the
-runner uses it during startup. Add any module that declares tasks with
-`@app.task(triggers=...)`; otherwise the runner may start before those trigger
-definitions are registered.
+runner uses it during startup. Normal task modules are loaded lazily when an
+invocation first reaches a runner, but trigger-backed tasks need to be known
+before any invocation exists: their conditions must already be registered
+when the app-level atomic service decides whether to create that first
+invocation.
+
+Add every module that declares `@app.task(triggers=...)`. Pynenc imports those
+modules when the runner starts and continues to lazy-load task modules that are
+not listed.
 
 ```toml
 [tool.pynenc]

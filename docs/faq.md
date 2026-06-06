@@ -107,6 +107,49 @@ See {doc}`reference/serializers`.
 
 ---
 
+## Why was my task not triggered?
+
+If a task should run from a cron schedule, event, status, result, or exception
+but no invocation is created, first check `trigger_task_modules`.
+
+Pynenc normally imports a task module lazily when a runner receives an
+invocation for a task in that module. A trigger-backed task must be registered
+before that first invocation can exist, because the app-level atomic service
+needs its conditions to decide when to create it.
+
+Add every module that declares `@app.task(triggers=...)` to
+`trigger_task_modules` using whichever configuration path you already use.
+These are alternative ways to populate the same setting, not steps you need to
+combine.
+
+```toml
+[tool.pynenc]
+trigger_task_modules = ["myapp.scheduled_tasks", "myapp.event_handlers"]
+```
+
+```bash
+PYNENC__TRIGGER_TASK_MODULES='["myapp.scheduled_tasks", "myapp.event_handlers"]'
+```
+
+```python
+from pynenc import PynencBuilder
+
+app = (
+    PynencBuilder()
+    .trigger_task_modules(["myapp.scheduled_tasks", "myapp.event_handlers"])
+    .build()
+)
+```
+
+The runner imports the configured modules at startup and registers their trigger
+definitions. Other task modules remain lazy-loaded. Also verify that a trigger
+backend is configured and that a runner is active.
+
+See {doc}`usage_guide/use_case_010_trigger_system` for the complete trigger
+setup.
+
+---
+
 ## What happens when a runner crashes?
 
 Pynenc tracks runner health through **heartbeats**. Each runner periodically registers a heartbeat with the state backend. If a runner stops sending heartbeats (crash, network partition, OOM kill), the orchestrator detects it and:
@@ -195,3 +238,4 @@ See {doc}`usage_guide/use_case_009_client_data_store`.
 3. **Defining tasks in `__main__`** — workers can't import them (see above).
 4. **Not installing the plugin package** — e.g., calling `.redis()` without `pip install pynenc-redis`.
 5. **Mismatched `app_id`** — if the runner and the caller use different `app_id` values, they won't share the same queue.
+6. **Missing `trigger_task_modules`** — trigger-backed tasks in lazy-loaded modules are not registered when the atomic service evaluates conditions.

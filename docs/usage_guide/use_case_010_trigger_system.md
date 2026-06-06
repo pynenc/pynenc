@@ -59,6 +59,18 @@ trigger_task_modules = ["tasks"]
 # ...other configuration...
 ```
 
+:::{important}
+Pynenc loads ordinary task modules lazily when a runner receives the first
+invocation for a task in that module. That is too late for trigger-backed
+tasks: cron, event, status, result, and exception conditions must already be
+registered for the app-level atomic service to evaluate them and create their
+first invocation.
+
+Add every module that declares `@app.task(triggers=...)` to
+`trigger_task_modules`. Runners import those modules at startup; Pynenc does
+not eagerly import the rest of your task modules.
+:::
+
 For a single-host app using the built-in SQLite components:
 
 ```toml
@@ -85,6 +97,7 @@ app = (
     PynencBuilder()
     .thread_runner()
     .trigger_memory()  # Enables memory-based triggers
+    .trigger_task_modules(["tasks"])
     .build()
 )
 
@@ -93,6 +106,7 @@ app = (
     PynencBuilder()
     .redis(url="redis://localhost:6379")
     .process_runner()
+    .trigger_task_modules(["tasks"])
     .build()
 )
 ```
@@ -162,9 +176,10 @@ def notification_task() -> str:
     return "Source task completed successfully"
 ```
 
-When the runner starts, it must import the modules that declare trigger-backed
-tasks so those decorators can register their deferred triggers. In config files,
-set `trigger_task_modules = ["tasks"]` (or the modules that contain your tasks).
+When the runner starts, it imports the configured `trigger_task_modules` before
+the atomic service begins evaluating conditions. Without that declaration,
+trigger-backed tasks in a lazily loaded module are unknown to the runner and
+cannot create their first invocation.
 
 ### Cron-Based Task Scheduling
 
