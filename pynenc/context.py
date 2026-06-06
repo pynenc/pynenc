@@ -61,6 +61,15 @@ def _get_dist_inv_context_storage() -> dict[str, "DistributedInvocation | None"]
     return storage
 
 
+def _get_trigger_event_context_storage() -> dict[str, str | None]:
+    """Get thread-local trigger-event context storage"""
+    storage = getattr(thread_local, "trigger_event_context", None)
+    if storage is None:
+        storage = {}
+        thread_local.trigger_event_context = storage
+    return storage
+
+
 def _get_app_storage() -> "Pynenc | None":
     """Get thread-local app storage."""
     return getattr(thread_local, "current_app", None)
@@ -154,6 +163,24 @@ def swap_dist_invocation_context(
     previous_invocation = storage.get(app_id)
     storage[app_id] = invocation
     return previous_invocation
+
+
+# =============================================================================
+# Trigger Event Context
+# =============================================================================
+
+
+def get_trigger_event_context(app_id: str) -> str | None:
+    """Return the active triggering event id for the given app, if any."""
+    return _get_trigger_event_context_storage().get(app_id)
+
+
+def swap_trigger_event_context(app_id: str, event_id: str | None) -> str | None:
+    """Set the active triggering event id for the given app, return the previous."""
+    storage = _get_trigger_event_context_storage()
+    previous = storage.get(app_id)
+    storage[app_id] = event_id
+    return previous
 
 
 # =============================================================================

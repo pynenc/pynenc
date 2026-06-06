@@ -2,6 +2,17 @@
   // Current invocation tracked for zoom + URL persistence
   let currentInvocationId = null;
   let currentInvocationData = null;
+  let currentInvocationApiData = null;
+  let currentAtomicServiceEl = null;
+  let currentEventId = null;
+  let currentEventData = null;
+  const timelineRangeZoom = {
+    enabled: false,
+    dragging: false,
+    startX: 0,
+    currentX: 0,
+    suppressNextClick: false,
+  };
 
   // ── Cross-highlight helpers ──────────────────────────────────────────
   // Highlight / unhighlight an invocation across BOTH the timeline SVG
@@ -37,6 +48,211 @@
     highlightInvocation(invocationId, false);
   }
 
+  function splitIds(value) {
+    return (value || "").split(/\s+/).filter(Boolean);
+  }
+
+  function setRelatedInvocationHighlight(invocationIds, on) {
+    invocationIds.forEach((invocationId) => {
+      if (!invocationId) return;
+      if (on) {
+        highlightInvocation(invocationId);
+      } else if (invocationId !== currentInvocationId) {
+        unhighlightInvocation(invocationId);
+      }
+    });
+  }
+
+  function relatedInvocationIdsForEvent(eventId, sourceEl) {
+    const ids = new Set(splitIds(sourceEl?.dataset?.relatedInvocationIds));
+    const timeline = document.getElementById("timeline-container");
+    if (!timeline || !eventId) return ids;
+
+    const safeEventId = CSS.escape(eventId);
+    timeline
+      .querySelectorAll(`.event-marker-link[data-event-id="${safeEventId}"]`)
+      .forEach((marker) => {
+        splitIds(marker.dataset.relatedInvocationIds).forEach((id) =>
+          ids.add(id)
+        );
+      });
+    timeline
+      .querySelectorAll(
+        `.event-trigger-relation-line[data-event-id="${safeEventId}"]`
+      )
+      .forEach((line) => {
+        const childId = line.getAttribute("data-child-invocation-id");
+        if (childId) ids.add(childId);
+      });
+    timeline
+      .querySelectorAll(
+        `.event-origin-relation-line[data-event-id="${safeEventId}"]`
+      )
+      .forEach((line) => {
+        const sourceId = line.getAttribute("data-source-invocation-id");
+        if (sourceId) ids.add(sourceId);
+      });
+    return ids;
+  }
+
+  function highlightEvent(eventId, on = true, sourceEl = null) {
+    if (!eventId) return;
+    const safeEventId = CSS.escape(eventId);
+    document
+      .querySelectorAll(
+        `[data-event-id="${safeEventId}"], [data-related-event-id="${safeEventId}"]`
+      )
+      .forEach((el) => el.classList.toggle("event-highlight", on));
+    setRelatedInvocationHighlight(
+      relatedInvocationIdsForEvent(eventId, sourceEl),
+      on
+    );
+  }
+
+  // Reverse mapping: given an invocation, find every event that either
+  // triggered it (incoming `event_trigger_relation_line`) or was emitted
+  // by it (`event_origin_relation_line`). Also walks event markers whose
+  // `data-related-invocation-ids` enumerates this invocation. Lets the
+  // SVG hover code light up the originating event marker(s) when a user
+  // hovers an invocation bar, mirroring the existing event→invocation
+  // highlight behaviour.
+  function relatedEventIdsForInvocation(invocationId) {
+    const ids = new Set();
+    const timeline = document.getElementById("timeline-container");
+    if (!timeline || !invocationId) return ids;
+    const safe = CSS.escape(invocationId);
+    timeline
+      .querySelectorAll(
+        `.event-trigger-relation-line[data-child-invocation-id="${safe}"]`
+      )
+      .forEach((line) => {
+        const eid = line.getAttribute("data-event-id");
+        if (eid) ids.add(eid);
+      });
+    timeline
+      .querySelectorAll(
+        `.event-origin-relation-line[data-source-invocation-id="${safe}"]`
+      )
+      .forEach((line) => {
+        const eid = line.getAttribute("data-event-id");
+        if (eid) ids.add(eid);
+      });
+    timeline
+      .querySelectorAll(".event-marker-link[data-event-id]")
+      .forEach((marker) => {
+        if (
+          splitIds(marker.dataset.relatedInvocationIds).includes(invocationId)
+        ) {
+          const eid = marker.getAttribute("data-event-id");
+          if (eid) ids.add(eid);
+        }
+      });
+    return ids;
+  }
+
+  // Returns the direct relation-line paths that connect ``invocationId``
+  // to its originating / emitted events or to its parent / child invocation
+  // via ``direct-call-relation-line``. We highlight only these so a hovered
+  // invocation lights up its own connections rather than the entire fan.
+  function directRelationLinesForInvocation(invocationId) {
+    const out = [];
+    const timeline = document.getElementById("timeline-container");
+    if (!timeline || !invocationId) return out;
+    const safe = CSS.escape(invocationId);
+    timeline
+      .querySelectorAll(
+        `.event-trigger-relation-line[data-child-invocation-id="${safe}"], ` +
+          `.event-origin-relation-line[data-source-invocation-id="${safe}"], ` +
+          `.direct-call-relation-line[data-parent-invocation-id="${safe}"], ` +
+          `.direct-call-relation-line[data-child-invocation-id="${safe}"]`
+      )
+      .forEach((line) => out.push(line));
+    return out;
+  }
+
+  function setRelatedEventHighlight(eventIds, on, invocationId) {
+    // Event markers + side-panel references light up via the event id.
+    // Relation paths in the SVG also match ``[data-event-id]`` but we
+    // skip them here so the broad highlight doesn't drown the timeline
+    // in lit-up sibling lines; the direct connecting paths are toggled
+    // separately below.
+    eventIds.forEach((eid) => {
+      if (!eid) return;
+      const safe = CSS.escape(eid);
+      document
+        .querySelectorAll(
+          `[data-event-id="${safe}"], [data-related-event-id="${safe}"]`
+        )
+        .forEach((el) => {
+          if (el.classList.contains("timeline-relation-line")) return;
+          el.classList.toggle("event-highlight", on);
+        });
+    });
+    if (invocationId) {
+      directRelationLinesForInvocation(invocationId).forEach((line) =>
+        line.classList.toggle("event-highlight", on)
+      );
+    }
+  }
+
+  function eventHoverTarget(target) {
+    return target?.closest(
+      ".event-marker-link[data-event-id], " +
+        ".event-origin-relation-line[data-event-id], " +
+        ".event-trigger-relation-line[data-event-id], " +
+        ".event-reference[data-event-id]"
+    );
+  }
+
+  function invocationHoverTarget(target) {
+    return target?.closest(".invocation-reference[data-invocation-id]");
+  }
+
+  // ── Trigger-run highlight helpers (Phase 5) ──────────────────────────
+  // Status/result/exception/cron relation lines all carry
+  // ``data-trigger-run-id``. Hovering any of them lights up every sibling
+  // line that belongs to the same trigger run plus the source and target
+  // invocation lanes.
+
+  function triggerRunHoverTarget(target) {
+    return target?.closest(
+      ".event-marker-link[data-trigger-run-id], " +
+        ".trigger-run-reference[data-trigger-run-id], " +
+        ".status-trigger-relation-line[data-trigger-run-id], " +
+        ".result-trigger-relation-line[data-trigger-run-id], " +
+        ".exception-trigger-relation-line[data-trigger-run-id], " +
+        ".cron-trigger-relation-line[data-trigger-run-id]"
+    );
+  }
+
+  function highlightTriggerRun(triggerRunId, on = true) {
+    if (!triggerRunId) return;
+    const container = document.getElementById("timeline-container");
+    if (!container) return;
+    const safe = CSS.escape(triggerRunId);
+    const relationItems = container.querySelectorAll(
+      `.timeline-relation-line[data-trigger-run-id="${safe}"], ` +
+        `.trigger-condition-marker[data-trigger-run-id="${safe}"]`
+    );
+    const relatedInvocationIds = new Set();
+    container
+      .querySelectorAll(`.event-marker-link[data-trigger-run-id="${safe}"]`)
+      .forEach((marker) => {
+        marker.classList.toggle("trigger-run-highlight", on);
+        splitIds(marker.dataset.relatedInvocationIds).forEach((id) => {
+          if (id) relatedInvocationIds.add(id);
+        });
+      });
+    relationItems.forEach((item) => {
+      item.classList.toggle("trigger-run-highlight", on);
+      const src = item.getAttribute("data-source-invocation-id");
+      const child = item.getAttribute("data-child-invocation-id");
+      if (src) relatedInvocationIds.add(src);
+      if (child) relatedInvocationIds.add(child);
+    });
+    setRelatedInvocationHighlight(relatedInvocationIds, on);
+  }
+
   // ── Runner highlight helpers ─────────────────────────────────────────
   // Highlight / unhighlight all lane backgrounds and labels for a runner.
 
@@ -54,25 +270,310 @@
     highlightRunner(runnerId, false);
   }
 
-  // Zoom timeline to invocation time range, preserving selected invocation in URL
-  function zoomToInvocation(historyData, invocationId) {
-    if (!historyData || historyData.length === 0) return;
+  function setTimelineDetailMode(kind) {
+    const panel = document.getElementById("invocation-details-panel");
+    const kicker = panel?.querySelector(".detail-kicker");
+    const title = panel?.querySelector(".timeline-detail-header h6");
+    const fullLink = document.getElementById("view-full-details");
+    const zoomButton = document.getElementById("zoom-to-invocation");
+    if (kind === "atomic-service") {
+      if (kicker) kicker.textContent = "Selected atomic service";
+      if (title) title.textContent = "Atomic service run";
+      if (fullLink) fullLink.textContent = "View Runner";
+      zoomButton?.classList.add("d-none");
+      return;
+    }
+    if (kind === "event") {
+      if (kicker) kicker.textContent = "Selected event";
+      if (title) title.textContent = "Event details";
+      if (fullLink) fullLink.textContent = "View Full Details";
+      zoomButton?.classList.add("d-none");
+      return;
+    }
+    if (kicker) kicker.textContent = "Selected invocation";
+    if (title) title.textContent = "Invocation details";
+    if (fullLink) fullLink.textContent = "View Full Details";
+    zoomButton?.classList.remove("d-none");
+  }
 
-    const startTime = new Date(historyData[0].timestamp);
-    const endTime = new Date(historyData[historyData.length - 1].timestamp);
-    const durationMs = endTime - startTime;
-    const paddingMs = Math.max(durationMs * 0.1, 1000);
+  function highlightAtomicService(el, on = true) {
+    if (!el) return;
+    el.classList.toggle("atomic-service-highlight", on);
+    const runnerId = el.getAttribute("data-runner-id");
+    if (runnerId) highlightRunner(runnerId, on);
+  }
 
-    const paddedStart = new Date(startTime.getTime() - paddingMs);
-    const paddedEnd = new Date(endTime.getTime() + paddingMs);
-    const fmt = (d) => d.toISOString().slice(0, 19);
+  function atomicServiceRunUrl(runId) {
+    return `/runners/atomic-service/runs/${encodeURIComponent(runId)}`;
+  }
+
+  function cssAttrEscape(value) {
+    if (window.CSS?.escape) return CSS.escape(value);
+    return String(value).replace(/["\\]/g, "\\$&");
+  }
+
+  function findAtomicServiceWindowByRunId(runId) {
+    if (!runId) return null;
+    const escaped = cssAttrEscape(runId);
+    return document.querySelector(
+      `.atomic-service-window[data-atomic-service-run-id="${escaped}"]`
+    );
+  }
+
+  function highlightAtomicServiceRun(runId, on = true) {
+    const el = findAtomicServiceWindowByRunId(runId);
+    if (!el) return null;
+    if (!on && el === currentAtomicServiceEl) return el;
+    highlightAtomicService(el, on);
+    return el;
+  }
+
+  function parseIsoDate(value) {
+    if (!value) return null;
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  function formatTimelineParamDate(date) {
+    return date
+      .toISOString()
+      .replace("Z", "")
+      .replace(/(\.\d{3})$/, "$1000");
+  }
+
+  function timelineSvg() {
+    return document.querySelector("#timeline-container svg");
+  }
+
+  function timelineZoomBounds(svg) {
+    if (!svg) return null;
+    const start = parseIsoDate(svg.dataset.startTime);
+    const end = parseIsoDate(svg.dataset.endTime);
+    const left = Number(svg.dataset.leftMargin);
+    const width = Number(svg.dataset.contentWidth);
+    const timelineWidth = Number(svg.dataset.timelineWidth);
+    if (!start || !end || !Number.isFinite(left) || !Number.isFinite(width)) {
+      return null;
+    }
+    return {
+      start,
+      end,
+      left,
+      right: Number.isFinite(timelineWidth) ? timelineWidth : left + width,
+      width,
+    };
+  }
+
+  function clientToSvgX(svg, event) {
+    const bounds = timelineZoomBounds(svg);
+    const matrix = svg?.getScreenCTM?.();
+    if (!bounds || !matrix) return null;
+    const point = svg.createSVGPoint();
+    point.x = event.clientX;
+    point.y = event.clientY;
+    const svgPoint = point.matrixTransform(matrix.inverse());
+    return Math.min(Math.max(svgPoint.x, bounds.left), bounds.right);
+  }
+
+  function ensureTimelineZoomSelection(svg) {
+    let rect = svg.querySelector("#timeline-zoom-selection");
+    if (rect) return rect;
+    rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    rect.setAttribute("id", "timeline-zoom-selection");
+    rect.setAttribute("class", "timeline-zoom-selection");
+    rect.setAttribute("y", "0");
+    rect.setAttribute("height", String(svg.viewBox.baseVal.height || 0));
+    rect.setAttribute("rx", "2");
+    svg.appendChild(rect);
+    return rect;
+  }
+
+  function updateTimelineZoomSelection(svg, startX, currentX) {
+    const rect = ensureTimelineZoomSelection(svg);
+    const x = Math.min(startX, currentX);
+    const width = Math.abs(currentX - startX);
+    rect.setAttribute("x", x.toFixed(1));
+    rect.setAttribute("width", width.toFixed(1));
+  }
+
+  function clearTimelineZoomSelection() {
+    document.getElementById("timeline-zoom-selection")?.remove();
+  }
+
+  function setTimelineRangeZoomEnabled(enabled) {
+    timelineRangeZoom.enabled = enabled;
+    timelineRangeZoom.dragging = false;
+    const button = document.getElementById("timeline-range-zoom");
+    const container = document.getElementById("timeline-container");
+    button?.classList.toggle("active", enabled);
+    button?.setAttribute("aria-pressed", enabled ? "true" : "false");
+    container?.classList.toggle("timeline-zoom-active", enabled);
+    container?.classList.remove("timeline-zoom-dragging");
+    if (!enabled) clearTimelineZoomSelection();
+  }
+
+  function zoomTimelineToSvgRange(svg, startX, endX) {
+    const bounds = timelineZoomBounds(svg);
+    if (!bounds || Math.abs(endX - startX) < 8) return;
+    const minX = Math.min(startX, endX);
+    const maxX = Math.max(startX, endX);
+    const startRatio = (minX - bounds.left) / bounds.width;
+    const endRatio = (maxX - bounds.left) / bounds.width;
+    const durationMs = bounds.end.getTime() - bounds.start.getTime();
+    const selectedStart = new Date(
+      bounds.start.getTime() + durationMs * startRatio
+    );
+    const selectedEnd = new Date(
+      bounds.start.getTime() + durationMs * endRatio
+    );
+    if (selectedEnd <= selectedStart) return;
 
     const params = new URLSearchParams(window.location.search);
     params.set("time_range", "custom");
-    params.set("start_date", fmt(paddedStart));
-    params.set("end_date", fmt(paddedEnd));
+    params.set("start_date", formatTimelineParamDate(selectedStart));
+    params.set("end_date", formatTimelineParamDate(selectedEnd));
+    params.set("resolution", "100ms");
+    window.location.href = "/invocations/timeline?" + params.toString();
+  }
+
+  function initTimelineRangeZoom() {
+    const button = document.getElementById("timeline-range-zoom");
+    const container = document.getElementById("timeline-container");
+    const svg = timelineSvg();
+    if (!button || !container) return;
+    if (!svg || !timelineZoomBounds(svg)) {
+      button.disabled = true;
+      return;
+    }
+
+    button.addEventListener("click", () => {
+      setTimelineRangeZoomEnabled(!timelineRangeZoom.enabled);
+    });
+
+    container.addEventListener("pointerdown", (event) => {
+      if (!timelineRangeZoom.enabled || event.button !== 0) return;
+      const svg = timelineSvg();
+      const x = clientToSvgX(svg, event);
+      if (x === null) return;
+      event.preventDefault();
+      event.stopPropagation();
+      timelineRangeZoom.dragging = true;
+      timelineRangeZoom.startX = x;
+      timelineRangeZoom.currentX = x;
+      timelineRangeZoom.suppressNextClick = true;
+      container.classList.add("timeline-zoom-dragging");
+      container.setPointerCapture?.(event.pointerId);
+      updateTimelineZoomSelection(svg, x, x);
+    });
+
+    container.addEventListener("pointermove", (event) => {
+      if (!timelineRangeZoom.dragging) return;
+      const svg = timelineSvg();
+      const x = clientToSvgX(svg, event);
+      if (x === null) return;
+      event.preventDefault();
+      timelineRangeZoom.currentX = x;
+      updateTimelineZoomSelection(svg, timelineRangeZoom.startX, x);
+    });
+
+    const finishDrag = (event, shouldZoom) => {
+      if (!timelineRangeZoom.dragging) return;
+      const svg = timelineSvg();
+      const x = clientToSvgX(svg, event) ?? timelineRangeZoom.currentX;
+      event.preventDefault();
+      event.stopPropagation();
+      container.releasePointerCapture?.(event.pointerId);
+      container.classList.remove("timeline-zoom-dragging");
+      timelineRangeZoom.dragging = false;
+      timelineRangeZoom.currentX = x;
+      if (shouldZoom && Math.abs(x - timelineRangeZoom.startX) >= 8) {
+        setTimelineRangeZoomEnabled(false);
+        zoomTimelineToSvgRange(svg, timelineRangeZoom.startX, x);
+        return;
+      }
+      clearTimelineZoomSelection();
+    };
+
+    container.addEventListener("pointerup", (event) => finishDrag(event, true));
+    container.addEventListener("pointercancel", (event) =>
+      finishDrag(event, false)
+    );
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && timelineRangeZoom.enabled) {
+        setTimelineRangeZoomEnabled(false);
+      }
+    });
+  }
+
+  function collectTriggerZoomContext(apiData, invocationId) {
+    const times = [];
+    const invocationIds = new Set();
+    const eventIds = [];
+    if (invocationId) invocationIds.add(invocationId);
+
+    const triggeredBy = apiData?.triggered_by;
+    if (!triggeredBy) {
+      if (apiData?.parent_event_id) eventIds.push(apiData.parent_event_id);
+      return { times, invocationIds, eventIds };
+    }
+
+    [triggeredBy.claimed_at, triggeredBy.executed_at].forEach((value) => {
+      const date = parseIsoDate(value);
+      if (date) times.push(date);
+    });
+    (triggeredBy.source_invocation_ids || []).forEach((id) => {
+      if (id) invocationIds.add(id);
+    });
+    (triggeredBy.event_ids || []).forEach((id) => {
+      if (id) eventIds.push(id);
+    });
+    (triggeredBy.participants || []).forEach((participant) => {
+      if (participant.source_invocation_id) {
+        invocationIds.add(participant.source_invocation_id);
+      }
+      if (participant.event_id) eventIds.push(participant.event_id);
+      const date = parseIsoDate(participant.context_timestamp);
+      if (date) times.push(date);
+    });
+    return { times, invocationIds, eventIds };
+  }
+
+  // Zoom timeline to invocation + trigger-origin context, preserving selection.
+  function zoomToInvocation(historyData, invocationId, apiData = null) {
+    if (!historyData || historyData.length === 0) return;
+
+    const triggerContext = collectTriggerZoomContext(apiData, invocationId);
+    const visibleTimes = historyData
+      .map((item) => parseIsoDate(item.timestamp))
+      .filter(Boolean)
+      .concat(triggerContext.times);
+    const startTime = new Date(
+      Math.min(...visibleTimes.map((date) => date.getTime()))
+    );
+    const endTime = new Date(
+      Math.max(...visibleTimes.map((date) => date.getTime()))
+    );
+    const durationMs = Math.max(endTime - startTime, 0);
+    const paddingMs =
+      durationMs === 0 ? 100 : Math.min(Math.max(durationMs * 0.15, 50), 750);
+
+    const paddedStart = new Date(startTime.getTime() - paddingMs);
+    const paddedEnd = new Date(endTime.getTime() + paddingMs);
+    const params = new URLSearchParams(window.location.search);
+    params.set("time_range", "custom");
+    params.set("start_date", formatTimelineParamDate(paddedStart));
+    params.set("end_date", formatTimelineParamDate(paddedEnd));
+    params.set("resolution", "100ms");
     // Carry selection forward so panel re-opens after page reload
     if (invocationId) params.set("selected", invocationId);
+    const scopedIds = new Set(
+      splitIds((params.get("inv_ids") || "").replaceAll(",", " "))
+    );
+    triggerContext.invocationIds.forEach((id) => scopedIds.add(id));
+    if (scopedIds.size) params.set("inv_ids", Array.from(scopedIds).join(","));
+    if (!params.get("focus_event") && triggerContext.eventIds.length) {
+      params.set("focus_event", triggerContext.eventIds[0]);
+    }
 
     window.location.href = "/invocations/timeline?" + params.toString();
   }
@@ -122,9 +623,14 @@
   }
 
   function buildSummaryRows(invocationId, apiData, historyData) {
-    let html = `<table class="table table-sm mb-0">
+    let html = `<div class="timeline-detail-summary">
+      <div class="detail-kicker">Invocation</div>
+      <div class="timeline-detail-id"><code>${invocationId}</code></div>
+    </div>
+    <div class="detail-panel compact-detail-panel"><div class="detail-panel-body">
+    <table class="table table-sm mb-0 timeline-detail-table">
       <tr><th style="width:130px;">Invocation ID</th>
-          <td><code style="font-size:11px;">${invocationId}</code></td></tr>`;
+          <td><code>${invocationId}</code></td></tr>`;
 
     if (apiData?.task_id_key) {
       html += `<tr><th>Task</th>
@@ -165,15 +671,65 @@
         <tr><th>Duration</th><td>${calculateDuration(historyData)}</td></tr>`;
     }
 
-    html += `</table>`;
+    html += `</table></div></div>`;
     return html;
+  }
+
+  function formatSeconds(value) {
+    const num = Number.parseFloat(value);
+    if (!Number.isFinite(num)) return "unknown";
+    if (num < 0.001) return `${(num * 1000).toFixed(2)}ms`;
+    if (num < 1) return `${(num * 1000).toFixed(1)}ms`;
+    return `${num.toFixed(3)}s`;
+  }
+
+  function buildAtomicServiceRows(el) {
+    const runnerId = el.getAttribute("data-runner-id") || "";
+    const startTime = el.getAttribute("data-start-time") || "";
+    const endTime = el.getAttribute("data-end-time") || "";
+    const duration = el.getAttribute("data-duration-seconds") || "";
+    const serviceRunId = el.getAttribute("data-atomic-service-run-id") || "";
+    const recorded = el.getAttribute("data-atomic-service-recorded") !== "0";
+    const serviceId =
+      serviceRunId ||
+      el.getAttribute("data-atomic-service-id") ||
+      "atomic-service";
+    const sourceBadge = recorded
+      ? '<span class="badge bg-success">recorded</span>'
+      : '<span class="badge bg-warning text-dark">trigger reference</span>';
+    return `<div class="timeline-detail-summary">
+      <div class="detail-kicker">Atomic service</div>
+      <div class="timeline-detail-id"><code>${serviceId}</code></div>
+    </div>
+    <div class="detail-panel compact-detail-panel"><div class="detail-panel-body">
+    <table class="table table-sm mb-0 timeline-detail-table">
+      <tr><th style="width:130px;">Runner</th>
+          <td><a href="/runners/${encodeURIComponent(
+            runnerId
+          )}" class="text-decoration-none"><code>${runnerId}</code></a></td></tr>
+      ${
+        serviceRunId
+          ? `<tr><th>Service run</th><td><a href="${atomicServiceRunUrl(
+              serviceRunId
+            )}" class="atomic-service-run-link text-decoration-none" data-atomic-service-run-id="${serviceRunId}"><code>${serviceRunId}</code></a></td></tr>`
+          : ""
+      }
+      <tr><th>Source</th><td>${sourceBadge}</td></tr>
+      <tr><th>Start</th><td><code>${formatUTCDate(startTime)}</code></td></tr>
+      <tr><th>End</th><td><code>${formatUTCDate(endTime)}</code></td></tr>
+      <tr><th>Duration</th><td><span class="badge bg-info">${formatSeconds(
+        duration
+      )}</span></td></tr>
+      <tr><th>Service</th><td>Trigger loop and runner-level recovery checks</td></tr>
+    </table></div></div>`;
   }
 
   function buildHistoryRows(historyData) {
     if (!historyData?.length) return "";
 
-    let html = `<h6 class="mt-3 mb-2">Status History</h6>
-      <table class="table table-sm mb-0"><thead>
+    let html = `<div class="detail-panel compact-detail-panel mt-3">
+      <div class="detail-panel-header">Status history</div>
+      <div class="detail-panel-body p-0"><table class="table table-sm mb-0 timeline-detail-table"><thead>
         <tr><th>Status</th><th>Timestamp (UTC)</th><th>Runner Context</th></tr>
       </thead><tbody>`;
 
@@ -187,7 +743,308 @@
       </tr>`;
     });
 
-    html += `</tbody></table>`;
+    html += `</tbody></table></div></div>`;
+    return html;
+  }
+
+  // ── Invocation summary card helper ───────────────────────────────────
+  // Builds a mini rich card for a source invocation given its summary dict.
+  function buildInvSummaryCard(invId, summary, runId) {
+    const task = summary?.task_id_key || "";
+    const funcName = summary?.func_name || "";
+    const status = summary?.status || "";
+    const dur = summary?.duration_seconds;
+    const durTxt = dur != null ? `${dur.toFixed(2)}s` : "";
+    const statusClass =
+      {
+        SUCCESS: "bg-success",
+        FAILED: "bg-danger",
+        RUNNING: "bg-primary",
+        PENDING: "bg-secondary",
+        RETRYING: "bg-warning text-dark",
+      }[status] || "bg-secondary";
+    const clickAttrs = runId
+      ? `data-invocation-id="${invId}" data-trigger-run-id="${runId}"`
+      : `data-invocation-id="${invId}"`;
+    return `<a href="#" class="inv-summary-card invocation-reference${
+      runId ? " trigger-run-reference" : ""
+    }" ${clickAttrs}
+        onclick="event.preventDefault();loadInvocationDetails('${invId}')">
+      <div class="inv-summary-id">${invId}</div>
+      ${funcName ? `<div class="inv-summary-task">${funcName}</div>` : ""}
+      <div class="inv-summary-meta">
+        ${
+          status
+            ? `<span class="badge ${statusClass}" style="font-size:9px;">${status}</span>`
+            : ""
+        }
+        ${durTxt ? `<span class="inv-summary-duration">${durTxt}</span>` : ""}
+      </div>
+    </a>`;
+  }
+
+  function buildContextBadges(participants, runId, sourceInvocationId) {
+    const types = [
+      ...new Set(
+        (participants || [])
+          .filter(
+            (p) =>
+              !sourceInvocationId ||
+              p.source_invocation_id === sourceInvocationId
+          )
+          .map((p) => p.context_type)
+          .filter(Boolean)
+      ),
+    ];
+    return types
+      .map(
+        (t) =>
+          `<span class="badge bg-info trigger-run-reference" data-trigger-run-id="${runId}" style="font-size:9px;">${t}</span>`
+      )
+      .join(" ");
+  }
+
+  function buildEventPills(eventIds, relatedInvocationIds, eventSummaries) {
+    if (!eventIds?.length) return "";
+    const relatedIds = relatedInvocationIds.filter(Boolean).join(" ");
+    const summaries = eventSummaries || {};
+    const escape = (v) =>
+      String(v).replace(
+        /[&<>"']/g,
+        (c) =>
+          ({
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#39;",
+          }[c])
+      );
+    return eventIds
+      .map((eid) => {
+        const s = summaries[eid] || {};
+        const code = s.event_code
+          ? `<span class="event-pill-code">${escape(s.event_code)}</span>`
+          : "";
+        const state = s.state
+          ? `<span class="event-pill-state state-${escape(s.state)}">${escape(
+              s.state
+            )}</span>`
+          : "";
+        const ts = s.timestamp
+          ? `<span class="event-pill-time">${escape(s.timestamp)}</span>`
+          : "";
+        const triggered =
+          s.triggered_count > 0
+            ? `<span class="event-pill-triggered">→ ${s.triggered_count} inv</span>`
+            : "";
+        const stateAttr = s.state
+          ? ` data-event-state="${escape(s.state)}"`
+          : "";
+        return `<a href="/events/${eid}" class="event-pill-rich event-reference" data-event-id="${eid}" data-related-invocation-ids="${relatedIds}"${stateAttr} title="${eid}">
+          ${code}
+          <span class="event-pill-id"><code>${eid}</code></span>
+          <span class="event-pill-meta">${state}${ts}${triggered}</span>
+        </a>`;
+      })
+      .join("");
+  }
+
+  // ── Triggering information in the invocation panel ───────────────────
+  // Renders trigger origin, reverse trigger effects, and emitted events as a
+  // full-width block between the invocation summary and status history.
+  function buildTriggeringSection(apiData) {
+    const triggeredBy = apiData?.triggered_by;
+    const emitted = apiData?.emitted_events || [];
+    const causedRuns = apiData?.triggered_runs_caused || [];
+    const parentEventId = apiData?.parent_event_id;
+    const srcSummaries = apiData?.source_inv_summaries || {};
+    const eventSummaries = apiData?.source_event_summaries || {};
+
+    if (
+      !triggeredBy &&
+      !emitted.length &&
+      !parentEventId &&
+      !causedRuns.length
+    ) {
+      return "";
+    }
+    const relatedCount =
+      emitted.length +
+      causedRuns.length +
+      (triggeredBy?.event_ids?.length || 0) +
+      (!triggeredBy && parentEventId ? 1 : 0);
+
+    let html = `<div class="detail-panel compact-detail-panel timeline-triggering-panel mt-3">
+      <div class="detail-panel-header">
+        Triggering information
+        <span class="badge bg-secondary">${relatedCount}</span>
+      </div>
+      <div class="detail-panel-body event-context-stack">`;
+
+    if (triggeredBy) {
+      const runId = triggeredBy.trigger_run_id;
+      const logic = triggeredBy.logic_value || "—";
+      const evIds = triggeredBy.event_ids || [];
+      const srcIds = triggeredBy.source_invocation_ids || [];
+      const participants = triggeredBy.participants || [];
+      const timelineUrl = triggeredBy.timeline_url || "";
+
+      html += `<section class="event-context-section trigger-run-reference" data-trigger-run-id="${runId}">
+        <div class="event-context-heading">
+          <span>Trigger origin</span>
+          <span class="badge bg-secondary">${logic}</span>
+        </div>
+        <dl class="event-context-list">
+          <dt>Trigger run</dt><dd>
+            <a href="/trigger-runs/${runId}" class="trigger-run-reference text-decoration-none" data-trigger-run-id="${runId}"><code>${runId}</code></a>
+            ${
+              timelineUrl
+                ? `<a href="${timelineUrl}" class="ms-1 text-decoration-none" title="Open trigger run in timeline"><span class="material-icons" style="font-size:14px;vertical-align:middle;color:#28a745;">timeline</span></a>`
+                : ""
+            }
+          </dd>`;
+
+      if (evIds.length) {
+        html += `<dt>Source events</dt><dd class="event-pill-row">${buildEventPills(
+          evIds,
+          [currentInvocationId, ...srcIds],
+          eventSummaries
+        )}</dd>`;
+      }
+      if (srcIds.length) {
+        html += `<dt>Source invocations</dt><dd class="inv-summary-card-row">`;
+        html += srcIds
+          .map((sid) =>
+            buildInvSummaryCard(sid, srcSummaries[sid] || {}, runId)
+          )
+          .join("");
+        html += `</dd>`;
+      }
+      if (participants.length) {
+        const types = [
+          ...new Set(participants.map((p) => p.context_type).filter(Boolean)),
+        ];
+        if (types.length) {
+          html += `<dt>Context</dt><dd>${types
+            .map(
+              (t) =>
+                `<span class="badge bg-info trigger-run-reference" data-trigger-run-id="${runId}" style="font-size:9px;">${t}</span>`
+            )
+            .join(" ")}</dd>`;
+        }
+      }
+      html += `</dl></section>`;
+    } else if (parentEventId) {
+      html += `<section class="event-context-section">
+        <div class="event-context-heading"><span>Trigger origin</span></div>
+        <dl class="event-context-list"><dt>Parent event</dt><dd>
+          <a href="/events/${parentEventId}" class="event-pill event-reference" data-event-id="${parentEventId}" data-related-invocation-ids="${
+        currentInvocationId || ""
+      }"><code>${parentEventId.slice(0, 8)}...</code></a>
+        </dd></dl>
+      </section>`;
+    }
+
+    if (causedRuns.length) {
+      html += `<section class="event-context-section">
+        <div class="event-context-heading">
+          <span>Triggers caused by this invocation</span>
+          <span class="badge bg-secondary">${causedRuns.length}</span>
+        </div>
+        <div class="trigger-caused-list">`;
+      causedRuns.forEach((run) => {
+        const runId = run.trigger_run_id;
+        const childId = run.triggered_invocation_id;
+        const evIds = run.event_ids || [];
+        const participants = run.participants || [];
+        const timelineUrl = run.timeline_url || "";
+        const contextBadges = buildContextBadges(
+          participants,
+          runId,
+          currentInvocationId
+        );
+        html += `<div class="trigger-caused-item trigger-run-reference" data-trigger-run-id="${runId}">
+          <dl class="event-context-list mb-0">
+            <dt>Trigger run</dt><dd><a href="/trigger-runs/${runId}" class="trigger-run-reference text-decoration-none" data-trigger-run-id="${runId}"><code>${runId}</code></a>
+              ${
+                timelineUrl
+                  ? `<a href="${timelineUrl}" class="ms-1 text-decoration-none" title="Open trigger run in timeline"><span class="material-icons" style="font-size:14px;vertical-align:middle;color:#28a745;">timeline</span></a>`
+                  : ""
+              }</dd>`;
+        if (childId) {
+          html += `<dt>Triggered invocation</dt><dd>${buildInvSummaryCard(
+            childId,
+            srcSummaries[childId] || {},
+            runId
+          )}</dd>`;
+        }
+        if (run.task_id_key) {
+          html += `<dt>Task</dt><dd><code>${run.task_id_key}</code></dd>`;
+        }
+        if (evIds.length) {
+          html += `<dt>Source events</dt><dd class="event-pill-row">${buildEventPills(
+            evIds,
+            [currentInvocationId, childId],
+            eventSummaries
+          )}</dd>`;
+        }
+        if (contextBadges) {
+          html += `<dt>Source type</dt><dd>${contextBadges}</dd>`;
+        }
+        html += `</dl></div>`;
+      });
+      html += `</div></section>`;
+    }
+
+    if (emitted.length) {
+      html += `<section class="event-context-section">
+        <div class="event-context-heading">
+          <span>Events emitted by this invocation</span>
+          <span class="badge bg-secondary">${emitted.length}</span>
+        </div>
+        <div class="emitted-events-list">`;
+      emitted.forEach((e) => {
+        const triggeredIds = (e.triggered_invocation_ids || []).filter(Boolean);
+        const relatedIds = [currentInvocationId, ...triggeredIds]
+          .filter(Boolean)
+          .join(" ");
+        const stateBadge = e.triggered
+          ? '<span class="badge bg-success" style="font-size:9px;">triggered</span>'
+          : e.matched
+          ? '<span class="badge bg-primary" style="font-size:9px;">matched</span>'
+          : '<span class="badge bg-secondary" style="font-size:9px;">recorded</span>';
+        const tsTxt = e.timestamp
+          ? `<span class="emitted-event-ts"><code>${e.timestamp}</code></span>`
+          : "";
+        html += `<div class="emitted-event-item event-reference"
+            data-event-id="${e.event_id}"
+            data-related-invocation-ids="${relatedIds}">
+          <div class="emitted-event-head">
+            <code class="emitted-event-code">${e.event_code}</code>
+            ${stateBadge}
+            ${tsTxt}
+            <a href="/events/${e.event_id}" class="ms-auto text-decoration-none"
+               title="${e.event_id}"><code>${e.event_id.slice(0, 8)}…</code></a>
+          </div>`;
+        if (triggeredIds.length) {
+          html += `<div class="emitted-event-triggered">
+            <span class="emitted-event-triggered-label">Triggered invocations (${
+              triggeredIds.length
+            })</span>
+            <div class="inv-summary-card-row">${triggeredIds
+              .map((sid) =>
+                buildInvSummaryCard(sid, srcSummaries[sid] || {}, null)
+              )
+              .join("")}</div>
+          </div>`;
+        }
+        html += `</div>`;
+      });
+      html += `</div></section>`;
+    }
+
+    html += `</div></div>`;
     return html;
   }
 
@@ -197,10 +1054,17 @@
     const content = document.getElementById("invocation-details-content");
     const fullLink = document.getElementById("view-full-details");
 
-    // Un-highlight previously selected invocation
+    setTimelineDetailMode("invocation");
+
+    // Un-highlight previously selected timeline item
     if (currentInvocationId) unhighlightInvocation(currentInvocationId);
+    if (currentAtomicServiceEl)
+      highlightAtomicService(currentAtomicServiceEl, false);
 
     currentInvocationId = invocationId;
+    currentAtomicServiceEl = null;
+    currentInvocationData = null;
+    currentInvocationApiData = null;
     panel.classList.remove("d-none");
     content.innerHTML = `<div class="d-flex justify-content-center">
       <div class="spinner-border spinner-border-sm text-primary" role="status">
@@ -228,15 +1092,283 @@
     ])
       .then(([apiData, historyData]) => {
         currentInvocationData = historyData;
+        currentInvocationApiData = apiData;
         content.innerHTML =
           buildSummaryRows(invocationId, apiData, historyData) +
+          buildTriggeringSection(apiData) +
           buildHistoryRows(historyData);
       })
       .catch((err) => {
         console.error("Error loading invocation details:", err);
         currentInvocationId = null;
         currentInvocationData = null;
+        currentInvocationApiData = null;
         content.innerHTML = `<div class="alert alert-danger mb-0">Error loading details: ${err.message}</div>`;
+      });
+  }
+
+  function loadAtomicServiceDetails(el) {
+    const panel = document.getElementById("invocation-details-panel");
+    const content = document.getElementById("invocation-details-content");
+    const fullLink = document.getElementById("view-full-details");
+    const runnerId = el.getAttribute("data-runner-id") || "";
+    const serviceRunId = el.getAttribute("data-atomic-service-run-id") || "";
+
+    setTimelineDetailMode("atomic-service");
+    if (currentInvocationId) unhighlightInvocation(currentInvocationId);
+    if (currentAtomicServiceEl)
+      highlightAtomicService(currentAtomicServiceEl, false);
+    if (currentEventId) highlightEvent(currentEventId, false);
+
+    currentInvocationId = null;
+    currentInvocationData = null;
+    currentInvocationApiData = null;
+    currentAtomicServiceEl = el;
+    currentEventId = null;
+    currentEventData = null;
+    panel.classList.remove("d-none");
+    if (serviceRunId) {
+      fullLink.href = atomicServiceRunUrl(serviceRunId);
+      fullLink.textContent = "View Run";
+    } else {
+      fullLink.href = `/runners/${encodeURIComponent(runnerId)}`;
+      fullLink.textContent = "View Runner";
+    }
+    content.innerHTML = buildAtomicServiceRows(el);
+    highlightAtomicService(el, true);
+  }
+
+  function wireAtomicServiceRunHover(container) {
+    if (!container) return;
+    container.addEventListener("mouseover", (e) => {
+      const link = e.target.closest(
+        ".atomic-service-run-link[data-atomic-service-run-id]"
+      );
+      if (link)
+        highlightAtomicServiceRun(link.dataset.atomicServiceRunId, true);
+    });
+    container.addEventListener("mouseout", (e) => {
+      const link = e.target.closest(
+        ".atomic-service-run-link[data-atomic-service-run-id]"
+      );
+      if (link && !link.contains(e.relatedTarget)) {
+        highlightAtomicServiceRun(link.dataset.atomicServiceRunId, false);
+      }
+    });
+    container.addEventListener("focusin", (e) => {
+      const link = e.target.closest(
+        ".atomic-service-run-link[data-atomic-service-run-id]"
+      );
+      if (link)
+        highlightAtomicServiceRun(link.dataset.atomicServiceRunId, true);
+    });
+    container.addEventListener("focusout", (e) => {
+      const link = e.target.closest(
+        ".atomic-service-run-link[data-atomic-service-run-id]"
+      );
+      if (link)
+        highlightAtomicServiceRun(link.dataset.atomicServiceRunId, false);
+    });
+  }
+
+  function buildEventRows(eventId, payload) {
+    const evt = payload?.event || {};
+    const triggerRuns = payload?.trigger_runs || [];
+    const code = evt.event_code || "event";
+    const ts = evt.timestamp ? formatUTCDate(evt.timestamp) : "";
+    const emitter = evt.emitted_by_invocation_id;
+    const emitterTask = evt.emitted_by_task_id;
+    const triggered = evt.triggered_invocation_ids || [];
+    const matched = evt.matched ? "yes" : "no";
+    const fired = evt.triggered ? "yes" : "no";
+    let payloadStr = "";
+    if (evt.payload != null) {
+      try {
+        payloadStr = JSON.stringify(evt.payload, null, 2);
+      } catch (_) {
+        payloadStr = String(evt.payload);
+      }
+    }
+
+    let html = `<div class="timeline-detail-summary">
+      <div class="detail-kicker">Event</div>
+      <div class="timeline-detail-id"><code>${code}</code></div>
+    </div>
+    <div class="detail-panel compact-detail-panel"><div class="detail-panel-body">
+    <table class="table table-sm mb-0 timeline-detail-table">
+      <tr><th style="width:130px;">Event ID</th><td><code>${eventId}</code></td></tr>
+      <tr><th>Timestamp</th><td><code>${ts}</code></td></tr>
+      <tr><th>Matched</th><td><span class="badge bg-${
+        evt.matched ? "info" : "secondary"
+      }">${matched}</span></td></tr>
+      <tr><th>Triggered</th><td><span class="badge bg-${
+        evt.triggered ? "success" : "secondary"
+      }">${fired}</span></td></tr>`;
+    if (emitterTask) {
+      html += `<tr><th>Emitted by task</th><td><code>${emitterTask}</code></td></tr>`;
+    }
+    if (emitter) {
+      html += `<tr><th>Emitted by</th><td><a href="#" class="event-emitter-link text-decoration-none" data-invocation-id="${emitter}"><code>${emitter}</code></a></td></tr>`;
+    }
+    html += `</table></div></div>`;
+
+    if (triggered.length) {
+      html += `<div class="detail-panel compact-detail-panel mt-3">
+        <div class="detail-panel-header">Triggered invocations (${triggered.length})</div>
+        <div class="detail-panel-body p-0"><table class="table table-sm mb-0 timeline-detail-table"><tbody>`;
+      triggered.forEach((id) => {
+        html += `<tr><td><a href="#" class="event-triggered-link text-decoration-none" data-invocation-id="${id}"><code>${id}</code></a></td></tr>`;
+      });
+      html += `</tbody></table></div></div>`;
+    }
+
+    if (triggerRuns.length) {
+      html += `<div class="detail-panel compact-detail-panel mt-3">
+        <div class="detail-panel-header">Trigger runs (${triggerRuns.length})</div>
+        <div class="detail-panel-body p-0"><table class="table table-sm mb-0 timeline-detail-table"><thead>
+          <tr><th>Run ID</th><th>AS run</th><th>Outcome</th></tr></thead><tbody>`;
+      triggerRuns.forEach((run) => {
+        const rid = run.trigger_run_id || "";
+        const outcome = run.outcome || "";
+        const atomicRunId = run.atomic_service_run_id || "";
+        const ridHref = `/trigger-runs/${encodeURIComponent(rid)}`;
+        const atomicHtml = atomicRunId
+          ? `<a href="${atomicServiceRunUrl(
+              atomicRunId
+            )}" class="atomic-service-run-link text-decoration-none" data-atomic-service-run-id="${atomicRunId}"><code>${atomicRunId}</code></a>`
+          : '<span class="text-muted">—</span>';
+        html += `<tr><td style="font-size:11px;"><a href="${ridHref}" class="trigger-run-reference text-decoration-none" data-trigger-run-id="${rid}"><code>${rid}</code></a></td><td style="font-size:11px;">${atomicHtml}</td><td><span class="badge bg-secondary">${outcome}</span></td></tr>`;
+      });
+      html += `</tbody></table></div></div>`;
+    }
+
+    if (payloadStr) {
+      html += `<div class="detail-panel compact-detail-panel mt-3">
+        <div class="detail-panel-header">Payload</div>
+        <div class="detail-panel-body"><pre class="mb-0" style="font-size:11px; white-space:pre-wrap;">${payloadStr.replace(
+          /[&<>]/g,
+          (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])
+        )}</pre></div></div>`;
+    }
+    return html;
+  }
+
+  function buildCronTickRows(eventId, sourceEl, payload) {
+    // Synthetic cron marker: no EventRecord behind it. Render a compact
+    // panel sourced from the trigger run that fired the cron tick.
+    const runId = payload?.trigger_run_id || "";
+    const triggerId = payload?.trigger_id || "";
+    const claimed = payload?.claimed_at
+      ? formatUTCDate(payload.claimed_at)
+      : "";
+    const executed = payload?.executed_at
+      ? formatUTCDate(payload.executed_at)
+      : "";
+    const target = payload?.triggered_invocation_id || "";
+    const ts = sourceEl?.dataset?.eventTimestamp || "";
+    let html = `<div class="timeline-detail-summary">
+      <div class="detail-kicker">Cron tick</div>
+      <div class="timeline-detail-id"><code>cron.tick</code></div>
+    </div>
+    <div class="detail-panel compact-detail-panel"><div class="detail-panel-body">
+    <table class="table table-sm mb-0 timeline-detail-table">
+      <tr><th style="width:140px;">Marker ID</th><td><code>${eventId}</code></td></tr>`;
+    if (ts) {
+      html += `<tr><th>Tick</th><td><code>${ts}</code></td></tr>`;
+    }
+    if (claimed) {
+      html += `<tr><th>Claimed at</th><td><code>${claimed}</code></td></tr>`;
+    }
+    if (executed) {
+      html += `<tr><th>Executed at</th><td><code>${executed}</code></td></tr>`;
+    }
+    if (triggerId) {
+      html += `<tr><th>Trigger</th><td><a href="/triggers/${encodeURIComponent(
+        triggerId
+      )}" class="text-decoration-none"><code>${triggerId}</code></a></td></tr>`;
+    }
+    html += `<tr><th>Trigger run</th><td><a href="/trigger-runs/${encodeURIComponent(
+      runId
+    )}" class="text-decoration-none"><code>${runId}</code></a></td></tr>`;
+    if (target) {
+      html += `<tr><th>Triggered invocation</th><td><a href="#" class="event-triggered-link text-decoration-none" data-invocation-id="${target}"><code>${target}</code></a></td></tr>`;
+    }
+    // Atomic-service context — populated from the runner that produced this
+    // tick. Lets you see exactly which runner's atomic-service cycle the
+    // cron tick ran in, even when multiple runners' windows overlap on the
+    // timeline due to startup races.
+    const atomicRunner = payload?.atomic_service_runner_id || "";
+    const atomicRunId = payload?.atomic_service_run_id || "";
+    if (atomicRunner) {
+      html += `<tr><th>Atomic-service runner</th><td><a href="/runners/atomic-service/timeline?runner_id=${encodeURIComponent(
+        atomicRunner
+      )}" class="text-decoration-none"><code>${atomicRunner}</code></a></td></tr>`;
+    }
+    if (atomicRunId) {
+      html += `<tr><th>Atomic-service run</th><td><a href="${atomicServiceRunUrl(
+        atomicRunId
+      )}" class="atomic-service-run-link text-decoration-none" data-atomic-service-run-id="${atomicRunId}"><code>${atomicRunId}</code></a></td></tr>`;
+    }
+    html += `</table></div></div>`;
+    return html;
+  }
+
+  function loadEventDetails(eventId, sourceEl) {
+    // Event detail lives in its OWN panel beside the invocation panel,
+    // so opening an event must never clear a previously-selected
+    // invocation. Only the event-specific state is reset here.
+    const panel = document.getElementById("event-details-panel");
+    const content = document.getElementById("event-details-content");
+    const fullLink = document.getElementById("view-full-event");
+
+    if (currentEventId && currentEventId !== eventId)
+      highlightEvent(currentEventId, false);
+
+    currentEventId = eventId;
+    currentEventData = null;
+
+    panel.classList.remove("d-none");
+    // Synthetic cron markers carry their own href to the trigger-run page
+    // (no EventRecord exists). For real events keep the /events/{id} link.
+    const isCron = typeof eventId === "string" && eventId.startsWith("cron:");
+    const linkHref =
+      sourceEl?.getAttribute?.("href") ||
+      (isCron ? "#" : `/events/${encodeURIComponent(eventId)}`);
+    fullLink.href = linkHref;
+    content.innerHTML = `<div class="d-flex justify-content-center">
+      <div class="spinner-border spinner-border-sm text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+      </div></div>`;
+    highlightEvent(eventId, true, sourceEl);
+
+    if (isCron) {
+      const runId = sourceEl?.dataset?.triggerRunId || "";
+      if (!runId) {
+        content.innerHTML = `<div class="alert alert-warning mb-0">Cron tick has no associated trigger run.</div>`;
+        return;
+      }
+      fetch(`/trigger-runs/${encodeURIComponent(runId)}/api`)
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error("not found"))))
+        .then((data) => {
+          currentEventData = data;
+          content.innerHTML = buildCronTickRows(eventId, sourceEl, data);
+        })
+        .catch((err) => {
+          console.error("Error loading cron tick details:", err);
+          content.innerHTML = `<div class="alert alert-danger mb-0">Error loading cron tick: ${err.message}</div>`;
+        });
+      return;
+    }
+
+    fetch(`/events/${encodeURIComponent(eventId)}/api`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("not found"))))
+      .then((data) => {
+        currentEventData = data;
+        content.innerHTML = buildEventRows(eventId, data);
+      })
+      .catch((err) => {
+        console.error("Error loading event details:", err);
+        content.innerHTML = `<div class="alert alert-danger mb-0">Error loading event: ${err.message}</div>`;
       });
   }
 
@@ -249,7 +1381,6 @@
       FAILED: "danger",
       RETRY: "secondary",
       PAUSED: "primary",
-      RESUMED: "info",
       REROUTED: "info",
       CONCURRENCY_CONTROLLED: "warning",
       CONCURRENCY_CONTROLLED_FINAL: "warning",
@@ -283,6 +1414,8 @@
   }
 
   document.addEventListener("DOMContentLoaded", function () {
+    initTimelineRangeZoom();
+
     // Show/hide custom date range inputs
     document
       .getElementById("time_range")
@@ -292,29 +1425,132 @@
           ?.classList.toggle("d-none", this.value !== "custom");
       });
 
-    // Close details panel
+    // Close invocation details panel (event panel has its own button).
     document.getElementById("close-details")?.addEventListener("click", () => {
       if (currentInvocationId) unhighlightInvocation(currentInvocationId);
+      if (currentAtomicServiceEl)
+        highlightAtomicService(currentAtomicServiceEl, false);
       document
         .getElementById("invocation-details-panel")
         .classList.add("d-none");
+      document
+        .getElementById("invocation-events-section")
+        ?.classList.add("d-none");
+      document
+        .getElementById("invocation-details-main")
+        ?.classList.remove("col-lg-8");
+      document
+        .getElementById("invocation-details-main")
+        ?.classList.add("col-12");
       currentInvocationId = null;
       currentInvocationData = null;
+      currentInvocationApiData = null;
+      currentAtomicServiceEl = null;
     });
+
+    // Close event details panel independently.
+    document
+      .getElementById("close-event-details")
+      ?.addEventListener("click", () => {
+        if (currentEventId) highlightEvent(currentEventId, false);
+        document.getElementById("event-details-panel").classList.add("d-none");
+        currentEventId = null;
+        currentEventData = null;
+      });
 
     // Zoom to invocation (pass ID so it's preserved in the URL)
     document
       .getElementById("zoom-to-invocation")
       ?.addEventListener("click", () => {
         if (currentInvocationData?.length > 0) {
-          zoomToInvocation(currentInvocationData, currentInvocationId);
+          zoomToInvocation(
+            currentInvocationData,
+            currentInvocationId,
+            currentInvocationApiData
+          );
         }
       });
+
+    // Zoom to event \u2014 centre the timeline on the event timestamp with
+    // a small symmetric buffer so the surrounding context stays visible.
+    document.getElementById("zoom-to-event")?.addEventListener("click", () => {
+      const ts =
+        currentEventData?.timestamp ||
+        document
+          .querySelector(`[data-event-id="${currentEventId}"]`)
+          ?.getAttribute("data-event-timestamp");
+      const date = parseIsoDate(ts);
+      if (!date) return;
+      const bufferMs = 5000;
+      const paddedStart = new Date(date.getTime() - bufferMs);
+      const paddedEnd = new Date(date.getTime() + bufferMs);
+      const params = new URLSearchParams(window.location.search);
+      params.set("time_range", "custom");
+      params.set("start_date", formatTimelineParamDate(paddedStart));
+      params.set("end_date", formatTimelineParamDate(paddedEnd));
+      params.set("resolution", "100ms");
+      if (currentEventId) params.set("focus_event", currentEventId);
+      window.location.href = "/invocations/timeline?" + params.toString();
+    });
+
+    // Delegated handler for event-panel internal links (emitter / triggered)
+    document
+      .getElementById("event-details-content")
+      ?.addEventListener("click", (e) => {
+        const link = e.target.closest(
+          ".event-emitter-link[data-invocation-id], " +
+            ".event-triggered-link[data-invocation-id]"
+        );
+        if (!link) return;
+        e.preventDefault();
+        const invId = link.getAttribute("data-invocation-id");
+        if (invId) loadInvocationDetails(invId);
+      });
+    wireAtomicServiceRunHover(document.getElementById("event-details-content"));
+
+    // Delegated handler for invocation-panel internal links
+    document
+      .getElementById("invocation-details-content")
+      ?.addEventListener("click", (e) => {
+        const link = e.target.closest(
+          ".event-emitter-link[data-invocation-id], " +
+            ".event-triggered-link[data-invocation-id]"
+        );
+        if (!link) return;
+        e.preventDefault();
+        const invId = link.getAttribute("data-invocation-id");
+        if (invId) loadInvocationDetails(invId);
+      });
+    wireAtomicServiceRunHover(
+      document.getElementById("invocation-details-content")
+    );
 
     // SVG click + hover wiring
     const container = document.getElementById("timeline-container");
     if (container) {
       container.addEventListener("click", (e) => {
+        if (timelineRangeZoom.enabled || timelineRangeZoom.suppressNextClick) {
+          e.preventDefault();
+          e.stopPropagation();
+          timelineRangeZoom.suppressNextClick = false;
+          return;
+        }
+        const eventTarget = e.target.closest(
+          ".event-marker-link[data-event-id]"
+        );
+        if (eventTarget) {
+          e.preventDefault();
+          loadEventDetails(eventTarget.dataset.eventId, eventTarget);
+          return;
+        }
+        const atomicTarget = e.target.closest(
+          ".atomic-service-window[data-atomic-service]"
+        );
+        if (atomicTarget) {
+          e.preventDefault();
+          loadAtomicServiceDetails(atomicTarget);
+          return;
+        }
         const target = e.target.closest(
           "rect[data-invocation-id], circle[data-invocation-id]"
         );
@@ -324,7 +1560,23 @@
 
       container.addEventListener("mouseover", (e) => {
         const t = e.target.closest("[data-invocation-id]");
-        if (t) highlightInvocation(t.getAttribute("data-invocation-id"));
+        if (t) {
+          const id = t.getAttribute("data-invocation-id");
+          highlightInvocation(id);
+          setRelatedEventHighlight(relatedEventIdsForInvocation(id), true, id);
+        }
+
+        const eventTarget = eventHoverTarget(e.target);
+        if (eventTarget)
+          highlightEvent(eventTarget.dataset.eventId, true, eventTarget);
+
+        const trTarget = triggerRunHoverTarget(e.target);
+        if (trTarget) highlightTriggerRun(trTarget.dataset.triggerRunId, true);
+
+        const atomicTarget = e.target.closest(
+          ".atomic-service-window[data-atomic-service]"
+        );
+        if (atomicTarget) highlightAtomicService(atomicTarget, true);
       });
 
       container.addEventListener("mouseout", (e) => {
@@ -333,6 +1585,28 @@
           const id = t.getAttribute("data-invocation-id");
           // Don't un-highlight the currently selected invocation
           if (id !== currentInvocationId) unhighlightInvocation(id);
+          setRelatedEventHighlight(relatedEventIdsForInvocation(id), false, id);
+        }
+
+        const eventTarget = eventHoverTarget(e.target);
+        if (eventTarget && !eventTarget.contains(e.relatedTarget)) {
+          highlightEvent(eventTarget.dataset.eventId, false, eventTarget);
+        }
+
+        const trTarget = triggerRunHoverTarget(e.target);
+        if (trTarget && !trTarget.contains(e.relatedTarget)) {
+          highlightTriggerRun(trTarget.dataset.triggerRunId, false);
+        }
+
+        const atomicTarget = e.target.closest(
+          ".atomic-service-window[data-atomic-service]"
+        );
+        if (
+          atomicTarget &&
+          atomicTarget !== currentAtomicServiceEl &&
+          !atomicTarget.contains(e.relatedTarget)
+        ) {
+          highlightAtomicService(atomicTarget, false);
         }
       });
 
@@ -351,14 +1625,69 @@
     document.addEventListener("mouseover", (e) => {
       const ri = e.target.closest(".timeline-runner-info[data-runner-id]");
       if (ri) highlightRunner(ri.getAttribute("data-runner-id"));
+
+      const invTarget = invocationHoverTarget(e.target);
+      if (invTarget) {
+        const id = invTarget.dataset.invocationId;
+        highlightInvocation(id);
+        setRelatedEventHighlight(relatedEventIdsForInvocation(id), true, id);
+      }
+
+      const eventTarget = eventHoverTarget(e.target);
+      if (eventTarget)
+        highlightEvent(eventTarget.dataset.eventId, true, eventTarget);
+
+      const trTarget = triggerRunHoverTarget(e.target);
+      if (trTarget) highlightTriggerRun(trTarget.dataset.triggerRunId, true);
     });
     document.addEventListener("mouseout", (e) => {
       const ri = e.target.closest(".timeline-runner-info[data-runner-id]");
       if (ri) unhighlightRunner(ri.getAttribute("data-runner-id"));
+
+      const invTarget = invocationHoverTarget(e.target);
+      if (invTarget && !invTarget.contains(e.relatedTarget)) {
+        const id = invTarget.dataset.invocationId;
+        if (id !== currentInvocationId) unhighlightInvocation(id);
+        setRelatedEventHighlight(relatedEventIdsForInvocation(id), false, id);
+      }
+
+      const eventTarget = eventHoverTarget(e.target);
+      if (eventTarget && !eventTarget.contains(e.relatedTarget)) {
+        highlightEvent(eventTarget.dataset.eventId, false, eventTarget);
+      }
+
+      const trTarget = triggerRunHoverTarget(e.target);
+      if (trTarget && !trTarget.contains(e.relatedTarget)) {
+        highlightTriggerRun(trTarget.dataset.triggerRunId, false);
+      }
     });
 
     // Re-open selected invocation if carried via URL (e.g. after zoom or from detail page)
     const selected = new URLSearchParams(location.search).get("selected");
     if (selected) loadInvocationDetails(selected);
+
+    // Focus on a specific event marker (carried via ?focus_event=...)
+    const focusEvent = new URLSearchParams(location.search).get("focus_event");
+    if (focusEvent) focusEventMarker(focusEvent);
   });
+
+  function focusEventMarker(eventId) {
+    const link = document.querySelector(
+      `.event-marker-link[data-event-id="${CSS.escape(eventId)}"]`
+    );
+    if (!link) return;
+    // Scroll the marker into view inside the timeline scroll container.
+    try {
+      link.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+        inline: "center",
+      });
+    } catch (_) {
+      link.scrollIntoView();
+    }
+    // Apply a pulsing highlight class so it's easy to spot.
+    link.classList.add("event-marker-focused");
+    setTimeout(() => link.classList.remove("event-marker-focused"), 6000);
+  }
 </script>

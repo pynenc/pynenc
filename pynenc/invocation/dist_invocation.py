@@ -51,10 +51,12 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         parent_invocation_id: InvocationId | None,
         workflow: WorkflowIdentity,
         stored_in_backend: bool,
+        parent_event_id: str | None = None,
     ) -> None:
         # Call parent init
         super().__init__(call, invocation_id)
         self.parent_invocation_id = parent_invocation_id
+        self.parent_event_id = parent_event_id
         self._workflow = workflow
 
         # Initialize additional state
@@ -79,6 +81,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         cls,
         call: Call[Params, Result],
         parent_invocation: DistributedInvocation | None = None,
+        parent_event_id: str | None = None,
     ) -> DistributedInvocation:
         """Create a new invocation as a child of an existing invocation.
 
@@ -86,6 +89,8 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             The call that this invocation will execute.
         :param DistributedInvocation | None parent_invocation:
             The parent invocation that this new invocation will be a child of. If None, the new invocation will be a main workflow task.
+        :param str | None parent_event_id:
+            Optional id of the event whose triggered firing produced this invocation.
         """
         new_invocation_id = generate_invocation_id()
         if parent_invocation is None:
@@ -115,6 +120,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             else None,
             workflow=workflow,
             stored_in_backend=False,
+            parent_event_id=parent_event_id,
         )
 
     @property
@@ -167,6 +173,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             invocation_id=self.invocation_id,
             call_id=self.call.call_id,
             parent_invocation_id=self.parent_invocation_id,
+            parent_event_id=self.parent_event_id,
             workflow=self.workflow,
         )
 
@@ -188,6 +195,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             parent_invocation_id=dto.parent_invocation_id,
             workflow=dto.workflow,
             stored_in_backend=True,
+            parent_event_id=dto.parent_event_id,
         )
 
     def __getstate__(self) -> dict:
@@ -196,6 +204,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         state["call"] = self._call
         state["invocation_id"] = self._invocation_id
         state["parent_invocation_id"] = self.parent_invocation_id
+        state["parent_event_id"] = self.parent_event_id
         state["workflow"] = self._workflow
         state["state"] = {
             "cached_status": self._cached_status,
@@ -212,6 +221,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         self._call = state["call"]
         self._invocation_id = state["invocation_id"]
         self.parent_invocation_id = state["parent_invocation_id"]
+        self.parent_event_id = state.get("parent_event_id")
         self._workflow = state["workflow"]
         # Restore mutable state directly
         state_data = state["state"]

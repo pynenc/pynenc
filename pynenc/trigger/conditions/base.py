@@ -9,7 +9,7 @@ based on specific criteria such as task status, time schedules, or custom events
 import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar, cast
 
 from pynenc.util.subclasses import build_class_cache
@@ -28,7 +28,7 @@ class ConditionContext(ABC):
     provides the foundation for type-specific context classes.
     """
 
-    timestamp: datetime = field(default_factory=datetime.now, init=False)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC), init=False)
 
     # Class cache for context type lookup (each subclass should appear here)
     _context_class_cache: ClassVar[dict[str, type["ConditionContext"]]] = {}

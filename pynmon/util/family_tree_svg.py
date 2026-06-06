@@ -23,6 +23,7 @@ from datetime import datetime
 
 from pynmon.util.family_tree import FamilyTreeNode
 from pynmon.util.status_colors import STATUS_COLORS, DEFAULT_STATUS_COLOR
+from pynmon.util.svg.event_markers import RELATION_LINE_COLORS
 
 # -- layout constants ----------------------------------------------------------
 _NODE_W: int = 300
@@ -43,7 +44,6 @@ _STATUS_TINTS: dict[str, str] = {
     "REGISTERED": "#f5f5f5",
     "RETRY": "#f3e5f5",
     "PAUSED": "#e0f2f1",
-    "RESUMED": "#e3f2fd",
     "KILLED": "#fdecea",
     "CONCURRENCY_CONTROLLED": "#fff3e0",
     "CONCURRENCY_CONTROLLED_FINAL": "#fff3e0",
@@ -102,6 +102,22 @@ def _format_elapsed(seconds: float | None) -> str:
     hours = minutes // 60
     mins = minutes % 60
     return f"{hours}h {mins}m"
+
+
+def _relation_style(relation_kind: str) -> tuple[str, str]:
+    """Return stroke colour and dash format matching the timeline legend."""
+    styles = {
+        "direct": (RELATION_LINE_COLORS["direct_call"], "2,3"),
+        "event": (RELATION_LINE_COLORS["event_trigger"], "6,3"),
+        "status_trigger": (RELATION_LINE_COLORS["status_trigger"], "6,3"),
+        "result_trigger": (RELATION_LINE_COLORS["result_trigger"], "6,3"),
+        "exception_trigger": (
+            RELATION_LINE_COLORS["exception_trigger"],
+            "6,3",
+        ),
+        "trigger": (RELATION_LINE_COLORS["event_origin"], "6,3"),
+    }
+    return styles.get(relation_kind, styles["direct"])
 
 
 # -- layout: time-ordered grid packing ----------------------------------------
@@ -238,6 +254,7 @@ def _render_connection(
     child_y: float,
     parent_id: str = "",
     child_id: str = "",
+    relation_kind: str = "direct",
 ) -> str:
     """Render a Bézier curve connecting parent to child.
 
@@ -253,9 +270,12 @@ def _render_connection(
     :return: SVG path element string.
     """
     data_attrs = f'data-parent-id="{_esc(parent_id)}" data-child-id="{_esc(child_id)}"'
+    edge_color, dash_pattern = _relation_style(relation_kind)
+    dash = f' stroke-dasharray="{dash_pattern}"'
     stroke = (
-        f'fill="none" stroke="#78909c" stroke-width="2" opacity="0.7" '
-        f'class="ft-edge" {data_attrs}'
+        f'fill="none" stroke="{edge_color}" stroke-width="2" opacity="0.7" '
+        f'class="ft-edge ft-edge-{relation_kind}" data-relation-kind="{relation_kind}" '
+        f"{data_attrs}{dash}"
     )
     dot_r = 3
     parent_bottom = parent_y + _NODE_H
@@ -274,7 +294,7 @@ def _render_connection(
         # Small dot at parent exit point
         parts.append(
             f'<circle cx="{parent_cx:.1f}" cy="{parent_bottom:.1f}" '
-            f'r="{dot_r}" fill="#78909c" opacity="0.7"/>'
+            f'r="{dot_r}" fill="{edge_color}" opacity="0.7"/>'
         )
     else:
         # Child is alongside or overlapping parent: route from side
@@ -295,7 +315,7 @@ def _render_connection(
         )
         parts.append(
             f'<circle cx="{sx:.1f}" cy="{sy:.1f}" '
-            f'r="{dot_r}" fill="#78909c" opacity="0.7"/>'
+            f'r="{dot_r}" fill="{edge_color}" opacity="0.7"/>'
         )
     return "\n".join(parts)
 
@@ -340,6 +360,7 @@ def _render_node(
 
     href = f"{base_url}/{node.invocation_id}"
     inv_id = _esc(node.invocation_id)
+    full_task = _esc(f"{node.module_name}.{node.func_name}")
     module_name = _esc(node.module_name)
     func_name = _esc(node.func_name)
     max_chars = _NODE_W // 7
@@ -381,6 +402,7 @@ def _render_node(
     node_markup = (
         f'<a href="{href}" class="ft-node" data-inv-id="{node.invocation_id}" '
         f'data-status="{node.status}">'
+        f"<title>{full_task}</title>"
         f"{focus_extra}"
         f'<rect x="{x:.1f}" y="{y:.1f}" width="{_NODE_W}" height="{_NODE_H}" '
         f'rx="4" fill="{bg}" {stroke}/>'
@@ -452,6 +474,7 @@ def _collect_elements(
                     child_y,
                     parent_id=node.invocation_id,
                     child_id=child.invocation_id,
+                    relation_kind=getattr(child, "relation_kind", "direct"),
                 )
             )
             stack.append(child)
@@ -506,7 +529,7 @@ def render_family_tree_svg(
         "#ft-group.ft-hover .ft-edge{opacity:.12}"
         "#ft-group.ft-hover .ft-node.ft-related{opacity:1}"
         "#ft-group.ft-hover .ft-edge.ft-related"
-        "{opacity:1;stroke-width:3;stroke:#1976d2}"
+        "{opacity:1;stroke-width:3}"
         "</style>"
     )
 

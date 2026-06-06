@@ -1,0 +1,348 @@
+{% extends "base.html" %} {% block content %}
+<div class="pynmon-container">
+  <div class="row">
+    <div class="col-12">
+      <div class="card pynmon-card">
+        <div
+          class="card-header pynmon-card-header d-flex justify-content-between align-items-center flex-wrap gap-2"
+        >
+          <span class="compact-header">Event Details</span>
+          <div class="d-flex justify-content-end flex-wrap gap-2">
+            <a
+              href="/events"
+              class="btn btn-sm btn-outline-secondary pynmon-action-btn"
+            >
+              Back to Events
+            </a>
+            <a
+              href="{{ timeline_url }}"
+              class="btn btn-sm btn-outline-primary pynmon-action-btn"
+              title="Open the timeline focused on this event"
+            >
+              Show in Timeline
+            </a>
+            {% if event.emitted_by_invocation_id %}
+            <a
+              href="/invocations/{{ event.emitted_by_invocation_id }}"
+              class="btn btn-sm btn-outline-info pynmon-action-btn"
+            >
+              View Emitter
+            </a>
+            {% endif %}
+          </div>
+        </div>
+        <div class="card-body pynmon-card-body">
+          <div class="row pynmon-row-compact pynmon-responsive-detail-grid">
+            <div class="col-md-6">
+              <div class="card pynmon-card">
+                <div class="card-header pynmon-card-header compact-header">
+                  Identity
+                </div>
+                <div class="card-body pynmon-card-body">
+                  <table class="table pynmon-table">
+                    <tbody>
+                      <tr>
+                        <th>Event ID:</th>
+                        <td>
+                          <code style="font-size: 11px; word-break: break-all"
+                            >{{ event.event_id }}</code
+                          >
+                        </td>
+                      </tr>
+                      <tr>
+                        <th>Event code:</th>
+                        <td>{{ event.event_code }}</td>
+                      </tr>
+                      <tr>
+                        <th>Timestamp (UTC):</th>
+                        <td>
+                          <code
+                            >{{ event.timestamp.isoformat(timespec="seconds")
+                            }}</code
+                          >
+                        </td>
+                      </tr>
+                      <tr>
+                        <th>Emitted by:</th>
+                        <td>
+                          {% if event.emitted_by_invocation_id %}
+                          <a
+                            href="/invocations/{{ event.emitted_by_invocation_id }}"
+                          >
+                            <code style="font-size: 11px; word-break: break-all"
+                              >{{ event.emitted_by_invocation_id }}</code
+                            >
+                          </a>
+                          {% else %}
+                          <span class="text-muted"
+                            >external (no invocation context)</span
+                          >
+                          {% endif %}
+                        </td>
+                      </tr>
+                      <tr>
+                        <th>Emitter task:</th>
+                        <td>
+                          {% if event.emitted_by_task_id %}
+                          <a href="/tasks/{{ event.emitted_by_task_id }}"
+                            ><code>{{ event.emitted_by_task_id }}</code></a
+                          >
+                          {% else %}
+                          <span class="text-muted">—</span>
+                          {% endif %}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-6">
+              <div class="card pynmon-card">
+                <div class="card-header pynmon-card-header compact-header">
+                  Outcome
+                </div>
+                <div class="card-body pynmon-card-body">
+                  <table class="table pynmon-table">
+                    <tbody>
+                      <tr>
+                        <th>Conditions evaluated:</th>
+                        <td>{{ event.valid_condition_ids|length }}</td>
+                      </tr>
+                      <tr>
+                        <th>Conditions matched:</th>
+                        <td>
+                          {% if event.matched %}
+                          <span class="badge bg-success"
+                            >{{ event.matched_condition_ids|length }}</span
+                          >
+                          {% else %}
+                          <span class="badge bg-secondary">0</span>
+                          {% endif %}
+                        </td>
+                      </tr>
+                      <tr>
+                        <th>Triggered invocations:</th>
+                        <td>
+                          {% if event.triggered %}
+                          <span class="badge bg-primary"
+                            >{{ event.triggered_invocation_ids|length }}</span
+                          >
+                          {% else %}
+                          <span class="badge bg-secondary">0</span>
+                          {% endif %}
+                        </td>
+                      </tr>
+                      <tr>
+                        <th>Trigger runs:</th>
+                        <td>{{ trigger_runs|length }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="row pynmon-row-compact">
+            <div class="col-12">
+              <div class="card pynmon-card">
+                <div class="card-header pynmon-card-header compact-header">
+                  Payload
+                </div>
+                <div class="card-body pynmon-card-body">
+                  {% if event.payload %} {% with args=event.payload,
+                  id_prefix='evt-payload' %} {% include
+                  "partials/formatted_arguments.html" %} {% endwith %} {% else
+                  %}
+                  <p class="text-muted mb-0">Empty payload.</p>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="row pynmon-row-compact">
+            <div class="col-12">
+              <div class="card pynmon-card">
+                <div class="card-header pynmon-card-header compact-header">
+                  Conditions evaluated for this event
+                  <span class="badge bg-secondary ms-2"
+                    >{{ conditions|length }}</span
+                  >
+                </div>
+                <div class="card-body pynmon-card-body">
+                  {% if conditions %}
+                  <table class="table table-sm pynmon-table">
+                    <thead>
+                      <tr>
+                        <th>Kind</th>
+                        <th>Matched</th>
+                        <th>Summary</th>
+                        <th>Condition ID</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for cond in conditions %}
+                      <tr>
+                        <td>
+                          <span class="badge bg-info">{{ cond.kind }}</span>
+                        </td>
+                        <td>
+                          {% if cond.matched %}
+                          <span class="badge bg-success">matched</span>
+                          {% else %}
+                          <span class="badge bg-secondary">no match</span>
+                          {% endif %}
+                        </td>
+                        <td>
+                          {% if cond.summary %} {% for k, v in cond.summary %}
+                          <code style="font-size: 11px"
+                            >{{ k }}=<strong>{{ v }}</strong></code
+                          >{% if not loop.last %} &middot; {% endif %} {% endfor
+                          %} {% else %}
+                          <span class="text-muted">—</span>
+                          {% endif %}
+                        </td>
+                        <td>
+                          <a
+                            href="/trigger-runs/condition?condition_id={{ cond.condition_id|urlencode }}"
+                            title="Open condition details"
+                            ><code
+                              style="font-size: 11px; word-break: break-all"
+                              title="{{ cond.condition_id }}"
+                              >{{ cond.condition_id }}</code
+                            ></a
+                          >
+                        </td>
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                  {% else %}
+                  <p class="text-muted mb-0">
+                    No conditions were registered for this event code.
+                  </p>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="row pynmon-row-compact">
+            <div class="col-12">
+              <div class="card pynmon-card">
+                <div class="card-header pynmon-card-header compact-header">
+                  Triggered invocations
+                  <span class="badge bg-secondary ms-2"
+                    >{{ trigger_runs|length }}</span
+                  >
+                </div>
+                <div class="card-body pynmon-card-body">
+                  {% if trigger_runs %}
+                  <table class="table table-sm pynmon-table">
+                    <thead>
+                      <tr>
+                        <th>Run ID</th>
+                        <th>Task</th>
+                        <th>Logic</th>
+                        <th>Invocation</th>
+                        <th>Executed at (UTC)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for run in trigger_runs %}
+                      <tr>
+                        <td>
+                          <a
+                            href="/trigger-runs/{{ run.trigger_run_id }}"
+                            title="Open trigger run details"
+                          >
+                            <code style="font-size: 11px"
+                              >{{ run.trigger_run_id }}</code
+                            >
+                          </a>
+                          {% set run_timeline_url =
+                          trigger_run_timeline_urls.get(run.trigger_run_id) %}
+                          {% if run_timeline_url %}
+                          <a
+                            href="{{ run_timeline_url }}"
+                            class="ms-1 text-decoration-none"
+                            title="Open trigger run in timeline"
+                          >
+                            <span
+                              class="material-icons"
+                              style="
+                                font-size: 14px;
+                                vertical-align: middle;
+                                color: #28a745;
+                              "
+                              >timeline</span
+                            >
+                          </a>
+                          {% endif %}
+                        </td>
+                        <td>
+                          <a href="/tasks/{{ run.task_id_key }}"
+                            ><code>{{ run.task_id_key }}</code></a
+                          >
+                        </td>
+                        <td>{{ run.logic_value }}</td>
+                        <td>
+                          {% if run.triggered_invocation_id %}
+                          <a
+                            href="/invocations/{{ run.triggered_invocation_id }}"
+                          >
+                            <code style="font-size: 11px"
+                              >{{ run.triggered_invocation_id }}</code
+                            >
+                          </a>
+                          <a
+                            href="/invocations/timeline?time_range=1h&selected={{ run.triggered_invocation_id }}"
+                            class="ms-1 text-decoration-none"
+                            title="Open invocation in timeline"
+                          >
+                            <span
+                              class="material-icons"
+                              style="
+                                font-size: 14px;
+                                vertical-align: middle;
+                                color: #28a745;
+                              "
+                              >timeline</span
+                            >
+                          </a>
+                          {% else %}
+                          <span class="text-muted">—</span>
+                          {% endif %}
+                        </td>
+                        <td>
+                          {% if run.executed_at %}
+                          <code
+                            >{{ run.executed_at.isoformat(timespec="seconds")
+                            }}</code
+                          >
+                          {% else %}
+                          <span class="text-muted">—</span>
+                          {% endif %}
+                        </td>
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                  {% else %}
+                  <p class="text-muted mb-0">
+                    No trigger runs reference this event yet.
+                  </p>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

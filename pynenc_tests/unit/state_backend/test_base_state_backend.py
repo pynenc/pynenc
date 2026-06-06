@@ -1,4 +1,3 @@
-import threading
 import time
 from typing import TYPE_CHECKING
 
@@ -9,10 +8,7 @@ from pynenc.conf.config_state_backend import ConfigStateBackend
 from pynenc.exceptions import InvocationNotFoundError
 from pynenc.invocation import (
     DistributedInvocation,
-    InvocationStatus,
-    InvocationStatusRecord,
 )
-from pynenc.runner import RunnerContext
 from pynenc_tests.conftest import MockPynenc
 
 if TYPE_CHECKING:
@@ -34,32 +30,6 @@ def dummy_task() -> "Task":
 @pytest.fixture
 def dummy_invocation(dummy_task: "Task") -> "DistributedInvocation":
     return DistributedInvocation.isolated(Call(dummy_task))
-
-
-def test_add_history_non_blocking(
-    dummy_invocation: "DistributedInvocation[Params, Result]",
-) -> None:
-    """Test that add_history is called in a non-blocking way."""
-    mock_base_app.state_backend._add_histories.side_effect = lambda x, y: time.sleep(
-        0.5
-    )
-
-    start_time = time.time()
-    runner_ctx = RunnerContext(
-        runner_cls="TestRunner",
-        runner_id="test-runner",
-        pid=12345,
-        hostname="test-host",
-    )
-    mock_base_app.state_backend.add_histories(
-        [dummy_invocation],
-        status_record=InvocationStatusRecord(status=InvocationStatus.REGISTERED),
-        runner_context=runner_ctx,
-    )
-    end_time = time.time()
-
-    # check that our method returned control to the main thread almost instantly
-    assert end_time - start_time < 0.5
 
 
 def test_set_result_blocking(
@@ -89,27 +59,3 @@ def test_get_invocation_exception() -> None:
 
 def test_conf_property() -> None:
     assert isinstance(mock_base_app.state_backend.conf, ConfigStateBackend)
-
-
-def test_wait_for_all_async_operations_blocks_until_threads_finish() -> None:
-    """Verify wait_for_all_async_operations blocks until background threads complete."""
-    completed = []
-
-    def slow_work(label: str) -> None:
-        time.sleep(0.05)
-        completed.append(label)
-
-    t1 = threading.Thread(target=slow_work, args=("t1",))
-    t2 = threading.Thread(target=slow_work, args=("t2",))
-    t1.start()
-    t2.start()
-
-    mock_base_app.state_backend.invocation_threads = {
-        "invocation1": [t1],
-        "invocation2": [t2],
-    }
-
-    mock_base_app.state_backend.wait_for_all_async_operations()
-
-    assert "t1" in completed
-    assert "t2" in completed

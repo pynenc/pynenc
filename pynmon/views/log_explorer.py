@@ -27,13 +27,19 @@ from pynmon.util.log_parser import (
     timestamp_to_utc,
 )
 from pynmon.views.log_explorer_resolve import (
+    build_timeline_qs_for_range,
     build_shared_timeline_qs,
     collect_all_entity_refs,
     enrich_extra_invocations,
+    enrich_trigger_entities,
     full_runner_id,
     resolve_single_line,
 )
-from pynmon.views.log_explorer_svg import LogSvgParams, build_log_svg
+from pynmon.views.log_explorer_svg import (
+    LogSvgParams,
+    build_log_svg,
+    compute_log_svg_time_range,
+)
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
@@ -141,14 +147,21 @@ async def _analyse_logs(app: "Pynenc", log: str) -> MultiLogAnalysis:
     lines = list(
         await asyncio.gather(*[resolve_single_line(app, p) for p in parsed_lines])
     )
-    timeline_qs = build_shared_timeline_qs(parsed_lines)
     all_refs = collect_all_entity_refs(lines)
     has_valid = any(la.parsed.is_valid for la in lines)
 
     utc_ts = [ts for p in parsed_lines if (ts := timestamp_to_utc(p.timestamp))]
-    svg_content = await build_log_svg(LogSvgParams(app, all_refs, utc_ts))
+    svg_params = LogSvgParams(app, all_refs, utc_ts)
+    if utc_ts:
+        timeline_start, timeline_end = await compute_log_svg_time_range(svg_params)
+        timeline_qs = build_timeline_qs_for_range(timeline_start, timeline_end)
+        svg_params = LogSvgParams(app, all_refs, utc_ts, (timeline_start, timeline_end))
+    else:
+        timeline_qs = build_shared_timeline_qs(parsed_lines)
+    svg_content = await build_log_svg(svg_params)
     ref_details = _build_ref_details(lines)
     await enrich_extra_invocations(app, all_refs, ref_details)
+    await enrich_trigger_entities(app, all_refs, ref_details)
 
     return MultiLogAnalysis(
         lines=lines,

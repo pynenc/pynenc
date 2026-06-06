@@ -7,13 +7,14 @@ All heavy data queries are offloaded to threads so the event loop stays free.
 """
 
 import asyncio
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from pynmon.app import get_pynenc_instance, templates
+from pynmon.util.atomic_service_timeline import load_atomic_service_timeline_data
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
@@ -57,16 +58,45 @@ def _calculate_last_heartbeat_age(runner_info: "ActiveRunnerInfo") -> dict[str, 
 
 
 def _enrich_runner_info(
-    runner_info: "ActiveRunnerInfo", context: "RunnerContext | None"
+    runner_info: "ActiveRunnerInfo",
+    context: "RunnerContext | None",
+    last_service: tuple[datetime | None, datetime | None] = (None, None),
 ) -> dict:
     """Enrich runner info with context and calculated fields."""
+    last_service_start, last_service_end = last_service
     return {
         "runner_info": runner_info,
         "context": context,
         "age": _calculate_runner_age(runner_info),
         "heartbeat_age": _calculate_last_heartbeat_age(runner_info),
         "has_context": context is not None,
+        "last_service_start": last_service_start,
+        "last_service_end": last_service_end,
     }
+
+
+def _load_last_service_by_runner(
+    app: "Pynenc", runner_ids: list[str]
+) -> dict[str, tuple[datetime | None, datetime | None]]:
+    """Return per-runner (start, end) of the most recent execution row.
+
+    Empty (None, None) entries for runners with no recorded execution.
+    """
+    result: dict[str, tuple[datetime | None, datetime | None]] = {}
+    epoch = datetime.fromtimestamp(0, tz=UTC)
+    now = datetime.now(UTC)
+    for runner_id in runner_ids:
+        try:
+            executions = app.orchestrator.get_atomic_service_executions_in_timerange(
+                epoch, now, limit=1, runner_id=runner_id
+            )
+        except Exception:
+            executions = []
+        if executions:
+            result[runner_id] = (executions[0].start_time, executions[0].end_time)
+        else:
+            result[runner_id] = (None, None)
+    return result
 
 
 def _collect_runner_config(app: "Pynenc") -> dict[str, str | int | float]:
@@ -109,10 +139,17 @@ async def runners_view(request: Request) -> HTMLResponse:
     active_runners = await asyncio.to_thread(app.orchestrator.get_active_runners)
     runner_ids = [r.runner_id for r in active_runners]
     contexts = await asyncio.to_thread(_get_runner_contexts, app, runner_ids)
+    last_service = await asyncio.to_thread(
+        _load_last_service_by_runner, app, runner_ids
+    )
 
     # Enrich runners with context
     enriched_runners = [
-        _enrich_runner_info(runner, contexts.get(runner.runner_id))
+        _enrich_runner_info(
+            runner,
+            contexts.get(runner.runner_id),
+            last_service.get(runner.runner_id, (None, None)),
+        )
         for runner in active_runners
     ]
 
@@ -120,7 +157,7 @@ async def runners_view(request: Request) -> HTMLResponse:
     total_runners = len(active_runners)
     atomic_eligible = sum(1 for r in active_runners if r.allow_to_run_atomic_service)
     runners_with_history = sum(
-        1 for r in active_runners if r.last_service_start is not None
+        1 for start, _ in last_service.values() if start is not None
     )
 
     runner_config = _collect_runner_config(app)
@@ -150,9 +187,16 @@ async def refresh_runners(request: Request) -> HTMLResponse:
     active_runners = await asyncio.to_thread(app.orchestrator.get_active_runners)
     runner_ids = [r.runner_id for r in active_runners]
     contexts = await asyncio.to_thread(_get_runner_contexts, app, runner_ids)
+    last_service = await asyncio.to_thread(
+        _load_last_service_by_runner, app, runner_ids
+    )
 
     enriched_runners = [
-        _enrich_runner_info(runner, contexts.get(runner.runner_id))
+        _enrich_runner_info(
+            runner,
+            contexts.get(runner.runner_id),
+            last_service.get(runner.runner_id, (None, None)),
+        )
         for runner in active_runners
     ]
 
@@ -183,13 +227,25 @@ async def runner_detail(request: Request, runner_id: str) -> HTMLResponse:
 
     # Calculate execution stats if available
     execution_stats = None
-    if runner_info.last_service_start and runner_info.last_service_end:
-        duration = runner_info.get_last_execution_duration_seconds()
+    last_service = await asyncio.to_thread(
+        _load_last_service_by_runner, app, [runner_id]
+    )
+    last_start, last_end = last_service.get(runner_id, (None, None))
+    if last_start and last_end:
         execution_stats = {
-            "last_start": runner_info.last_service_start,
-            "last_end": runner_info.last_service_end,
-            "duration_seconds": duration,
+            "last_start": last_start,
+            "last_end": last_end,
+            "duration_seconds": (last_end - last_start).total_seconds(),
         }
+
+    # Recent atomic-service executions for this runner (most recent first).
+    recent_executions = await asyncio.to_thread(
+        load_atomic_service_timeline_data,
+        app,
+        limit=20,
+        runner_id=runner_id,
+        min_duration_seconds=0.0,
+    )
 
     return templates.TemplateResponse(
         request,
@@ -203,47 +259,6 @@ async def runner_detail(request: Request, runner_id: str) -> HTMLResponse:
             "age": _calculate_runner_age(runner_info),
             "heartbeat_age": _calculate_last_heartbeat_age(runner_info),
             "execution_stats": execution_stats,
-        },
-    )
-
-
-@router.get("/atomic-service/timeline", response_class=HTMLResponse)
-async def atomic_service_timeline(request: Request) -> HTMLResponse:
-    """Display atomic service execution timeline."""
-    app = get_pynenc_instance()
-
-    active_runners = await asyncio.to_thread(app.orchestrator.get_active_runners)
-
-    # Filter runners that have executed atomic service
-    runners_with_executions = [
-        r for r in active_runners if r.last_service_start is not None
-    ]
-
-    # Sort by last execution time
-    runners_with_executions.sort(
-        key=lambda r: r.last_service_start or datetime.min, reverse=True
-    )
-
-    # Calculate timeline data
-    timeline_data = []
-    for runner in runners_with_executions:
-        if runner.last_service_start and runner.last_service_end:
-            timeline_data.append(
-                {
-                    "runner_id": runner.runner_id,
-                    "start": runner.last_service_start,
-                    "end": runner.last_service_end,
-                    "duration": runner.get_last_execution_duration_seconds(),
-                }
-            )
-
-    return templates.TemplateResponse(
-        request,
-        "runners/atomic_service_timeline.html",
-        context={
-            "title": "Atomic Service Timeline",
-            "app_id": app.app_id,
-            "timeline_data": timeline_data,
-            "service_interval_minutes": app.conf.atomic_service_check_interval_minutes,
+            "atomic_service_history": recent_executions,
         },
     )

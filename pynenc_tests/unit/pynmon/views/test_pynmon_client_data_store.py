@@ -4,17 +4,10 @@ Unit tests for pynmon arg cache view.
 Tests argument cache monitoring endpoints including overview and purge.
 """
 
-import pytest
-
-pytest.importorskip("fastapi", reason="pynmon tests require monitor dependencies")
-pytest.importorskip("jinja2", reason="pynmon tests require monitor dependencies")
-
-# All imports below must come after pytest.importorskip calls
-# ruff: noqa: E402
-
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
 
 from pynenc_tests.conftest import MockPynenc

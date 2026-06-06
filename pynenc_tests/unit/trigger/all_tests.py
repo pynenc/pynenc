@@ -4,6 +4,8 @@
 # Plugins should import: from pynenc_tests.unit.trigger.all_tests import *
 
 from pynenc_tests.unit.trigger.test_trigger_all_instances import *
+from pynenc_tests.unit.trigger.test_trigger_auto_purge import *
+from pynenc_tests.unit.trigger.test_trigger_backend_monitoring import *
 
 # Files in this folder that are NOT exported to plugins
 # (implementation-specific tests or base class tests)

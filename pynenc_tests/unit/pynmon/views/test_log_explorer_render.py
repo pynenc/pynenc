@@ -13,12 +13,6 @@ Key components:
 
 from dataclasses import dataclass, field
 
-import pytest
-
-pytest.importorskip("fastapi", reason="pynmon tests require monitor dependencies")
-pytest.importorskip("jinja2", reason="pynmon tests require monitor dependencies")
-
-# ruff: noqa: E402
 from pynmon.util.log_parser import ParsedLogLine, ParsedRunner
 from pynmon.views.log_explorer_render import (
     _bracket_link_runners,
@@ -78,6 +72,24 @@ def test_entity_link_url_should_return_workflow_url() -> None:
     for kind in ("workflow", "sub-workflow", "parent-workflow"):
         url = entity_link_url(kind, "wf-id")
         assert url == "/workflows/runs", f"Failed for kind={kind}"
+
+
+def test_entity_link_url_should_return_trigger_detail_urls() -> None:
+    """Trigger/event condition refs map to their Pynmon detail routes."""
+    assert entity_link_url("event", "evt-1") == "/events/evt-1"
+    assert entity_link_url("trigger", "trig-1") == "/triggers/trig-1"
+    assert (
+        entity_link_url("condition", "cond-1")
+        == "/trigger-runs/condition?condition_id=cond-1"
+    )
+    assert (
+        entity_link_url("valid-condition", "vc-1")
+        == "/trigger-runs/valid-condition?valid_condition_id=vc-1"
+    )
+    assert (
+        entity_link_url("atomic-service-run", "as-run-1")
+        == "/runners/atomic-service/runs/as-run-1"
+    )
 
 
 def test_entity_link_url_should_return_empty_for_unknown_kind() -> None:
@@ -204,6 +216,15 @@ def test_bracket_link_runners_should_use_partial_id_as_fallback() -> None:
 
     assert "/runners/abcdef12" in result
     assert "TR(abcdef12)" in result
+
+
+def test_bracket_link_runners_should_link_atomic_service_context() -> None:
+    """AS(...) bracket entries link to atomic-service run details."""
+    result = _bracket_link_runners("AS(as-run-1)", {})
+
+    assert "/runners/atomic-service/runs/as-run-1" in result
+    assert 'data-atomic-service-run-id="as-run-1"' in result
+    assert "bracket-atomic-service" in result
 
 
 # ################################################################################### #
@@ -412,3 +433,137 @@ def test_render_log_html_should_handle_line_without_bracket() -> None:
 
     assert "log-level-error" in result
     assert "Some error occurred" in result
+
+
+# ################################################################################### #
+# ENTITY_LINK_URL — TRIGGER KINDS (Phase 1)
+# ################################################################################### #
+
+
+def test_entity_link_url_should_return_event_url() -> None:
+    """``event:{id}`` chips link to /events/<id>."""
+    assert entity_link_url("event", "evt-1") == "/events/evt-1"
+
+
+def test_entity_link_url_should_return_trigger_run_url() -> None:
+    """``trigger-run:{id}`` chips link to /trigger-runs/<id>."""
+    assert entity_link_url("trigger-run", "run-1") == "/trigger-runs/run-1"
+
+
+def test_entity_link_url_should_route_invocation_roles_to_invocations() -> None:
+    """source-invocation/triggered-invocation map to /invocations/<id>."""
+    assert entity_link_url("source-invocation", "src-1") == "/invocations/src-1"
+    assert entity_link_url("triggered-invocation", "new-1") == "/invocations/new-1"
+
+
+def test_entity_link_url_should_return_condition_urls() -> None:
+    """condition refs link to their independent detail views."""
+    assert (
+        entity_link_url("condition", "cond-1")
+        == "/trigger-runs/condition?condition_id=cond-1"
+    )
+    assert (
+        entity_link_url("valid-condition", "vc-1")
+        == "/trigger-runs/valid-condition?valid_condition_id=vc-1"
+    )
+
+
+def test_entity_link_url_should_encode_condition_url_values() -> None:
+    """Condition IDs contain # and cron spaces, so query values are encoded."""
+    condition_id = "condition#pkg.task#success#static_hash_result_callable_pkg._filter"
+    cron_condition_id = "cron_*/15 * * * *"
+
+    assert entity_link_url("condition", condition_id) == (
+        "/trigger-runs/condition?"
+        "condition_id=condition%23pkg.task%23success%23static_hash_result_callable_pkg._filter"
+    )
+    assert entity_link_url("condition", cron_condition_id) == (
+        "/trigger-runs/condition?condition_id=cron_%2A%2F15+%2A+%2A+%2A+%2A"
+    )
+
+
+# ################################################################################### #
+# _LINKIFY_ENTITIES — TRIGGER REFS (Phase 1)
+# ################################################################################### #
+
+
+def test_linkify_entities_should_link_event_with_data_attribute() -> None:
+    """``event:{id}`` becomes a chip with ``data-event-id`` and typed class."""
+    html = "Routing event:evt-abc to listeners"
+    result = _linkify_entities(html)
+    assert "/events/evt-abc" in result
+    assert 'data-event-id="evt-abc"' in result
+    assert "log-entity-event" in result
+
+
+def test_linkify_entities_should_link_trigger_run_with_data_attribute() -> None:
+    """``trigger-run:{id}`` becomes a chip with ``data-trigger-run-id``."""
+    html = "Executed trigger-run:run-xyz now"
+    result = _linkify_entities(html)
+    assert "/trigger-runs/run-xyz" in result
+    assert 'data-trigger-run-id="run-xyz"' in result
+    assert "log-entity-trigger-run" in result
+
+
+def test_linkify_entities_should_link_atomic_service_run_with_data_attribute() -> None:
+    """``atomic-service-run:{id}`` links to the atomic-service run page."""
+    html = "Processed atomic-service-run:as-run-xyz now"
+    result = _linkify_entities(html)
+    assert "/runners/atomic-service/runs/as-run-xyz" in result
+    assert 'data-atomic-service-run-id="as-run-xyz"' in result
+    assert "log-entity-atomic-service-run" in result
+
+
+def test_linkify_entities_should_link_condition_with_data_attribute() -> None:
+    """``condition:{id}`` links to detail and still cross-highlights."""
+    html = "Matched condition:cond-1 against context"
+    result = _linkify_entities(html)
+    assert "/trigger-runs/condition?condition_id=cond-1" in result
+    assert 'data-condition-id="cond-1"' in result
+    assert "log-entity-condition" in result
+
+
+def test_linkify_entities_should_link_full_hash_condition_id() -> None:
+    """Inline condition chips keep the full # separated condition id."""
+    condition_id = "condition#pkg.task#success#static_hash_result_callable_pkg._filter"
+    html = f"Matched condition:{condition_id} against context"
+
+    result = _linkify_entities(html)
+
+    assert (
+        "condition_id=condition%23pkg.task%23success%23static_hash_result_callable_pkg._filter"
+        in result
+    )
+    assert f'data-condition-id="{condition_id}"' in result
+    assert f"condition:{condition_id}" in result
+
+
+def test_linkify_entities_should_link_full_cron_condition_id() -> None:
+    """Inline cron condition refs keep all five cron fields."""
+    condition_id = "cron_*/15 * * * *"
+    html = f"Matched condition:{condition_id} against context"
+
+    result = _linkify_entities(html)
+
+    assert "condition_id=cron_%2A%2F15+%2A+%2A+%2A+%2A" in result
+    assert 'data-condition-id="cron_*/15 * * * *"' in result
+
+
+def test_linkify_entities_should_link_source_and_triggered_invocations() -> None:
+    """source-invocation/triggered-invocation chips carry invocation data attr + typed class."""
+    html = "trigger.run.executed source-invocation:src-1 triggered-invocation:new-1"
+    result = _linkify_entities(html)
+    assert "/invocations/src-1" in result
+    assert "/invocations/new-1" in result
+    assert 'data-entity-kind="source-invocation"' in result
+    assert 'data-entity-kind="triggered-invocation"' in result
+    assert "log-entity-source-invocation" in result
+    assert "log-entity-triggered-invocation" in result
+
+
+def test_linkify_entities_should_link_trigger_token() -> None:
+    """``trigger:{id}`` chips link to /triggers/<id> with data-trigger-id."""
+    html = "Claimed trigger:trig-1 for run"
+    result = _linkify_entities(html)
+    assert "/triggers/trig-1" in result
+    assert 'data-trigger-id="trig-1"' in result

@@ -4,6 +4,111 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.4] - 2026-05-10
+
+### Added
+
+- **Trigger event monitoring.** `emit_event` now persists a full `EventRecord`
+  (matched/valid condition ids, emitter task and invocation, payload, timestamp).
+  Trigger runs link back to their source events, and the backend purges them
+  together — deleting an event cascades to every trigger run that referenced it.
+  Auto-purge runs at the end of each trigger-loop iteration when enabled; age
+  and capacity policies are applied independently.
+- **`ConfigTrigger` purge fields:** `event_retention_days` (default `7`),
+  `event_auto_purge_enabled` (default `True`), `event_max_records` (default `0`,
+  unlimited), `trigger_run_max_records` (default `0`),
+  and age retention for trigger runs now reuses `event_retention_days`.
+  All accept the standard `PYNENC__*` env-var override.
+- **Pynmon events area.** New `/events` section with a paginated list filterable
+  by event code, time range, matched outcome and triggered outcome; an event
+  detail page; JSON endpoints `GET /events/{event_id}/api` and
+  `GET /events/{event_id}/trigger-runs`; and a `POST /events/auto-purge` action
+  that runs the configured policy on demand. The sidebar gets an _Events_
+  entry.
+- **Invocation detail surfaces trigger context.** The detail page and its JSON
+  API now expose `triggered_by` (the trigger run that produced this invocation),
+  `emitted_events` (events emitted during execution), and `triggered_runs_caused`
+  (downstream trigger runs caused by this invocation). The timeline overlays
+  event markers that fall in the queried window.
+- **Timeline range zoom.** A magnifying-glass tool on the invocation timeline.
+  Drag across the SVG to draw a selection rectangle; releasing the pointer
+  reloads the timeline scoped to the selected `start_date` / `end_date`.
+- **Dashboard event indicators.** Counters for recorded events, matched events,
+  triggered events, distinct event codes, and trigger runs.
+- **Configuration liveness validation.** Runner startup now validates the
+  atomic-service schedule so invalid timing fails before the runner loop starts,
+  with warnings for tight but possible atomic-service windows. Trigger config is
+  also validated when the trigger component first caches its config so settings
+  that prevent trigger processing from making progress fail early.
+
+### Changed
+
+- **Synchronous invocation history writes.** State backends now persist status
+  history before `add_history()` or `add_histories()` returns. This removes the
+  per-record background threads, guarantees immediate history visibility,
+  prevents background write reordering, and lets persistence failures reach the
+  caller. History-thread tracking and test shutdown waits have been removed.
+- **Trigger-run detail clarity.** Pages show the full trigger-run id and each
+  participant explains the matched `TriggerCondition`, the concrete
+  `ConditionContext`, and the generated `ValidCondition` id rather than opaque
+  hashes. Participant records keep a display snapshot so the page still reads
+  well after transient valid conditions are cleared. Valid-condition ids link
+  only while the backend still retains them. Per-participant event/source
+  columns appear only when they add information beyond the outcome summary.
+- **Invocation detail layout.** Detail pages use the full row width. The
+  related-events panel collapses empty halves so the populated side fills the
+  row. Timeline selected-invocation details now show trigger origin, downstream
+  trigger runs (as responsive cards), and emitted events in a full-width band
+  between the invocation summary and the status history.
+- **Event list links.** Event ids are real links to the detail page; the
+  emitter column is labelled _Emitter invocation_ and shows the full invocation
+  id as the link text.
+- **Timeline filter layout.** Desktop filters now fit on two balanced rows;
+  collapsed invocation-scope chips include an inline _clear_ link.
+- **Timeline zoom URLs.** Generated query strings omit the UTC `+00:00`
+  suffix to avoid double form-submission parsing issues.
+- **Timeline relations are causal only.** The SVG no longer draws inferred
+  atomic-service-to-event origin lines. Atomic-service executions remain
+  visible as runner-lane windows; relation lines are reserved for explicit
+  causal links (direct calls, event origins, event triggers, status/result/cron
+  trigger participants).
+- **Atomic-service routes in Pynmon.** All `/runners/atomic-service/*` endpoints
+  are served by the atomic-service view module; runner pages stay focused on
+  runner list/detail concerns.
+- **Log parser trigger vocabulary.** `pynmon` now imports trigger entity kinds
+  from `pynenc.trigger.log_messages` so log producers and parsers share one
+  source of truth.
+
+### Fixed
+
+- **Log Explorer mini-timeline clipping.** When a pasted log line referenced a
+  trigger-run event, the emitter invocation was often outside the log-timestamps
+  window and its bar was not visible. The mini-timeline now widens its bounds to
+  include all referenced emitters before rendering.
+- **Log Explorer hover fan-out.** Hovering an event marker highlighted every
+  marker sharing the same trigger id instead of only the hovered one. Hover
+  wiring now resolves to the most specific entity attribute on the target element.
+- **Log Explorer "open full" zoom mismatch.** The link to the full timeline was
+  built from raw log timestamps rather than the expanded mini-timeline bounds,
+  so the full view opened at a different zoom level. Both now use the same
+  computed range. Generated dates also drop the `+00:00` UTC offset that
+  prevented the timeline filter form from accepting them.
+- **Family-tree load-more regression.** Nodes were sometimes marked as
+  truncated when their "missing" children had actually been rendered elsewhere
+  in the tree through another event or trigger path. `load more` badges now
+  appear only for real unrendered children.
+- **Atomic-service purge safety.** Execution retention now keeps runs that are
+  still referenced by trigger-run history (age and capacity purges), preventing
+  dangling references in monitoring views.
+
+### Removed
+
+- **`InvocationStatus.RESUMED`.** After `SIGCONT` the runner sets the
+  invocation back to `RUNNING` directly, so `PAUSED -> RESUMED` becomes
+  `PAUSED -> RUNNING`. This restores symmetry with the rest of the running
+  lifecycle — a resumed invocation can again reach `RUNNING_RECOVERY` if its
+  runner becomes inactive.
+
 ## [0.2.3] - 2026-05-09
 
 ### Added

@@ -380,7 +380,8 @@ def on_cron(cron_expression: str) -> TriggerBuilder:
 
 
 def on_event(
-    event_code: str, required_params: dict[str, Any] | None = None
+    event_code: str,
+    required_params: dict[str, Any] | Callable[[dict[str, Any]], bool] | None = None,
 ) -> TriggerBuilder:
     """
     Create a trigger builder for an event.

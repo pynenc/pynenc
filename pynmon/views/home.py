@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import pathlib
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Request
@@ -124,6 +125,34 @@ def _collect_invocation_summary(app: "Pynenc") -> dict[str, int]:
     }
 
 
+def _collect_event_summary(app: "Pynenc") -> dict[str, int]:
+    """Collect lightweight trigger-event counters for the dashboard."""
+    summary = {
+        "total": 0,
+        "matched": 0,
+        "triggered": 0,
+        "event_codes": 0,
+        "trigger_runs": 0,
+    }
+    try:
+        summary["total"] = app.trigger.count_events()
+        summary["matched"] = app.trigger.count_events(matched=True)
+        summary["triggered"] = app.trigger.count_events(triggered=True)
+        summary["event_codes"] = len(app.trigger.list_event_codes())
+    except Exception:
+        logger.debug("trigger event counters unavailable for dashboard")
+    try:
+        summary["trigger_runs"] = len(
+            app.trigger.get_trigger_runs_in_timerange(
+                datetime.min.replace(tzinfo=UTC),
+                datetime.max.replace(tzinfo=UTC),
+            )
+        )
+    except Exception:
+        logger.debug("trigger-run counter unavailable for dashboard")
+    return summary
+
+
 @router.get("/", response_class=HTMLResponse, tags=["Dashboard"])
 async def index(request: Request) -> HTMLResponse:
     """Dashboard home page."""
@@ -151,6 +180,7 @@ async def index(request: Request) -> HTMLResponse:
     invocation_summary = await asyncio.to_thread(
         _collect_invocation_summary, active_app
     )
+    event_summary = await asyncio.to_thread(_collect_event_summary, active_app)
 
     # Registered task count
     registered_tasks = len(active_app.tasks)
@@ -166,6 +196,7 @@ async def index(request: Request) -> HTMLResponse:
             "broker_pending": broker_pending,
             "active_runner_count": len(active_runners),
             "invocation_summary": invocation_summary,
+            "event_summary": event_summary,
             "registered_tasks": registered_tasks,
         },
     )

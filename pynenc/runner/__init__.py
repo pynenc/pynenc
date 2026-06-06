@@ -1,3 +1,4 @@
+from pynenc.orchestrator.atomic_service import AtomicServiceRun
 from pynenc.runner.base_runner import BaseRunner, DummyRunner, ExternalRunner
 from pynenc.runner.multi_thread_runner import MultiThreadRunner
 from pynenc.runner.persistent_process_runner import PersistentProcessRunner
@@ -14,4 +15,5 @@ __all__ = [
     "MultiThreadRunner",
     "PersistentProcessRunner",
     "RunnerContext",
+    "AtomicServiceRun",
 ]

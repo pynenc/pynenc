@@ -19,7 +19,7 @@ def test_complex_pause_resume_scenario() -> None:
     - inv-0: PENDING-REROUTED on worker-0 (small segment)
     - inv-0: PENDING-RUNNING-PAUSED on worker-1
     - inv-1: PENDING-RUNNING-RETRY on worker-1 (while inv-0 paused, same lane)
-    - inv-0: RESUMED-KILLED on worker-1 (same lane)
+    - inv-0: RUNNING-KILLED on worker-1 (same lane, after resume)
     """
     w0_t1 = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
     w0_t2 = datetime(2025, 1, 1, 12, 0, 10, tzinfo=UTC)
@@ -41,7 +41,7 @@ def test_complex_pause_resume_scenario() -> None:
         VisualElement("inv-1", "worker-1", TimeInterval(w1_t4, w1_t5), "PENDING"),
         VisualElement("inv-1", "worker-1", TimeInterval(w1_t5, w1_t6), "RUNNING"),
         VisualElement("inv-1", "worker-1", TimeInterval(w1_t6, w1_t6), "RETRY"),
-        VisualElement("inv-0", "worker-1", TimeInterval(w1_t6, w1_t7), "RESUMED"),
+        VisualElement("inv-0", "worker-1", TimeInterval(w1_t6, w1_t7), "RUNNING"),
         VisualElement("inv-0", "worker-1", TimeInterval(w1_t7, w1_t7), "KILLED"),
     ]
 
@@ -115,7 +115,7 @@ def test_same_invocation_multiple_elements_different_lanes() -> None:
         ),
         VisualElement("inv-2", "runner-1", TimeInterval(t2_start, t2_end), "RUNNING"),
         VisualElement(
-            "inv-1", "runner-1", TimeInterval(t1_resume_start, t1_resume_end), "RESUMED"
+            "inv-1", "runner-1", TimeInterval(t1_resume_start, t1_resume_end), "RUNNING"
         ),
     ]
 

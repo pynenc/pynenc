@@ -43,7 +43,6 @@ class InvocationStatus(StrEnum):
     :cvar RUNNING: The task call is currently running
     :cvar RUNNING_RECOVERY: The task call is being recovered because the owner runner is inactive
     :cvar PAUSED: The task call execution is paused
-    :cvar RESUMED: The task call execution has been resumed
     :cvar KILLED: The task call execution has been killed
     :cvar SUCCESS: The task call finished without errors
     :cvar FAILED: The task call finished with exceptions
@@ -59,7 +58,6 @@ class InvocationStatus(StrEnum):
     RUNNING = "running"
     RUNNING_RECOVERY = "running_recovery"
     PAUSED = "paused"
-    RESUMED = "resumed"
     KILLED = "killed"
     SUCCESS = "success"
     FAILED = "failed"
@@ -283,19 +281,7 @@ _CONFIG: Final[StatusConfiguration] = StatusConfiguration(
         ),
         InvocationStatus.PAUSED: StatusDefinition(
             allowed_transitions=frozenset(
-                {InvocationStatus.RESUMED, InvocationStatus.KILLED}
-            ),
-            requires_ownership=True,
-        ),
-        InvocationStatus.RESUMED: StatusDefinition(
-            allowed_transitions=frozenset(
-                {
-                    InvocationStatus.PAUSED,
-                    InvocationStatus.KILLED,
-                    InvocationStatus.RETRY,
-                    InvocationStatus.SUCCESS,
-                    InvocationStatus.FAILED,
-                }
+                {InvocationStatus.RUNNING, InvocationStatus.KILLED}
             ),
             requires_ownership=True,
         ),

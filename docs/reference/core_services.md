@@ -13,7 +13,7 @@ given time — even in a multi-runner deployment.
 Runner main loop (every iteration)
 ├── Report child heartbeats
 ├── Check atomic services          ← time-slot gating
-│   └── trigger_loop_iteration()   ← cron evaluation + trigger processing
+│   └── trigger_loop_iteration     ← cron evaluation + trigger processing
 │       ├── Evaluate cron conditions (including recovery task crons)
 │       └── Route triggered tasks as normal invocations
 └── Process task invocations
@@ -77,22 +77,35 @@ each recovery task executes at a time across the entire system.
 
 ### Problem
 
-With N runners, global services (trigger evaluation, recovery) must run **once per cycle**,
-not N times. Concurrent execution causes race conditions: duplicate task firings,
+With N runners, global services (trigger evaluation, recovery) must not run
+concurrently. Concurrent execution causes race conditions: duplicate task firings,
 conflicting recovery operations.
 
-### Solution: Time-Slot Distribution
+### Solution: Claim-Based Time Slots
 
-The atomic service module divides time into repeating cycles and assigns each runner
-an exclusive execution window:
+The scheduler is now centered on one pure decision function:
+`decide_atomic_service_claim(...)`.
 
-1. **Runner ordering** — active runners are sorted by creation time (oldest first) for
-   a stable, deterministic ordering.
-2. **Slot calculation** — the cycle interval is divided equally among runners, with a
-   safety margin subtracted from each slot.
-3. **Modulo clock** — the current timestamp is mapped into the cycle via
-   `time % interval`. Each runner checks whether it falls within its window.
-4. **Single-runner fast path** — when only one runner exists, it always runs services.
+Each runner follows this flow when it checks atomic services:
+
+1. **Refresh membership** — the runner heartbeats itself with
+   `can_run_atomic_service=True`, then loads active runners in deterministic order
+   (creation time, then runner id).
+2. **Reap stale in-progress runs** — before claiming, the orchestrator marks
+   `RUNNING` atomic-service executions as abandoned when their owner is no longer
+   active.
+3. **Compute one claim** — `decide_atomic_service_claim` returns a single
+   `AtomicServiceClaim` with either:
+   - `atomic_service_run` (this runner may start), or
+   - a skip reason (`NOT_ASSIGNED_SLOT`, `SCHEDULED_RUNNER_IN_GRACE`,
+     `SLOT_WINDOW_INVALID`, `LATE_START`, `NO_STABLE_RUNNERS`).
+4. **Prevent overlap** — even if the slot is assigned, the orchestrator checks for
+   another live `RUNNING` execution and skips if one exists.
+5. **Start then re-check margin** — once start is recorded, the orchestrator validates
+   that enough slot time remains. If too little time is left, it immediately abandons
+   the run with `no_margin` and does no trigger work.
+6. **Run and finalize** — the runner calls `trigger.trigger_loop_iteration(atomic_service_run)`.
+   The execution is finalized as `COMPLETED` or `ABANDONED`.
 
 #### Example: 3 Runners, 5-Minute Cycle
 
@@ -107,11 +120,16 @@ Runner 2: [200s, 240s)
 
 ### Configuration
 
-| Setting                                 | Default | Description                                   |
-| --------------------------------------- | ------- | --------------------------------------------- |
-| `atomic_service_interval_minutes`       | `5.0`   | Total cycle length shared across all runners  |
-| `atomic_service_spread_margin_minutes`  | `1.0`   | Safety gap subtracted from each slot          |
-| `atomic_service_check_interval_minutes` | `0.5`   | How often each runner polls to check its slot |
+| Setting                                           | Default | Description                                                            |
+| ------------------------------------------------- | ------- | ---------------------------------------------------------------------- |
+| `atomic_service_interval_minutes`                 | `5.0`   | Total cycle length shared across all eligible runners                  |
+| `atomic_service_spread_margin_minutes`            | `1.0`   | Safety gap subtracted from each per-runner slot (except single-runner) |
+| `atomic_service_check_interval_minutes`           | `0.5`   | How often each runner evaluates an atomic-service claim                |
+| `atomic_service_max_start_slot_fraction`          | `0.5`   | Abort starts that consume too much of the assigned slot before running |
+| `atomic_service_membership_stabilization_minutes` | `0.0`   | Keep new runners in membership while temporarily non-runnable          |
+| `atomic_service_min_run_margin_seconds`           | `0.05`  | Minimum remaining slot time required after claiming                    |
+| `atomic_service_execution_retention_minutes`      | `60.0`  | Age retention window for execution audit records                       |
+| `atomic_service_execution_max_records`            | `1000`  | Capacity cap for execution audit records                               |
 
 ### Heartbeat and Liveness
 
@@ -126,14 +144,18 @@ Runners report heartbeats to the orchestrator every loop iteration:
 - Only runners with recent heartbeats and `can_run_atomic_service=True` participate in
   time-slot distribution.
 
-### Execution Time Monitoring
+### Timing Safety Rules
 
-The system validates that each atomic service execution fits within its allocated slot:
+The scheduler enforces two independent timing checks:
 
-- **>80% usage**: Info-level log suggesting the slot is getting tight.
-- **Overrun**: Warning-level log indicating atomicity guarantees may be broken.
+- **Late-start guard (`atomic_service_max_start_slot_fraction`)**:
+  if claim/start work begins too late within the slot, the attempt is skipped.
+- **Minimum-margin guard (`atomic_service_min_run_margin_seconds`)**:
+  if the remaining slot time after claiming is below the configured minimum, the run is
+  immediately marked `ABANDONED:no_margin`.
 
-Tune `atomic_service_interval_minutes` based on these diagnostics.
+In addition, `atomic_service_membership_stabilization_minutes` can reserve slots for
+newly seen runners while they are still in a grace period.
 
 ---
 
@@ -141,8 +163,9 @@ Tune `atomic_service_interval_minutes` based on these diagnostics.
 
 The atomic service and trigger system are tightly coupled:
 
-1. **Trigger evaluation runs inside the atomic service window** — when a runner enters
-   its time slot, it calls `trigger.trigger_loop_iteration()`.
+1. **Trigger evaluation runs inside an atomic-service claim** — when a runner is
+   cleared to start, the orchestrator returns an `AtomicServiceRun`, and the runner
+   calls `trigger.trigger_loop_iteration(atomic_service_run)`.
 
 2. **Core tasks are cron-triggered tasks** — both recovery tasks are registered with cron
    expressions via the same `TriggerBuilder` API that user tasks use.

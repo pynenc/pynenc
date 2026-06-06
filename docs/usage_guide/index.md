@@ -111,7 +111,7 @@ Automatically cache large arguments to reduce serialization overhead at scale.
 :link: use_case_010_trigger_system
 :link-type: doc
 :shadow: sm
-Schedule tasks with cron or fire them on status changes, results, and events.
+Schedule tasks or react to events, status changes, results, and exceptions.
 :::
 
 :::{grid-item-card} 11 · Workflow System
@@ -533,10 +533,11 @@ For a detailed guide and examples, see {doc}`./use_case_009_client_data_store`.
 
 📖 {doc}`Full step-by-step guide <./use_case_010_trigger_system>`
 
-Explore Pynenc's powerful trigger system, which enables declarative task scheduling and event-driven workflows. This feature allows you to automatically execute tasks in response to various conditions such as scheduled times, task status changes, results, exceptions, or custom events.
+Explore Pynenc's trigger system, which enables declarative task scheduling and event-driven execution. A trigger belongs to the task that reacts, so the upstream caller does not have to wire callbacks or build chains every time it enqueues work.
 
 ```python
 from pynenc import Pynenc
+from pynenc.invocation.status import InvocationStatus
 from pynenc.trigger.trigger_builder import TriggerBuilder
 
 app = Pynenc()
@@ -545,8 +546,12 @@ app = Pynenc()
 def source_task(x: int) -> str:
     return f"Processed {x}"
 
-# Define a task that runs when source_task completes successfully
-@app.task(triggers=TriggerBuilder().on_status(source_task, statuses=["SUCCESS"]))
+# Define a task that runs when source_task completes successfully.
+@app.task(
+    triggers=TriggerBuilder().on_status(
+        source_task, statuses=[InvocationStatus.SUCCESS]
+    )
+)
 def notification_task() -> str:
     return "Source task completed successfully"
 ```
@@ -558,7 +563,7 @@ The trigger system provides a comprehensive framework for automating workflows w
 - Conditional execution with filters based on arguments, results, or payload content
 - Composite conditions using AND/OR logic for complex triggering rules
 
-This use case demonstrates how to create self-managing workflows that respond to system events and task outcomes, reducing the need for manual orchestration.
+This use case demonstrates how to create reactive task graphs that respond to system events and task outcomes, reducing the need for manual orchestration. For a runnable end-to-end version, see the external [`trigger_demo` sample](https://github.com/pynenc/samples/tree/main/trigger_demo), which runs with SQLite and no external services.
 
 For a detailed guide and examples, see {doc}`./use_case_010_trigger_system`.
 
@@ -642,7 +647,7 @@ Pynenc uses a declarative, type-safe state machine to manage the lifecycle of ta
 Key status categories include:
 
 - **Available for Run**: `REGISTERED`, `REROUTED`, `RETRY`
-- **Owned by Runner**: `PENDING`, `RUNNING`, `PAUSED`, `RESUMED`
+- **Owned by Runner**: `PENDING`, `RUNNING`, `PAUSED`
 - **Recovery**: `PENDING_RECOVERY`, `RUNNING_RECOVERY`
 - **Final**: `SUCCESS`, `FAILED`, `CONCURRENCY_CONTROLLED_FINAL`
 

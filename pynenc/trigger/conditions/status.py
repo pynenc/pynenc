@@ -48,7 +48,7 @@ class StatusContext(ConditionContext):
         status: InvocationStatus | None = None,
     ) -> "StatusContext":
         """
-        Create a StatusContext from a DistInvocation.
+        Create a StatusContext from a DistributedInvocation.
 
         :param invocation: The invocation to extract context from
         :param status: Optional status to override the invocation's status

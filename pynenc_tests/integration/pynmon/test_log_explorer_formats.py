@@ -173,7 +173,7 @@ def _run_and_capture(task_fn: "Task") -> tuple[str, str]:
         invocation_id = inv.invocation_id
     finally:
         task_fn.app.runner.stop_runner_loop()
-        runner_thread.join(timeout=5)
+        runner_thread.join(timeout=0)
         for handler, original_stream in original_streams:
             handler.setStream(original_stream)
     return buf.getvalue(), invocation_id

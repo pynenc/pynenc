@@ -101,12 +101,20 @@
 /* Entity links in message body */
 .log-entity-link {
   color: #0d6efd;
-  text-decoration: none;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
   border-bottom: 1px dotted #0d6efd;
 }
 .log-entity-link:hover {
   color: #0a58ca;
   border-bottom-style: solid;
+}
+
+.log-bracket .bracket-link {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
 }
 
 /* Log message text (right column) */
@@ -169,6 +177,11 @@
   white-space: nowrap;
   vertical-align: middle;
 }
+.line-refs .ref-chip[href]:not(.chip-timeline) {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
 .line-refs .ref-chip:hover {
   background: #d3d8de;
 }
@@ -195,6 +208,31 @@
   background: #f3e8ff;
   border-color: #d9c2f2;
   color: #6b21a8;
+}
+.line-refs .ref-chip.chip-event {
+  background: #fff7e0;
+  border-color: #f0d98a;
+  color: #8a5a00;
+}
+.line-refs .ref-chip.chip-trigger-run {
+  background: #ffe8f0;
+  border-color: #f2b8cc;
+  color: #a01457;
+}
+.line-refs .ref-chip.chip-atomic-service {
+  background: #fff1e6;
+  border-color: #fdba74;
+  color: #9a3412;
+}
+.line-refs .ref-chip.chip-condition {
+  background: #eef3ff;
+  border-color: #b8c8e0;
+  color: #2e4a87;
+}
+.line-refs .ref-chip.chip-trigger {
+  background: #ffe2e0;
+  border-color: #f0a8a8;
+  color: #8a1a1a;
 }
 
 /* Grouped invocation + timeline chips (visually connected) */
@@ -240,7 +278,9 @@
   margin: 2px 4px 2px 0;
   font-size: 11px;
   border-radius: 3px;
-  text-decoration: none;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
   border: 1px solid #dee2e6;
   transition: background 0.15s;
 }
@@ -295,6 +335,68 @@
 }
 .log-svg-container [data-invocation-id]:hover {
   cursor: pointer;
+}
+.log-svg-container svg .event-marker-link,
+.log-svg-container svg .atomic-service-window,
+.log-svg-container svg .timeline-relation-line,
+.log-svg-container svg .trigger-condition-marker {
+  cursor: pointer;
+}
+
+.log-svg-container svg .atomic-service-window.atomic-service-highlight rect {
+  opacity: 0.32 !important;
+  stroke: #0369a1 !important;
+  stroke-width: 2px !important;
+  filter: drop-shadow(0 0 4px rgba(14, 165, 233, 0.45));
+}
+
+.log-svg-container svg .atomic-service-window.atomic-service-highlight text {
+  fill: #075985 !important;
+  font-weight: 700;
+}
+
+.log-svg-container svg .event-marker-link.event-highlight rect {
+  stroke: #7c3aed !important;
+  stroke-width: 2.5px !important;
+  filter: drop-shadow(0 0 4px rgba(124, 58, 237, 0.45));
+}
+
+.log-svg-container svg .event-marker-link.event-highlight text {
+  fill: #4c1d95 !important;
+  font-weight: 700;
+}
+
+.log-svg-container svg .event-marker-link.trigger-run-highlight rect,
+.log-svg-container svg .event-marker-link.trigger-highlight rect {
+  stroke: #f59e0b !important;
+  stroke-width: 2.5px !important;
+  filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0.45));
+}
+
+.log-svg-container svg .event-marker-link.trigger-run-highlight text,
+.log-svg-container svg .event-marker-link.trigger-highlight text {
+  fill: #92400e !important;
+  font-weight: 700;
+}
+
+.log-svg-container svg .timeline-relation-line.event-highlight {
+  opacity: 1 !important;
+  stroke-width: 3px !important;
+  filter: drop-shadow(0 0 3px rgba(124, 58, 237, 0.35));
+}
+
+.log-svg-container svg .timeline-relation-line.trigger-run-highlight,
+.log-svg-container svg .timeline-relation-line.trigger-highlight {
+  opacity: 1 !important;
+  stroke-width: 3px !important;
+  filter: drop-shadow(0 0 3px rgba(13, 110, 253, 0.4));
+}
+
+.log-svg-container svg .trigger-condition-marker.trigger-run-highlight,
+.log-svg-container svg .trigger-condition-marker.trigger-highlight {
+  stroke: #0d6efd !important;
+  stroke-width: 2px !important;
+  filter: drop-shadow(0 0 4px rgba(13, 110, 253, 0.45));
 }
 
 /* Invocation detail floating panel shown on SVG click */
@@ -377,6 +479,10 @@
   gap: 5px;
 }
 
+.refs-card-grid-wide {
+  gap: 6px;
+}
+
 .ref-entity-card {
   display: flex;
   flex-direction: column;
@@ -403,17 +509,115 @@
 .ref-card-runner:hover {
   background: #d4f0d4;
 }
+.ref-card-event {
+  background: #fff7e0;
+  border-color: #f0d98a;
+}
+.ref-card-event:hover {
+  background: #fdedc7;
+}
+.ref-card-trigger-run {
+  background: #ffe8f0;
+  border-color: #f2b8cc;
+}
+.ref-card-trigger-run:hover {
+  background: #fcd5e3;
+}
+.ref-card-condition {
+  min-width: 240px;
+  max-width: 420px;
+  background: #eef3ff;
+  border-color: #b8c8e0;
+}
+.ref-card-condition:hover {
+  background: #e0e9ff;
+}
+.ref-card-condition.log-entity-valid-condition {
+  background: #f5f0ff;
+  border-color: #d4c2f2;
+}
+.ref-card-trigger {
+  flex: 1 1 300px;
+  min-width: 220px;
+  max-width: 360px;
+  background: #ffe8e5;
+  border-color: #f0a8a8;
+}
+.ref-card-trigger:hover {
+  background: #ffd8d4;
+}
+.ref-card-atomic-service {
+  flex: 1 1 260px;
+  min-width: 220px;
+  max-width: 340px;
+  background: #fff1e6;
+  border-color: #fdba74;
+}
+.ref-card-atomic-service:hover {
+  background: #ffedd5;
+}
+.ref-card-event .ref-card-id-link {
+  color: #8a5a00;
+}
+.ref-card-trigger-run .ref-card-id-link {
+  color: #a01457;
+}
+.ref-card-trigger .ref-card-id-link {
+  color: #8a1a1a;
+}
+.ref-card-atomic-service .ref-card-id-link,
+.ref-card-atomic-service .ref-card-id-wrap {
+  color: #9a3412;
+}
+.ref-link.ref-link-condition,
+.ref-link.ref-link-trigger {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  font-size: 10px;
+  border-radius: 3px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+  cursor: pointer;
+}
+.ref-link.ref-link-condition {
+  background: #eef3ff;
+  border: 1px solid #b8c8e0;
+  color: #2e4a87;
+}
+.ref-link.ref-link-trigger {
+  background: #ffe2e0;
+  border: 1px solid #f0a8a8;
+  color: #8a1a1a;
+}
+.ref-link.log-entity-valid-condition {
+  background: #f5f0ff;
+  border-color: #d4c2f2;
+  color: #5a3a87;
+}
+.ref-badge-matched {
+  background: #d1f0c4;
+  color: #1a5a1a;
+}
+.ref-badge-triggered {
+  background: #c4dcf5;
+  color: #1a3a7a;
+}
 
 .ref-card-header {
   display: flex;
   align-items: center;
   gap: 4px;
+  flex-wrap: wrap;
 }
 
 .ref-card-id-link {
   font-size: 11px;
   font-weight: 600;
-  text-decoration: none;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -450,6 +654,41 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.ref-card-detail-multiline {
+  color: #555;
+  font-size: 10.5px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.ref-card-id-wrap {
+  display: block;
+  color: #2f3b52;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 3px;
+  padding: 2px 4px;
+  font-size: 10px;
+  line-height: 1.25;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+.ref-card-id-wrap code {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ref-card-type {
+  color: #495057;
+  font-size: 9.5px;
+  font-weight: 600;
 }
 .ref-card-cls {
   font-weight: 500;

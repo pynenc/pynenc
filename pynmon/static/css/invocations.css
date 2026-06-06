@@ -75,7 +75,8 @@
 
 /* SVG Timeline Visualization */
 .timeline-svg-container {
-  min-height: 200px;
+  position: relative;
+  min-height: 0;
   background-color: #ffffff;
   border-radius: 4px;
 }
@@ -83,6 +84,754 @@
 .timeline-svg-container svg {
   display: block;
   min-width: 100%;
+}
+
+.timeline-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.timeline-card-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+}
+
+.timeline-zoom-tool {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 6px;
+}
+
+.timeline-zoom-tool .material-icons {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.timeline-zoom-tool.active,
+.timeline-zoom-tool[aria-pressed="true"] {
+  color: #0d6efd;
+  background: #e7f1ff;
+  border-color: #86b7fe;
+}
+
+.timeline-svg-container.timeline-zoom-active {
+  touch-action: none;
+}
+
+.timeline-svg-container.timeline-zoom-active svg,
+.timeline-svg-container.timeline-zoom-active svg * {
+  cursor: crosshair !important;
+}
+
+.timeline-svg-container svg .timeline-zoom-selection {
+  fill: rgba(13, 110, 253, 0.14);
+  stroke: #0d6efd;
+  stroke-width: 1.5px;
+  stroke-dasharray: 6 4;
+  pointer-events: none;
+}
+
+/* Collapsible timeline filters */
+.timeline-filter-panel {
+  border: 1px solid #d8dee9;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.timeline-filter-panel summary {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.55rem 0.75rem;
+  cursor: pointer;
+  list-style: none;
+  min-height: 42px;
+}
+
+.timeline-filter-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.timeline-filter-panel summary::after {
+  content: "expand_more";
+  font-family: "Material Icons";
+  margin-left: auto;
+  color: #64748b;
+}
+
+.timeline-filter-panel[open] summary::after {
+  content: "expand_less";
+}
+
+.timeline-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: 999px;
+  padding: 0.12rem 0.45rem;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.timeline-filter-scope-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 50%;
+  color: #4338ca;
+  font-size: 0.82rem;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.timeline-filter-scope-clear:hover {
+  background: #dbeafe;
+  color: #1e3a8a;
+}
+
+.timeline-filter-range {
+  color: #64748b;
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+
+.timeline-filter-body {
+  border-top: 1px solid #e5e7eb;
+  padding: 0.65rem 0.75rem;
+}
+
+.timeline-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 0.45rem 0.55rem;
+  align-items: end;
+}
+
+.timeline-filter-field {
+  grid-column: span 2;
+  min-width: 0;
+}
+
+.timeline-filter-field-small {
+  grid-column: span 1;
+  min-width: 86px;
+}
+
+.timeline-filter-custom-range {
+  grid-column: span 4;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.timeline-filter-custom-range .timeline-filter-field {
+  grid-column: auto;
+}
+
+.timeline-filter-scope {
+  grid-column: span 5;
+}
+
+.timeline-filter-body .form-label {
+  margin-bottom: 0.15rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+.timeline-filter-body .form-control,
+.timeline-filter-body .form-select {
+  min-height: 32px;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+  font-size: 0.82rem;
+}
+
+.timeline-filter-help {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.68rem;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.timeline-filter-check {
+  grid-column: span 2;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 32px;
+  color: #334155;
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.timeline-filter-check .form-check-input {
+  margin: 0;
+}
+
+.timeline-filter-actions {
+  grid-column: span 3;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 32px;
+}
+
+.timeline-filter-actions .btn {
+  min-height: 32px;
+}
+
+@media (max-width: 1200px) {
+  .timeline-filter-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .timeline-filter-custom-range,
+  .timeline-filter-scope,
+  .timeline-filter-actions {
+    grid-column: span 2;
+  }
+}
+
+/* Invocation detail surfaces */
+.invocation-detail-page {
+  /* No max-width — use all available container space */
+}
+
+.invocation-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1rem 0 0.85rem;
+  border-bottom: 1px solid #e5e7eb;
+  margin-bottom: 1rem;
+}
+
+.invocation-hero h1 {
+  margin: 0;
+  font-size: 1.45rem;
+  line-height: 1.2;
+  color: #111827;
+  font-weight: 700;
+}
+
+.detail-kicker {
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.invocation-hero-meta,
+.invocation-action-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.invocation-hero-meta {
+  margin-top: 0.45rem;
+  color: #64748b;
+  font-size: 0.82rem;
+}
+
+.invocation-hero-meta code,
+.timeline-detail-id code {
+  font-size: 0.72rem;
+  word-break: break-all;
+}
+
+.invocation-action-bar {
+  justify-content: flex-end;
+}
+
+.invocation-detail-content .pynmon-row-compact {
+  margin-bottom: 0.85rem;
+}
+
+.detail-panel {
+  height: 100%;
+  border: 1px solid #d8dee9;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.detail-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid #e5e7eb;
+  color: #1f2937;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.detail-panel-body {
+  padding: 0.75rem;
+}
+
+.detail-panel .pynmon-table {
+  margin-bottom: 0;
+}
+
+.detail-panel .pynmon-table th {
+  color: #64748b;
+  font-size: 0.76rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.detail-panel .pynmon-table td {
+  font-size: 0.8rem;
+}
+
+.compact-detail-panel .detail-panel-header,
+.compact-detail-panel .detail-panel-body {
+  padding: 0.55rem 0.65rem;
+}
+
+/* Related event grouping shared by full detail and timeline panel */
+.event-context-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(260px, 1fr);
+  gap: 0.75rem;
+}
+
+/* Left column: two stacked sections */
+.event-context-left-col {
+  display: grid;
+  gap: 0.75rem;
+  align-content: start;
+}
+
+.event-context-stack {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.timeline-triggering-panel {
+  height: auto;
+}
+
+.trigger-caused-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(28rem, 100%), 1fr));
+  gap: 0.5rem;
+}
+
+.trigger-caused-item {
+  min-width: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #ffffff;
+  padding: 0.55rem;
+}
+
+.trigger-caused-item .inv-summary-card {
+  max-width: 100%;
+}
+
+.event-context-section {
+  min-width: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #f8fafc;
+  padding: 0.65rem;
+}
+
+.event-context-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+  color: #334155;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.event-context-list {
+  display: grid;
+  grid-template-columns: minmax(86px, max-content) minmax(0, 1fr);
+  gap: 0.35rem 0.6rem;
+  margin: 0;
+  font-size: 0.76rem;
+}
+
+.event-context-list dt {
+  color: #64748b;
+  font-weight: 700;
+}
+
+.event-context-list dd {
+  margin: 0;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.event-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.event-pill {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #dbe3ef;
+  border-radius: 999px;
+  padding: 0.08rem 0.4rem;
+  background: #ffffff;
+  text-decoration: none;
+}
+
+.event-reference {
+  cursor: pointer;
+}
+
+.event-reference.event-highlight,
+.event-pill.event-highlight {
+  border-color: #7c3aed;
+  background: #f5f3ff;
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.12);
+}
+
+.event-context-table {
+  font-size: 0.74rem;
+}
+
+.event-table-wrap {
+  overflow-x: auto;
+}
+
+/* Inline invocation detail card used in source-invocation references */
+.inv-summary-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.15rem 0.5rem;
+  align-items: baseline;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #dbe3ef;
+  border-radius: 6px;
+  background: #ffffff;
+  text-decoration: none;
+  font-size: 0.74rem;
+  color: inherit;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.inv-summary-card:hover {
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12);
+  text-decoration: none;
+}
+
+.inv-summary-id {
+  grid-column: 1 / -1;
+  font-family: monospace;
+  font-size: 0.72rem;
+  color: #374151;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.inv-summary-task {
+  grid-column: 1 / -1;
+  font-family: monospace;
+  font-size: 0.72rem;
+  color: #0369a1;
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.inv-summary-meta {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  align-items: center;
+  margin-top: 0.15rem;
+}
+
+.inv-summary-duration {
+  font-size: 0.7rem;
+  color: #64748b;
+}
+
+.inv-summary-card-row {
+  display: flex;
+  flex-flow: row wrap;
+  gap: 0.45rem;
+  align-items: stretch;
+}
+
+.inv-summary-card-row .inv-summary-card {
+  flex: 1 1 320px;
+  min-width: 0;
+  max-width: 480px;
+}
+
+/* Source-event pills carry richer context (code, timestamp, outcome). */
+.event-pill-row {
+  display: flex;
+  flex-flow: row wrap;
+  gap: 0.4rem;
+}
+
+.event-pill-rich {
+  display: inline-grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.1rem 0.4rem;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  background: #ffffff;
+  text-decoration: none;
+  color: inherit;
+  font-size: 0.72rem;
+  flex: 1 1 320px;
+  min-width: 0;
+  max-width: 480px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.event-pill-rich:hover {
+  border-color: #c4b5fd;
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.12);
+  text-decoration: none;
+}
+
+.event-pill-rich .event-pill-code {
+  font-family: monospace;
+  font-weight: 700;
+  color: #4338ca;
+  font-size: 0.74rem;
+  word-break: break-word;
+}
+
+.event-pill-rich .event-pill-id {
+  display: block;
+  font-family: monospace;
+  font-size: 0.66rem;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.event-pill-rich .event-pill-id code {
+  font-family: inherit;
+  background: transparent;
+  padding: 0;
+}
+
+.event-pill-rich .event-pill-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  align-items: center;
+  margin-top: 0.1rem;
+  font-size: 0.68rem;
+  color: #475569;
+}
+
+.event-pill-rich .event-pill-state {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.event-pill-rich .event-pill-state.state-triggered {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.event-pill-rich .event-pill-state.state-matched {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.event-pill-rich .event-pill-state.state-unmatched {
+  background: #e5e7eb;
+  color: #475569;
+}
+
+.timeline-detail-shell {
+  border: 1px solid #d8dee9;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  overflow: hidden;
+}
+
+/* Side-by-side row that holds the invocation + event detail panels.
+   When only one is visible it expands to fill the row; when both are
+   visible they share the width (~70/30 split favouring the invocation
+   panel which carries far more rows). */
+.timeline-detail-row {
+  display: flex;
+  flex-flow: row wrap;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.timeline-detail-panel {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.timeline-detail-row
+  > .timeline-detail-panel-invocation:not(.d-none)
+  ~ .timeline-detail-panel-event:not(.d-none) {
+  flex: 0 1 32%;
+  max-width: 420px;
+}
+
+.timeline-detail-row
+  > .timeline-detail-panel-invocation:not(.d-none):has(~ .timeline-detail-panel-event:not(.d-none)) {
+  flex: 1 1 60%;
+}
+
+/* Event panel rows are compact — the panel is narrow so we shrink the
+   font and tighten paddings rather than letting the table sprawl. */
+#event-details-content .timeline-detail-table th,
+#event-details-content .timeline-detail-table td {
+  font-size: 0.72rem;
+  padding: 0.2rem 0.4rem;
+  vertical-align: top;
+}
+
+#event-details-content .timeline-detail-table code {
+  font-size: 0.7rem;
+  word-break: break-all;
+}
+
+#event-details-content .inv-summary-card {
+  font-size: 0.7rem;
+}
+
+@media (max-width: 992px) {
+  .timeline-detail-row
+    > .timeline-detail-panel-invocation:not(.d-none)
+    ~ .timeline-detail-panel-event:not(.d-none),
+  .timeline-detail-row
+    > .timeline-detail-panel-invocation:not(.d-none):has(~ .timeline-detail-panel-event:not(.d-none)) {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+}
+
+.timeline-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.timeline-detail-heading {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.timeline-detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.timeline-detail-summary {
+  display: grid;
+  gap: 0.2rem;
+  margin-bottom: 0.55rem;
+}
+
+.timeline-detail-table th {
+  color: #64748b;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+@media (max-width: 992px) {
+  .invocation-hero {
+    flex-direction: column;
+  }
+
+  .invocation-action-bar {
+    justify-content: flex-start;
+  }
+
+  .event-context-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .event-context-left-col {
+    /* On mobile the left col flows naturally as one flat column */
+  }
+
+  .timeline-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .timeline-filter-custom-range {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 768px) {
+  .timeline-filter-panel summary {
+    flex-wrap: wrap;
+  }
+
+  .timeline-filter-range {
+    white-space: normal;
+  }
+
+  .timeline-filter-grid,
+  .timeline-filter-custom-range {
+    grid-template-columns: 1fr;
+  }
+
+  .timeline-filter-field,
+  .timeline-filter-field-small,
+  .timeline-filter-custom-range,
+  .timeline-filter-scope,
+  .timeline-filter-check,
+  .timeline-filter-actions {
+    grid-column: 1 / -1;
+  }
 }
 
 /* Style for clickable bars */
@@ -125,6 +874,77 @@
   font-weight: bold;
 }
 
+.timeline-svg-container svg .event-marker-link {
+  cursor: pointer;
+}
+
+.timeline-svg-container svg .atomic-service-window {
+  cursor: pointer;
+}
+
+.timeline-svg-container svg .atomic-service-window:hover rect,
+.timeline-svg-container
+  svg
+  .atomic-service-window.atomic-service-highlight
+  rect {
+  opacity: 0.32 !important;
+  stroke: #0369a1 !important;
+  stroke-width: 2px !important;
+  filter: drop-shadow(0 0 4px rgba(14, 165, 233, 0.45));
+}
+
+.timeline-svg-container
+  svg
+  .atomic-service-window.atomic-service-highlight
+  text {
+  fill: #075985 !important;
+  font-weight: 700;
+}
+
+.timeline-svg-container svg .event-marker-link.event-highlight rect {
+  stroke: #7c3aed !important;
+  stroke-width: 2.5px !important;
+  filter: drop-shadow(0 0 4px rgba(124, 58, 237, 0.45));
+}
+
+.timeline-svg-container svg .event-marker-link.event-highlight text {
+  fill: #4c1d95 !important;
+  font-weight: 700;
+}
+
+.timeline-svg-container svg .event-marker-link.trigger-run-highlight rect {
+  stroke: #f59e0b !important;
+  stroke-width: 2.5px !important;
+  filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0.45));
+}
+
+.timeline-svg-container svg .event-marker-link.trigger-run-highlight text {
+  fill: #92400e !important;
+  font-weight: 700;
+}
+
+.timeline-svg-container svg .timeline-relation-line.event-highlight {
+  opacity: 1 !important;
+  stroke-width: 3px !important;
+  filter: drop-shadow(0 0 3px rgba(124, 58, 237, 0.35));
+}
+
+/* Phase 5: trigger-run participant relation highlighting.
+   All status/result/exception/cron lines share the same trigger-run id;
+   hover any of them lights up the whole group plus the source / target
+   invocation lanes (via .invocation-highlight propagated by JS). */
+.timeline-svg-container svg .timeline-relation-line.trigger-run-highlight {
+  opacity: 1 !important;
+  stroke-width: 3px !important;
+  filter: drop-shadow(0 0 3px rgba(13, 110, 253, 0.4));
+}
+
+.timeline-svg-container svg .trigger-condition-marker.trigger-run-highlight {
+  stroke: #0d6efd !important;
+  stroke-width: 2px !important;
+  filter: drop-shadow(0 0 4px rgba(13, 110, 253, 0.45));
+}
+
 /* Cross-highlight: family-tree SVG nodes */
 .ft-node rect.invocation-highlight {
   stroke: #0d6efd !important;
@@ -150,4 +970,70 @@
 .timeline-modal-body {
   max-height: 600px;
   overflow-y: auto;
+}
+
+/* Emitted-events list on invocation detail / side panel.
+   Each event is a card whose head is hover-linked to the timeline event
+   marker, and whose body lists the invocations the event triggered as
+   hoverable invocation chips. */
+.emitted-events-list {
+  display: flex;
+  flex-flow: row wrap;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.emitted-event-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 0.4rem 0.55rem;
+  background: #f8fafc;
+  cursor: default;
+  flex: 0 1 auto;
+  max-width: 100%;
+  min-width: 240px;
+}
+
+.emitted-event-item .inv-summary-card-row .inv-summary-card {
+  flex: 0 1 auto;
+  min-width: 220px;
+  max-width: 340px;
+}
+
+.emitted-event-item.event-highlight {
+  background: #fffbe6;
+  border-color: #facc15;
+}
+
+.emitted-event-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+}
+
+.emitted-event-code {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.emitted-event-ts {
+  color: #64748b;
+  font-size: 0.7rem;
+}
+
+.emitted-event-triggered {
+  margin-top: 0.4rem;
+  padding-top: 0.35rem;
+  border-top: 1px dashed #e2e8f0;
+}
+
+.emitted-event-triggered-label {
+  display: block;
+  font-size: 0.7rem;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.3rem;
 }

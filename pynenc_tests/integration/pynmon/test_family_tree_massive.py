@@ -264,6 +264,15 @@ def test_massive_family_tree_should_truncate_beyond_limits(
             f"Expanded tree should have more nodes than initial "
             f"({node_count2} vs {node_count})"
         )
+        resp3 = pynmon_client.get(
+            f"/invocations/{inv.invocation_id}/family-tree?expand={trunc_id},{trunc_id}"
+        )
+        assert resp3.status_code == 200
+        node_count3 = len(re.findall(r'class="ft-node"', resp3.text))
+        assert node_count3 > node_count2, (
+            "Clicking the same load-more badge again should keep increasing "
+            f"the rendered subtree ({node_count3} vs {node_count2})"
+        )
         # The expanded tree should still contain the focus invocation
         assert str(inv.invocation_id) in content2, (
             f"Expanded tree should contain the focus invocation {inv.invocation_id}"

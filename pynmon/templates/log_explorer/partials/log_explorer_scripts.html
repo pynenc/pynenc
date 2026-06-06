@@ -23,6 +23,7 @@ detail panel on click. #}
       if (rl) highlightRunner(rl.getAttribute("data-runner-id"), true);
       const tl = e.target.closest("[data-task-key]");
       if (tl) highlightTask(tl.getAttribute("data-task-key"), true);
+      handleSvgEntityHover(e.target, e.relatedTarget, true);
     });
     svgContainer.addEventListener("mouseout", function (e) {
       const el = e.target.closest("[data-invocation-id]");
@@ -31,6 +32,7 @@ detail panel on click. #}
       if (rl) highlightRunner(rl.getAttribute("data-runner-id"), false);
       const tl = e.target.closest("[data-task-key]");
       if (tl) highlightTask(tl.getAttribute("data-task-key"), false);
+      handleSvgEntityHover(e.target, e.relatedTarget, false);
     });
 
     // ── Cross-highlight: ref chips ↔ SVG ──────────────────────────────
@@ -64,6 +66,29 @@ detail panel on click. #}
       });
       chip.addEventListener("mouseleave", function () {
         highlightTask(chip.dataset.taskKey, false);
+      });
+    });
+
+    // ── Generic cross-highlight for trigger entity refs ───────────────
+    // These attrs are present both in the log/reference cards and in SVG
+    // markers/relations/windows, so hovering either side lights up both.
+    [
+      "data-event-id",
+      "data-trigger-run-id",
+      "data-atomic-service-run-id",
+      "data-condition-id",
+      "data-trigger-id",
+    ].forEach(function (attr) {
+      document.querySelectorAll("[" + attr + "]").forEach(function (chip) {
+        if (svgContainer.contains(chip)) return;
+        var value = chip.getAttribute(attr);
+        if (!value) return;
+        chip.addEventListener("mouseenter", function () {
+          highlightEntityRef(attr, value, true);
+        });
+        chip.addEventListener("mouseleave", function () {
+          highlightEntityRef(attr, value, false);
+        });
       });
     });
 
@@ -148,6 +173,96 @@ detail panel on click. #}
             ? el.classList.add("cross-highlight")
             : el.classList.remove("cross-highlight");
         });
+    }
+
+    function highlightEntityRef(attr, value, on) {
+      if (!value) return;
+      var relatedInvocationIds = new Set();
+      document
+        .querySelectorAll(attrSelector(attr, value))
+        .forEach(function (el) {
+          if (svgContainer.contains(el)) {
+            applySvgEntityHighlight(el, attr, on);
+            collectRelatedInvocationIds(el, relatedInvocationIds);
+            return;
+          }
+          on
+            ? el.classList.add("cross-highlight")
+            : el.classList.remove("cross-highlight");
+        });
+      relatedInvocationIds.forEach(function (invId) {
+        highlightInvocation(invId, on);
+      });
+    }
+
+    function handleSvgEntityHover(target, relatedTarget, on) {
+      var hit = firstSvgEntityHit(target);
+      if (!hit) return;
+      if (!on && hit.el.contains(relatedTarget)) return;
+      highlightEntityRef(hit.attr, hit.el.getAttribute(hit.attr), on);
+    }
+
+    function firstSvgEntityHit(target) {
+      var attrs = [
+        "data-event-id",
+        "data-trigger-run-id",
+        "data-atomic-service-run-id",
+        "data-condition-id",
+        "data-trigger-id",
+      ];
+      for (var i = 0; i < attrs.length; i++) {
+        var attr = attrs[i];
+        var el = target.closest("[" + attr + "]");
+        if (el && svgContainer.contains(el)) return { attr: attr, el: el };
+      }
+      return null;
+    }
+
+    function applySvgEntityHighlight(el, attr, on) {
+      var cls = svgHighlightClass(attr);
+      if (cls) el.classList.toggle(cls, on);
+      if (attr === "data-atomic-service-run-id") {
+        var runnerId = el.getAttribute("data-runner-id");
+        if (runnerId) highlightRunner(runnerId, on);
+      }
+    }
+
+    function svgHighlightClass(attr) {
+      if (attr === "data-event-id") return "event-highlight";
+      if (attr === "data-trigger-run-id") return "trigger-run-highlight";
+      if (attr === "data-atomic-service-run-id")
+        return "atomic-service-highlight";
+      if (attr === "data-trigger-id") return "trigger-highlight";
+      if (attr === "data-condition-id") return "trigger-run-highlight";
+      return "";
+    }
+
+    function collectRelatedInvocationIds(el, ids) {
+      splitIds(el.getAttribute("data-related-invocation-ids")).forEach(
+        function (id) {
+          ids.add(id);
+        }
+      );
+      [
+        "data-child-invocation-id",
+        "data-source-invocation-id",
+        "data-parent-invocation-id",
+      ].forEach(function (attr) {
+        var value = el.getAttribute(attr);
+        if (value) ids.add(value);
+      });
+    }
+
+    function splitIds(value) {
+      return (value || "").split(/\s+/).filter(Boolean);
+    }
+
+    function attrSelector(attr, value) {
+      return "[" + attr + '="' + attrValueEscape(value) + '"]';
+    }
+
+    function attrValueEscape(value) {
+      return String(value).replace(/\\/g, "\\\\").replace(/\"/g, '\\"');
     }
 
     // ── Invocation detail panel ───────────────────────────────────────

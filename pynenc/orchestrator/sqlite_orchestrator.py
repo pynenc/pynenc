@@ -6,8 +6,9 @@ true cross-process coordination for testing process runners. Unlike shared memor
 SQLite provides ACID transactions and handles concurrent access automatically.
 """
 
+import sqlite3
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from functools import cached_property
 from time import time
 from typing import TYPE_CHECKING
@@ -23,7 +24,11 @@ from pynenc.orchestrator.base_orchestrator import (
     BaseBlockingControl,
     BaseOrchestrator,
 )
-from pynenc.orchestrator.atomic_service import ActiveRunnerInfo
+from pynenc.orchestrator.atomic_service import (
+    ActiveRunnerInfo,
+    AtomicServiceExecution,
+    AtomicServiceExecutionStatus,
+)
 from pynenc.util.sqlite_utils import TableNames
 from pynenc.util.sqlite_utils import create_sqlite_connection as sqlite_conn
 from pynenc.util.sqlite_utils import (
@@ -35,8 +40,10 @@ if TYPE_CHECKING:
     from pynenc.app import Pynenc
     from pynenc.identifiers.call_id import CallId
     from pynenc.invocation.dist_invocation import DistributedInvocation
+    from pynenc.orchestrator.atomic_service import AtomicServiceRun
     from pynenc.task import Task, TaskId
     from pynenc.types import Params, Result
+    from pynenc.util.sqlite_utils import SQLiteConnection
 
 
 class Tables(TableNames):
@@ -49,6 +56,7 @@ class Tables(TableNames):
         self.INVOCATION_ARGS = f"{p}_invocation_args"
         self.BLOCKING_EDGES = f"{p}_blocking_edges"
         self.RUNNER_HEARTBEATS = f"{p}_runner_heartbeats"
+        self.ATOMIC_SERVICE_EXECUTIONS = f"{p}_atomic_service_executions"
 
 
 class SQLiteBlockingControl(BaseBlockingControl):
@@ -222,9 +230,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
                     runner_id TEXT PRIMARY KEY,
                     creation_timestamp REAL NOT NULL,
                     allow_to_run_atomic_service INTEGER NOT NULL,
-                    last_heartbeat REAL NOT NULL,
-                    last_service_start TEXT,
-                    last_service_end TEXT
+                    last_heartbeat REAL NOT NULL
                 )
             """
             )
@@ -235,7 +241,82 @@ class SQLiteOrchestrator(BaseOrchestrator):
                 f"CREATE INDEX IF NOT EXISTS idx_{self.tables.RUNNER_HEARTBEATS}_creation ON {self.tables.RUNNER_HEARTBEATS}(creation_timestamp)"
             )
 
+            conn.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS {self.tables.ATOMIC_SERVICE_EXECUTIONS} (
+                    runner_id TEXT NOT NULL,
+                    start_time TEXT NOT NULL,
+                    end_time TEXT,
+                    atomic_service_run_id TEXT NOT NULL PRIMARY KEY,
+                    status TEXT NOT NULL DEFAULT 'running',
+                    reason TEXT NOT NULL DEFAULT ''
+                )
+            """
+            )
+            conn.execute(
+                f"""
+                CREATE INDEX IF NOT EXISTS idx_{self.tables.ATOMIC_SERVICE_EXECUTIONS}_time
+                ON {self.tables.ATOMIC_SERVICE_EXECUTIONS}(start_time, end_time)
+                """
+            )
+            conn.execute(
+                f"""
+                CREATE INDEX IF NOT EXISTS idx_{self.tables.ATOMIC_SERVICE_EXECUTIONS}_status
+                ON {self.tables.ATOMIC_SERVICE_EXECUTIONS}(status)
+                """
+            )
+            try:
+                conn.execute(
+                    f"""
+                    CREATE UNIQUE INDEX IF NOT EXISTS
+                    idx_{self.tables.ATOMIC_SERVICE_EXECUTIONS}_single_running
+                    ON {self.tables.ATOMIC_SERVICE_EXECUTIONS}(status)
+                    WHERE status = 'running'
+                    """
+                )
+            except sqlite3.IntegrityError:
+                self._repair_duplicate_atomic_service_running_rows(conn)
+                conn.execute(
+                    f"""
+                    CREATE UNIQUE INDEX IF NOT EXISTS
+                    idx_{self.tables.ATOMIC_SERVICE_EXECUTIONS}_single_running
+                    ON {self.tables.ATOMIC_SERVICE_EXECUTIONS}(status)
+                    WHERE status = 'running'
+                    """
+                )
+
             conn.commit()
+
+    def _repair_duplicate_atomic_service_running_rows(
+        self, conn: "SQLiteConnection"
+    ) -> None:
+        """Keep the newest RUNNING row so the single-active index can be created."""
+        table = self.tables.ATOMIC_SERVICE_EXECUTIONS
+        conn.execute(
+            f"""
+            UPDATE {table}
+            SET end_time = start_time,
+                status = ?,
+                reason = CASE
+                    WHEN reason = '' THEN ?
+                    ELSE reason
+                END
+            WHERE status = ?
+              AND atomic_service_run_id NOT IN (
+                  SELECT atomic_service_run_id
+                  FROM {table}
+                  WHERE status = ?
+                  ORDER BY start_time DESC
+                  LIMIT 1
+              )
+            """,
+            (
+                str(AtomicServiceExecutionStatus.ABANDONED),
+                "recovered_duplicate_running",
+                str(AtomicServiceExecutionStatus.RUNNING),
+                str(AtomicServiceExecutionStatus.RUNNING),
+            ),
+        )
 
     @cached_property
     def conf(self) -> ConfigOrchestratorSQLite:
@@ -632,11 +713,11 @@ class SQLiteOrchestrator(BaseOrchestrator):
             cursor = conn.execute(
                 f"""
                 SELECT runner_id, creation_timestamp, last_heartbeat,
-                       allow_to_run_atomic_service, last_service_start, last_service_end
+                       allow_to_run_atomic_service
                 FROM {self.tables.RUNNER_HEARTBEATS}
                 WHERE last_heartbeat >= ?
                 AND (? IS NULL OR allow_to_run_atomic_service = ?)
-                ORDER BY creation_timestamp ASC
+                ORDER BY creation_timestamp ASC, runner_id ASC
                 """,
                 (cutoff_time, can_run_atomic_service, can_run_atomic_service),
             )
@@ -649,40 +730,325 @@ class SQLiteOrchestrator(BaseOrchestrator):
                 creation_ts,
                 last_hb,
                 allow_to_run_atomic_service,
-                service_start,
-                service_end,
             ) in cursor_rows:
+                creation_time = datetime.fromtimestamp(creation_ts, tz=UTC)
+                allow = bool(allow_to_run_atomic_service)
                 active_runners.append(
                     ActiveRunnerInfo(
                         runner_id=runner_id,
-                        creation_time=datetime.fromtimestamp(creation_ts, tz=UTC),
+                        creation_time=creation_time,
                         last_heartbeat=datetime.fromtimestamp(last_hb, tz=UTC),
-                        allow_to_run_atomic_service=bool(allow_to_run_atomic_service),
-                        last_service_start=datetime.fromisoformat(service_start)
-                        if service_start
-                        else None,
-                        last_service_end=datetime.fromisoformat(service_end)
-                        if service_end
-                        else None,
+                        allow_to_run_atomic_service=allow,
                     )
                 )
 
             return active_runners
 
-    def record_atomic_service_execution(
-        self, runner_id: str, start_time: datetime, end_time: datetime
+    def record_atomic_service_execution_start(
+        self,
+        atomic_service_run: "AtomicServiceRun",
+        started_at: datetime | None,
+        status: AtomicServiceExecutionStatus = AtomicServiceExecutionStatus.RUNNING,
+        reason: str = "",
+    ) -> bool:
+        """Insert a new atomic-service execution record."""
+        atomic_service_id = atomic_service_run.atomic_service_id
+        table = self.tables.ATOMIC_SERVICE_EXECUTIONS
+        running = str(AtomicServiceExecutionStatus.RUNNING)
+        accepted = status != AtomicServiceExecutionStatus.BLOCKED
+        with sqlite_conn(self.sqlite_db_path) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            if status == AtomicServiceExecutionStatus.RUNNING:
+                prior = conn.execute(
+                    f"""
+                    SELECT runner_id, atomic_service_run_id
+                    FROM {table}
+                    WHERE status = ?
+                    ORDER BY start_time DESC
+                    LIMIT 1
+                    """,
+                    (running,),
+                ).fetchone()
+                if prior:
+                    prior_runner_id, prior_run_id = prior
+                    if prior_run_id == atomic_service_id.atomic_service_run_id:
+                        conn.commit()
+                        return True
+                    actual_started_at = started_at or datetime.now(UTC)
+                    atomic_service_run.started_at = actual_started_at
+                    start_iso = actual_started_at.isoformat()
+                    conn.execute(
+                        f"""
+                        INSERT OR REPLACE INTO {table}
+                            (runner_id, start_time, end_time, atomic_service_run_id,
+                             status, reason)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            atomic_service_id.runner_id,
+                            start_iso,
+                            start_iso,
+                            atomic_service_id.atomic_service_run_id,
+                            str(AtomicServiceExecutionStatus.BLOCKED),
+                            reason
+                            or (
+                                f"prior_running:{prior_run_id} runner:{prior_runner_id}"
+                            ),
+                        ),
+                    )
+                    conn.commit()
+                    self.purge_atomic_service_executions()
+                    return False
+                actual_started_at = started_at or datetime.now(UTC)
+                atomic_service_run.started_at = actual_started_at
+                start_iso = actual_started_at.isoformat()
+                try:
+                    conn.execute(
+                        f"""
+                        INSERT INTO {table}
+                            (runner_id, start_time, end_time, atomic_service_run_id,
+                             status, reason)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            atomic_service_id.runner_id,
+                            start_iso,
+                            None,
+                            atomic_service_id.atomic_service_run_id,
+                            running,
+                            reason,
+                        ),
+                    )
+                except sqlite3.IntegrityError:
+                    prior = conn.execute(
+                        f"""
+                        SELECT runner_id, atomic_service_run_id
+                        FROM {table}
+                        WHERE status = ?
+                        ORDER BY start_time DESC
+                        LIMIT 1
+                        """,
+                        (running,),
+                    ).fetchone()
+                    prior_runner_id, prior_run_id = (
+                        prior if prior else ("unknown", "unknown")
+                    )
+                    conn.execute(
+                        f"""
+                        INSERT OR REPLACE INTO {table}
+                            (runner_id, start_time, end_time, atomic_service_run_id,
+                             status, reason)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            atomic_service_id.runner_id,
+                            start_iso,
+                            start_iso,
+                            atomic_service_id.atomic_service_run_id,
+                            str(AtomicServiceExecutionStatus.BLOCKED),
+                            reason
+                            or (
+                                f"prior_running:{prior_run_id} runner:{prior_runner_id}"
+                            ),
+                        ),
+                    )
+                    accepted = False
+            else:
+                actual_started_at = started_at or datetime.now(UTC)
+                atomic_service_run.started_at = actual_started_at
+                start_iso = actual_started_at.isoformat()
+                end_iso: str | None = (
+                    start_iso
+                    if status == AtomicServiceExecutionStatus.BLOCKED
+                    else None
+                )
+                conn.execute(
+                    f"""
+                    INSERT OR REPLACE INTO {table}
+                        (runner_id, start_time, end_time, atomic_service_run_id,
+                         status, reason)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        atomic_service_id.runner_id,
+                        start_iso,
+                        end_iso,
+                        atomic_service_id.atomic_service_run_id,
+                        str(status),
+                        reason,
+                    ),
+                )
+            conn.commit()
+        if status != AtomicServiceExecutionStatus.RUNNING or not accepted:
+            self.purge_atomic_service_executions()
+        return accepted
+
+    def finalize_atomic_service_execution(
+        self,
+        atomic_service_run: "AtomicServiceRun",
+        end_time: datetime,
+        status: AtomicServiceExecutionStatus,
+        reason: str = "",
     ) -> None:
-        """Record the latest atomic service execution window for a runner."""
+        """Transition the RUNNING record for this run to a terminal status.
+
+        Idempotent: if the row is already terminal (or absent) the UPDATE
+        matches zero rows and we no-op. The caller (`_check_atomic_services`)
+        only invokes this after a successful claim, so the RUNNING row exists.
+        """
+        atomic_service_id = atomic_service_run.atomic_service_id
         with sqlite_conn(self.sqlite_db_path) as conn:
             conn.execute(
                 f"""
-                UPDATE {self.tables.RUNNER_HEARTBEATS}
-                SET last_service_start = ?, last_service_end = ?
-                WHERE runner_id = ?
+                UPDATE {self.tables.ATOMIC_SERVICE_EXECUTIONS}
+                SET end_time = ?,
+                    status = ?,
+                    reason = CASE WHEN ? = '' THEN reason ELSE ? END
+                WHERE atomic_service_run_id = ? AND status = ?
                 """,
-                (start_time.isoformat(), end_time.isoformat(), runner_id),
+                (
+                    end_time.isoformat(),
+                    str(status),
+                    reason,
+                    reason,
+                    atomic_service_id.atomic_service_run_id,
+                    str(AtomicServiceExecutionStatus.RUNNING),
+                ),
             )
             conn.commit()
+        self.purge_atomic_service_executions()
+
+    @staticmethod
+    def _row_to_atomic_service_execution(row: tuple) -> AtomicServiceExecution:
+        runner_id, start, end, run_id, status, reason = row
+        return AtomicServiceExecution.from_raw(
+            runner_id=runner_id,
+            atomic_service_run_id=run_id,
+            start_time=datetime.fromisoformat(start),
+            end_time=datetime.fromisoformat(end) if end else None,
+            status=AtomicServiceExecutionStatus(status),
+            reason=reason,
+        )
+
+    def get_active_atomic_service_executions(
+        self,
+    ) -> list[AtomicServiceExecution]:
+        """Return RUNNING executions ordered most-recently-started first."""
+        with sqlite_conn(self.sqlite_db_path) as conn:
+            rows = conn.execute(
+                f"""
+                SELECT runner_id, start_time, end_time,
+                       atomic_service_run_id, status, reason
+                FROM {self.tables.ATOMIC_SERVICE_EXECUTIONS}
+                WHERE status = ?
+                ORDER BY start_time DESC
+                """,
+                (str(AtomicServiceExecutionStatus.RUNNING),),
+            ).fetchall()
+        return [self._row_to_atomic_service_execution(row) for row in rows]
+
+    def get_atomic_service_executions_in_timerange(
+        self,
+        start_time: datetime,
+        end_time: datetime,
+        limit: int = 1000,
+        *,
+        runner_id: str | None = None,
+        min_duration_seconds: float = 0.0,
+    ) -> list[AtomicServiceExecution]:
+        """Retrieve atomic service execution windows overlapping a time range."""
+        start_iso = start_time.isoformat()
+        end_iso = end_time.isoformat()
+        # RUNNING rows (end_time IS NULL) are treated as "still going" and
+        # overlap if their start_time falls inside the window.
+        clauses = [
+            "(end_time >= ? OR (end_time IS NULL AND start_time >= ?))",
+            "start_time <= ?",
+        ]
+        params: list[object] = [start_iso, start_iso, end_iso]
+        if runner_id is not None:
+            clauses.append("runner_id = ?")
+            params.append(runner_id)
+        if min_duration_seconds > 0.0:
+            clauses.append(
+                "end_time IS NOT NULL AND "
+                "(julianday(end_time) - julianday(start_time)) * 86400.0 >= ?"
+            )
+            params.append(min_duration_seconds)
+        params.append(max(limit, 0))
+        with sqlite_conn(self.sqlite_db_path) as conn:
+            rows = conn.execute(
+                f"""
+                SELECT runner_id, start_time, end_time, atomic_service_run_id,
+                       status, reason
+                FROM {self.tables.ATOMIC_SERVICE_EXECUTIONS}
+                WHERE {" AND ".join(clauses)}
+                ORDER BY start_time DESC
+                LIMIT ?
+                """,
+                tuple(params),
+            ).fetchall()
+        return [self._row_to_atomic_service_execution(row) for row in rows]
+
+    def purge_atomic_service_executions(self) -> int:
+        """Trim atomic-service execution history by age and capacity.
+
+        Trigger-run history references atomic-service rows, so anything in
+        ``protected`` is excluded from both passes to avoid dangling refs.
+        RUNNING rows are always preserved — they signal a live slot holder.
+        """
+        retention_minutes = float(
+            self.app.conf.atomic_service_execution_retention_minutes
+        )
+        max_records = int(self.app.conf.atomic_service_execution_max_records)
+        protected = tuple(self.app.trigger.get_referenced_atomic_service_run_ids())
+        # Build a `(sql_fragment, params)` pair that excludes protected rows;
+        # when nothing is protected the fragment collapses to an empty AND.
+        if protected:
+            placeholders = ",".join("?" for _ in protected)
+            protect_sql = f" AND atomic_service_run_id NOT IN ({placeholders})"
+            protect_params: tuple[object, ...] = protected
+        else:
+            protect_sql = ""
+            protect_params = ()
+        table = self.tables.ATOMIC_SERVICE_EXECUTIONS
+        running = str(AtomicServiceExecutionStatus.RUNNING)
+        removed = 0
+        with sqlite_conn(self.sqlite_db_path) as conn:
+            if retention_minutes > 0:
+                cutoff = (
+                    datetime.now(UTC) - timedelta(minutes=retention_minutes)
+                ).isoformat()
+                cursor = conn.execute(
+                    f"DELETE FROM {table} "
+                    f"WHERE end_time IS NOT NULL AND end_time < ?" + protect_sql,
+                    (cutoff, *protect_params),
+                )
+                removed += cursor.rowcount or 0
+                cursor.close()
+            if max_records > 0:
+                (current_count,) = conn.execute(
+                    f"SELECT COUNT(*) FROM {table} WHERE status != ?",
+                    (running,),
+                ).fetchone()
+                excess = current_count - max_records
+                if excess > 0:
+                    cursor = conn.execute(
+                        f"""
+                        DELETE FROM {table}
+                        WHERE atomic_service_run_id IN (
+                            SELECT atomic_service_run_id FROM {table}
+                            WHERE status != ?{protect_sql}
+                            ORDER BY start_time ASC
+                            LIMIT ?
+                        )
+                        """,
+                        (running, *protect_params, excess),
+                    )
+                    removed += cursor.rowcount or 0
+                    cursor.close()
+            conn.commit()
+        return removed
 
     def get_pending_invocations_for_recovery(self) -> Iterator["InvocationId"]:
         """Retrieve invocation IDs stuck in PENDING status beyond the allowed time."""

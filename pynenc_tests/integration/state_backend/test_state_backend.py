@@ -96,10 +96,9 @@ def test_store_history_status(
     app = invocation.app
 
     def _check_history(
-        invocation_id: str, expected_statuses: list[InvocationStatus]
+        invocation_id: "InvocationId", expected_statuses: list[InvocationStatus]
     ) -> None:
-        app.state_backend.wait_for_invocation_async_operations(invocation_id)
-        history = app.state_backend.get_history(invocation.invocation_id)
+        history = app.state_backend.get_history(invocation_id)
         assert len(history) == len(expected_statuses)
         prev_datetime = datetime.min.replace(tzinfo=UTC)
         for expected_status, inv_hist in zip(expected_statuses, history, strict=True):

@@ -25,6 +25,7 @@ def create_status_point(
     runner_info: RunnerInfo,
     order: int = 0,
     sub_lane: int = 0,
+    registered_by_inv_id: str | None = None,
 ) -> StatusPoint:
     """Create a StatusPoint with auto-generated tooltip and color."""
     color = STATUS_COLORS.get(status, DEFAULT_STATUS_COLOR)
@@ -37,6 +38,7 @@ def create_status_point(
         tooltip=tooltip,
         order=order,
         sub_lane=sub_lane,
+        registered_by_inv_id=registered_by_inv_id,
     )
 
 

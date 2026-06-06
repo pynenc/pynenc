@@ -4,18 +4,10 @@ Minimal tests for pynmon broker view.
 Tests basic functionality using real in-memory Pynenc app with actual tasks and invocations.
 """
 
-# Skip all pynmon tests if monitor dependencies are not available
-import pytest
-
-pytest.importorskip("fastapi", reason="pynmon tests require monitor dependencies")
-pytest.importorskip("jinja2", reason="pynmon tests require monitor dependencies")
-
-# All imports below must come after pytest.importorskip calls
-# ruff: noqa: E402
-
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 
+import pytest
 from fastapi.testclient import TestClient
 
 from pynenc_tests.conftest import MockPynenc

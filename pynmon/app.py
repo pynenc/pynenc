@@ -251,9 +251,11 @@ def setup_routes() -> None:
     """Set up all route modules."""
     # Import view modules only when needed to avoid circular imports
     from pynmon.views import (
+        atomic_service,
         broker,
         calls,
         client_data_store,
+        events,
         family_tree,
         home,
         invocations,
@@ -262,6 +264,8 @@ def setup_routes() -> None:
         runners,
         state_backend,
         tasks,
+        triggers,
+        trigger_runs,
         workflows,
     )
 
@@ -270,6 +274,10 @@ def setup_routes() -> None:
     app.include_router(broker.router)
     app.include_router(client_data_store.router)
     app.include_router(orchestrator.router)
+    # atomic_service.router must register before runners.router so its
+    # /runners/atomic-service/scheduling path wins over runners catch-all
+    # routes like /runners/{runner_id}.
+    app.include_router(atomic_service.router)
     app.include_router(runners.router)
     # family_tree first: its /{id}/family-tree is more specific than /{id}
     app.include_router(family_tree.router)
@@ -278,6 +286,9 @@ def setup_routes() -> None:
     app.include_router(calls.router)
     app.include_router(state_backend.router)
     app.include_router(workflows.router)
+    app.include_router(events.router)
+    app.include_router(triggers.router)
+    app.include_router(trigger_runs.router)
     app.include_router(log_explorer.router)
 
 

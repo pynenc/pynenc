@@ -31,6 +31,20 @@ def test_medium_duration_ticks(config: TimelineConfig) -> None:
     assert len(ticks) <= 20
 
 
+def test_millisecond_resolution_ticks_stay_readable() -> None:
+    """Explicit ms resolution should not produce overlapping axis labels."""
+    config = TimelineConfig(resolution_seconds=0.1)
+    start = datetime(2024, 1, 1, 10, 0, 0, 123000, tzinfo=UTC)
+    end = start + timedelta(seconds=90)
+    bounds = TimelineBounds(start_time=start, end_time=end, config=config)
+
+    ticks = _tick_positions(bounds)
+    label = _format_tick_label(start, bounds)
+
+    assert len(ticks) <= 20
+    assert label.endswith(".123")
+
+
 def test_long_duration_ticks(config: TimelineConfig) -> None:
     """Test tick interval for long duration."""
     start = datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC)

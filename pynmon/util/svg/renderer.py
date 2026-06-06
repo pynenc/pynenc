@@ -11,6 +11,11 @@ import logging
 import time as _time
 from dataclasses import dataclass
 
+from pynmon.util.svg.atomic_service import render_atomic_service_windows
+from pynmon.util.svg.event_markers import (
+    render_event_markers,
+    render_timeline_relations,
+)
 from pynmon.util.svg.render_axis import render_grid, render_legend, render_time_axis
 from pynmon.util.svg.render_elements import (
     render_bars,
@@ -91,8 +96,11 @@ class TimelineSVGRenderer:
             render_lane_labels(data, s),
             render_segments(data, s),
             render_bars(data, s),
+            render_atomic_service_windows(data, s),
             render_lines(data, s),
+            render_timeline_relations(data, s),
             render_points(data, s),
+            render_event_markers(data, s),
             render_legend(data, s),
             "</svg>",
         ]
@@ -108,9 +116,15 @@ class TimelineSVGRenderer:
     def _header(self, data: TimelineData) -> str:
         """SVG opening tag with viewBox for responsive scaling."""
         w, h = data.config.width, data.total_height
+        start = data.bounds.start_time.isoformat()
+        end = data.bounds.end_time.isoformat()
         return (
             f'<svg xmlns="http://www.w3.org/2000/svg" width="100%" '
             f'viewBox="0 0 {w} {h}" preserveAspectRatio="xMinYMin meet" '
+            f'data-start-time="{start}" data-end-time="{end}" '
+            f'data-left-margin="{data.config.left_margin}" '
+            f'data-content-width="{data.config.content_width}" '
+            f'data-timeline-width="{w}" '
             f'style="font-family: {self.style.font_family}; font-size: {self.style.font_size}px;">'
         )
 

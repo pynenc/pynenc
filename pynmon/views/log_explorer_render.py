@@ -12,8 +12,9 @@ Key components:
 import re
 from dataclasses import dataclass
 from html import escape
-from typing import TYPE_CHECKING
 from collections.abc import Callable
+from typing import TYPE_CHECKING
+from urllib.parse import quote, urlencode
 
 from pynmon.app import templates
 from pynmon.util.status_colors import STATUS_COLORS, get_hex_color
@@ -23,13 +24,18 @@ if TYPE_CHECKING:
 
 # ── regex constants ────────────────────────────────────────────────────────────
 
-# Entity:value tokens in the message body for inline linking
+# Entity:value tokens in the message body for inline linking. Mirrors the
+# entity kinds recognised by ``pynmon.util.log_parser._ENTITY_REF_RE``.
 _INLINE_ENTITY_RE = re.compile(
-    r"((?:invocation|runner|worker|task"
+    r"(condition:cron_(?:\S+\s+){4}\S+"
+    r"|(?:invocation|runner|worker|task"
     r"|parent-invocation|child-invocation|new-invocation"
     r"|current-owner-runner|attempted-owner-runner"
-    r"|workflow|sub-workflow|parent-workflow)"
-    r":[0-9a-zA-Z._-]+(?:-[0-9a-fA-F]{4}){0,4})",
+    r"|workflow|sub-workflow|parent-workflow"
+    r"|event|trigger-run|trigger|condition|valid-condition"
+    r"|atomic-service-run"
+    r"|source-invocation|triggered-invocation|cron|context)"
+    r":[0-9a-zA-Z._:+#-]+)",
 )
 
 # Log-level tokens → CSS class mapping
@@ -97,14 +103,30 @@ def entity_link_url(kind: str, value: str) -> str:
         "parent-invocation",
         "child-invocation",
         "new-invocation",
+        "source-invocation",
+        "triggered-invocation",
     ):
-        return f"/invocations/{value}"
+        return f"/invocations/{quote(value, safe='')}"
     if kind in ("runner", "worker", "current-owner-runner", "attempted-owner-runner"):
-        return f"/runners/{value}"
+        return f"/runners/{quote(value, safe='')}"
     if kind == "task":
-        return f"/tasks/{value}"
+        return f"/tasks/{quote(value, safe='')}"
     if kind in ("workflow", "sub-workflow", "parent-workflow"):
         return "/workflows/runs"
+    if kind == "event":
+        return f"/events/{quote(value, safe='')}"
+    if kind == "trigger-run":
+        return f"/trigger-runs/{quote(value, safe='')}"
+    if kind == "atomic-service-run":
+        return f"/runners/atomic-service/runs/{quote(value, safe='')}"
+    if kind == "trigger":
+        return f"/triggers/{quote(value, safe='')}"
+    if kind == "condition":
+        return "/trigger-runs/condition?" + urlencode({"condition_id": value})
+    if kind == "valid-condition":
+        return "/trigger-runs/valid-condition?" + urlencode(
+            {"valid_condition_id": value}
+        )
     return ""
 
 
@@ -208,6 +230,13 @@ def _bracket_link_runners(content: str, rid_map: dict[str, str]) -> str:
 
     def _repl(rm: re.Match[str]) -> str:
         cls, pid = rm.group(1), rm.group(2)
+        if cls == "AS":
+            return (
+                f'<a href="/runners/atomic-service/runs/{pid}" '
+                f'class="bracket-link bracket-atomic-service"'
+                f' data-atomic-service-run-id="{pid}"'
+                f' title="Atomic service run: {pid}">{cls}({pid})</a>'
+            )
         full_id = rid_map.get(pid, pid)
         return (
             f'<a href="/runners/{full_id}" class="bracket-link bracket-runner"'
@@ -269,38 +298,95 @@ def _linkify_entities(html: str) -> str:
 def _entity_replacer(m: re.Match[str]) -> str:
     """Build an <a> tag for a single entity token.
 
-    Emits data-runner-id or data-invocation-id so the JS hover wiring can
-    cross-highlight SVG bars and other chips on the page.
+    Emits ``data-*-id`` attributes so the JS hover wiring can cross-highlight
+    SVG bars, event markers, trigger-run rows, and other chips on the page.
+    Trigger-specific kinds (``event``, ``trigger-run``, ``condition``,
+    ``trigger``) carry a ``data-entity-kind`` attribute so the renderer and
+    JS layer can style them by role even when they share the same DOM class.
     """
     token = m.group(1)
     colon_idx = token.index(":")
     kind, value = token[:colon_idx], token[colon_idx + 1 :]
     url = entity_link_url(kind, value)
+    data_attr = _entity_data_attrs(kind, value)
+    css_class = _entity_css_class(kind)
     if url:
-        if kind in (
-            "runner",
-            "worker",
-            "current-owner-runner",
-            "attempted-owner-runner",
-        ):
-            data_attr = f' data-runner-id="{escape(value)}"'
-        elif kind in (
-            "invocation",
-            "parent-invocation",
-            "child-invocation",
-            "new-invocation",
-        ):
-            data_attr = f' data-invocation-id="{escape(value)}"'
-        elif kind == "task":
-            data_attr = f' data-task-key="{escape(value)}"'
-        else:
-            data_attr = ""
         return (
-            f'<a href="{url}" class="log-entity-link"'
+            f'<a href="{escape(url, quote=True)}" class="{css_class}"'
             f"{data_attr}"
             f' title="{kind}: {escape(value)}">{escape(token)}</a>'
         )
-    return escape(token)
+    # No URL available (e.g. condition without a detail page): render as a
+    # styled span so cross-highlight still works without a dangling link.
+    return (
+        f'<span class="{css_class}"'
+        f"{data_attr}"
+        f' title="{kind}: {escape(value)}">{escape(token)}</span>'
+    )
+
+
+def _entity_data_attrs(kind: str, value: str) -> str:
+    """Return the ``data-*`` attribute string for an entity ref chip.
+
+    Multiple invocation-role kinds map to the same ``data-invocation-id``
+    attribute so SVG bars and chips cross-highlight regardless of the role
+    label used in the log message. ``data-entity-kind`` preserves the role.
+    """
+    safe_value = escape(value)
+    if kind in (
+        "runner",
+        "worker",
+        "current-owner-runner",
+        "attempted-owner-runner",
+    ):
+        return f' data-runner-id="{safe_value}" data-entity-kind="{kind}"'
+    if kind in (
+        "invocation",
+        "parent-invocation",
+        "child-invocation",
+        "new-invocation",
+        "source-invocation",
+        "triggered-invocation",
+    ):
+        return f' data-invocation-id="{safe_value}" data-entity-kind="{kind}"'
+    if kind == "task":
+        return f' data-task-key="{safe_value}" data-entity-kind="{kind}"'
+    if kind == "event":
+        return f' data-event-id="{safe_value}" data-entity-kind="event"'
+    if kind == "trigger-run":
+        return f' data-trigger-run-id="{safe_value}" data-entity-kind="trigger-run"'
+    if kind == "atomic-service-run":
+        return (
+            f' data-atomic-service-run-id="{safe_value}"'
+            f' data-entity-kind="atomic-service-run"'
+        )
+    if kind == "trigger":
+        return f' data-trigger-id="{safe_value}" data-entity-kind="trigger"'
+    if kind in ("condition", "valid-condition"):
+        return f' data-condition-id="{safe_value}" data-entity-kind="{kind}"'
+    return f' data-entity-kind="{kind}"'
+
+
+def _entity_css_class(kind: str) -> str:
+    """Return the CSS class chain for an entity chip.
+
+    All chips share ``log-entity-link``; trigger/event kinds also get a
+    typed modifier class so the Log Explorer stylesheet can colour them.
+    """
+    typed = {
+        "event": "log-entity-event",
+        "trigger-run": "log-entity-trigger-run",
+        "atomic-service-run": "log-entity-atomic-service-run",
+        "trigger": "log-entity-trigger",
+        "condition": "log-entity-condition",
+        "valid-condition": "log-entity-valid-condition",
+        "source-invocation": "log-entity-source-invocation",
+        "triggered-invocation": "log-entity-triggered-invocation",
+        "cron": "log-entity-cron",
+        "context": "log-entity-context",
+    }
+    extra = typed.get(kind)
+    return f"log-entity-link {extra}" if extra else "log-entity-link"
 
 
 def _dim_timestamp(html: str) -> str:

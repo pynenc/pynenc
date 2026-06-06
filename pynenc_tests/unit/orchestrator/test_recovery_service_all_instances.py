@@ -51,7 +51,7 @@ def test_register_runner_heartbeat(app_instance: "Pynenc") -> None:
 
 
 def test_multiple_runner_heartbeats_ordered_by_creation(app_instance: "Pynenc") -> None:
-    """Test that multiple runners are ordered by creation time."""
+    """Test that multiple runners are ordered by creation time first."""
     runner1 = create_runner_context("runner-1")
     runner2 = create_runner_context("runner-2")
     runner3 = create_runner_context("runner-3")
@@ -67,6 +67,23 @@ def test_multiple_runner_heartbeats_ordered_by_creation(app_instance: "Pynenc") 
     assert active_runners[0].runner_id == "runner-1"
     assert active_runners[1].runner_id == "runner-2"
     assert active_runners[2].runner_id == "runner-3"
+
+
+def test_get_active_runners_orders_equal_creation_time_by_runner_id(
+    app_instance: "Pynenc",
+) -> None:
+    """All orchestrators must expose deterministic runner ordering for slots."""
+    app_instance.orchestrator.register_runner_heartbeats(
+        ["runner-2", "runner-1", "runner-3"]
+    )
+
+    active_runners = app_instance.orchestrator.get_active_runners()
+
+    assert [runner.runner_id for runner in active_runners] == [
+        "runner-1",
+        "runner-2",
+        "runner-3",
+    ]
 
 
 def test_heartbeat_update_does_not_change_order(app_instance: "Pynenc") -> None:
@@ -121,13 +138,18 @@ def test_get_pending_invocations_for_recovery(app_instance: "Pynenc") -> None:
 
 def test_should_run_atomic_service_single_runner(app_instance: "Pynenc") -> None:
     """Test atomic service scheduling with single runner."""
-    runner_ctx = create_runner_context("runner-1")
+    original_fraction = app_instance.conf.atomic_service_max_start_slot_fraction
+    app_instance.conf.atomic_service_max_start_slot_fraction = 1.0
+    try:
+        runner_ctx = create_runner_context("runner-1")
 
-    app_instance.orchestrator.register_runner_heartbeats([runner_ctx.runner_id])
+        app_instance.orchestrator.register_runner_heartbeats([runner_ctx.runner_id])
 
-    should_run = app_instance.orchestrator.should_run_atomic_service(runner_ctx)
+        claim = app_instance.orchestrator.try_claim_atomic_service_run(runner_ctx)
 
-    assert should_run is True
+        assert claim is not None
+    finally:
+        app_instance.conf.atomic_service_max_start_slot_fraction = original_fraction
 
 
 def test_should_run_atomic_service_multiple_runners(app_instance: "Pynenc") -> None:
@@ -159,15 +181,18 @@ def test_should_run_atomic_service_multiple_runners(app_instance: "Pynenc") -> N
         # Patch time() to a fixed value so the test is not clock-sensitive.
         # With 3 runners and a 60s interval, slots are [0,19s), [20,39s), [40,59s).
         # Setting time=0 (i.e. 0 % 60 == 0) lands inside runner1's slot so exactly
-        # one runner returns True regardless of when the test runs.
+        # one runner can claim at any given time.
         with patch("pynenc.orchestrator.base_orchestrator.time", return_value=0.0):
             results = [
-                app_instance.orchestrator.should_run_atomic_service(runner1),
-                app_instance.orchestrator.should_run_atomic_service(runner2),
-                app_instance.orchestrator.should_run_atomic_service(runner3),
+                app_instance.orchestrator.try_claim_atomic_service_run(runner1)
+                is not None,
+                app_instance.orchestrator.try_claim_atomic_service_run(runner2)
+                is not None,
+                app_instance.orchestrator.try_claim_atomic_service_run(runner3)
+                is not None,
             ]
 
-        # Only one runner should be scheduled at any given time
+        # Only one runner should be able to claim at any given time
         assert sum(results) == 1
     finally:
         app_instance.conf.atomic_service_interval_minutes = original_interval

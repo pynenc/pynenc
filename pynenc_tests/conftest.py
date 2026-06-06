@@ -55,15 +55,6 @@ def check_all_status_transitions(app: Pynenc) -> None:
     from pynenc.invocation.status import validate_transition
     from pynenc.exceptions import InvocationStatusTransitionError
 
-    # History is written asynchronously in threads; wait for all to flush
-    # before validating transitions.
-    for threads in app.state_backend.invocation_threads.values():
-        for t in threads:
-            try:
-                t.join(timeout=2.0)
-            except RuntimeError:
-                logger.debug("Skipping unstarted history thread during flush")
-
     violations: list[str] = []
     batch_size = 100
     offset = 0
@@ -93,6 +84,66 @@ def check_all_status_transitions(app: Pynenc) -> None:
         joined = "\n".join(violations)
         raise AssertionError(
             f"Found {len(violations)} invalid status transition(s):\n{joined}"
+        )
+
+
+def check_no_atomic_service_overlap(app: Pynenc) -> None:
+    """
+    Assert atomic-service execution windows do not overlap across runners.
+
+    Atomic services are, by definition, mutually exclusive across the cluster:
+    at any wall-clock instant at most one runner may be executing the
+    atomic-service cycle.  This helper inspects every execution recorded by
+    the orchestrator since the start of the test (a wide 48-hour window is
+    queried) and asserts no two windows belonging to different runner IDs
+    overlap.  Same-runner sequential windows are allowed.
+
+    Only records that actually executed work are considered: ``COMPLETED``
+    and ``ABANDONED``. ``RUNNING`` rows that were never finalized (e.g.
+    runner shutdown mid-cycle) and ``BLOCKED`` rows (zero-width markers
+    proving the consensus rejected a duplicate start) are skipped.
+
+    :param Pynenc app: The app instance whose recorded executions to validate.
+    :raises AssertionError: If any cross-runner overlap is found.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from pynenc.orchestrator.atomic_service import AtomicServiceExecutionStatus
+
+    now = datetime.now(UTC)
+    executions = app.orchestrator.get_atomic_service_executions_in_timerange(
+        start_time=now - timedelta(hours=48),
+        end_time=now + timedelta(minutes=1),
+        limit=10_000,
+    )
+    executed = [
+        e
+        for e in executions
+        if e.status
+        in (
+            AtomicServiceExecutionStatus.COMPLETED,
+            AtomicServiceExecutionStatus.ABANDONED,
+        )
+        and e.end_time is not None
+    ]
+    sorted_execs = sorted(executed, key=lambda e: e.start_time)
+    overlaps: list[str] = []
+    for i, cur in enumerate(sorted_execs):
+        for prev in sorted_execs[:i]:
+            assert prev.end_time is not None and cur.end_time is not None
+            if prev.end_time <= cur.start_time:
+                continue
+            if prev.runner_id == cur.runner_id:
+                continue
+            overlaps.append(
+                f"  runner {prev.runner_id} [{prev.start_time.isoformat()} ->"
+                f" {prev.end_time.isoformat()}] overlaps runner {cur.runner_id}"
+                f" [{cur.start_time.isoformat()} -> {cur.end_time.isoformat()}]"
+            )
+    if overlaps:
+        joined = "\n".join(overlaps)
+        raise AssertionError(
+            f"Found {len(overlaps)} cross-runner atomic-service overlap(s):\n{joined}"
         )
 
 
@@ -257,7 +308,7 @@ def runner(request: "FixtureRequest") -> Generator[None, None, None]:
 
     app.logger.info("Stopping runner thread...")
     app.runner.stop_runner_loop()
-    # runner_thread.join()
+    runner_thread.join(timeout=0)
     logger.info("Thread join completed")
 
     logger.info("Purging app data...")

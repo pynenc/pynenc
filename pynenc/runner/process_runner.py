@@ -275,7 +275,7 @@ class ProcessRunner(BaseRunner):
             )
 
     def _resume_waiting_process(self, waiting_invocation_id: "InvocationId") -> None:
-        """Send SIGCONT and set RESUMED status for a previously paused invocation."""
+        """Send SIGCONT and restore RUNNING status for a previously paused invocation."""
         waiting_process = self._get_process_for_invocation(waiting_invocation_id)
         if not (waiting_process and waiting_process.pid):
             return
@@ -292,12 +292,12 @@ class ProcessRunner(BaseRunner):
         try:
             self.app.orchestrator.set_invocation_status(
                 waiting_invocation_id,
-                InvocationStatus.RESUMED,
+                InvocationStatus.RUNNING,
                 self.runner_context,
             )
         except InvocationStatusError as ex:
             self.logger.warning(
-                f"Could not set invocation:{waiting_invocation_id} to RESUMED status: {ex}"
+                f"Could not set invocation:{waiting_invocation_id} back to RUNNING status: {ex}"
             )
 
     def handle_waiting_invocations(self) -> None:

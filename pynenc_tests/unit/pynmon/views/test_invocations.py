@@ -4,25 +4,20 @@ Minimal tests for pynmon invocation view.
 Tests basic functionality using real in-memory Pynenc app with actual tasks and invocations.
 """
 
-# Skip all pynmon tests if monitor dependencies are not available
-import pytest
-
-pytest.importorskip("fastapi", reason="pynmon tests require monitor dependencies")
-pytest.importorskip("jinja2", reason="pynmon tests require monitor dependencies")
-
-# All imports below must come after pytest.importorskip calls
-# ruff: noqa: E402
-
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 
+import pytest
 from fastapi.testclient import TestClient
 
 from pynenc.arguments import Arguments
 from pynenc.call import Call
 from pynenc.invocation import DistributedInvocation
 from pynenc.invocation.status import InvocationStatus
+from pynenc.orchestrator.atomic_service import AtomicServiceRun
 from pynenc.runner.runner_context import RunnerContext
+from pynenc.trigger.monitoring import TriggerRunRecord
 from pynenc_tests.conftest import MockPynenc
 from pynmon.app import app as pynmon_app
 from pynmon.app import setup_routes
@@ -103,6 +98,50 @@ def test_invocations_list_shows_invocations(app: "Pynenc") -> None:
         assert invocation2.invocation_id[:8] in content
         assert "add_task" in content
         assert "multiply_task" in content
+
+
+def test_invocations_timeline_shows_reference_only_atomic_service_window(
+    app: "Pynenc",
+) -> None:
+    """Trigger-run AS refs without execution history no longer produce a
+    fallback window. The orchestrator's purge now protects referenced
+    executions, so a trigger run whose execution has been dropped is
+    treated as data loss rather than rendered with synthetic timestamps.
+    """
+    app.purge()
+    setup_routes()
+    now = datetime.now(UTC).replace(microsecond=123000)
+    atomic_service_run_id = "as-run-from-trigger-ref"
+    runner_id = "test-trigger-runner"
+    app.trigger.store_trigger_run(
+        TriggerRunRecord(
+            trigger_run_id="trigger-run-as-ref",
+            trigger_id="trigger-as-ref",
+            task_id_key="tests.add_task",
+            logic_value="AND",
+            claimed_at=now,
+            executed_at=now + timedelta(milliseconds=3),
+            atomic_service_run_id=atomic_service_run_id,
+            atomic_service_runner_id=runner_id,
+        )
+    )
+    start_date = (now - timedelta(seconds=1)).replace(tzinfo=None).isoformat()
+    end_date = (now + timedelta(seconds=1)).replace(tzinfo=None).isoformat()
+
+    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=app):
+        client = TestClient(pynmon_app)
+        response = client.get(
+            "/invocations/timeline",
+            params={
+                "time_range": "custom",
+                "start_date": start_date,
+                "end_date": end_date,
+                "show_atomic_service": "1",
+            },
+        )
+
+    assert response.status_code == 200
+    assert f'data-atomic-service-run-id="{atomic_service_run_id}"' not in response.text
 
 
 def _create_invocations_with_statuses(
@@ -293,6 +332,402 @@ def test_invocations_timeline_basic(app: "Pynenc") -> None:
 
         assert response.status_code == 200
         assert "text/html" in response.headers["content-type"]
+        assert 'id="timeline-range-zoom"' in response.text
+        assert 'aria-label="Select timeline range to zoom"' in response.text
+        assert "zoom_in" in response.text
+
+
+def test_invocations_timeline_exposes_scope_filter_and_date_examples(
+    app: "Pynenc",
+) -> None:
+    """Hidden invocation scoping must be visible and editable in filters."""
+    app.purge()
+    setup_routes()
+
+    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=app):
+        client = TestClient(pynmon_app)
+        response = client.get(
+            "/invocations/timeline"
+            "?time_range=custom"
+            "&start_date=2026-05-18T17:50:49"
+            "&end_date=2026-05-18T17:50:49.600"
+            "&inv_ids=inv-a,inv-b"
+        )
+
+    assert response.status_code == 200
+    content = response.text
+    assert 'id="inv_ids" name="inv_ids"' in content
+    assert 'value="inv-a,inv-b"' in content
+    assert 'type="hidden" name="inv_ids"' not in content
+    assert "Invocation Scope" in content
+    assert "scope: 2" in content
+    assert "timeline-filter-scope-clear" in content
+    assert "Clear invocation scope" in content
+    import re
+
+    clear_link = re.search(
+        r'href="([^"]+)" class="timeline-filter-scope-clear"', content
+    )
+    assert clear_link is not None
+    assert "inv_ids" not in clear_link.group(1)
+    assert "time_range=custom" in clear_link.group(1)
+    assert 'placeholder="2026-05-16T19:09:12.348"' in content
+    assert "ISO 8601 with ms/us" not in content
+
+
+def test_invocations_timeline_renders_event_markers(app: "Pynenc") -> None:
+    """Timeline SVG includes a clickable marker for each event in the window."""
+    from datetime import UTC, datetime
+
+    from pynenc.trigger.monitoring import EventRecord
+
+    app.purge()
+    # Create a real invocation with a RUNNING segment so the marker has
+    # a visible emitter bar to anchor on (strict anchor regime skips
+    # orphan markers that have no segment in the timeline).
+    call: Call = Call(add_task, Arguments({"x": 7, "y": 8}))
+    emitter: DistributedInvocation = DistributedInvocation.isolated(call)
+    app.orchestrator.register_new_invocations([emitter])
+    runner_ctx = RunnerContext.from_runner(app.runner)
+    app.orchestrator.set_invocation_status(
+        emitter.invocation_id, InvocationStatus.PENDING, runner_ctx
+    )
+    app.orchestrator.set_invocation_status(
+        emitter.invocation_id, InvocationStatus.RUNNING, runner_ctx
+    )
+
+    record = EventRecord(
+        event_id="evt-marker",
+        event_code="alpha",
+        timestamp=datetime.now(UTC),
+        emitted_by_invocation_id=emitter.invocation_id,
+        triggered_invocation_ids=[emitter.invocation_id],
+    )
+    app.trigger.store_event(record)
+
+    setup_routes()
+    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=app):
+        client = TestClient(pynmon_app)
+        response = client.get("/invocations/timeline?time_range=1h")
+
+    assert response.status_code == 200
+    assert "/events/evt-marker" in response.text
+    assert "event-markers" in response.text
+
+
+def test_invocations_timeline_renders_ghost_bar_for_offscreen_emitter(
+    app: "Pynenc",
+) -> None:
+    """Off-window emitter referenced by a visible event gets a partial bar.
+
+    When the time window contains only the event marker but the emitter
+    invocation's status history lives entirely before window.start, the
+    timeline must backfill a clipped "ghost" segment so the marker has an
+    anchor (no floating dot) and the rect remains clickable via the
+    existing ``rect[data-invocation-id]`` JS delegation.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from pynenc.invocation.status import InvocationStatusRecord
+    from pynenc.state_backend.base_state_backend import InvocationHistory
+    from pynenc.trigger.monitoring import EventRecord
+
+    app.purge()
+    call: Call = Call(add_task, Arguments({"x": 1, "y": 2}))
+    emitter: DistributedInvocation = DistributedInvocation.isolated(call)
+    app.orchestrator.register_new_invocations([emitter])
+
+    event_time = datetime.now(UTC)
+    window_start = event_time - timedelta(milliseconds=50)
+    window_end = event_time + timedelta(milliseconds=50)
+    backdate = event_time - timedelta(seconds=10)
+
+    runner_ctx = RunnerContext.from_runner(app.runner)
+    app.state_backend.store_runner_context(runner_ctx)
+    backdated_running = InvocationHistory(
+        invocation_id=str(emitter.invocation_id),
+        status_record=InvocationStatusRecord(status=InvocationStatus.RUNNING),
+        runner_context_id=runner_ctx.runner_id,
+    )
+    backdated_running._timestamp = backdate
+    # The emitter's only history record is backdated well before the
+    # visible window. Stub get_history so the test is backend-agnostic.
+    with patch.object(
+        app.state_backend, "get_history", return_value=[backdated_running]
+    ):
+        app.trigger.store_event(
+            EventRecord(
+                event_id="evt-ghost",
+                event_code="payment.captured",
+                timestamp=event_time,
+                emitted_by_invocation_id=str(emitter.invocation_id),
+                triggered_invocation_ids=[str(emitter.invocation_id)],
+            )
+        )
+        # Mark the event as "triggered" so the default state="triggered"
+        # filter in _load_event_markers keeps it in the window.
+        app.trigger.link_trigger_run_to_events(
+            ["evt-ghost"],
+            str(emitter.invocation_id),
+            trigger_run_id="run-ghost",
+        )
+
+        setup_routes()
+        with patch("pynmon.views.invocations.get_pynenc_instance", return_value=app):
+            client = TestClient(pynmon_app)
+            response = client.get(
+                "/invocations/timeline"
+                "?time_range=custom"
+                f"&start_date={window_start.isoformat()}"
+                f"&end_date={window_end.isoformat()}"
+                "&resolution=1ms"
+            )
+
+    assert response.status_code == 200
+    # The ghost backfill must emit a clickable status segment for the
+    # off-screen emitter so the event marker can anchor on top of it.
+    assert f'data-invocation-id="{emitter.invocation_id}"' in response.text
+    assert "evt-ghost" in response.text
+
+
+def test_invocations_timeline_backfills_visible_status_left_boundary(
+    app: "Pynenc",
+) -> None:
+    """A visible final status should keep its clipped running segment."""
+    from pynenc.invocation.status import InvocationStatusRecord
+    from pynenc.state_backend.base_state_backend import InvocationHistory
+    from pynenc.trigger.monitoring import EventMarkerPage
+    from pynmon.util.svg.models import TimelineConfig
+    from pynmon.views.invocations import TimelineRequest, _build_svg_timeline
+
+    app.purge()
+    runner_ctx = RunnerContext.from_runner(app.runner)
+    app.state_backend.store_runner_context(runner_ctx)
+    invocation_id = "11111111-1111-4111-8111-111111111111"
+    window_start = datetime(2026, 5, 26, 12, 25, 31, 668000, tzinfo=UTC)
+    window_end = window_start + timedelta(milliseconds=300)
+
+    running = InvocationHistory(
+        invocation_id=invocation_id,
+        status_record=InvocationStatusRecord(status=InvocationStatus.RUNNING),
+        runner_context_id=runner_ctx.runner_id,
+    )
+    running._timestamp = window_start - timedelta(milliseconds=100)
+    success = InvocationHistory(
+        invocation_id=invocation_id,
+        status_record=InvocationStatusRecord(status=InvocationStatus.SUCCESS),
+        runner_context_id=runner_ctx.runner_id,
+    )
+    success._timestamp = window_start + timedelta(milliseconds=80)
+
+    with (
+        patch.object(
+            app.state_backend,
+            "iter_history_in_timerange",
+            return_value=iter([[success]]),
+        ),
+        patch.object(app.state_backend, "get_history", return_value=[running, success]),
+        patch.object(
+            app.trigger,
+            "get_event_markers_in_timerange",
+            return_value=EventMarkerPage(markers=[], total=0, truncated=False),
+        ),
+        patch.object(app.trigger, "get_trigger_runs_in_timerange", return_value=[]),
+    ):
+        svg = _build_svg_timeline(
+            TimelineRequest(
+                app=app,
+                start_time=window_start,
+                end_time=window_end,
+                config=TimelineConfig(resolution_seconds=0.001),
+                limit=500,
+                show_atomic_service=False,
+            )
+        )
+
+    assert 'class="status-segment"><rect' in svg
+    assert f'data-invocation-id="{invocation_id}" data-status="RUNNING"' in svg
+    assert f'data-invocation-id="{invocation_id}" data-status="SUCCESS"' in svg
+
+
+def test_collect_referenced_invocation_ids_picks_marker_and_trigger_run_refs() -> None:
+    """Helper aggregates emitter, triggered, and trigger-run invocation IDs."""
+    from types import SimpleNamespace
+
+    from pynmon.views.invocations import _collect_referenced_invocation_ids
+
+    marker = SimpleNamespace(
+        emitted_by_invocation_id="emitter-1",
+        triggered_invocation_ids=["child-1", "child-2"],
+    )
+    run = SimpleNamespace(
+        source_invocation_ids=["src-1", "src-2"],
+        triggered_invocation_id="child-3",
+    )
+
+    refs = _collect_referenced_invocation_ids([marker], [run])
+
+    assert refs == {"emitter-1", "child-1", "child-2", "src-1", "src-2", "child-3"}
+
+
+def test_clip_history_to_window_prepends_synthetic_segment_entry() -> None:
+    """Clipping a pre-window RUNNING entry produces a synthetic start anchor."""
+    from datetime import UTC, datetime, timedelta
+
+    from pynenc.invocation.status import InvocationStatus, InvocationStatusRecord
+    from pynenc.state_backend.base_state_backend import InvocationHistory
+    from pynmon.views.invocations import _clip_history_to_window
+
+    window_start = datetime(2026, 5, 25, 12, 31, 16, 203000, tzinfo=UTC)
+    window_end = window_start + timedelta(milliseconds=300)
+    pre = InvocationHistory(
+        invocation_id="ghost-inv",
+        status_record=InvocationStatusRecord(status=InvocationStatus.RUNNING),
+        runner_context_id="runner-x",
+    )
+    pre._timestamp = window_start - timedelta(seconds=10)
+
+    clipped = _clip_history_to_window([pre], window_start, window_end)
+
+    assert len(clipped) == 1
+    assert clipped[0].invocation_id == "ghost-inv"
+    assert clipped[0].timestamp == window_start
+    assert clipped[0].status_record.status == InvocationStatus.RUNNING
+
+
+def test_clip_history_to_window_drops_lifecycle_entirely_before_window() -> None:
+    """Already-finished invocations before the window produce no ghost entries."""
+    from datetime import UTC, datetime, timedelta
+
+    from pynenc.invocation.status import InvocationStatus, InvocationStatusRecord
+    from pynenc.state_backend.base_state_backend import InvocationHistory
+    from pynmon.views.invocations import _clip_history_to_window
+
+    window_start = datetime(2026, 5, 25, 12, 31, 16, 203000, tzinfo=UTC)
+    window_end = window_start + timedelta(milliseconds=300)
+
+    def _hist(status: InvocationStatus, offset_ms: int) -> InvocationHistory:
+        h = InvocationHistory(
+            invocation_id="done-inv",
+            status_record=InvocationStatusRecord(status=status),
+            runner_context_id="runner-x",
+        )
+        h._timestamp = window_start + timedelta(milliseconds=offset_ms)
+        return h
+
+    history = [
+        _hist(InvocationStatus.RUNNING, -5000),
+        _hist(InvocationStatus.SUCCESS, -4000),
+    ]
+
+    assert _clip_history_to_window(history, window_start, window_end) == []
+
+
+def test_invocations_timeline_renders_atomic_service_with_default_filters(
+    app: "Pynenc",
+) -> None:
+    """Blank default filters must not hide recorded atomic-service windows."""
+    from datetime import UTC, datetime, timedelta
+
+    app.purge()
+    start = datetime(2026, 5, 24, 11, 53, 0, 444000, tzinfo=UTC)
+    end = start + timedelta(milliseconds=2)
+    app.orchestrator.register_runner_heartbeats(
+        ["runner-atomic"], can_run_atomic_service=True
+    )
+    atomic_service_run = AtomicServiceRun(
+        runner_id="runner-atomic",
+        atomic_service_run_id="as-timeline-default",
+        started_at=start,
+    )
+    app.orchestrator.record_atomic_service_execution_start(
+        atomic_service_run,
+        start,
+    )
+    from pynenc.orchestrator.atomic_service import AtomicServiceExecutionStatus
+
+    app.orchestrator.finalize_atomic_service_execution(
+        atomic_service_run,
+        end,
+        AtomicServiceExecutionStatus.COMPLETED,
+    )
+
+    setup_routes()
+    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=app):
+        client = TestClient(pynmon_app)
+        response = client.get(
+            "/invocations/timeline"
+            "?time_range=custom"
+            "&start_date=2026-05-24T11:53:00.394000"
+            "&end_date=2026-05-24T11:53:00.496000"
+            "&task_id="
+            "&limit=500"
+            "&resolution=100ms"
+            "&workflow_type="
+            "&workflow_id="
+            "&inv_ids="
+            "&collapse_external=0"
+            "&show_system=1"
+            "&show_atomic_service=1"
+        )
+
+    assert response.status_code == 200
+    assert "atomic-service-window" in response.text
+    assert "atomic service run" in response.text
+
+
+def test_family_tree_shows_result_trigger_source_parent(app: "Pynenc") -> None:
+    """Result-trigger source invocations appear as indirect parents."""
+    from datetime import UTC, datetime
+
+    from pynenc.trigger.monitoring import TriggerRunParticipant, TriggerRunRecord
+
+    app.purge()
+    source = DistributedInvocation.isolated(Call(add_task, Arguments({"x": 1, "y": 2})))
+    child = DistributedInvocation.isolated(
+        Call(multiply_task, Arguments({"a": 3, "b": 4}))
+    )
+    app.orchestrator.register_new_invocations([source, child])
+    now = datetime.now(UTC)
+    app.trigger.store_trigger_run(
+        TriggerRunRecord(
+            trigger_run_id="run-result-parent",
+            trigger_id="trg-result-parent",
+            task_id_key=multiply_task.task_id.key,
+            logic_value="and",
+            valid_condition_ids=["vc-result"],
+            condition_ids=["c-result"],
+            source_invocation_ids=[str(source.invocation_id)],
+            triggered_invocation_id=str(child.invocation_id),
+            claimed_at=now,
+            executed_at=now,
+            participants=[
+                TriggerRunParticipant(
+                    context_type="ResultContext",
+                    condition_id="c-result",
+                    valid_condition_id="vc-result",
+                    source_invocation_id=str(source.invocation_id),
+                    context_timestamp=now,
+                    context_summary="result:any",
+                )
+            ],
+        )
+    )
+    setup_routes()
+
+    with patch("pynmon.views.family_tree.get_pynenc_instance", return_value=app):
+        client = TestClient(pynmon_app)
+        response = client.get(f"/invocations/{child.invocation_id}/family-tree?bare=1")
+
+    assert response.status_code == 200
+    assert str(source.invocation_id) in response.text
+    assert str(child.invocation_id) in response.text
+    assert "add_task" in response.text
+    assert "multiply_task" in response.text
+    assert 'class="ft-edge ft-edge-result_trigger"' in response.text
+    assert 'data-relation-kind="result_trigger"' in response.text
+    assert 'stroke="#15803d"' in response.text
+    assert 'stroke-dasharray="6,3"' in response.text
 
 
 def test_orchestrator_status_filtering_logic(app: "Pynenc") -> None:
@@ -471,3 +906,310 @@ def test_invocations_list_should_handle_missing_task_id_key(app: "Pynenc") -> No
 
         assert response.status_code == 200
         assert "text/html" in response.headers["content-type"]
+
+
+# ################################################################################### #
+# TRIGGER ORIGIN TESTS (Step 2.2)
+# ################################################################################### #
+
+
+def _store_trigger_run_for(app: "Pynenc", invocation_id: str) -> None:
+    """Persist a trigger run that produced ``invocation_id``."""
+    from datetime import UTC, datetime
+
+    from pynenc.trigger.monitoring import TriggerRunRecord
+
+    now = datetime.now(UTC)
+    app.trigger.store_trigger_run(
+        TriggerRunRecord(
+            trigger_run_id="run-xyz",
+            trigger_id="trg-xyz",
+            task_id_key=add_task.task_id.key,
+            logic_value="EVENT",
+            valid_condition_ids=["cond-1"],
+            condition_ids=["cond-1"],
+            event_ids=["evt-origin"],
+            source_invocation_ids=[],
+            triggered_invocation_id=invocation_id,
+            claimed_at=now,
+            executed_at=now,
+        )
+    )
+
+
+def test_invocation_detail_shows_trigger_origin(app: "Pynenc") -> None:
+    """Invocation detail renders trigger source context when a run exists."""
+    call: Call = Call(add_task, Arguments({"x": 1, "y": 2}))
+    invocation: DistributedInvocation = DistributedInvocation.isolated(call)
+    app.orchestrator.register_new_invocations([invocation])
+    _store_trigger_run_for(app, invocation.invocation_id)
+    setup_routes()
+
+    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=app):
+        client = TestClient(pynmon_app)
+        response = client.get(f"/invocations/{invocation.invocation_id}")
+
+    assert response.status_code == 200
+    assert "Triggering information" in response.text
+    assert "Trigger origin" in response.text
+    assert "trg-xyz" in response.text
+    assert "evt-origin"[:8] in response.text
+
+
+def test_invocation_detail_no_trigger_origin(app: "Pynenc") -> None:
+    """Invocations with no trigger run do not show the trigger origin block."""
+    call: Call = Call(add_task, Arguments({"x": 1, "y": 2}))
+    invocation: DistributedInvocation = DistributedInvocation.isolated(call)
+    app.orchestrator.register_new_invocations([invocation])
+    setup_routes()
+
+    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=app):
+        client = TestClient(pynmon_app)
+        response = client.get(f"/invocations/{invocation.invocation_id}")
+
+    assert response.status_code == 200
+    assert "Trigger origin" not in response.text
+
+
+def test_invocation_api_includes_triggered_by(app: "Pynenc") -> None:
+    """The /api endpoint always exposes a triggered_by key (may be null)."""
+    call: Call = Call(add_task, Arguments({"x": 1, "y": 2}))
+    invocation: DistributedInvocation = DistributedInvocation.isolated(call)
+    app.orchestrator.register_new_invocations([invocation])
+    setup_routes()
+
+    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=app):
+        client = TestClient(pynmon_app)
+        response = client.get(f"/invocations/{invocation.invocation_id}/api")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "triggered_by" in data
+    assert data["triggered_by"] is None
+
+
+def test_invocation_api_triggered_by_populated(app: "Pynenc") -> None:
+    """When a trigger run exists, /api returns the linked metadata."""
+    call: Call = Call(add_task, Arguments({"x": 1, "y": 2}))
+    invocation: DistributedInvocation = DistributedInvocation.isolated(call)
+    app.orchestrator.register_new_invocations([invocation])
+    _store_trigger_run_for(app, invocation.invocation_id)
+    setup_routes()
+
+    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=app):
+        client = TestClient(pynmon_app)
+        response = client.get(f"/invocations/{invocation.invocation_id}/api")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["triggered_by"] is not None
+    assert data["triggered_by"]["trigger_id"] == "trg-xyz"
+    assert data["triggered_by"]["event_ids"] == ["evt-origin"]
+
+
+def test_invocation_api_participants_include_context_timestamp(app: "Pynenc") -> None:
+    """Timeline zoom needs participant timestamps to include trigger origins."""
+    call: Call = Call(add_task, Arguments({"x": 1, "y": 2}))
+    invocation: DistributedInvocation = DistributedInvocation.isolated(call)
+    app.orchestrator.register_new_invocations([invocation])
+    _store_trigger_run_with_participants(app, invocation.invocation_id)
+    setup_routes()
+
+    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=app):
+        client = TestClient(pynmon_app)
+        response = client.get(f"/invocations/{invocation.invocation_id}/api")
+
+    assert response.status_code == 200
+    participant = response.json()["triggered_by"]["participants"][0]
+    assert participant["context_timestamp"] is not None
+    assert participant["context_summary"] == "status:SUCCESS"
+
+
+# --------------------------------------------------------------------------- #
+# Phase 6: participant tables + reverse trigger effects
+# --------------------------------------------------------------------------- #
+
+
+def _store_trigger_run_with_participants(app: "Pynenc", invocation_id: str) -> None:
+    """Store a trigger run with one StatusContext participant for tests."""
+    from datetime import UTC, datetime
+
+    from pynenc.trigger.monitoring import TriggerRunParticipant, TriggerRunRecord
+
+    now = datetime.now(UTC)
+    app.trigger.store_trigger_run(
+        TriggerRunRecord(
+            trigger_run_id="run-p6",
+            trigger_id="trg-p6",
+            task_id_key=add_task.task_id.key,
+            logic_value="and",
+            valid_condition_ids=["cond-1"],
+            condition_ids=["cond-1"],
+            event_ids=[],
+            source_invocation_ids=["src-inv-p6"],
+            triggered_invocation_id=invocation_id,
+            claimed_at=now,
+            executed_at=now,
+            participants=[
+                TriggerRunParticipant(
+                    context_type="StatusContext",
+                    condition_id="cond-1",
+                    valid_condition_id="vc-1",
+                    source_invocation_id="src-inv-p6",
+                    context_timestamp=now,
+                    context_summary="status:SUCCESS",
+                )
+            ],
+        )
+    )
+
+
+def _store_trigger_run_sourced_by(app: "Pynenc", source_invocation_id: str) -> str:
+    """Store a trigger run whose participant points at *source_invocation_id*."""
+    from datetime import UTC, datetime
+
+    from pynenc.trigger.monitoring import TriggerRunParticipant, TriggerRunRecord
+
+    now = datetime.now(UTC)
+    child_invocation_id = "child-inv-p6"
+    app.trigger.store_trigger_run(
+        TriggerRunRecord(
+            trigger_run_id="run-rev",
+            trigger_id="trg-rev",
+            task_id_key="pkg.task.child",
+            logic_value="and",
+            valid_condition_ids=["vc-rev"],
+            condition_ids=["c-rev"],
+            event_ids=[],
+            source_invocation_ids=[source_invocation_id],
+            triggered_invocation_id=child_invocation_id,
+            claimed_at=now,
+            executed_at=now,
+            participants=[
+                TriggerRunParticipant(
+                    context_type="StatusContext",
+                    condition_id="c-rev",
+                    valid_condition_id="vc-rev",
+                    source_invocation_id=source_invocation_id,
+                    context_timestamp=now,
+                    context_summary="status:SUCCESS",
+                )
+            ],
+        )
+    )
+    return child_invocation_id
+
+
+def test_invocation_detail_renders_participants_table(app: "Pynenc") -> None:
+    """The trigger origin section renders one row per participant."""
+    call: Call = Call(add_task, Arguments({"x": 1, "y": 2}))
+    invocation: DistributedInvocation = DistributedInvocation.isolated(call)
+    app.orchestrator.register_new_invocations([invocation])
+    _store_trigger_run_with_participants(app, invocation.invocation_id)
+    setup_routes()
+
+    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=app):
+        client = TestClient(pynmon_app)
+        response = client.get(f"/invocations/{invocation.invocation_id}")
+
+    assert response.status_code == 200
+    assert 'data-trigger-run-id="run-p6"' in response.text
+    assert 'data-context-type="StatusContext"' in response.text
+    assert 'data-source-invocation-id="src-inv-p6"' in response.text
+    assert "status:SUCCESS" in response.text
+
+
+def test_invocation_detail_shows_reverse_trigger_effects(app: "Pynenc") -> None:
+    """Triggers caused by this invocation render as a dedicated section."""
+    call: Call = Call(add_task, Arguments({"x": 1, "y": 2}))
+    invocation: DistributedInvocation = DistributedInvocation.isolated(call)
+    app.orchestrator.register_new_invocations([invocation])
+    child_id = _store_trigger_run_sourced_by(app, str(invocation.invocation_id))
+    setup_routes()
+
+    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=app):
+        client = TestClient(pynmon_app)
+        response = client.get(f"/invocations/{invocation.invocation_id}")
+
+    assert response.status_code == 200
+    assert "Triggers caused by this invocation" in response.text
+    assert 'data-trigger-run-id="run-rev"' in response.text
+    assert f"/invocations/{child_id}" in response.text
+
+
+def test_invocation_api_includes_reverse_trigger_effects(app: "Pynenc") -> None:
+    """Timeline detail API exposes trigger runs caused by the selected source."""
+    call: Call = Call(add_task, Arguments({"x": 1, "y": 2}))
+    invocation: DistributedInvocation = DistributedInvocation.isolated(call)
+    app.orchestrator.register_new_invocations([invocation])
+    child_id = _store_trigger_run_sourced_by(app, str(invocation.invocation_id))
+    setup_routes()
+
+    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=app):
+        client = TestClient(pynmon_app)
+        response = client.get(f"/invocations/{invocation.invocation_id}/api")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["triggered_runs_caused"][0]["trigger_run_id"] == "run-rev"
+    assert data["triggered_runs_caused"][0]["triggered_invocation_id"] == child_id
+    assert child_id in data["source_inv_summaries"]
+
+
+def test_invocation_detail_no_reverse_trigger_effects(app: "Pynenc") -> None:
+    """When no trigger run is sourced by this invocation, the section is hidden."""
+    call: Call = Call(add_task, Arguments({"x": 1, "y": 2}))
+    invocation: DistributedInvocation = DistributedInvocation.isolated(call)
+    app.orchestrator.register_new_invocations([invocation])
+    # Store the inbound trigger so the related-events panel is rendered but
+    # the outbound triggers section should remain hidden.
+    _store_trigger_run_with_participants(app, invocation.invocation_id)
+    setup_routes()
+
+    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=app):
+        client = TestClient(pynmon_app)
+        response = client.get(f"/invocations/{invocation.invocation_id}")
+
+    assert response.status_code == 200
+    # The "Triggers caused" section is collapsed entirely when there are none.
+    assert "Triggers caused by this invocation" not in response.text
+    # The inbound trigger section is still visible.
+    assert "Trigger origin" in response.text
+
+
+def test_condition_types_by_event_deduplicates_participant_contexts() -> None:
+    """Event marker overlays should show unique condition context colours."""
+    from pynenc.trigger.monitoring import TriggerRunParticipant, TriggerRunRecord
+    from pynmon.views.invocations import _condition_types_by_event
+
+    runs = [
+        TriggerRunRecord(
+            trigger_run_id="run-contexts",
+            trigger_id="trg-contexts",
+            task_id_key="pkg.task",
+            logic_value="and",
+            participants=[
+                TriggerRunParticipant(
+                    context_type="EventContext",
+                    event_id="event-1",
+                ),
+                TriggerRunParticipant(
+                    context_type="ResultContext",
+                    event_id="event-1",
+                ),
+                TriggerRunParticipant(
+                    context_type="EventContext",
+                    event_id="event-1",
+                ),
+                TriggerRunParticipant(
+                    context_type="StatusContext",
+                    event_id="event-2",
+                ),
+            ],
+        )
+    ]
+
+    assert _condition_types_by_event(runs) == {
+        "event-1": ["EventContext", "ResultContext"],
+        "event-2": ["StatusContext"],
+    }

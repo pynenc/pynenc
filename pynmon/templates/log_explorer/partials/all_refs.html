@@ -1,12 +1,20 @@
 {# ── References panel — compact entity cards, one per entity ─────────── #} {%
 set inv_refs = analysis.all_entity_refs|selectattr('kind', 'in',
-['invocation','parent-invocation','child-invocation','new-invocation'])|list %}
-{% set runner_refs = analysis.all_entity_refs|selectattr('kind', 'in',
+['invocation','parent-invocation','child-invocation','new-invocation','source-invocation','triggered-invocation'])|list
+%} {% set runner_refs = analysis.all_entity_refs|selectattr('kind', 'in',
 ['runner','worker'])|list %} {% set task_refs =
 analysis.all_entity_refs|selectattr('kind', 'equalto', 'task')|list %} {% set
 wf_refs = analysis.all_entity_refs|selectattr('kind', 'in',
-['workflow','sub-workflow','parent-workflow'])|list %} {% set details =
-analysis.ref_details or {} %}
+['workflow','sub-workflow','parent-workflow'])|list %} {% set event_refs =
+analysis.all_entity_refs|selectattr('kind', 'equalto', 'event')|list %} {% set
+trigger_run_refs = analysis.all_entity_refs|selectattr('kind', 'equalto',
+'trigger-run')|list %} {% set atomic_service_refs =
+analysis.all_entity_refs|selectattr('kind', 'equalto',
+'atomic-service-run')|list %} {% set condition_refs =
+analysis.all_entity_refs|selectattr('kind', 'in',
+['condition','valid-condition'])|list %} {% set trigger_refs =
+analysis.all_entity_refs|selectattr('kind', 'equalto', 'trigger')|list %} {% set
+details = analysis.ref_details or {} %}
 
 <div class="card pynmon-card all-refs-panel">
   <div class="card-body py-2 px-3">
@@ -114,6 +122,215 @@ analysis.ref_details or {} %}
         >
           {{ ref.value[:12] }}&hellip;
         </a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %} {# ── Events ── #} {% if event_refs %}
+    <div class="refs-section mb-2">
+      <div class="refs-section-title">
+        <span class="material-icons">bolt</span>
+        Events ({{ event_refs|length }})
+      </div>
+      <div class="refs-card-grid">
+        {% for ref in event_refs %} {% set d = details.get('event:' ~ ref.value,
+        {}) %}
+        <div
+          class="ref-entity-card ref-card-event"
+          data-event-id="{{ ref.value }}"
+          data-entity-kind="event"
+        >
+          <div class="ref-card-header">
+            <a
+              href="/events/{{ ref.value }}"
+              class="ref-card-id-link"
+              title="{{ ref.value }}"
+              >{{ ref.value[:12] }}&hellip;</a
+            >
+            {% if d.matched %}
+            <span
+              class="ref-badge ref-badge-matched"
+              title="Matched a condition"
+              >matched</span
+            >
+            {% endif %} {% if d.triggered %}
+            <span
+              class="ref-badge ref-badge-triggered"
+              title="Triggered at least one invocation"
+              >triggered</span
+            >
+            {% endif %}
+          </div>
+          {% if d.code %}
+          <div class="ref-card-detail" title="{{ d.code }}">{{ d.code }}</div>
+          {% endif %} {% if d.emitted_by_invocation_id %}
+          <div
+            class="ref-card-detail"
+            title="Emitted by invocation {{ d.emitted_by_invocation_id }}"
+          >
+            by {{ d.emitted_by_invocation_id[:12] }}&hellip;
+          </div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %} {# ── Trigger Runs ── #} {% if trigger_run_refs %}
+    <div class="refs-section mb-2">
+      <div class="refs-section-title">
+        <span class="material-icons">play_circle</span>
+        Trigger Runs ({{ trigger_run_refs|length }})
+      </div>
+      <div class="refs-card-grid">
+        {% for ref in trigger_run_refs %} {% set d = details.get('trigger-run:'
+        ~ ref.value, {}) %}
+        <div
+          class="ref-entity-card ref-card-trigger-run"
+          data-trigger-run-id="{{ ref.value }}"
+          data-entity-kind="trigger-run"
+        >
+          <div class="ref-card-header">
+            <a
+              href="/trigger-runs/{{ ref.value }}"
+              class="ref-card-id-link"
+              title="{{ ref.value }}"
+              >{{ ref.value[:12] }}&hellip;</a
+            >
+            {% if d.logic %}
+            <span class="ref-badge" title="Composite logic">{{ d.logic }}</span>
+            {% endif %} {% if d.timeline_url %}
+            <a
+              href="{{ d.timeline_url }}"
+              class="ref-card-action ms-auto"
+              title="Open in timeline"
+            >
+              <span class="material-icons">timeline</span>
+            </a>
+            {% endif %}
+          </div>
+          {% if d.task %}
+          <div class="ref-card-detail" title="{{ d.task }}">{{ d.task }}</div>
+          {% endif %} {% if d.triggered_invocation_id %}
+          <div
+            class="ref-card-detail"
+            title="Triggered invocation {{ d.triggered_invocation_id }}"
+          >
+            inv {{ d.triggered_invocation_id[:12] }}&hellip;
+          </div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %} {# ── Atomic Service Runs ── #} {% if atomic_service_refs %}
+    <div class="refs-section mb-2">
+      <div class="refs-section-title">
+        <span class="material-icons">bolt</span>
+        Atomic Service Runs ({{ atomic_service_refs|length }})
+      </div>
+      <div class="refs-card-grid refs-card-grid-wide">
+        {% for ref in atomic_service_refs %}
+        <div
+          class="ref-entity-card ref-card-atomic-service log-entity-atomic-service-run"
+          data-atomic-service-run-id="{{ ref.value }}"
+          data-entity-kind="atomic-service-run"
+          title="Atomic Service Run {{ ref.value }}"
+        >
+          <div class="ref-card-header">
+            <a
+              href="/runners/atomic-service/runs/{{ ref.value|urlencode }}"
+              class="ref-card-id-link"
+              title="Open atomic-service run"
+              ><span class="ref-badge">atomic service</span></a
+            >
+          </div>
+          <a
+            href="/runners/atomic-service/runs/{{ ref.value|urlencode }}"
+            class="ref-card-id-wrap"
+            title="{{ ref.value }}"
+            ><code>{{ ref.value }}</code></a
+          >
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %} {# ── Conditions ── #} {% if condition_refs %}
+    <div class="refs-section mb-2">
+      <div class="refs-section-title">
+        <span class="material-icons">rule</span>
+        Conditions ({{ condition_refs|length }})
+      </div>
+      <div class="refs-card-grid refs-card-grid-wide">
+        {% for ref in condition_refs %} {% set d = details.get('condition:' ~
+        ref.value, {}) if ref.kind == 'condition' else {} %}
+        <div
+          class="ref-entity-card ref-card-condition log-entity-{{ ref.kind }}"
+          data-condition-id="{{ ref.value }}"
+          data-entity-kind="{{ ref.kind }}"
+          title="{{ ref.kind|replace('-',' ')|title }}: {{ ref.value }}{% if d.type %} ({{ d.type }}){% endif %}"
+        >
+          <div class="ref-card-header">
+            <a
+              href="{% if ref.kind == 'valid-condition' %}/trigger-runs/valid-condition?valid_condition_id={{ ref.value|urlencode }}{% else %}/trigger-runs/condition?condition_id={{ ref.value|urlencode }}{% endif %}"
+              class="ref-card-id-link"
+              title="Open {{ ref.kind|replace('-',' ') }} details"
+            >
+              <span class="ref-badge"
+                >{{ 'valid' if ref.kind == 'valid-condition' else 'condition'
+                }}</span
+              >
+            </a>
+            {% if d.type %}<span class="ref-card-type">{{ d.type }}</span>{%
+            endif %}
+          </div>
+          <a
+            href="{% if ref.kind == 'valid-condition' %}/trigger-runs/valid-condition?valid_condition_id={{ ref.value|urlencode }}{% else %}/trigger-runs/condition?condition_id={{ ref.value|urlencode }}{% endif %}"
+            class="ref-card-id-wrap"
+            title="{{ ref.value }}"
+            ><code>{{ ref.value }}</code></a
+          >
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %} {# ── Triggers ── #} {% if trigger_refs %}
+    <div class="refs-section">
+      <div class="refs-section-title">
+        <span class="material-icons">flash_on</span>
+        Triggers ({{ trigger_refs|length }})
+      </div>
+      <div class="refs-card-grid refs-card-grid-wide">
+        {% for ref in trigger_refs %} {% set d = details.get('trigger:' ~
+        ref.value, {}) %}
+        <div
+          class="ref-entity-card ref-card-trigger log-entity-trigger"
+          data-trigger-id="{{ ref.value }}"
+          data-entity-kind="trigger"
+          title="Trigger {{ ref.value }}{% if d.task %} ({{ d.task }}){% endif %}"
+        >
+          <div class="ref-card-header">
+            <a
+              href="/triggers/{{ ref.value|urlencode }}"
+              class="ref-card-id-link"
+              title="Open trigger details"
+              ><span class="ref-badge">trigger</span></a
+            >
+            {% if d.logic %}<span class="ref-card-type">{{ d.logic }}</span>{%
+            endif %} {% if d.conditions %}<span class="ref-card-type"
+              >{{ d.conditions }} cond</span
+            >{% endif %}
+          </div>
+          <a
+            href="/triggers/{{ ref.value|urlencode }}"
+            class="ref-card-id-wrap"
+            title="{{ ref.value }}"
+            ><code>{{ ref.value }}</code></a
+          >
+          {% if d.task %}
+          <div class="ref-card-detail-multiline" title="{{ d.task }}">
+            {{ d.task }}
+          </div>
+          {% endif %}
+        </div>
         {% endfor %}
       </div>
     </div>

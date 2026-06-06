@@ -1,0 +1,21 @@
+{% extends "base.html" %} {% block content %}
+<div class="pynmon-container">
+  <div class="row">
+    <div class="col-12">
+      <div class="alert alert-warning">
+        <h5 class="mb-1">Trigger run not found</h5>
+        <p class="mb-0">
+          No trigger run exists with ID
+          <code>{{ trigger_run_id }}</code>. It may have been purged by the
+          configured retention policy, or the ID is mistyped.
+        </p>
+      </div>
+      <a
+        href="javascript:history.back()"
+        class="btn btn-sm btn-outline-secondary"
+        >Back</a
+      >
+    </div>
+  </div>
+</div>
+{% endblock %}

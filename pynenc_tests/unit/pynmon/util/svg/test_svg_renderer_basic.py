@@ -2,6 +2,9 @@
 Tests for TimelineSVGRenderer.
 """
 
+from datetime import timedelta
+
+from pynmon.util.svg.atomic_service import AtomicServiceWindow
 from pynmon.util.svg import (
     SVGStyle,
     TimelineData,
@@ -52,6 +55,20 @@ def test_renderer_includes_dimensions(sample_timeline_data: TimelineData) -> Non
     assert expected_viewbox in svg
 
 
+def test_renderer_exposes_timeline_zoom_metadata(
+    sample_timeline_data: TimelineData,
+) -> None:
+    """The browser zoom tool needs time bounds and x-axis geometry."""
+    renderer = TimelineSVGRenderer()
+    svg = renderer.render(sample_timeline_data)
+
+    assert 'data-start-time="2024-01-01T10:00:00+00:00"' in svg
+    assert 'data-end-time="2024-01-01T10:01:00+00:00"' in svg
+    assert 'data-left-margin="200"' in svg
+    assert 'data-content-width="800"' in svg
+    assert 'data-timeline-width="1000"' in svg
+
+
 def test_renderer_includes_defs(sample_timeline_data: TimelineData) -> None:
     """Test SVG includes defs section with filters."""
     renderer = TimelineSVGRenderer()
@@ -97,6 +114,29 @@ def test_renderer_includes_tooltip(sample_timeline_data: TimelineData) -> None:
 
     assert "<title>" in svg
     assert "Test invocation" in svg
+
+
+def test_renderer_includes_atomic_service_run_metadata(
+    sample_timeline_data: TimelineData,
+) -> None:
+    """Atomic-service windows expose service-run ids for links/highlighting."""
+    start = sample_timeline_data.bounds.start_time + timedelta(seconds=5)
+    end = start + timedelta(milliseconds=5)
+    sample_timeline_data.atomic_service_windows = [
+        AtomicServiceWindow(
+            runner_id="runner-1@host1",
+            start_time=start,
+            end_time=end,
+            duration_seconds=0.005,
+            atomic_service_run_id="as-run-1",
+        )
+    ]
+
+    svg = TimelineSVGRenderer().render(sample_timeline_data)
+
+    assert 'data-atomic-service-run-id="as-run-1"' in svg
+    assert "/runners/atomic-service/runs/as-run-1" in svg
+    assert 'width="6.0"' in svg
 
 
 def test_renderer_includes_time_axis(sample_timeline_data: TimelineData) -> None:

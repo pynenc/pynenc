@@ -11,10 +11,14 @@ from typing import TYPE_CHECKING
 
 from pynmon.util.svg.bounds import TimelineBounds
 from pynmon.util.svg.config import TimelineConfig
+from pynmon.util.svg.atomic_service import AtomicServiceWindow
+from pynmon.util.svg.event_markers import EventMarker, event_row_height
 from pynmon.util.svg.lane_models import LaneGroup, RunnerLane
+from pynmon.util.svg.render_axis import legend_strip_height
 from pynmon.util.svg.status_elements import StatusLine
 
 if TYPE_CHECKING:
+    from pynenc.trigger.monitoring import TriggerRunRecord
     from pynmon.util.svg.runner_info import RunnerInfo
 
 logger = logging.getLogger("pynmon.util.svg.timeline_data")
@@ -37,6 +41,9 @@ class TimelineData:
     groups: dict[str, LaneGroup] = field(default_factory=dict)
     config: TimelineConfig = field(default_factory=TimelineConfig)
     global_lines: list[StatusLine] = field(default_factory=list)
+    event_markers: list[EventMarker] = field(default_factory=list)
+    trigger_runs: list["TriggerRunRecord"] = field(default_factory=list)
+    atomic_service_windows: list[AtomicServiceWindow] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         """Initialize lazy caches for O(1) lookups during rendering."""
@@ -114,20 +121,31 @@ class TimelineData:
 
     @property
     def total_height(self) -> int:
-        """Total SVG height including legend space. Cached."""
+        """Total SVG height including legend + optional event row. Cached.
+
+        The reserved bottom strip holds (in this order):
+
+        * a flexible event markers band when events exist
+        * compact legend rows for status, events, condition types, and relations
+        * a small trailing gap (4px)
+
+        Without events present, no event row is added and the bottom strip
+        is just the legend + trailing gap.
+        """
         if self._total_height_cache is None:
             lanes = self.get_sorted_lanes()
             if not lanes:
-                self._total_height_cache = (
-                    self.config.top_margin + self.config.lane_height + 70
-                )
+                base = self.config.top_margin + self.config.lane_height
             else:
-                h = self.config.top_margin
+                base = self.config.top_margin
                 for i, lane in enumerate(lanes):
-                    h += lane.lane_height(self.config)
+                    base += lane.lane_height(self.config)
                     if i < len(lanes) - 1:
-                        h += self.config.lane_padding
-                self._total_height_cache = h + 70
+                        base += self.config.lane_padding
+            event_row = event_row_height(self)
+            self._total_height_cache = (
+                base + event_row + legend_strip_height(self.config)
+            )
         return self._total_height_cache
 
     def get_or_create_group(
