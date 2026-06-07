@@ -19,13 +19,19 @@ from pynmon.app import get_pynenc_instance, templates
 from pynmon.util.formatting import RunnerContextInfo
 from pynmon.util.time_ranges import parse_time_range, parse_resolution
 from pynmon.util.view_helpers import format_call_arguments
-from pynmon.util.svg.atomic_service import AtomicServiceWindow
+from pynmon.util.svg.atomic_service import (
+    AtomicServiceWindow,
+    assign_atomic_service_sub_lanes,
+)
 from pynmon.util.svg.builder import TimelineDataBuilder
 from pynmon.util.svg.models import TimelineConfig
 from pynmon.util.svg.renderer import TimelineSVGRenderer
 from pynmon.util.svg.runner_info import RunnerInfo
 from pynmon.util.trigger_timeline import timeline_url_for_trigger_run
-from pynmon.util.trigger_monitoring import trigger_run_to_dict
+from pynmon.util.trigger_monitoring import (
+    relevant_trigger_run_participants,
+    trigger_run_to_dict,
+)
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
@@ -293,6 +299,11 @@ def _load_event_markers(req: TimelineRequest, trigger_runs: list | None = None) 
                 emitted_by_invocation_id=getattr(
                     full_event, "emitted_by_invocation_id", None
                 ),
+                emitted_by_runner_context_id=getattr(
+                    full_event,
+                    "emitted_by_runner_context_id",
+                    marker.emitted_by_runner_context_id,
+                ),
                 condition_types=_condition_types_for_event(
                     marker.event_id,
                     marker.event_code,
@@ -322,6 +333,9 @@ def _load_event_markers(req: TimelineRequest, trigger_runs: list | None = None) 
                         focused_event.triggered_invocation_ids or []
                     ),
                     emitted_by_invocation_id=focused_event.emitted_by_invocation_id,
+                    emitted_by_runner_context_id=(
+                        focused_event.emitted_by_runner_context_id
+                    ),
                     condition_types=_condition_types_for_event(
                         focused_event.event_id,
                         focused_event.event_code,
@@ -460,6 +474,7 @@ def _build_svg_timeline(req: TimelineRequest) -> str:
         allowed_invocation_ids=allowed,
         excluded_invocation_ids=excluded,
     )
+    _register_event_runner_contexts(req, state, markers)
     _accumulate_history(req, state)
     # Complete the left boundary for invocations that already have at least
     # one visible status point. ``iter_history_in_timerange`` only returns
@@ -502,6 +517,32 @@ def _build_svg_timeline(req: TimelineRequest) -> str:
     svg = TimelineSVGRenderer().render(data)
     logger.info(f"SVG rendered in {time.time() - t_build:.2f}s ({len(svg):,} chars)")
     return svg
+
+
+def _register_event_runner_contexts(
+    req: TimelineRequest, state: _IterState, markers: list
+) -> None:
+    """Add event emitters as timeline lanes and apply external-runner collapsing."""
+    context_ids = {
+        marker.emitted_by_runner_context_id
+        for marker in markers
+        if marker.emitted_by_runner_context_id
+    }
+    if not context_ids:
+        return
+    contexts = {
+        context.runner_id: context
+        for context in req.app.state_backend.get_runner_contexts(list(context_ids))
+    }
+    for marker in markers:
+        runner_context_id = marker.emitted_by_runner_context_id
+        if runner_context_id is None:
+            continue
+        context = contexts.get(runner_context_id)
+        if context is not None:
+            marker.emitted_by_runner_context_id = state.builder.add_runner_context(
+                context
+            )
 
 
 def _load_task_invocation_ids(req: TimelineRequest) -> set | None:
@@ -572,7 +613,7 @@ def _load_atomic_service_windows(
                 duration_seconds=execution.duration_seconds,
             )
         )
-    return windows
+    return assign_atomic_service_sub_lanes(data, windows, trigger_runs)
 
 
 def _ensure_atomic_service_lane(
@@ -1198,6 +1239,10 @@ def _collect_source_inv_summaries(
         tid = getattr(run, "triggered_invocation_id", None)
         if tid:
             ids.add(tid)
+        for participant in relevant_trigger_run_participants(run):
+            sid = participant.source_invocation_id
+            if sid:
+                ids.add(sid)
     return {inv_id: _fetch_inv_summary(app, inv_id) for inv_id in ids}
 
 
@@ -1375,6 +1420,18 @@ async def invocation_detail(
             run.trigger_run_id: timeline_url_for_trigger_run(run, [], app)
             for run in ([triggered_by] if triggered_by else []) + triggered_runs_caused
         }
+        triggered_by_participants = (
+            relevant_trigger_run_participants(triggered_by) if triggered_by else []
+        )
+        triggered_runs_caused_participants = {
+            run.trigger_run_id: relevant_trigger_run_participants(run)
+            for run in triggered_runs_caused
+        }
+        triggered_by_source_invocation_ids = [
+            participant.source_invocation_id
+            for participant in triggered_by_participants
+            if participant.source_invocation_id
+        ]
         return templates.TemplateResponse(
             request,
             "invocations/detail.html",
@@ -1397,8 +1454,15 @@ async def invocation_detail(
                 ),
                 "workflow": workflow,
                 "triggered_by": triggered_by,
+                "triggered_by_participants": triggered_by_participants,
+                "triggered_by_source_invocation_ids": (
+                    triggered_by_source_invocation_ids
+                ),
                 "emitted_events": emitted_events,
                 "triggered_runs_caused": triggered_runs_caused,
+                "triggered_runs_caused_participants": (
+                    triggered_runs_caused_participants
+                ),
                 "source_inv_summaries": source_inv_summaries,
                 "source_event_summaries": source_event_summaries,
                 "emitted_event_inv_summaries": emitted_event_inv_summaries,

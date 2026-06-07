@@ -111,6 +111,14 @@ class TimelineDataBuilder:
             except (AttributeError, TypeError, ValueError, KeyError):
                 continue
 
+    def add_runner_context(self, runner_context: "RunnerContext") -> str:
+        """Track a runner that owns timeline activity without invocation history."""
+        runner_info = self._maybe_collapse_external(
+            RunnerInfo.from_context(runner_context)
+        )
+        self._track_runner(runner_info)
+        return runner_info.lane_id
+
     def _add_history_entry(
         self, history: "InvocationHistory", runner_context: "RunnerContext"
     ) -> None:
@@ -262,7 +270,11 @@ class TimelineDataBuilder:
         :return: Complete TimelineData ready for rendering
         """
         if self._min_time is None or self._max_time is None:
-            return self._create_empty_timeline(start_time, end_time)
+            timeline_data = self._create_empty_timeline(start_time, end_time)
+            if self._runners:
+                groups_info, child_runners = self._collect_groups_info()
+                self._create_lanes(timeline_data, groups_info, child_runners)
+            return timeline_data
 
         actual_start = start_time or self._min_time
         actual_end = end_time or self._max_time

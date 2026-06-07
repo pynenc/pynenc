@@ -375,6 +375,11 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         finally:
             self.reset_context(previous_invocation_context)
 
+    def _get_waiting_invocation_id(self) -> InvocationId | None:
+        """Get the invocation ID to use for waiting on results."""
+        current_invocation = context.get_dist_invocation_context(self.app.app_id)
+        return current_invocation.invocation_id if current_invocation else None
+
     @property
     def result(self) -> Result:
         """
@@ -399,14 +404,15 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         ```
         """
         self.app.logger.debug(f"ini waiting for invocation:{self.invocation_id} result")
+        waiting_invocation_id = self._get_waiting_invocation_id()
         if not self.status.is_final():
             self.app.orchestrator.waiting_for_results(
-                self.parent_invocation_id, [self.invocation_id]
+                waiting_invocation_id, [self.invocation_id]
             )
 
         while not self.status.is_final():
             self.app.runner.waiting_for_results(
-                self.parent_invocation_id,
+                waiting_invocation_id,
                 [self.invocation_id],
                 context.get_runner_args(),
             )
@@ -415,13 +421,14 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
 
     async def async_result(self) -> Result:
         # Assuming an async_waiting_for_results will be implemented in the runner:
+        waiting_invocation_id = self._get_waiting_invocation_id()
         if not self.status.is_final():
             self.app.orchestrator.waiting_for_results(
-                self.parent_invocation_id, [self.invocation_id]
+                waiting_invocation_id, [self.invocation_id]
             )
         while not self.status.is_final():
             await self.app.runner.async_waiting_for_results(
-                self.parent_invocation_id,
+                waiting_invocation_id,
                 [self.invocation_id],
                 context.get_runner_args(),
             )
@@ -489,9 +496,11 @@ class DistributedInvocationGroup(
         waiting_invocation_ids = list(self.invocation_map.keys())
         if not waiting_invocation_ids:
             return
-        parent_invocation_id = self.invocation_map[
-            waiting_invocation_ids[0]
-        ].parent_invocation_id
+        current_invocation = context.get_dist_invocation_context(self.app.app_id)
+        waiting_parent_id = (
+            current_invocation.invocation_id if current_invocation else None
+        )
+        waiting_app = current_invocation.app if current_invocation else self.app
         notified_orchestrator = False
         while waiting_invocation_ids:
             for final_inv_id in self.app.orchestrator.filter_final(
@@ -502,21 +511,23 @@ class DistributedInvocationGroup(
             if not waiting_invocation_ids:
                 break
             if not notified_orchestrator:
-                self.app.orchestrator.waiting_for_results(
-                    parent_invocation_id, waiting_invocation_ids
+                waiting_app.orchestrator.waiting_for_results(
+                    waiting_parent_id, waiting_invocation_ids
                 )
                 notified_orchestrator = True
-            self.app.runner.waiting_for_results(
-                parent_invocation_id, waiting_invocation_ids, context.get_runner_args()
+            waiting_app.runner.waiting_for_results(
+                waiting_parent_id, waiting_invocation_ids, context.get_runner_args()
             )
 
     async def async_results(self) -> AsyncGenerator[Result, None]:
         waiting_invocation_ids = list(self.invocation_map.keys())
         if not waiting_invocation_ids:
             return
-        parent_invocation_id = self.invocation_map[
-            waiting_invocation_ids[0]
-        ].parent_invocation_id
+        current_invocation = context.get_dist_invocation_context(self.app.app_id)
+        waiting_parent_id = (
+            current_invocation.invocation_id if current_invocation else None
+        )
+        waiting_app = current_invocation.app if current_invocation else self.app
         notified_orchestrator = False
         while waiting_invocation_ids:
             for final_inv_id in self.app.orchestrator.filter_final(
@@ -527,12 +538,12 @@ class DistributedInvocationGroup(
             if not waiting_invocation_ids:
                 break
             if not notified_orchestrator:
-                self.app.orchestrator.waiting_for_results(
-                    parent_invocation_id, waiting_invocation_ids
+                waiting_app.orchestrator.waiting_for_results(
+                    waiting_parent_id, waiting_invocation_ids
                 )
                 notified_orchestrator = True
-            await self.app.runner.async_waiting_for_results(
-                parent_invocation_id, waiting_invocation_ids, context.get_runner_args()
+            await waiting_app.runner.async_waiting_for_results(
+                waiting_parent_id, waiting_invocation_ids, context.get_runner_args()
             )
 
 

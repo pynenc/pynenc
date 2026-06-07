@@ -161,7 +161,7 @@ class SQLiteTrigger(BaseTrigger):
     # Schema versioning
     # ------------------------------------------------------------------ #
 
-    SCHEMA_VERSION_CURRENT: int = 2
+    SCHEMA_VERSION_CURRENT: int = 3
 
     def _ensure_schema_version(self, conn: "SQLiteConnection") -> None:
         """Create the schema-version table and record the current version.
@@ -179,8 +179,11 @@ class SQLiteTrigger(BaseTrigger):
             """
         )
         conn.execute(
-            f"INSERT OR IGNORE INTO {self.tables.SCHEMA_VERSION} (key, value) "
-            f"VALUES ('version', ?)",
+            f"""
+            INSERT INTO {self.tables.SCHEMA_VERSION} (key, value)
+            VALUES ('version', ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value
+            """,
             (self.SCHEMA_VERSION_CURRENT,),
         )
 
@@ -202,10 +205,22 @@ class SQLiteTrigger(BaseTrigger):
                 matched_condition_count INTEGER NOT NULL DEFAULT 0,
                 triggered_invocation_count INTEGER NOT NULL DEFAULT 0,
                 emitted_by_invocation_id TEXT,
-                emitted_by_task_id TEXT
+                emitted_by_task_id TEXT,
+                emitted_by_runner_context_id TEXT
             )
             """
         )
+        columns = {
+            row[1]
+            for row in conn.execute(
+                f"PRAGMA table_info({self.tables.EVENTS})"
+            ).fetchall()
+        }
+        if "emitted_by_runner_context_id" not in columns:
+            conn.execute(
+                f"ALTER TABLE {self.tables.EVENTS} "
+                "ADD COLUMN emitted_by_runner_context_id TEXT"
+            )
         conn.execute(
             f"CREATE INDEX IF NOT EXISTS idx_{self.tables.EVENTS}_code_time "
             f"ON {self.tables.EVENTS}(event_code, event_timestamp)"
@@ -645,8 +660,9 @@ class SQLiteTrigger(BaseTrigger):
                 INSERT OR REPLACE INTO {self.tables.EVENTS} (
                     event_id, event_code, event_timestamp, event_json,
                     matched_condition_count, triggered_invocation_count,
-                    emitted_by_invocation_id, emitted_by_task_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    emitted_by_invocation_id, emitted_by_task_id,
+                    emitted_by_runner_context_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     event.event_id,
@@ -657,6 +673,7 @@ class SQLiteTrigger(BaseTrigger):
                     len(event.triggered_invocation_ids),
                     event.emitted_by_invocation_id,
                     event.emitted_by_task_id,
+                    event.emitted_by_runner_context_id,
                 ),
             )
             conn.execute(
@@ -815,7 +832,7 @@ class SQLiteTrigger(BaseTrigger):
                 f"""
                 SELECT event_id, event_code, event_timestamp,
                        matched_condition_count, triggered_invocation_count,
-                       emitted_by_invocation_id
+                       emitted_by_invocation_id, emitted_by_runner_context_id
                 FROM {self.tables.EVENTS}
                 WHERE {where}
                 ORDER BY event_timestamp
@@ -831,6 +848,7 @@ class SQLiteTrigger(BaseTrigger):
                 matched=row[3] > 0,
                 triggered=row[4] > 0,
                 emitted_by_invocation_id=row[5],
+                emitted_by_runner_context_id=row[6],
             )
             for row in rows
         ]

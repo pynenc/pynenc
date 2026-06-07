@@ -19,6 +19,54 @@ if TYPE_CHECKING:
     )
 
 
+def relevant_trigger_run_participants(
+    run: TriggerRunRecord,
+) -> list[TriggerRunParticipant]:
+    """Return the participants that form the run's coherent trigger cause."""
+    participants = list(run.participants)
+    if str(run.logic_value).lower() != "and" or len(run.condition_ids) < 2:
+        return participants
+
+    by_source: dict[str, list[TriggerRunParticipant]] = {}
+    for participant in participants:
+        if participant.source_invocation_id:
+            by_source.setdefault(participant.source_invocation_id, []).append(
+                participant
+            )
+    coherent_sources = {
+        source_id: source_participants
+        for source_id, source_participants in by_source.items()
+        if len({p.condition_id for p in source_participants if p.condition_id}) > 1
+    }
+    if not coherent_sources:
+        return participants
+
+    source_id, source_participants = max(
+        coherent_sources.items(),
+        key=lambda item: (
+            len({p.condition_id for p in item[1] if p.condition_id}),
+            max(
+                (
+                    p.context_timestamp.timestamp()
+                    for p in item[1]
+                    if p.context_timestamp
+                ),
+                default=float("-inf"),
+            ),
+            item[0],
+        ),
+    )
+    correlated_condition_ids = {
+        p.condition_id for p in source_participants if p.condition_id
+    }
+    return [
+        participant
+        for participant in participants
+        if participant.condition_id not in correlated_condition_ids
+        or participant.source_invocation_id == source_id
+    ]
+
+
 def event_to_dict(event: EventRecord) -> dict:
     """Return a JSON-serializable dict for one :class:`EventRecord`."""
     return {
@@ -32,6 +80,7 @@ def event_to_dict(event: EventRecord) -> dict:
         "triggered_invocation_ids": list(event.triggered_invocation_ids),
         "emitted_by_invocation_id": event.emitted_by_invocation_id,
         "emitted_by_task_id": event.emitted_by_task_id,
+        "emitted_by_runner_context_id": event.emitted_by_runner_context_id,
         "payload": event.payload,
     }
 
@@ -79,6 +128,7 @@ def trigger_run_to_dict(run: TriggerRunRecord) -> dict:
     """
     claimed = run.claimed_at
     executed = run.executed_at
+    participants = relevant_trigger_run_participants(run)
     return {
         "trigger_run_id": run.trigger_run_id,
         "trigger_id": run.trigger_id,
@@ -93,5 +143,5 @@ def trigger_run_to_dict(run: TriggerRunRecord) -> dict:
         "executed_at": executed.isoformat() if executed else None,
         "atomic_service_run_id": run.atomic_service_run_id,
         "atomic_service_runner_id": run.atomic_service_runner_id,
-        "participants": [participant_to_dict(p) for p in run.participants],
+        "participants": [participant_to_dict(p) for p in participants],
     }

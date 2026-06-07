@@ -17,7 +17,7 @@ from pynenc.invocation import DistributedInvocation
 from pynenc.invocation.status import InvocationStatus
 from pynenc.orchestrator.atomic_service import AtomicServiceRun
 from pynenc.runner.runner_context import RunnerContext
-from pynenc.trigger.monitoring import TriggerRunRecord
+from pynenc.trigger.monitoring import TriggerRunParticipant, TriggerRunRecord
 from pynenc_tests.conftest import MockPynenc
 from pynmon.app import app as pynmon_app
 from pynmon.app import setup_routes
@@ -98,6 +98,10 @@ def test_invocations_list_shows_invocations(app: "Pynenc") -> None:
         assert invocation2.invocation_id[:8] in content
         assert "add_task" in content
         assert "multiply_task" in content
+        assert "window.openInvocationInTimeline = openInvocationInTimeline" in content
+        assert 'params.set("selected", invocationId)' in content
+        assert 'params.set("resolution", "100ms")' in content
+        assert "Math.max(durationMs * 0.1, 1000)" not in content
 
 
 def test_invocations_timeline_shows_reference_only_atomic_service_window(
@@ -298,6 +302,8 @@ def test_invocation_detail_shows_invocation_info(app: "Pynenc") -> None:
         # Should show arguments
         assert "10" in content  # x argument
         assert "20" in content  # y argument
+        assert "window.openInvocationInTimeline = openInvocationInTimeline" in content
+        assert f'data-invocation-id="{invocation.invocation_id}"' in content
 
 
 def test_invocation_detail_nonexistent_invocation(app: "Pynenc") -> None:
@@ -413,6 +419,44 @@ def test_invocations_timeline_renders_event_markers(app: "Pynenc") -> None:
     assert response.status_code == 200
     assert "/events/evt-marker" in response.text
     assert "event-markers" in response.text
+
+
+def test_invocations_timeline_places_external_event_on_external_runner(
+    app: "Pynenc",
+) -> None:
+    """Events emitted by clients render on an ExternalRunner lane."""
+    from datetime import UTC, datetime
+
+    from pynenc.trigger.monitoring import EventRecord
+
+    app.purge()
+    external_context = RunnerContext(
+        runner_cls="ExternalRunner",
+        runner_id="ExternalRunner@host-123",
+        hostname="host",
+        pid=123,
+    )
+    app.state_backend.store_runner_context(external_context)
+    app.trigger.store_event(
+        EventRecord(
+            event_id="evt-external",
+            event_code="feed_updated",
+            timestamp=datetime.now(UTC),
+            matched_condition_ids=["event:feed_updated"],
+            triggered_invocation_ids=["inv-triggered"],
+            emitted_by_runner_context_id=external_context.runner_id,
+        )
+    )
+
+    setup_routes()
+    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=app):
+        client = TestClient(pynmon_app)
+        response = client.get("/invocations/timeline?time_range=1h")
+
+    assert response.status_code == 200
+    assert 'data-event-id="evt-external"' in response.text
+    assert 'data-runner-id="__collapsed_external_runners__"' in response.text
+    assert "ExternalRunner" in response.text
 
 
 def test_invocations_timeline_renders_ghost_bar_for_offscreen_emitter(
@@ -1025,6 +1069,68 @@ def test_invocation_api_participants_include_context_timestamp(app: "Pynenc") ->
     assert participant["context_summary"] == "status:SUCCESS"
 
 
+def test_invocation_views_hide_stale_composite_participants(app: "Pynenc") -> None:
+    """Existing runs project only the source that completed an AND trigger."""
+    call: Call = Call(add_task, Arguments({"x": 1, "y": 2}))
+    invocation: DistributedInvocation = DistributedInvocation.isolated(call)
+    app.orchestrator.register_new_invocations([invocation])
+    now = datetime.now(UTC)
+    app.trigger.store_trigger_run(
+        TriggerRunRecord(
+            trigger_run_id="run-composite",
+            trigger_id="trigger-composite",
+            task_id_key=add_task.task_id.key,
+            logic_value="and",
+            valid_condition_ids=["old-status", "matched-status", "matched-result"],
+            condition_ids=["status-condition", "status-condition", "result-condition"],
+            source_invocation_ids=["old-source", "matching-source", "matching-source"],
+            triggered_invocation_id=str(invocation.invocation_id),
+            claimed_at=now,
+            executed_at=now,
+            participants=[
+                TriggerRunParticipant(
+                    context_type="StatusContext",
+                    condition_id="status-condition",
+                    valid_condition_id="old-status",
+                    source_invocation_id="old-source",
+                    context_timestamp=now - timedelta(seconds=1),
+                ),
+                TriggerRunParticipant(
+                    context_type="StatusContext",
+                    condition_id="status-condition",
+                    valid_condition_id="matched-status",
+                    source_invocation_id="matching-source",
+                    context_timestamp=now,
+                ),
+                TriggerRunParticipant(
+                    context_type="ResultContext",
+                    condition_id="result-condition",
+                    valid_condition_id="matched-result",
+                    source_invocation_id="matching-source",
+                    context_timestamp=now,
+                ),
+            ],
+        )
+    )
+    setup_routes()
+
+    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=app):
+        client = TestClient(pynmon_app)
+        api_response = client.get(f"/invocations/{invocation.invocation_id}/api")
+        detail_response = client.get(f"/invocations/{invocation.invocation_id}")
+
+    assert api_response.status_code == 200
+    participants = api_response.json()["triggered_by"]["participants"]
+    assert [p["source_invocation_id"] for p in participants] == [
+        "matching-source",
+        "matching-source",
+    ]
+    assert detail_response.status_code == 200
+    assert "matching-source" in detail_response.text
+    assert 'href="/invocations/old-source"' not in detail_response.text
+    assert 'data-source-invocation-id="old-source"' not in detail_response.text
+
+
 # --------------------------------------------------------------------------- #
 # Phase 6: participant tables + reverse trigger effects
 # --------------------------------------------------------------------------- #
@@ -1078,8 +1184,8 @@ def _store_trigger_run_sourced_by(app: "Pynenc", source_invocation_id: str) -> s
             trigger_id="trg-rev",
             task_id_key="pkg.task.child",
             logic_value="and",
-            valid_condition_ids=["vc-rev"],
-            condition_ids=["c-rev"],
+            valid_condition_ids=["vc-status-rev", "vc-result-rev"],
+            condition_ids=["c-status-rev", "c-result-rev"],
             event_ids=[],
             source_invocation_ids=[source_invocation_id],
             triggered_invocation_id=child_invocation_id,
@@ -1088,12 +1194,20 @@ def _store_trigger_run_sourced_by(app: "Pynenc", source_invocation_id: str) -> s
             participants=[
                 TriggerRunParticipant(
                     context_type="StatusContext",
-                    condition_id="c-rev",
-                    valid_condition_id="vc-rev",
+                    condition_id="c-status-rev",
+                    valid_condition_id="vc-status-rev",
                     source_invocation_id=source_invocation_id,
                     context_timestamp=now,
                     context_summary="status:SUCCESS",
-                )
+                ),
+                TriggerRunParticipant(
+                    context_type="ResultContext",
+                    condition_id="c-result-rev",
+                    valid_condition_id="vc-result-rev",
+                    source_invocation_id=source_invocation_id,
+                    context_timestamp=now,
+                    context_summary="result:{'accepted': true}",
+                ),
             ],
         )
     )
@@ -1135,6 +1249,13 @@ def test_invocation_detail_shows_reverse_trigger_effects(app: "Pynenc") -> None:
     assert "Triggers caused by this invocation" in response.text
     assert 'data-trigger-run-id="run-rev"' in response.text
     assert f"/invocations/{child_id}" in response.text
+    assert "Matched conditions" in response.text
+    assert 'data-context-type="StatusContext"' in response.text
+    assert 'data-context-type="ResultContext"' in response.text
+    assert "c-status-rev" in response.text
+    assert "c-result-rev" in response.text
+    assert "status:SUCCESS" in response.text
+    assert "result:{&#39;accepted&#39;: true}" in response.text
 
 
 def test_invocation_api_includes_reverse_trigger_effects(app: "Pynenc") -> None:

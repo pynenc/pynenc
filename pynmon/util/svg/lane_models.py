@@ -97,6 +97,7 @@ class RunnerLane:
     points: list[StatusPoint] = field(default_factory=list)
     segments: list[StatusSegment] = field(default_factory=list)
     lines: list[StatusLine] = field(default_factory=list)
+    auxiliary_max_sub_lane: int = 0
 
     @property
     def display_runner_id(self) -> str:
@@ -133,6 +134,7 @@ class RunnerLane:
         return max(
             max((p.sub_lane for p in self.points), default=0),
             max((s.sub_lane for s in self.segments), default=0),
+            self.auxiliary_max_sub_lane,
         )
 
     def lane_height(self, config: TimelineConfig) -> int:

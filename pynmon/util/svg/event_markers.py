@@ -22,7 +22,6 @@ if TYPE_CHECKING:
 
 from pynmon.util.svg.atomic_service import AtomicServiceWindow
 
-
 EVENT_MARKER_COLORS: dict[str, str] = {
     "triggered": "#28a745",
     "matched": "#0d6efd",
@@ -75,8 +74,10 @@ class EventMarker:
     payload_excerpt: str = ""
     triggered_invocation_ids: list[str] | None = None
     emitted_by_invocation_id: str | None = None
+    emitted_by_runner_context_id: str | None = None
     href: str | None = None
     trigger_run_id: str | None = None
+    trigger_run_ids: list[str] = field(default_factory=list)
     trigger_id: str | None = None
     context_type: str | None = None
     condition_types: list[str] = field(default_factory=list)
@@ -88,6 +89,16 @@ class EventMarker:
     # the timeline.
     atomic_service_run_id: str | None = None
     atomic_service_runner_id: str | None = None
+
+
+@dataclass
+class _CronMarkerGroup:
+    """Cron trigger runs produced by one atomic-service tick."""
+
+    runs: list[TriggerRunRecord] = field(default_factory=list)
+    conditions: list[str] = field(default_factory=list)
+    summaries: list[str] = field(default_factory=list)
+    invocation_ids: list[str] = field(default_factory=list)
 
 
 class _TimelinePoint(Protocol):
@@ -151,18 +162,15 @@ def _marker_color(marker: EventMarker) -> str:
 def cron_event_markers_from_trigger_runs(
     trigger_runs: Iterable[TriggerRunRecord],
 ) -> list[EventMarker]:
-    """Build synthetic timeline markers for cron-triggered runs.
+    """Build one synthetic marker per atomic-service cron tick.
 
     Cron triggers do not originate from a durable ``EventRecord``, but users
-    still need the same event row anchor that event-based triggers get. These
-    markers are display-only and link to the trigger-run detail page.
+    still need the same event row anchor that event-based triggers get. Several
+    cron conditions can fire during the same atomic-service cycle, so runs with
+    the same cycle and context timestamp share one marker.
     """
-    markers: list[EventMarker] = []
-    seen: set[tuple[str, str, datetime]] = set()
+    grouped: dict[tuple[str, datetime], _CronMarkerGroup] = {}
     for run in trigger_runs:
-        triggered_invocation_ids: list[str] = (
-            [run.triggered_invocation_id] if run.triggered_invocation_id else []
-        )
         for participant in run.participants or []:
             if participant.context_type != "CronContext":
                 continue
@@ -172,29 +180,59 @@ def cron_event_markers_from_trigger_runs(
             if timestamp is None:
                 continue
             condition_id = participant.condition_id or "cron"
-            key = (run.trigger_run_id, condition_id, timestamp)
-            if key in seen:
-                continue
-            seen.add(key)
-            summary = participant.context_summary or "cron"
-            payload = f"{summary}\ncondition:{condition_id}"
-            markers.append(
-                EventMarker(
-                    event_id=f"cron:{run.trigger_run_id}:{condition_id}",
-                    event_code="cron.tick",
-                    timestamp=timestamp,
-                    triggered=bool(triggered_invocation_ids),
-                    matched=True,
-                    payload_excerpt=payload,
-                    triggered_invocation_ids=triggered_invocation_ids or None,
-                    href=f"/trigger-runs/{run.trigger_run_id}",
-                    trigger_run_id=run.trigger_run_id,
-                    trigger_id=run.trigger_id,
-                    context_type="CronContext",
-                    atomic_service_run_id=run.atomic_service_run_id,
-                    atomic_service_runner_id=run.atomic_service_runner_id,
-                )
+            cycle_key = run.atomic_service_run_id or f"run:{run.trigger_run_id}"
+            group = grouped.setdefault(
+                (cycle_key, timestamp),
+                _CronMarkerGroup(),
             )
+            if run not in group.runs:
+                group.runs.append(run)
+            if condition_id not in group.conditions:
+                group.conditions.append(condition_id)
+            summary = participant.context_summary or "cron"
+            if summary not in group.summaries:
+                group.summaries.append(summary)
+            if (
+                run.triggered_invocation_id
+                and run.triggered_invocation_id not in group.invocation_ids
+            ):
+                group.invocation_ids.append(run.triggered_invocation_id)
+
+    markers: list[EventMarker] = []
+    for (_, timestamp), group in grouped.items():
+        first_run = group.runs[0]
+        run_ids = [run.trigger_run_id for run in group.runs]
+        atomic_run_id = first_run.atomic_service_run_id
+        if atomic_run_id:
+            event_id = f"cron:{atomic_run_id}:{timestamp.isoformat()}"
+            href = f"/runners/atomic-service/runs/{atomic_run_id}"
+        else:
+            event_id = f"cron:{first_run.trigger_run_id}:{group.conditions[0]}"
+            href = f"/trigger-runs/{first_run.trigger_run_id}"
+        payload_lines = [
+            *group.summaries,
+            *(f"condition:{item}" for item in group.conditions),
+        ]
+        if len(run_ids) > 1:
+            payload_lines.append(f"trigger runs:{len(run_ids)}")
+        markers.append(
+            EventMarker(
+                event_id=event_id,
+                event_code="cron.tick",
+                timestamp=timestamp,
+                triggered=bool(group.invocation_ids),
+                matched=True,
+                payload_excerpt="\n".join(payload_lines),
+                triggered_invocation_ids=group.invocation_ids or None,
+                href=href,
+                trigger_run_id=first_run.trigger_run_id,
+                trigger_run_ids=run_ids,
+                trigger_id=first_run.trigger_id,
+                context_type="CronContext",
+                atomic_service_run_id=atomic_run_id,
+                atomic_service_runner_id=first_run.atomic_service_runner_id,
+            )
+        )
     return markers
 
 
@@ -273,7 +311,12 @@ def _atomic_service_top_for_marker(
         runner_lane = data.lanes.get(window.runner_id)  # type: ignore[attr-defined]
         if runner_lane is None:
             return None
-        return float(data.lane_y_position(runner_lane) + config.bar_y_offset)
+        sub_lane = getattr(window, "sub_lane", 0)
+        return float(
+            data.lane_y_position(runner_lane)
+            + config.bar_y_offset
+            + sub_lane * (config.bar_height + 2)
+        )
 
     if marker.atomic_service_run_id:
         for window in data.atomic_service_windows:
@@ -337,25 +380,21 @@ def _resolve_marker_anchor(
 ) -> tuple[float, float, float] | None:
     """Return ``(x, dot_y, label_y)`` for the marker, or ``None`` to skip.
 
-    Events do not pop up from nowhere: they are always produced either by a
-    task invocation (``emitted_by_invocation_id`` set), by the atomic
-    trigger service running inside one of the runners (cron ticks,
-    periodic checks), or — failing both — they at least caused a
-    triggered invocation that IS visible in the timeline. The marker dot
-    is drawn **on top of** the corresponding bar at its vertical centre
-    and the label is placed inline so the marker never adds extra
-    vertical space above the bar.
+    Events do not pop up from nowhere: they are produced by a task invocation,
+    an external runner, or the atomic trigger service. The marker dot is drawn
+    on the corresponding lane at its vertical centre.
 
     Resolution priority:
 
     1. Segment matching ``emitted_by_invocation_id`` (real events).
-    2. Atomic-service window containing the marker's timestamp, or the
+    2. Runner context that emitted the event.
+    3. Atomic-service window containing the marker's timestamp, or the
        originating trigger run's ``claimed_at`` / ``executed_at``
        (cron / system events).
-    3. First triggered-invocation segment visible in the timeline
+    4. First triggered-invocation segment visible in the timeline
        (universal fallback — for cron, this is the invocation the tick
        registered).
-    4. ``None`` — caller skips the marker (we never float orphan dots).
+    5. ``None`` — caller skips the marker (we never float orphan dots).
     """
     config = data.config
     x = _clamp_marker_x(data, data.bounds.time_to_x(marker.timestamp))
@@ -372,6 +411,13 @@ def _resolve_marker_anchor(
         top = _segment_top_for_invocation(data, str(inv_id), marker.timestamp)
         if top is not None:
             return _anchor(top)
+
+    if marker.emitted_by_runner_context_id:
+        runner_lane = data.lanes.get(marker.emitted_by_runner_context_id)
+        if runner_lane is not None:
+            return _anchor(
+                float(data.lane_y_position(runner_lane) + config.bar_y_offset)
+            )
 
     atomic_top = _atomic_service_top_for_marker(data, marker)
     if atomic_top is not None:
@@ -508,6 +554,12 @@ def render_event_markers(data: TimelineData, style: SVGStyle | None) -> str:
         trigger_attrs = ""
         if marker.trigger_run_id:
             trigger_attrs += f' data-trigger-run-id="{escape(marker.trigger_run_id)}"'
+        if marker.trigger_run_ids:
+            trigger_attrs += (
+                ' data-trigger-run-ids="'
+                + escape(" ".join(marker.trigger_run_ids))
+                + '"'
+            )
         if marker.trigger_id:
             trigger_attrs += f' data-trigger-id="{escape(marker.trigger_id)}"'
         if marker.context_type:
@@ -799,10 +851,7 @@ def _render_trigger_run_relations(
     parts: list[str] = []
     if not data.trigger_runs:
         return parts
-    marker_y = {
-        placement.marker.event_id: placement.y
-        for placement in _event_marker_layout(data)
-    }
+    marker_refs = _trigger_run_marker_refs(data)
     for run in data.trigger_runs:
         target_refs = by_inv.get(str(run.triggered_invocation_id or ""))
         if not target_refs:
@@ -820,7 +869,7 @@ def _render_trigger_run_relations(
             source_ref = _trigger_run_source_ref(
                 data,
                 by_inv,
-                marker_y,
+                marker_refs,
                 participant,
                 target_ref,
                 run.trigger_run_id,
@@ -851,6 +900,26 @@ def _render_trigger_run_relations(
                 )
             )
     return parts
+
+
+def _trigger_run_marker_refs(data: TimelineData) -> dict[str, _PointRef]:
+    """Map trigger runs to their rendered event-marker positions."""
+    refs: dict[str, _PointRef] = {}
+    for placement in _event_marker_layout(data):
+        marker = placement.marker
+        run_ids = marker.trigger_run_ids or (
+            [marker.trigger_run_id] if marker.trigger_run_id else []
+        )
+        for trigger_run_id in run_ids:
+            refs[trigger_run_id] = _PointRef(
+                point=_SyntheticPoint(
+                    invocation_id=f"event:{marker.event_id}",
+                    timestamp=marker.timestamp,
+                ),
+                x=placement.x,
+                y=placement.y,
+            )
+    return refs
 
 
 def _render_trigger_condition_markers(
@@ -917,7 +986,7 @@ def _render_trigger_condition_markers(
 def _trigger_run_source_ref(
     data: TimelineData,
     by_inv: dict[str, list[_PointRef]],
-    marker_y: dict[str, float],
+    marker_refs: dict[str, _PointRef],
     participant: object,
     target_ref: _PointRef,
     trigger_run_id: str,
@@ -935,17 +1004,16 @@ def _trigger_run_source_ref(
         getattr(participant, "context_type", None) == "CronContext"
         and ctx_ts is not None
     ):
-        condition_id = getattr(participant, "condition_id", None) or "cron"
-        marker_id = f"cron:{trigger_run_id}:{condition_id}"
+        if marker_ref := marker_refs.get(trigger_run_id):
+            return marker_ref
         x = _clamp_marker_x(data, data.bounds.time_to_x(ctx_ts))
-        y = marker_y.get(marker_id, event_row_y(data))
         return _PointRef(
             point=_SyntheticPoint(
                 invocation_id=f"trigger-source:{target_ref.point.invocation_id}",
                 timestamp=ctx_ts,
             ),
             x=x,
-            y=y,
+            y=event_row_y(data),
         )
     return None
 

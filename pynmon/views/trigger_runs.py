@@ -296,9 +296,9 @@ def _enrich_trigger_run_details(
             "id_short": _shorten_id(valid_condition_id) if valid_condition_id else "",
             "available": bool(valid_condition_id),
             "source": valid_source,
-            "detail_url": _valid_condition_url(valid_condition_id)
-            if valid_condition_id
-            else "",
+            "detail_url": (
+                _valid_condition_url(valid_condition_id) if valid_condition_id else ""
+            ),
         }
         condition_id = participant.get("condition_id")
         if condition_id:
@@ -412,6 +412,19 @@ async def trigger_run_api(trigger_run_id: str) -> JSONResponse:
 
     payload = trigger_run_to_dict(run)
     payload = await asyncio.to_thread(_enrich_trigger_run_details, app, payload)
+    invocation_ids = {
+        invocation_id
+        for invocation_id in [
+            run.triggered_invocation_id,
+            *run.source_invocation_ids,
+            *(participant.source_invocation_id for participant in run.participants),
+        ]
+        if invocation_id
+    }
+    payload["invocation_summaries"] = {
+        invocation_id: await asyncio.to_thread(_fetch_inv_summary, app, invocation_id)
+        for invocation_id in invocation_ids
+    }
     events: list[dict] = []
     event_timestamps: list[datetime] = []
     for event_id in run.event_ids or []:

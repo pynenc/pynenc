@@ -230,6 +230,72 @@ def test_event_detail_lists_trigger_runs(app_events: "Pynenc") -> None:
     assert "inv-1"[:8] in response.text
 
 
+def test_event_detail_api_returns_all_runs_and_invocation_summaries(
+    app_events: "Pynenc",
+) -> None:
+    setup_routes()
+    record = _store_event(
+        app_events,
+        "evt-multi-run",
+        "alpha",
+        triggered_invocation_ids=["inv-1", "inv-2"],
+    )
+    for index in (1, 2):
+        condition_ids = [f"event-c-{index}"]
+        valid_condition_ids = [f"event-vc-{index}"]
+        participants = [
+            TriggerRunParticipant(
+                context_type="EventContext",
+                condition_id=f"event-c-{index}",
+                valid_condition_id=f"event-vc-{index}",
+                event_id=record.event_id,
+            )
+        ]
+        if index == 1:
+            condition_ids.append("status-c-1")
+            valid_condition_ids.append("status-vc-1")
+            participants.append(
+                TriggerRunParticipant(
+                    context_type="StatusContext",
+                    condition_id="status-c-1",
+                    valid_condition_id="status-vc-1",
+                    source_invocation_id="source-inv",
+                )
+            )
+        app_events.trigger.store_trigger_run(
+            TriggerRunRecord(
+                trigger_run_id=f"run-{index}",
+                trigger_id=f"trg-{index}",
+                task_id_key=reactor_task.task_id.key,
+                logic_value="and",
+                valid_condition_ids=valid_condition_ids,
+                condition_ids=condition_ids,
+                event_ids=[record.event_id],
+                source_invocation_ids=["source-inv"] if index == 1 else [],
+                triggered_invocation_id=f"inv-{index}",
+                claimed_at=datetime.now(UTC),
+                executed_at=datetime.now(UTC),
+                participants=participants,
+            )
+        )
+
+    with patch("pynmon.views.events.get_pynenc_instance", return_value=app_events):
+        client = TestClient(pynmon_app)
+        response = client.get(f"/events/{record.event_id}/api")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert [run["trigger_run_id"] for run in data["trigger_runs"]] == [
+        "run-1",
+        "run-2",
+    ]
+    assert set(data["invocation_summaries"]) == {
+        "inv-1",
+        "inv-2",
+        "source-inv",
+    }
+
+
 def test_event_timeline_url_should_use_tight_window_and_scope_invocations() -> None:
     timestamp = datetime(2026, 5, 18, 11, 3, 6, 831000, tzinfo=UTC)
     event = EventRecord(

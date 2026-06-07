@@ -24,7 +24,8 @@ text[:22] }}...{{ text[-12:] }}{% else %}{{ text }}{% endif %} {%- endmacro %}
       <a
         href="#"
         id="view-in-timeline-btn"
-        class="btn btn-sm btn-outline-success pynmon-action-btn"
+        class="btn btn-sm btn-outline-success pynmon-action-btn view-in-timeline-link"
+        data-invocation-id="{{ invocation.invocation_id }}"
         title="Zoom to this invocation in the timeline"
       >
         <span
@@ -295,10 +296,10 @@ text[:22] }}...{{ text[-12:] }}{% else %}{{ text }}{% endif %} {%- endmacro %}
                     {% for eid in triggered_by.event_ids %} {{ event_pill(eid,
                     source_event_summaries.get(eid)) }} {% endfor %}
                   </dd>
-                  {% endif %} {% if triggered_by.source_invocation_ids %}
+                  {% endif %} {% if triggered_by_source_invocation_ids %}
                   <dt>Source invocations</dt>
                   <dd class="inv-summary-card-row">
-                    {% for sid in triggered_by.source_invocation_ids %} {% set s
+                    {% for sid in triggered_by_source_invocation_ids %} {% set s
                     = source_inv_summaries.get(sid, {}) %}
                     <a href="/invocations/{{ sid }}" class="inv-summary-card">
                       <div class="inv-summary-id">{{ sid }}</div>
@@ -333,12 +334,12 @@ text[:22] }}...{{ text[-12:] }}{% else %}{{ text }}{% endif %} {%- endmacro %}
                   </dd>
                   {% endif %}
                 </dl>
-                {% if triggered_by.participants %}
+                {% if triggered_by_participants %}
                 <div
                   class="trigger-caused-list mt-2"
                   data-trigger-run-id="{{ triggered_by.trigger_run_id }}"
                 >
-                  {% for p in triggered_by.participants %}
+                  {% for p in triggered_by_participants %}
                   <div
                     class="trigger-caused-item"
                     data-context-type="{{ p.context_type }}"
@@ -611,6 +612,106 @@ text[:22] }}...{{ text[-12:] }}{% else %}{{ text }}{% endif %} {%- endmacro %}
                     </dd>
                     {% endif %}
                   </dl>
+                  {% set run_participants =
+                  triggered_runs_caused_participants.get(run.trigger_run_id, [])
+                  %} {% if run_participants %}
+                  <div class="trigger-participants-heading">
+                    Matched conditions
+                  </div>
+                  <div class="trigger-participant-list">
+                    {% for p in run_participants %}
+                    <div
+                      class="trigger-participant-item"
+                      data-context-type="{{ p.context_type }}"
+                      {%
+                      if
+                      p.source_invocation_id
+                      %}data-source-invocation-id="{{ p.source_invocation_id }}"
+                      {%
+                      endif
+                      %}
+                      {%
+                      if
+                      p.event_id
+                      %}data-event-id="{{ p.event_id }}"
+                      {%
+                      endif
+                      %}
+                    >
+                      <dl class="event-context-list mb-0">
+                        <dt>Context</dt>
+                        <dd>
+                          <span class="badge bg-info"
+                            >{{ p.context_type }}</span
+                          >
+                        </dd>
+                        <dt>Condition</dt>
+                        <dd>
+                          {% if p.condition_id %}
+                          <a
+                            href="/trigger-runs/condition?condition_id={{ p.condition_id|urlencode }}"
+                            title="{{ p.condition_id }}"
+                            ><code>{{ short_id(p.condition_id) }}</code></a
+                          >
+                          {% else %}<span class="text-muted">—</span>{% endif %}
+                        </dd>
+                        <dt>Source</dt>
+                        <dd>
+                          {% if p.source_invocation_id %} {% set s =
+                          source_inv_summaries.get(p.source_invocation_id, {})
+                          %}
+                          <a
+                            href="/invocations/{{ p.source_invocation_id }}"
+                            class="inv-summary-card"
+                          >
+                            <div class="inv-summary-id">
+                              {{ p.source_invocation_id }}
+                            </div>
+                            {% if s.get("func_name") %}
+                            <div class="inv-summary-task">
+                              {{ s.func_name }}
+                            </div>
+                            {% endif %}
+                            <div class="inv-summary-meta">
+                              {% if s.get("status") %}
+                              <span
+                                class="badge {% if s.status == 'SUCCESS' %}bg-success{% elif s.status == 'FAILED' %}bg-danger{% elif s.status == 'RUNNING' %}bg-primary{% else %}bg-secondary{% endif %}"
+                                style="font-size: 9px"
+                                >{{ s.status }}</span
+                              >
+                              {% endif %} {% if s.get("duration_seconds") is not
+                              none %}
+                              <span class="inv-summary-duration"
+                                >{{ "%.2f"|format(s.duration_seconds) }}s</span
+                              >
+                              {% endif %}
+                            </div>
+                          </a>
+                          {% elif p.event_id %} {{ event_pill(p.event_id,
+                          source_event_summaries.get(p.event_id)) }} {% else
+                          %}<span class="text-muted">—</span>{% endif %}
+                        </dd>
+                        <dt>Timestamp</dt>
+                        <dd>
+                          {% if p.context_timestamp %}<code
+                            >{{
+                            p.context_timestamp.isoformat(timespec="microseconds")
+                            }}</code
+                          >{% else %}<span class="text-muted">—</span>{% endif
+                          %}
+                        </dd>
+                        <dt>Summary</dt>
+                        <dd>
+                          {% if p.context_summary %}<code
+                            >{{ p.context_summary }}</code
+                          >{% else %}<span class="text-muted">—</span>{% endif
+                          %}
+                        </dd>
+                      </dl>
+                    </div>
+                    {% endfor %}
+                  </div>
+                  {% endif %}
                 </div>
                 {% endfor %}
               </div>
@@ -817,61 +918,9 @@ text[:22] }}...{{ text[-12:] }}{% else %}{{ text }}{% endif %} {%- endmacro %}
   </script>
 </div>
 
-{% endblock %} {% block extra_js %}
+{% endblock %} {% block extra_js %} {% include
+"invocations/partials/timeline_zoom_scripts.html" %}
 <script>
-  // View in timeline functionality
-  document
-    .getElementById("view-in-timeline-btn")
-    ?.addEventListener("click", function (e) {
-      e.preventDefault();
-
-      // Fetch invocation history to get time range
-      fetch("/invocations/{{ invocation.invocation_id }}/history")
-        .then((response) => response.json())
-        .then((historyData) => {
-          if (!historyData || historyData.length === 0) {
-            alert("No history data available for this invocation");
-            return;
-          }
-
-          // Get first and last timestamp
-          const startTime = new Date(historyData[0].timestamp);
-          const endTime = new Date(
-            historyData[historyData.length - 1].timestamp
-          );
-
-          const durationMs = Math.max(endTime - startTime, 0);
-          const paddingMs =
-            durationMs === 0
-              ? 100
-              : Math.min(Math.max(durationMs * 0.15, 25), 500);
-
-          const paddedStart = new Date(startTime.getTime() - paddingMs);
-          const paddedEnd = new Date(endTime.getTime() + paddingMs);
-
-          const formatForInput = (date) =>
-            date
-              .toISOString()
-              .replace("Z", "")
-              .replace(/(\.\d{3})$/, "$1000");
-
-          // Build the timeline URL with custom range, preserving the selected invocation
-          const params = new URLSearchParams();
-          params.set("time_range", "custom");
-          params.set("start_date", formatForInput(paddedStart));
-          params.set("end_date", formatForInput(paddedEnd));
-          params.set("resolution", "100ms");
-          params.set("selected", "{{ invocation.invocation_id }}");
-
-          // Navigate to timeline
-          window.location.href = "/invocations/timeline?" + params.toString();
-        })
-        .catch((error) => {
-          console.error("Error fetching history:", error);
-          alert("Failed to load invocation history");
-        });
-    });
-
   // Re-run call functionality
   document
     .getElementById("rerun-call-btn")

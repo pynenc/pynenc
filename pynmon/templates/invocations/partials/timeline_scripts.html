@@ -109,6 +109,16 @@
     );
   }
 
+  function selectEvent(eventId, on = true) {
+    if (!eventId) return;
+    const safeEventId = CSS.escape(eventId);
+    document
+      .querySelectorAll(
+        `[data-event-id="${safeEventId}"], [data-related-event-id="${safeEventId}"]`
+      )
+      .forEach((el) => el.classList.toggle("event-selected", on));
+  }
+
   // Reverse mapping: given an invocation, find every event that either
   // triggered it (incoming `event_trigger_relation_line`) or was emitted
   // by it (`event_origin_relation_line`). Also walks event markers whose
@@ -850,6 +860,168 @@
       .join("");
   }
 
+  function shortMonitoringId(value, head = 22, tail = 12) {
+    const text = String(value || "");
+    if (text.length <= head + tail + 1) return text;
+    return `${text.slice(0, head)}...${text.slice(-tail)}`;
+  }
+
+  function buildParticipantCards(
+    participants,
+    runId,
+    invocationSummaries,
+    relatedInvocationIds,
+    options = {}
+  ) {
+    if (!participants?.length) return "";
+    const includeTimestamp = options.includeTimestamp === true;
+    const eventSummaries = options.eventSummaries || {};
+    return `<div class="trigger-participant-list">${participants
+      .map((participant) => {
+        const conditionId = participant.condition_id || "";
+        const sourceInvocationId = participant.source_invocation_id || "";
+        const eventId = participant.event_id || "";
+        let source = '<span class="text-muted">—</span>';
+        if (sourceInvocationId) {
+          source = buildInvSummaryCard(
+            sourceInvocationId,
+            invocationSummaries?.[sourceInvocationId] || {},
+            runId
+          );
+        } else if (eventId) {
+          source = `<a href="/events/${encodeURIComponent(
+            eventId
+          )}" class="event-pill event-reference" data-event-id="${eventId}" data-related-invocation-ids="${(
+            relatedInvocationIds || []
+          )
+            .filter(Boolean)
+            .join(" ")}"><code>${shortMonitoringId(eventId)}</code></a>`;
+          if (eventSummaries[eventId]) {
+            source = buildEventPills(
+              [eventId],
+              relatedInvocationIds || [],
+              eventSummaries
+            );
+          }
+        }
+        return `<div class="trigger-participant-item" data-context-type="${
+          participant.context_type || ""
+        }">
+          <dl class="event-context-list mb-0">
+            <dt>Context</dt><dd><span class="badge bg-info">${
+              participant.context_type || "Unknown"
+            }</span></dd>
+            <dt>Condition</dt><dd>${
+              conditionId
+                ? `<a href="/trigger-runs/condition?condition_id=${encodeURIComponent(
+                    conditionId
+                  )}" title="${conditionId}"><code>${shortMonitoringId(
+                    conditionId
+                  )}</code></a>`
+                : '<span class="text-muted">—</span>'
+            }</dd>
+            <dt>Source</dt><dd>${source}</dd>
+            ${
+              includeTimestamp
+                ? `<dt>Timestamp</dt><dd>${
+                    participant.context_timestamp
+                      ? `<code>${participant.context_timestamp}</code>`
+                      : '<span class="text-muted">—</span>'
+                  }</dd>`
+                : ""
+            }
+          </dl>
+        </div>`;
+      })
+      .join("")}</div>`;
+  }
+
+  function buildTriggerRunCards(
+    triggerRuns,
+    invocationSummaries,
+    heading = "Trigger runs"
+  ) {
+    if (!triggerRuns?.length) return "";
+    return `<section class="event-context-section mt-3">
+      <div class="event-context-heading">
+        <span>${heading}</span>
+        <span class="badge bg-secondary">${triggerRuns.length}</span>
+      </div>
+      <div class="trigger-caused-list">${triggerRuns
+        .map((run) => {
+          const runId = run.trigger_run_id || "";
+          const triggerId = run.trigger_id || "";
+          const targetId = run.triggered_invocation_id || "";
+          const atomicRunId = run.atomic_service_run_id || "";
+          const summaries = {
+            ...(invocationSummaries || {}),
+            ...(run.invocation_summaries || {}),
+          };
+          const participants = buildParticipantCards(
+            run.participants || [],
+            runId,
+            summaries,
+            [targetId, ...(run.source_invocation_ids || [])]
+          );
+          return `<article class="trigger-caused-item trigger-run-reference" data-trigger-run-id="${runId}">
+            <dl class="event-context-list mb-0">
+              <dt>Trigger run</dt><dd><a href="/trigger-runs/${encodeURIComponent(
+                runId
+              )}" class="trigger-run-reference text-decoration-none" data-trigger-run-id="${runId}"><code>${runId}</code></a></dd>
+              ${
+                triggerId
+                  ? `<dt>Trigger</dt><dd><a href="/triggers/${encodeURIComponent(
+                      triggerId
+                    )}" class="text-decoration-none"><code>${triggerId}</code></a></dd>`
+                  : ""
+              }
+              ${
+                run.task_id_key
+                  ? `<dt>Task</dt><dd><a href="/tasks/${encodeURIComponent(
+                      run.task_id_key
+                    )}" class="text-decoration-none"><code>${
+                      run.task_id_key
+                    }</code></a></dd>`
+                  : ""
+              }
+              <dt>Logic</dt><dd><span class="badge bg-secondary">${
+                run.logic_value || "—"
+              }</span></dd>
+              ${
+                targetId
+                  ? `<dt>Triggered invocation</dt><dd>${buildInvSummaryCard(
+                      targetId,
+                      summaries[targetId] || {},
+                      runId
+                    )}</dd>`
+                  : ""
+              }
+              ${
+                run.executed_at
+                  ? `<dt>Executed at</dt><dd><code>${formatUTCDate(
+                      run.executed_at
+                    )}</code></dd>`
+                  : ""
+              }
+              ${
+                atomicRunId
+                  ? `<dt>Atomic-service run</dt><dd><a href="${atomicServiceRunUrl(
+                      atomicRunId
+                    )}" class="atomic-service-run-link text-decoration-none" data-atomic-service-run-id="${atomicRunId}"><code>${atomicRunId}</code></a></dd>`
+                  : ""
+              }
+            </dl>
+            ${
+              participants
+                ? `<div class="trigger-participants-heading">Matched conditions</div>${participants}`
+                : ""
+            }
+          </article>`;
+        })
+        .join("")}</div>
+    </section>`;
+  }
+
   // ── Triggering information in the invocation panel ───────────────────
   // Renders trigger origin, reverse trigger effects, and emitted events as a
   // full-width block between the invocation summary and status history.
@@ -874,6 +1046,8 @@
       causedRuns.length +
       (triggeredBy?.event_ids?.length || 0) +
       (!triggeredBy && parentEventId ? 1 : 0);
+    const hasTriggerRelations =
+      Boolean(triggeredBy) || Boolean(parentEventId) || causedRuns.length > 0;
 
     let html = `<div class="detail-panel compact-detail-panel timeline-triggering-panel mt-3">
       <div class="detail-panel-header">
@@ -881,21 +1055,35 @@
         <span class="badge bg-secondary">${relatedCount}</span>
       </div>
       <div class="detail-panel-body event-context-stack">`;
+    if (hasTriggerRelations) {
+      html += `<div class="timeline-trigger-summary-grid">`;
+    }
 
     if (triggeredBy) {
       const runId = triggeredBy.trigger_run_id;
       const logic = triggeredBy.logic_value || "—";
-      const evIds = triggeredBy.event_ids || [];
       const srcIds = triggeredBy.source_invocation_ids || [];
       const participants = triggeredBy.participants || [];
       const timelineUrl = triggeredBy.timeline_url || "";
+      const participantCards = buildParticipantCards(
+        participants,
+        runId,
+        srcSummaries,
+        [currentInvocationId, ...srcIds],
+        {
+          includeTimestamp: true,
+          eventSummaries,
+        }
+      );
 
       html += `<section class="event-context-section trigger-run-reference" data-trigger-run-id="${runId}">
         <div class="event-context-heading">
           <span>Trigger origin</span>
           <span class="badge bg-secondary">${logic}</span>
         </div>
-        <dl class="event-context-list">
+        <div class="trigger-origin-stack">
+        <div class="trigger-caused-item">
+        <dl class="event-context-list mb-0">
           <dt>Trigger run</dt><dd>
             <a href="/trigger-runs/${runId}" class="trigger-run-reference text-decoration-none" data-trigger-run-id="${runId}"><code>${runId}</code></a>
             ${
@@ -904,37 +1092,21 @@
                 : ""
             }
           </dd>`;
-
-      if (evIds.length) {
-        html += `<dt>Source events</dt><dd class="event-pill-row">${buildEventPills(
-          evIds,
-          [currentInvocationId, ...srcIds],
-          eventSummaries
-        )}</dd>`;
+      if (triggeredBy.trigger_id) {
+        html += `<dt>Trigger ID</dt><dd><a href="/triggers/${encodeURIComponent(
+          triggeredBy.trigger_id
+        )}" class="text-decoration-none"><code>${
+          triggeredBy.trigger_id
+        }</code></a></dd>`;
       }
-      if (srcIds.length) {
-        html += `<dt>Source invocations</dt><dd class="inv-summary-card-row">`;
-        html += srcIds
-          .map((sid) =>
-            buildInvSummaryCard(sid, srcSummaries[sid] || {}, runId)
-          )
-          .join("");
-        html += `</dd>`;
+      if (triggeredBy.executed_at) {
+        html += `<dt>Triggered at</dt><dd><code>${triggeredBy.executed_at}</code></dd>`;
       }
-      if (participants.length) {
-        const types = [
-          ...new Set(participants.map((p) => p.context_type).filter(Boolean)),
-        ];
-        if (types.length) {
-          html += `<dt>Context</dt><dd>${types
-            .map(
-              (t) =>
-                `<span class="badge bg-info trigger-run-reference" data-trigger-run-id="${runId}" style="font-size:9px;">${t}</span>`
-            )
-            .join(" ")}</dd>`;
-        }
+      html += `</dl></div>`;
+      if (participantCards) {
+        html += participantCards;
       }
-      html += `</dl></section>`;
+      html += `</div></section>`;
     } else if (parentEventId) {
       html += `<section class="event-context-section">
         <div class="event-context-heading"><span>Trigger origin</span></div>
@@ -995,6 +1167,10 @@
         html += `</dl></div>`;
       });
       html += `</div></section>`;
+    }
+
+    if (hasTriggerRelations) {
+      html += `</div>`;
     }
 
     if (emitted.length) {
@@ -1118,7 +1294,10 @@
     if (currentInvocationId) unhighlightInvocation(currentInvocationId);
     if (currentAtomicServiceEl)
       highlightAtomicService(currentAtomicServiceEl, false);
-    if (currentEventId) highlightEvent(currentEventId, false);
+    if (currentEventId) {
+      highlightEvent(currentEventId, false);
+      selectEvent(currentEventId, false);
+    }
 
     currentInvocationId = null;
     currentInvocationData = null;
@@ -1174,6 +1353,7 @@
   function buildEventRows(eventId, payload) {
     const evt = payload?.event || {};
     const triggerRuns = payload?.trigger_runs || [];
+    const invocationSummaries = payload?.invocation_summaries || {};
     const code = evt.event_code || "event";
     const ts = evt.timestamp ? formatUTCDate(evt.timestamp) : "";
     const emitter = evt.emitted_by_invocation_id;
@@ -1208,39 +1388,37 @@
       html += `<tr><th>Emitted by task</th><td><code>${emitterTask}</code></td></tr>`;
     }
     if (emitter) {
-      html += `<tr><th>Emitted by</th><td><a href="#" class="event-emitter-link text-decoration-none" data-invocation-id="${emitter}"><code>${emitter}</code></a></td></tr>`;
+      html += `<tr><th>Emitted by</th><td>${buildInvSummaryCard(
+        emitter,
+        invocationSummaries[emitter] || {},
+        null
+      )}</td></tr>`;
     }
     html += `</table></div></div>`;
 
-    if (triggered.length) {
+    const runTargetIds = new Set(
+      triggerRuns.map((run) => run.triggered_invocation_id).filter(Boolean)
+    );
+    const unlinkedTriggeredIds = triggered.filter(
+      (id) => !runTargetIds.has(id)
+    );
+    if (unlinkedTriggeredIds.length) {
       html += `<div class="detail-panel compact-detail-panel mt-3">
-        <div class="detail-panel-header">Triggered invocations (${triggered.length})</div>
-        <div class="detail-panel-body p-0"><table class="table table-sm mb-0 timeline-detail-table"><tbody>`;
-      triggered.forEach((id) => {
-        html += `<tr><td><a href="#" class="event-triggered-link text-decoration-none" data-invocation-id="${id}"><code>${id}</code></a></td></tr>`;
-      });
-      html += `</tbody></table></div></div>`;
+        <div class="detail-panel-header">Other triggered invocations (${
+          unlinkedTriggeredIds.length
+        })</div>
+        <div class="detail-panel-body"><div class="inv-summary-card-row">${unlinkedTriggeredIds
+          .map((id) =>
+            buildInvSummaryCard(id, invocationSummaries[id] || {}, null)
+          )
+          .join("")}</div></div></div>`;
     }
 
-    if (triggerRuns.length) {
-      html += `<div class="detail-panel compact-detail-panel mt-3">
-        <div class="detail-panel-header">Trigger runs (${triggerRuns.length})</div>
-        <div class="detail-panel-body p-0"><table class="table table-sm mb-0 timeline-detail-table"><thead>
-          <tr><th>Run ID</th><th>AS run</th><th>Outcome</th></tr></thead><tbody>`;
-      triggerRuns.forEach((run) => {
-        const rid = run.trigger_run_id || "";
-        const outcome = run.outcome || "";
-        const atomicRunId = run.atomic_service_run_id || "";
-        const ridHref = `/trigger-runs/${encodeURIComponent(rid)}`;
-        const atomicHtml = atomicRunId
-          ? `<a href="${atomicServiceRunUrl(
-              atomicRunId
-            )}" class="atomic-service-run-link text-decoration-none" data-atomic-service-run-id="${atomicRunId}"><code>${atomicRunId}</code></a>`
-          : '<span class="text-muted">—</span>';
-        html += `<tr><td style="font-size:11px;"><a href="${ridHref}" class="trigger-run-reference text-decoration-none" data-trigger-run-id="${rid}"><code>${rid}</code></a></td><td style="font-size:11px;">${atomicHtml}</td><td><span class="badge bg-secondary">${outcome}</span></td></tr>`;
-      });
-      html += `</tbody></table></div></div>`;
-    }
+    html += buildTriggerRunCards(
+      triggerRuns,
+      invocationSummaries,
+      "Triggers involving this event"
+    );
 
     if (payloadStr) {
       html += `<div class="detail-panel compact-detail-panel mt-3">
@@ -1254,18 +1432,14 @@
   }
 
   function buildCronTickRows(eventId, sourceEl, payload) {
-    // Synthetic cron marker: no EventRecord behind it. Render a compact
-    // panel sourced from the trigger run that fired the cron tick.
-    const runId = payload?.trigger_run_id || "";
-    const triggerId = payload?.trigger_id || "";
-    const claimed = payload?.claimed_at
-      ? formatUTCDate(payload.claimed_at)
-      : "";
-    const executed = payload?.executed_at
-      ? formatUTCDate(payload.executed_at)
-      : "";
-    const target = payload?.triggered_invocation_id || "";
+    const triggerRuns = payload?.trigger_runs || [];
+    const firstRun = triggerRuns[0] || {};
     const ts = sourceEl?.dataset?.eventTimestamp || "";
+    const targetIds = [
+      ...new Set(
+        triggerRuns.map((run) => run.triggered_invocation_id).filter(Boolean)
+      ),
+    ];
     let html = `<div class="timeline-detail-summary">
       <div class="detail-kicker">Cron tick</div>
       <div class="timeline-detail-id"><code>cron.tick</code></div>
@@ -1276,29 +1450,16 @@
     if (ts) {
       html += `<tr><th>Tick</th><td><code>${ts}</code></td></tr>`;
     }
-    if (claimed) {
-      html += `<tr><th>Claimed at</th><td><code>${claimed}</code></td></tr>`;
-    }
-    if (executed) {
-      html += `<tr><th>Executed at</th><td><code>${executed}</code></td></tr>`;
-    }
-    if (triggerId) {
-      html += `<tr><th>Trigger</th><td><a href="/triggers/${encodeURIComponent(
-        triggerId
-      )}" class="text-decoration-none"><code>${triggerId}</code></a></td></tr>`;
-    }
-    html += `<tr><th>Trigger run</th><td><a href="/trigger-runs/${encodeURIComponent(
-      runId
-    )}" class="text-decoration-none"><code>${runId}</code></a></td></tr>`;
-    if (target) {
-      html += `<tr><th>Triggered invocation</th><td><a href="#" class="event-triggered-link text-decoration-none" data-invocation-id="${target}"><code>${target}</code></a></td></tr>`;
-    }
-    // Atomic-service context — populated from the runner that produced this
-    // tick. Lets you see exactly which runner's atomic-service cycle the
-    // cron tick ran in, even when multiple runners' windows overlap on the
-    // timeline due to startup races.
-    const atomicRunner = payload?.atomic_service_runner_id || "";
-    const atomicRunId = payload?.atomic_service_run_id || "";
+    html += `<tr><th>Trigger runs</th><td><span class="badge bg-secondary">${triggerRuns.length}</span></td></tr>
+      <tr><th>Triggered invocations</th><td><span class="badge bg-success">${targetIds.length}</span></td></tr>`;
+    const atomicRunner =
+      sourceEl?.dataset?.atomicServiceRunnerId ||
+      firstRun.atomic_service_runner_id ||
+      "";
+    const atomicRunId =
+      sourceEl?.dataset?.atomicServiceRunId ||
+      firstRun.atomic_service_run_id ||
+      "";
     if (atomicRunner) {
       html += `<tr><th>Atomic-service runner</th><td><a href="/runners/atomic-service/timeline?runner_id=${encodeURIComponent(
         atomicRunner
@@ -1310,6 +1471,15 @@
       )}" class="atomic-service-run-link text-decoration-none" data-atomic-service-run-id="${atomicRunId}"><code>${atomicRunId}</code></a></td></tr>`;
     }
     html += `</table></div></div>`;
+    const invocationSummaries = Object.assign(
+      {},
+      ...triggerRuns.map((run) => run.invocation_summaries || {})
+    );
+    html += buildTriggerRunCards(
+      triggerRuns,
+      invocationSummaries,
+      "Triggers from this tick"
+    );
     return html;
   }
 
@@ -1321,8 +1491,10 @@
     const content = document.getElementById("event-details-content");
     const fullLink = document.getElementById("view-full-event");
 
-    if (currentEventId && currentEventId !== eventId)
+    if (currentEventId && currentEventId !== eventId) {
       highlightEvent(currentEventId, false);
+      selectEvent(currentEventId, false);
+    }
 
     currentEventId = eventId;
     currentEventData = null;
@@ -1339,19 +1511,39 @@
       <div class="spinner-border spinner-border-sm text-primary" role="status">
         <span class="visually-hidden">Loading...</span>
       </div></div>`;
+    selectEvent(eventId, true);
     highlightEvent(eventId, true, sourceEl);
 
     if (isCron) {
-      const runId = sourceEl?.dataset?.triggerRunId || "";
-      if (!runId) {
+      const runIds = splitIds(
+        sourceEl?.dataset?.triggerRunIds ||
+          sourceEl?.dataset?.triggerRunId ||
+          ""
+      );
+      if (!runIds.length) {
         content.innerHTML = `<div class="alert alert-warning mb-0">Cron tick has no associated trigger run.</div>`;
         return;
       }
-      fetch(`/trigger-runs/${encodeURIComponent(runId)}/api`)
-        .then((r) => (r.ok ? r.json() : Promise.reject(new Error("not found"))))
-        .then((data) => {
-          currentEventData = data;
-          content.innerHTML = buildCronTickRows(eventId, sourceEl, data);
+      const groupedServiceTick = Boolean(
+        sourceEl?.dataset?.atomicServiceRunId || runIds.length > 1
+      );
+      fullLink.textContent = groupedServiceTick
+        ? "View Service Run"
+        : "View Trigger Run";
+      Promise.all(
+        runIds.map((runId) =>
+          fetch(`/trigger-runs/${encodeURIComponent(runId)}/api`).then((r) =>
+            r.ok ? r.json() : Promise.reject(new Error("not found"))
+          )
+        )
+      )
+        .then((runs) => {
+          currentEventData = { trigger_runs: runs };
+          content.innerHTML = buildCronTickRows(
+            eventId,
+            sourceEl,
+            currentEventData
+          );
         })
         .catch((err) => {
           console.error("Error loading cron tick details:", err);
@@ -1360,6 +1552,7 @@
       return;
     }
 
+    fullLink.textContent = "View Full Details";
     fetch(`/events/${encodeURIComponent(eventId)}/api`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("not found"))))
       .then((data) => {
@@ -1452,7 +1645,10 @@
     document
       .getElementById("close-event-details")
       ?.addEventListener("click", () => {
-        if (currentEventId) highlightEvent(currentEventId, false);
+        if (currentEventId) {
+          highlightEvent(currentEventId, false);
+          selectEvent(currentEventId, false);
+        }
         document.getElementById("event-details-panel").classList.add("d-none");
         currentEventId = null;
         currentEventData = null;

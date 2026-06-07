@@ -27,6 +27,22 @@ def create_runner_context(runner_id: str, hostname: str) -> RunnerContext:
     )
 
 
+def test_add_runner_context_collapses_external_runner() -> None:
+    builder = TimelineDataBuilder(collapse_external=True)
+    context = RunnerContext(
+        runner_cls="ExternalRunner",
+        runner_id="ExternalRunner@host-123",
+        hostname="host",
+        pid=123,
+    )
+
+    lane_id = builder.add_runner_context(context)
+    data = builder.build()
+
+    assert lane_id == "__collapsed_external_runners__"
+    assert lane_id in data.lanes
+
+
 def create_history(
     invocation_id: str,
     status: InvocationStatus,

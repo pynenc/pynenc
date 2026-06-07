@@ -23,6 +23,7 @@ from pynmon.util.timeline_zoom import (
     trigger_run_zoom_timestamps,
 )
 from pynmon.util.trigger_timeline import timeline_url_for_trigger_run
+from pynmon.views.invocations import _fetch_inv_summary
 
 router = APIRouter(prefix="/events", tags=["events"])
 
@@ -231,10 +232,31 @@ async def event_detail_api(event_id: str) -> JSONResponse:
     if event is None:
         raise HTTPException(status_code=404, detail="Event not found")
     runs = await asyncio.to_thread(app.trigger.get_trigger_runs_for_event, event_id)
+    invocation_ids = {
+        invocation_id
+        for invocation_id in [
+            *event.triggered_invocation_ids,
+            event.emitted_by_invocation_id,
+            *(run.triggered_invocation_id for run in runs),
+            *(source_id for run in runs for source_id in run.source_invocation_ids),
+            *(
+                participant.source_invocation_id
+                for run in runs
+                for participant in run.participants
+            ),
+        ]
+        if invocation_id
+    }
     return JSONResponse(
         {
             "event": event_to_dict(event),
             "trigger_runs": [trigger_run_to_dict(r) for r in runs],
+            "invocation_summaries": {
+                invocation_id: await asyncio.to_thread(
+                    _fetch_inv_summary, app, invocation_id
+                )
+                for invocation_id in invocation_ids
+            },
         }
     )
 

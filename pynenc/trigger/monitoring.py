@@ -70,6 +70,7 @@ class EventRecord:
     triggered_invocation_ids: list[str] = field(default_factory=list)
     emitted_by_invocation_id: str | None = None
     emitted_by_task_id: str | None = None
+    emitted_by_runner_context_id: str | None = None
 
     @property
     def matched(self) -> bool:
@@ -101,6 +102,7 @@ class EventRecord:
             "triggered_invocation_ids": list(self.triggered_invocation_ids),
             "emitted_by_invocation_id": self.emitted_by_invocation_id,
             "emitted_by_task_id": self.emitted_by_task_id,
+            "emitted_by_runner_context_id": self.emitted_by_runner_context_id,
         }
 
     @classmethod
@@ -125,6 +127,7 @@ class EventRecord:
             triggered_invocation_ids=list(data.get("triggered_invocation_ids") or []),
             emitted_by_invocation_id=emitted_by,
             emitted_by_task_id=data.get("emitted_by_task_id"),
+            emitted_by_runner_context_id=data.get("emitted_by_runner_context_id"),
         )
 
 
@@ -144,6 +147,7 @@ class EventMarker:
     matched: bool
     triggered: bool
     emitted_by_invocation_id: str | None = None
+    emitted_by_runner_context_id: str | None = None
 
 
 @dataclass(frozen=True)

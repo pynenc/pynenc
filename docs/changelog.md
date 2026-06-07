@@ -100,6 +100,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **Atomic-service purge safety.** Execution retention now keeps runs that are
   still referenced by trigger-run history (age and capacity purges), preventing
   dangling references in monitoring views.
+- **Setting parent always as waiting_for_result** DistInvocation result was
+  always setting the parent_invocation_id as callee, that was not true when
+  parent forward registered invocation to a third invocation to wait.
 
 ### Removed
 

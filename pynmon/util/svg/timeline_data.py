@@ -63,6 +63,14 @@ class TimelineData:
         """Add a line that may span across lanes."""
         self.global_lines.append(line)
 
+    def reserve_auxiliary_sub_lane(self, runner_id: str, sub_lane: int) -> None:
+        """Expand a runner lane for non-invocation elements."""
+        lane = self.lanes.get(runner_id)
+        if lane is None or sub_lane <= lane.auxiliary_max_sub_lane:
+            return
+        lane.auxiliary_max_sub_lane = sub_lane
+        self._invalidate()
+
     def get_sorted_lanes(self) -> list[RunnerLane]:
         """Lanes sorted by lane_index. Cached after first call."""
         if self._sorted_lanes_cache is None:

@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
+from pynenc import context
 from pynenc.call import Call
 from pynenc.exceptions import InvocationError, RetryError
 from pynenc.invocation import (
@@ -91,11 +92,17 @@ def test_reroute_on_running_control() -> None:
 
 
 app2 = MockPynenc()
+waiting_app = MockPynenc()
 
 
 @app2.task
 def add2(x: int, y: int) -> int:
     return x + y
+
+
+@waiting_app.task
+def waiting_task() -> None:
+    pass
 
 
 @pytest.mark.asyncio
@@ -133,6 +140,42 @@ async def test_distributed_async_result_wait_loop(
     # Now, calling async_result() should loop until status becomes final, then return 3.
     result = await invocation.async_result()
     assert result == 3
+
+
+def test_result_uses_current_invocation_as_waiter() -> None:
+    target: DistributedInvocation = add(1, 2)  # type: ignore
+    waiter: DistributedInvocation = waiting_task()  # type: ignore
+
+    app.orchestrator.get_invocation_status_record.return_value = InvocationStatusRecord(
+        status=InvocationStatus.RUNNING
+    )
+
+    previous = context.swap_dist_invocation_context(app.app_id, waiter)
+    try:
+        with (
+            patch.object(
+                app.orchestrator,
+                "waiting_for_results",
+            ) as orchestrator_wait,
+            patch.object(
+                app.runner,
+                "waiting_for_results",
+                side_effect=RuntimeError("stop waiting"),
+            ) as runner_wait,
+            pytest.raises(RuntimeError, match="stop waiting"),
+        ):
+            _ = target.result
+    finally:
+        context.swap_dist_invocation_context(app.app_id, previous)
+
+    orchestrator_wait.assert_called_once_with(
+        waiter.invocation_id, [target.invocation_id]
+    )
+    runner_wait.assert_called_once_with(
+        waiter.invocation_id,
+        [target.invocation_id],
+        None,
+    )
 
 
 def test_distributed_invocation_get_and_set_state() -> None:

@@ -78,6 +78,7 @@ def test_event_record_json_round_trip() -> None:
         triggered_invocation_ids=["inv-1"],
         emitted_by_invocation_id="inv-source",
         emitted_by_task_id="tasks.emit",
+        emitted_by_runner_context_id="ExternalRunner@host-123",
     )
 
     raw = record.to_json(_fake_app())

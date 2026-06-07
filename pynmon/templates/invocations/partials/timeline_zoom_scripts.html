@@ -1,0 +1,72 @@
+<script>
+  (function () {
+    if (window.pynmonInvocationTimelineZoomInstalled) return;
+    window.pynmonInvocationTimelineZoomInstalled = true;
+
+    function formatTimelineDate(date) {
+      return date
+        .toISOString()
+        .replace("Z", "")
+        .replace(/(\.\d{3})$/, "$1000");
+    }
+
+    async function openInvocationInTimeline(invocationId) {
+      try {
+        const response = await fetch(`/invocations/${invocationId}/history`);
+        const historyData = await response.json();
+        if (!historyData || historyData.length === 0) {
+          alert("No history data available for this invocation");
+          return;
+        }
+
+        const timestamps = historyData
+          .map((item) => new Date(item.timestamp))
+          .filter((date) => !Number.isNaN(date.getTime()));
+        if (!timestamps.length) {
+          alert("No history data available for this invocation");
+          return;
+        }
+
+        const startTime = new Date(
+          Math.min(...timestamps.map((date) => date.getTime()))
+        );
+        const endTime = new Date(
+          Math.max(...timestamps.map((date) => date.getTime()))
+        );
+        const durationMs = Math.max(endTime - startTime, 0);
+        const paddingMs =
+          durationMs === 0
+            ? 100
+            : Math.min(Math.max(durationMs * 0.15, 25), 500);
+
+        const params = new URLSearchParams();
+        params.set("time_range", "custom");
+        params.set(
+          "start_date",
+          formatTimelineDate(new Date(startTime.getTime() - paddingMs))
+        );
+        params.set(
+          "end_date",
+          formatTimelineDate(new Date(endTime.getTime() + paddingMs))
+        );
+        params.set("resolution", "100ms");
+        params.set("selected", invocationId);
+
+        window.location.href = "/invocations/timeline?" + params.toString();
+      } catch (error) {
+        console.error("Error fetching history:", error);
+        alert("Failed to load invocation history");
+      }
+    }
+
+    window.openInvocationInTimeline = openInvocationInTimeline;
+    document.addEventListener("click", function (event) {
+      const link = event.target.closest(".view-in-timeline-link");
+      if (!link) return;
+      const invocationId = link.dataset.invocationId;
+      if (!invocationId) return;
+      event.preventDefault();
+      openInvocationInTimeline(invocationId);
+    });
+  })();
+</script>

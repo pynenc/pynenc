@@ -150,7 +150,10 @@ def _line_svg(
     y2 = to_base + line.to_sub_lane * sub_h
     return (
         f'  <line x1="{x1:.1f}" y1="{y1}" x2="{x2:.1f}" y2="{y2}" '
+        f'class="status-transition-line" '
         f'stroke="{line.color}" stroke-width="{style.line_width}" '
         f'opacity="{style.line_opacity}" stroke-dasharray="4,2" '
-        f'data-invocation-id="{escape(line.invocation_id)}"/>'
+        f'data-invocation-id="{escape(line.invocation_id)}" '
+        f'data-from-status="{escape(line.from_status)}" '
+        f'data-to-status="{escape(line.to_status)}"/>'
     )

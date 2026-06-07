@@ -10,6 +10,7 @@ from pynmon.util.svg import (
     TimelineData,
     TimelineSVGRenderer,
 )
+from pynmon.util.svg.elements import create_status_line
 
 
 def test_renderer_init_default_style() -> None:
@@ -105,6 +106,32 @@ def test_renderer_includes_bars(sample_timeline_data: TimelineData) -> None:
     assert 'class="invocation-bar"' in svg
     assert 'data-invocation-id="inv-001"' in svg
     assert 'fill="#3498db"' in svg
+
+
+def test_renderer_exposes_status_transition_metadata(
+    sample_timeline_data: TimelineData,
+) -> None:
+    """Status connectors identify the transition for browser highlighting."""
+    start = sample_timeline_data.bounds.start_time + timedelta(seconds=1)
+    end = start + timedelta(seconds=1)
+    sample_timeline_data.add_global_line(
+        create_status_line(
+            invocation_id="inv-transition",
+            start_time=start,
+            end_time=end,
+            from_status="REGISTERED",
+            to_status="PENDING",
+            from_runner_id="runner-1@host1",
+            to_runner_id="runner-1@host1",
+        )
+    )
+
+    svg = TimelineSVGRenderer().render(sample_timeline_data)
+
+    assert 'class="status-transition-line"' in svg
+    assert 'data-invocation-id="inv-transition"' in svg
+    assert 'data-from-status="REGISTERED"' in svg
+    assert 'data-to-status="PENDING"' in svg
 
 
 def test_renderer_includes_tooltip(sample_timeline_data: TimelineData) -> None:

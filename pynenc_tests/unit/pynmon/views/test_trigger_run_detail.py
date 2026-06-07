@@ -112,6 +112,44 @@ def test_trigger_run_detail_shows_condition_and_context_details(
     assert "score" in valid_response.text
 
 
+def test_trigger_run_api_includes_related_invocation_summaries(
+    app_trigger_runs: Pynenc,
+) -> None:
+    run = TriggerRunRecord(
+        trigger_run_id="run-api-summary",
+        trigger_id="trigger-api-summary",
+        task_id_key="orders.capture",
+        logic_value="and",
+        valid_condition_ids=["vc-1"],
+        condition_ids=["c-1"],
+        source_invocation_ids=["source-inv"],
+        triggered_invocation_id="target-inv",
+        participants=[
+            TriggerRunParticipant(
+                context_type="StatusContext",
+                condition_id="c-1",
+                valid_condition_id="vc-1",
+                source_invocation_id="source-inv",
+            )
+        ],
+    )
+    app_trigger_runs.trigger.store_trigger_run(run)
+    setup_routes()
+
+    with patch(
+        "pynmon.views.trigger_runs.get_pynenc_instance",
+        return_value=app_trigger_runs,
+    ):
+        client = TestClient(pynmon_app)
+        response = client.get(f"/trigger-runs/{run.trigger_run_id}/api")
+
+    assert response.status_code == 200
+    assert set(response.json()["invocation_summaries"]) == {
+        "source-inv",
+        "target-inv",
+    }
+
+
 def test_trigger_condition_detail_resolves_registered_condition(
     app_trigger_runs: Pynenc,
 ) -> None:

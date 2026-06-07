@@ -51,6 +51,7 @@ if TYPE_CHECKING:
     from pynenc.invocation.status import InvocationStatus
     from pynenc.models.trigger_definition_dto import TriggerDefinitionDTO
     from pynenc.orchestrator.atomic_service import AtomicServiceRun
+    from pynenc.runner.runner_context import RunnerContext
     from pynenc.task import Task, TaskId
     from pynenc.trigger.conditions import ConditionContext, TriggerCondition
     from pynenc.trigger.monitoring import (
@@ -530,8 +531,19 @@ class BaseTrigger(ABC):
         # the monitoring record and the condition evaluation use the same time.
         timestamp = context.timestamp
 
-        record = self._build_event_record(event_id, event_code, payload, timestamp)
-        self._safe_store_event(record, "trigger.store_event failed for event %s")
+        runner_context = ctx_mod.get_or_create_runner_context(self.app.app_id)
+        record = self._build_event_record(
+            event_id,
+            event_code,
+            payload,
+            timestamp,
+            runner_context.runner_id,
+        )
+        self._safe_store_event(
+            record,
+            runner_context,
+            "trigger.store_event failed for event %s",
+        )
 
         self.app.logger.info(
             join_tokens(
@@ -557,7 +569,9 @@ class BaseTrigger(ABC):
             record.matched_condition_ids = matched_ids
             record.valid_condition_ids = valid_ids
             self._safe_store_event(
-                record, "trigger.store_event update failed for event %s"
+                record,
+                runner_context,
+                "trigger.store_event update failed for event %s",
             )
         return event_id
 
@@ -567,6 +581,7 @@ class BaseTrigger(ABC):
         event_code: str,
         payload: dict[str, Any],
         timestamp: datetime,
+        runner_context_id: str,
     ) -> "EventRecord":
         """Build a fresh :class:`EventRecord` for the current emitter context."""
         from pynenc.trigger.monitoring import EventRecord
@@ -579,15 +594,22 @@ class BaseTrigger(ABC):
             timestamp=timestamp,
             emitted_by_invocation_id=emitter_inv_id,
             emitted_by_task_id=emitter_task_id,
+            emitted_by_runner_context_id=runner_context_id,
         )
 
-    def _safe_store_event(self, record: "EventRecord", log_template: str) -> None:
+    def _safe_store_event(
+        self,
+        record: "EventRecord",
+        runner_context: "RunnerContext",
+        log_template: str,
+    ) -> None:
         """Persist ``record`` swallowing storage failures per the monitoring policy.
 
         Monitoring writes must never break the hot path. This helper centralizes
         the "log and continue" policy documented for the trigger component.
         """
         try:
+            self.app.state_backend.store_runner_context(runner_context)
             self.store_event(record)
         except Exception:  # pragma: no cover - logged, never re-raised
             self.app.logger.exception(log_template, record.event_id)
@@ -1079,7 +1101,8 @@ class BaseTrigger(ABC):
         atomic_service_run_id = atomic_service_run.atomic_service_run_id
         service_runner_id = atomic_service_run.runner_id
 
-        participants = self._build_run_participants(context)
+        monitoring_context = self._monitoring_context_for_trigger_run(trigger, context)
+        participants = self._build_run_participants(monitoring_context)
         event_ids = [p.event_id for p in participants if p.event_id]
         source_invocation_ids = [
             p.source_invocation_id for p in participants if p.source_invocation_id
@@ -1089,9 +1112,10 @@ class BaseTrigger(ABC):
             trigger_id=trigger.trigger_id,
             task_id_key=trigger.task_id.key,
             logic_value=trigger.logic.value,
-            valid_condition_ids=list(context.valid_conditions.keys()),
+            valid_condition_ids=list(monitoring_context.valid_conditions.keys()),
             condition_ids=[
-                vc.condition.condition_id for vc in context.valid_conditions.values()
+                vc.condition.condition_id
+                for vc in monitoring_context.valid_conditions.values()
             ],
             event_ids=event_ids,
             source_invocation_ids=source_invocation_ids,
@@ -1101,6 +1125,59 @@ class BaseTrigger(ABC):
             participants=participants,
             atomic_service_run_id=atomic_service_run_id,
             atomic_service_runner_id=service_runner_id,
+        )
+
+    def _monitoring_context_for_trigger_run(
+        self,
+        trigger: TriggerDefinition,
+        context: TriggerContext,
+    ) -> TriggerContext:
+        """Keep only the condition instances that explain this trigger run."""
+        relevant = [
+            vc
+            for vc in context.valid_conditions.values()
+            if vc.condition.condition_id in trigger.condition_ids
+        ]
+        if trigger.logic != CompositeLogic.AND or len(trigger.condition_ids) < 2:
+            return TriggerContext(
+                valid_conditions={vc.valid_condition_id: vc for vc in relevant}
+            )
+
+        by_source: dict[str, list[ValidCondition]] = defaultdict(list)
+        for vc in relevant:
+            invocation_id = getattr(vc.context, "invocation_id", None)
+            if invocation_id is not None:
+                by_source[str(invocation_id)].append(vc)
+
+        coherent_sources = {
+            source_id: conditions
+            for source_id, conditions in by_source.items()
+            if len({vc.condition.condition_id for vc in conditions}) > 1
+        }
+        if not coherent_sources:
+            return TriggerContext(
+                valid_conditions={vc.valid_condition_id: vc for vc in relevant}
+            )
+
+        source_id, source_conditions = max(
+            coherent_sources.items(),
+            key=lambda item: (
+                len({vc.condition.condition_id for vc in item[1]}),
+                max(vc.context.timestamp for vc in item[1]),
+                item[0],
+            ),
+        )
+        correlated_condition_ids = {
+            vc.condition.condition_id for vc in source_conditions
+        }
+        selected = [
+            vc
+            for vc in relevant
+            if vc.condition.condition_id not in correlated_condition_ids
+            or str(getattr(vc.context, "invocation_id", "")) == source_id
+        ]
+        return TriggerContext(
+            valid_conditions={vc.valid_condition_id: vc for vc in selected}
         )
 
     def _build_run_participants(

@@ -430,6 +430,31 @@
   gap: 0.75rem;
 }
 
+.timeline-trigger-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  align-items: start;
+}
+
+.timeline-trigger-summary-grid .event-context-section {
+  padding: 0.5rem;
+}
+
+.timeline-trigger-summary-grid .event-context-heading {
+  margin-bottom: 0.4rem;
+}
+
+.timeline-trigger-summary-grid .trigger-caused-item,
+.timeline-trigger-summary-grid .trigger-participant-item {
+  padding: 0.45rem;
+}
+
+.trigger-origin-stack {
+  display: grid;
+  gap: 0.4rem;
+}
+
 .timeline-triggering-panel {
   height: auto;
 }
@@ -450,6 +475,33 @@
 
 .trigger-caused-item .inv-summary-card {
   max-width: 100%;
+}
+
+.trigger-participants-heading {
+  margin-top: 0.6rem;
+  margin-bottom: 0.35rem;
+  color: #64748b;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.trigger-participant-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(20rem, 100%), 1fr));
+  gap: 0.4rem;
+}
+
+.trigger-participant-item {
+  min-width: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #ffffff;
+  padding: 0.55rem;
+}
+
+.trigger-participant-item .event-context-list {
+  grid-template-columns: minmax(70px, max-content) minmax(0, 1fr);
 }
 
 .event-context-section {
@@ -695,34 +747,23 @@
 
 /* Side-by-side row that holds the invocation + event detail panels.
    When only one is visible it expands to fill the row; when both are
-   visible they share the width (~70/30 split favouring the invocation
-   panel which carries far more rows). */
+   visible they share the width with enough room for event trigger cards. */
 .timeline-detail-row {
-  display: flex;
-  flex-flow: row wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.75rem;
   align-items: flex-start;
 }
 
 .timeline-detail-panel {
-  flex: 1 1 100%;
   min-width: 0;
 }
 
-.timeline-detail-row
-  > .timeline-detail-panel-invocation:not(.d-none)
-  ~ .timeline-detail-panel-event:not(.d-none) {
-  flex: 0 1 32%;
-  max-width: 420px;
+.timeline-detail-row:has(> .timeline-detail-panel-invocation:not(.d-none)):has(> .timeline-detail-panel-event:not(.d-none)) {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.timeline-detail-row
-  > .timeline-detail-panel-invocation:not(.d-none):has(~ .timeline-detail-panel-event:not(.d-none)) {
-  flex: 1 1 60%;
-}
-
-/* Event panel rows are compact — the panel is narrow so we shrink the
-   font and tighten paddings rather than letting the table sprawl. */
+/* Event panel rows stay compact while retaining enough width for cards. */
 #event-details-content .timeline-detail-table th,
 #event-details-content .timeline-detail-table td {
   font-size: 0.72rem;
@@ -740,13 +781,8 @@
 }
 
 @media (max-width: 992px) {
-  .timeline-detail-row
-    > .timeline-detail-panel-invocation:not(.d-none)
-    ~ .timeline-detail-panel-event:not(.d-none),
-  .timeline-detail-row
-    > .timeline-detail-panel-invocation:not(.d-none):has(~ .timeline-detail-panel-event:not(.d-none)) {
-    flex: 1 1 100%;
-    max-width: none;
+  .timeline-detail-row:has(> .timeline-detail-panel-invocation:not(.d-none)):has(> .timeline-detail-panel-event:not(.d-none)) {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -811,6 +847,10 @@
 }
 
 @media (max-width: 768px) {
+  .timeline-trigger-summary-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .timeline-filter-panel summary {
     flex-wrap: wrap;
   }
@@ -874,6 +914,16 @@
   font-weight: bold;
 }
 
+.timeline-svg-container
+  svg
+  .status-transition-line.invocation-highlight[data-from-status="REGISTERED"][data-to-status="PENDING"] {
+  opacity: 1 !important;
+  stroke: #0d6efd !important;
+  stroke-width: 4px !important;
+  stroke-dasharray: none !important;
+  filter: drop-shadow(0 0 4px rgba(13, 110, 253, 0.65));
+}
+
 .timeline-svg-container svg .event-marker-link {
   cursor: pointer;
 }
@@ -912,6 +962,17 @@
   font-weight: 700;
 }
 
+.timeline-svg-container svg .event-marker-link.event-selected rect {
+  stroke: #c026d3 !important;
+  stroke-width: 4px !important;
+  filter: drop-shadow(0 0 5px rgba(192, 38, 211, 0.6));
+}
+
+.timeline-svg-container svg .event-marker-link.event-selected text {
+  fill: #86198f !important;
+  font-weight: 700;
+}
+
 .timeline-svg-container svg .event-marker-link.trigger-run-highlight rect {
   stroke: #f59e0b !important;
   stroke-width: 2.5px !important;
@@ -927,6 +988,13 @@
   opacity: 1 !important;
   stroke-width: 3px !important;
   filter: drop-shadow(0 0 3px rgba(124, 58, 237, 0.35));
+}
+
+.timeline-svg-container svg .timeline-relation-line.event-selected {
+  opacity: 1 !important;
+  stroke: #c026d3 !important;
+  stroke-width: 4px !important;
+  filter: drop-shadow(0 0 4px rgba(192, 38, 211, 0.45));
 }
 
 /* Phase 5: trigger-run participant relation highlighting.

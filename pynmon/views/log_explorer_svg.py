@@ -255,6 +255,8 @@ def _build_sync(
     start, end = scope.start, scope.end
 
     builder = TimelineDataBuilder(config=_MINI_CONFIG, collapse_external=True)
+    markers = _render_markers_for_events(scope.events, scope.trigger_runs)
+    _register_event_runner_contexts(app, builder, markers)
     contexts: dict[str, RunnerContext] = {}
     seen_invocation_ids: set[str] = set()
     for batch in app.state_backend.iter_history_in_timerange(start, end):
@@ -275,7 +277,7 @@ def _build_sync(
         app, data, scope.trigger_runs, scope.atomic_service_run_ids, start, end
     )
     data.trigger_runs = scope.trigger_runs
-    data.event_markers = _render_markers_for_events(scope.events, scope.trigger_runs)
+    data.event_markers = markers
     if not data.lanes and not data.event_markers and not data.atomic_service_windows:
         return ""
     svg = TimelineSVGRenderer().render(data)
@@ -618,6 +620,7 @@ def _render_markers_for_events(
                 matched=event.matched,
                 triggered_invocation_ids=list(event.triggered_invocation_ids or []),
                 emitted_by_invocation_id=event.emitted_by_invocation_id,
+                emitted_by_runner_context_id=event.emitted_by_runner_context_id,
                 condition_types=_condition_types_for_event(
                     event.event_id,
                     event.event_code,
@@ -632,6 +635,32 @@ def _render_markers_for_events(
     markers.extend(cron_event_markers_from_trigger_runs(trigger_runs))
     markers.sort(key=lambda marker: marker.timestamp)
     return markers
+
+
+def _register_event_runner_contexts(
+    app: "Pynenc",
+    builder: TimelineDataBuilder,
+    markers: list[RenderEventMarker],
+) -> None:
+    """Track runner lanes for events emitted outside visible invocations."""
+    context_ids = {
+        marker.emitted_by_runner_context_id
+        for marker in markers
+        if marker.emitted_by_runner_context_id
+    }
+    if not context_ids:
+        return
+    contexts = {
+        context.runner_id: context
+        for context in app.state_backend.get_runner_contexts(list(context_ids))
+    }
+    for marker in markers:
+        runner_context_id = marker.emitted_by_runner_context_id
+        if runner_context_id is None:
+            continue
+        context = contexts.get(runner_context_id)
+        if context is not None:
+            marker.emitted_by_runner_context_id = builder.add_runner_context(context)
 
 
 def _condition_types_by_event(

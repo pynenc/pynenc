@@ -9,7 +9,7 @@ parametrized fixture.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 
@@ -19,6 +19,7 @@ from pynenc_tests.conftest import MockPynenc
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
+    from pynenc.invocation.dist_invocation import DistributedInvocation
     from pynenc.trigger import BaseTrigger
 
 
@@ -133,6 +134,22 @@ def test_get_events_time_range(trigger: BaseTrigger) -> None:
     events = trigger.get_events(start_time=datetime.now(UTC) - timedelta(minutes=10))
 
     assert {e.event_id for e in events} == {"recent"}
+
+
+def test_event_marker_preserves_emitter_runner_context(trigger: BaseTrigger) -> None:
+    now = datetime.now(UTC)
+    event = _make_event("runner-event", timestamp=now, triggered=["inv-1"])
+    event.emitted_by_runner_context_id = "ExternalRunner@host-123"
+    trigger.store_event(event)
+
+    page = trigger.get_event_markers_in_timerange(
+        now - timedelta(seconds=1),
+        now + timedelta(seconds=1),
+        state="triggered",
+    )
+
+    assert len(page.markers) == 1
+    assert page.markers[0].emitted_by_runner_context_id == "ExternalRunner@host-123"
 
 
 def test_count_events_matches_get_events_count(trigger: BaseTrigger) -> None:
@@ -302,10 +319,20 @@ def test_emit_event_captures_emitter_invocation_id(
 
 
 def test_emit_event_outside_task_has_no_emitter_id(trigger: BaseTrigger) -> None:
+    from pynenc import context
+
+    context.clear_runner_context(trigger.app.app_id)
+    context.clear_current_runner(trigger.app.app_id)
     event_id = trigger.emit_event("user.created", {})
     record = trigger.get_event(event_id)
     assert record is not None
     assert record.emitted_by_invocation_id is None
+    assert record.emitted_by_runner_context_id is not None
+    runner_context = trigger.app.state_backend.get_runner_context(
+        record.emitted_by_runner_context_id
+    )
+    assert runner_context is not None
+    assert runner_context.runner_cls == "ExternalRunner"
 
 
 def test_emit_event_populates_valid_condition_ids(trigger: BaseTrigger) -> None:
@@ -535,3 +562,89 @@ def test_trigger_run_participants_capture_context_metadata(
     # ``context_extra_tokens`` for EventContext emits the event code token
     # (the event_id itself is captured separately in ``event_id``).
     assert p.context_summary == "code:user.created"
+
+
+def test_trigger_run_record_keeps_only_coherent_composite_participants(
+    trigger: BaseTrigger,
+) -> None:
+    """Stale contexts for one AND condition must not leak into monitoring."""
+    from unittest.mock import Mock
+
+    from pynenc.invocation.status import InvocationStatus
+    from pynenc.trigger.arguments import create_argument_filter, create_result_filter
+    from pynenc.trigger.conditions import (
+        ResultCondition,
+        ResultContext,
+        StatusCondition,
+        StatusContext,
+        ValidCondition,
+    )
+    from pynenc.trigger.trigger_context import TriggerContext
+    from pynenc.trigger.trigger_definitions import TriggerDefinition
+
+    trigger_target_task.app = trigger.app
+    older = cast("DistributedInvocation[Any, Any]", trigger_target_task(1))
+    matching = cast("DistributedInvocation[Any, Any]", trigger_target_task(8))
+    status_condition = StatusCondition(
+        trigger_target_task.task_id,
+        [InvocationStatus.SUCCESS],
+        create_argument_filter(None),
+    )
+    result_condition = ResultCondition(
+        trigger_target_task.task_id,
+        create_argument_filter(None),
+        create_result_filter(8),
+    )
+    valid_conditions = [
+        ValidCondition(
+            status_condition,
+            StatusContext.from_invocation(older, InvocationStatus.SUCCESS),
+        ),
+        ValidCondition(
+            status_condition,
+            StatusContext.from_invocation(matching, InvocationStatus.SUCCESS),
+        ),
+        ValidCondition(
+            result_condition,
+            ResultContext(
+                call_id=matching.call.call_id,
+                invocation_id=matching.invocation_id,
+                arguments=matching.call.arguments,
+                status=InvocationStatus.SUCCESS,
+                disable_cache_args=matching.call.task.conf.disable_cache_args,
+                result=8,
+            ),
+        ),
+    ]
+    context = TriggerContext(
+        valid_conditions={vc.valid_condition_id: vc for vc in valid_conditions}
+    )
+    trigger_definition = TriggerDefinition(
+        task_id=trigger_target_task.task_id,
+        condition_ids=[
+            status_condition.condition_id,
+            result_condition.condition_id,
+        ],
+    )
+    now = datetime.now(UTC)
+
+    record = trigger._build_trigger_run_record(
+        "composite-run",
+        trigger_definition,
+        context,
+        Mock(invocation_id="digest-invocation"),
+        now,
+        now,
+        _test_atomic_service_run(),
+    )
+
+    assert len(record.participants) == 2
+    assert {p.context_type for p in record.participants} == {
+        "StatusContext",
+        "ResultContext",
+    }
+    assert record.source_invocation_ids == [
+        str(matching.invocation_id),
+        str(matching.invocation_id),
+    ]
+    assert str(older.invocation_id) not in record.source_invocation_ids

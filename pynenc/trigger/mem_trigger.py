@@ -542,6 +542,7 @@ class MemTrigger(BaseTrigger):
                 matched=r.matched,
                 triggered=bool(triggered_lookup.get(r.event_id)),
                 emitted_by_invocation_id=r.emitted_by_invocation_id,
+                emitted_by_runner_context_id=r.emitted_by_runner_context_id,
             )
             for r in window
         ]
