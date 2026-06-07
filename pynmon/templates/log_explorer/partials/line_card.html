@@ -68,6 +68,17 @@ from "partials/status_badge.html" import status_badge %} {% set p = la.parsed %}
             <span class="material-icons">timeline</span>
           </a>
         </span>
+        {% endif %} {# Bracket atomic service #} {% if p.atomic_service_id %}
+        <a
+          href="/runners/atomic-service/runs/{{ p.atomic_service_id|urlencode }}"
+          class="ref-chip chip-atomic-service log-entity-atomic-service-run"
+          data-atomic-service-run-id="{{ p.atomic_service_id }}"
+          data-entity-kind="atomic-service-run"
+          title="Atomic Service Run {{ p.atomic_service_id }}"
+        >
+          <span class="material-icons">bolt</span>
+          AS({{ p.atomic_service_id[:8] }}&hellip;)
+        </a>
         {% endif %} {# Bracket task #} {% if p.task_key %}
         <a
           href="/tasks/{{ p.task_key }}"
@@ -90,7 +101,7 @@ from "partials/status_badge.html" import status_badge %} {% set p = la.parsed %}
       {% endif %} {% if la.extra_entity_refs %}
       <div class="line-refs msg-refs">
         {% for ref in la.extra_entity_refs %} {% if ref.kind in
-        ('invocation','parent-invocation','child-invocation','new-invocation')
+        ('invocation','parent-invocation','child-invocation','new-invocation','source-invocation','triggered-invocation')
         %} {% set ref_d = analysis.ref_details.get('invocation:' ~ ref.value,
         {}) if analysis else {} %}
         <span class="inv-chip-group">
@@ -104,7 +115,9 @@ from "partials/status_badge.html" import status_badge %} {% set p = la.parsed %}
             {% if ref.kind == 'invocation' %}{{ ref.value }}{% elif ref.kind ==
             'parent-invocation' %}Parent: {{ ref.value }}{% elif ref.kind ==
             'child-invocation' %}Child: {{ ref.value }}{% elif ref.kind ==
-            'new-invocation' %}New: {{ ref.value }}{% endif %} {% if
+            'new-invocation' %}New: {{ ref.value }}{% elif ref.kind ==
+            'source-invocation' %}Source: {{ ref.value }}{% elif ref.kind ==
+            'triggered-invocation' %}Triggered: {{ ref.value }}{% endif %} {% if
             ref_d.status %}
             <span class="ref-badge ref-badge-{{ ref_d.status|lower }}"
               >{{ ref_d.status }}</span
@@ -120,6 +133,86 @@ from "partials/status_badge.html" import status_badge %} {% set p = la.parsed %}
             <span class="material-icons">timeline</span>
           </a>
         </span>
+        {% elif ref.kind == 'event' %} {% set ref_d =
+        analysis.ref_details.get('event:' ~ ref.value, {}) if analysis else {}
+        %}
+        <a
+          href="/events/{{ ref.value }}"
+          class="ref-chip chip-event log-entity-event"
+          data-event-id="{{ ref.value }}"
+          data-entity-kind="event"
+          title="Event {{ ref_d.code or ref.value }}"
+        >
+          <span class="material-icons">bolt</span>
+          {% if ref_d.code %}{{ ref_d.code }} &middot; {% endif %}{{
+          ref.value[:8] }}&hellip;
+        </a>
+        {% elif ref.kind == 'trigger-run' %} {% set ref_d =
+        analysis.ref_details.get('trigger-run:' ~ ref.value, {}) if analysis
+        else {} %}
+        <span class="inv-chip-group">
+          <a
+            href="/trigger-runs/{{ ref.value }}"
+            class="ref-chip chip-trigger-run log-entity-trigger-run"
+            data-trigger-run-id="{{ ref.value }}"
+            data-entity-kind="trigger-run"
+            title="Trigger Run {{ ref.value }}"
+          >
+            <span class="material-icons">play_circle</span>
+            {% if ref_d.task %}{{ ref_d.task }} &middot; {% endif %}{{
+            ref.value[:8] }}&hellip;
+          </a>
+          {% if ref_d.timeline_url %}
+          <a
+            href="{{ ref_d.timeline_url }}"
+            class="ref-chip chip-trigger-run chip-timeline"
+            data-trigger-run-id="{{ ref.value }}"
+            title="Timeline"
+          >
+            <span class="material-icons">timeline</span>
+          </a>
+          {% endif %}
+        </span>
+        {% elif ref.kind == 'atomic-service-run' %}
+        <a
+          href="/runners/atomic-service/runs/{{ ref.value|urlencode }}"
+          class="ref-chip chip-trigger-run log-entity-atomic-service-run"
+          data-atomic-service-run-id="{{ ref.value }}"
+          data-entity-kind="atomic-service-run"
+          title="Atomic Service Run {{ ref.value }}"
+        >
+          <span class="material-icons">bolt</span>
+          AS: {{ ref.value[:8] }}&hellip;
+        </a>
+        {% elif ref.kind in ('condition','valid-condition') %} {% set ref_d =
+        analysis.ref_details.get('condition:' ~ ref.value, {}) if analysis and
+        ref.kind == 'condition' else {} %}
+        <a
+          href="{% if ref.kind == 'valid-condition' %}/trigger-runs/valid-condition?valid_condition_id={{ ref.value|urlencode }}{% else %}/trigger-runs/condition?condition_id={{ ref.value|urlencode }}{% endif %}"
+          class="ref-chip chip-condition log-entity-{{ ref.kind }}"
+          data-condition-id="{{ ref.value }}"
+          data-entity-kind="{{ ref.kind }}"
+          title="{{ ref.kind|replace('-',' ')|title }}: {{ ref.value }}"
+        >
+          <span class="material-icons">rule</span>
+          {% if ref.kind == 'valid-condition' %}Valid: {% endif %}{% if
+          ref_d.type %}{{ ref_d.type }} &middot; {% endif %}{{ ref.value[:8]
+          }}&hellip;
+        </a>
+        {% elif ref.kind == 'trigger' %} {% set ref_d =
+        analysis.ref_details.get('trigger:' ~ ref.value, {}) if analysis else {}
+        %}
+        <a
+          href="/triggers/{{ ref.value|urlencode }}"
+          class="ref-chip chip-trigger log-entity-trigger"
+          data-trigger-id="{{ ref.value }}"
+          data-entity-kind="trigger"
+          title="Trigger {{ ref.value }}"
+        >
+          <span class="material-icons">flash_on</span>
+          {% if ref_d.task %}{{ ref_d.task }} &middot; {% endif %}{{
+          ref.value[:8] }}&hellip;
+        </a>
         {% elif ref.kind in
         ('runner','worker','current-owner-runner','attempted-owner-runner') %}
         {% set runner_label = ref.kind|replace('-runner','')|replace('-','

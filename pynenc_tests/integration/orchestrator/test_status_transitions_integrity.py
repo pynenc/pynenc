@@ -3,7 +3,7 @@ Status transition integrity test under concurrent runner load.
 
 Validates every recorded history entry against the state machine after running
 hierarchical task chains (grandparent -> parent -> child) to exercise
-PAUSED/RESUMED transitions that occur when a task waits on sub-invocation results.
+PAUSED -> RUNNING transitions that occur when a task waits on sub-invocation results.
 
 Uses PersistentProcessRunner to exercise cross-process status transitions.
 The ``_subprocess_config`` registry in ``Pynenc`` ensures child processes share
@@ -82,7 +82,7 @@ def test_status_transitions() -> None:
     """Validate status transitions for hierarchical task chains.
 
     Runs grandparent -> parent -> child task hierarchy exercising the
-    PAUSED/RESUMED transitions that occur when a task waits on sub-invocation
+    PAUSED -> RUNNING transitions that occur when a task waits on sub-invocation
     results. After completion, validates every recorded history entry against
     the state machine.
     """

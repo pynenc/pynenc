@@ -1,0 +1,270 @@
+{% extends "base.html" %} {% block content %}
+<div class="container-fluid">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h2 class="h4 mb-0 text-primary">Atomic Service Run</h2>
+      <small class="text-muted">{{ atomic_service_run_id }}</small>
+    </div>
+    <a
+      href="/runners/atomic-service/timeline"
+      class="btn btn-sm btn-outline-secondary"
+    >
+      Back to Atomic Service Timeline
+    </a>
+  </div>
+
+  {% if not execution %}
+  <div class="alert alert-warning py-2" role="alert">
+    No atomic-service execution record found for this run id. It may have
+    expired from history before any retention reference could pin it.
+  </div>
+  {% endif %}
+
+  <div class="row mb-4">
+    <div class="col-lg-6">
+      <div class="card pynmon-card">
+        <div class="card-header pynmon-card-header compact-header">
+          Run Summary
+        </div>
+        <div class="card-body pynmon-card-body">
+          <table class="table table-sm mb-0 pynmon-table">
+            <tbody>
+              <tr>
+                <th style="width: 170px">Service Run ID</th>
+                <td>
+                  <code style="word-break: break-all"
+                    >{{ atomic_service_run_id }}</code
+                  >
+                </td>
+              </tr>
+              <tr>
+                <th>Runner</th>
+                <td>
+                  {% if runner_id %}
+                  <a
+                    href="/runners/{{ runner_id|urlencode }}"
+                    class="text-decoration-none"
+                  >
+                    <code>{{ runner_id }}</code>
+                  </a>
+                  {% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
+              </tr>
+              <tr>
+                <th>Execution Record</th>
+                <td>
+                  {% if execution %}
+                  <span class="badge bg-success">recorded</span>
+                  {% else %}
+                  <span class="badge bg-secondary">unavailable</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% if runner_context %}
+              <tr>
+                <th>Runner Class</th>
+                <td>
+                  <span class="badge bg-secondary"
+                    >{{ runner_context.runner_cls }}</span
+                  >
+                </td>
+              </tr>
+              <tr>
+                <th>Host</th>
+                <td><code>{{ runner_context.hostname }}</code></td>
+              </tr>
+              {% endif %} {% if active_runner %}
+              <tr>
+                <th>Last Heartbeat</th>
+                <td><code>{{ active_runner.last_heartbeat }}</code></td>
+              </tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+      <div class="card pynmon-card">
+        <div class="card-header pynmon-card-header compact-header">
+          Execution Window
+        </div>
+        <div class="card-body pynmon-card-body">
+          {% if execution %}
+          <table class="table table-sm mb-0 pynmon-table">
+            <tbody>
+              <tr>
+                <th style="width: 170px">Start (UTC)</th>
+                <td><code>{{ execution.start }}</code></td>
+              </tr>
+              <tr>
+                <th>End (UTC)</th>
+                <td>
+                  {% if execution.end %}<code>{{ execution.end }}</code> {% else
+                  %}<span class="text-muted">— still running</span>{% endif %}
+                </td>
+              </tr>
+              <tr>
+                <th>Duration</th>
+                <td>
+                  {% if execution.end %}
+                  <span class="badge bg-info"
+                    >{{ execution.duration|round(3) }}s</span
+                  >
+                  {% else %}
+                  <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+              </tr>
+              <tr>
+                <th>Status</th>
+                <td>
+                  {% if execution.status == 'running' %}
+                  <span class="badge bg-primary">running</span>
+                  {% elif execution.status == 'completed' %}
+                  <span class="badge bg-success">completed</span>
+                  {% elif execution.status == 'abandoned' %}
+                  <span class="badge bg-warning text-dark">abandoned</span>
+                  {% elif execution.status == 'blocked' %}
+                  <span class="badge bg-secondary">blocked</span>
+                  {% else %}
+                  <span class="badge bg-light text-dark"
+                    >{{ execution.status }}</span
+                  >
+                  {% endif %} {% if execution.runner_alive is sameas false %}
+                  <span
+                    class="badge bg-warning text-dark ms-2"
+                    title="Runner heartbeat expired"
+                    >runner dead</span
+                  >
+                  {% endif %}
+                </td>
+              </tr>
+              <tr>
+                <th>Reason</th>
+                <td>
+                  {% if execution.reason %}
+                  <code class="small text-muted">{{ execution.reason }}</code>
+                  {% else %}
+                  <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+              </tr>
+              <tr>
+                <th>Timeline</th>
+                <td>
+                  <a
+                    href="{{ execution.timeline_url }}"
+                    class="btn btn-sm btn-outline-primary"
+                  >
+                    <span
+                      class="material-icons"
+                      style="font-size: 14px; vertical-align: middle"
+                      >timeline</span
+                    >
+                    Open Timeline
+                  </a>
+                  <a
+                    href="/runners/atomic-service/timeline?selected_atomic_service_run_id={{ atomic_service_run_id|urlencode }}&page_size=100"
+                    class="btn btn-sm btn-outline-secondary ms-1"
+                    title="Show the timeline page containing this run"
+                  >
+                    <span
+                      class="material-icons"
+                      style="font-size: 14px; vertical-align: middle"
+                      >compare_arrows</span
+                    >
+                    Timeline Page
+                  </a>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          {% else %}
+          <p class="text-muted mb-0">Execution window unavailable.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-12">
+      <div class="card pynmon-card">
+        <div class="card-header pynmon-card-header compact-header">
+          Trigger Runs Referencing This Atomic Service
+        </div>
+        <div class="card-body p-0">
+          {% if trigger_runs %}
+          <div class="table-responsive">
+            <table class="table table-sm mb-0 pynmon-table">
+              <thead>
+                <tr>
+                  <th>Trigger Run</th>
+                  <th>Trigger</th>
+                  <th>Task</th>
+                  <th>Claimed</th>
+                  <th>Executed</th>
+                  <th>Triggered Invocation</th>
+                  <th style="width: 110px"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for run in trigger_runs %}
+                <tr>
+                  <td>
+                    <a href="{{ run.detail_url }}" class="text-decoration-none">
+                      <code>{{ run.trigger_run_id }}</code>
+                    </a>
+                  </td>
+                  <td>
+                    <a
+                      href="/triggers/{{ run.trigger_id|urlencode }}"
+                      class="text-decoration-none"
+                    >
+                      <code>{{ run.trigger_id }}</code>
+                    </a>
+                  </td>
+                  <td><code>{{ run.task_id_key }}</code></td>
+                  <td>
+                    {% if run.claimed_at %}<code>{{ run.claimed_at }}</code>{%
+                    else %}<span class="text-muted">—</span>{% endif %}
+                  </td>
+                  <td>
+                    {% if run.executed_at %}<code>{{ run.executed_at }}</code>{%
+                    else %}<span class="text-muted">—</span>{% endif %}
+                  </td>
+                  <td>
+                    {% if run.triggered_invocation_id %}
+                    <a
+                      href="/invocations/{{ run.triggered_invocation_id }}"
+                      class="text-decoration-none"
+                    >
+                      <code>{{ run.triggered_invocation_id }}</code>
+                    </a>
+                    {% else %}<span class="text-muted">—</span>{% endif %}
+                  </td>
+                  <td>
+                    <a
+                      href="{{ run.timeline_url }}"
+                      class="btn btn-sm btn-outline-primary"
+                      >Timeline</a
+                    >
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <div class="p-3 text-muted">
+            No retained trigger runs reference this atomic-service run.
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

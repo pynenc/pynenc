@@ -4,34 +4,24 @@ Fixtures for pynmon integration tests.
 This module provides fixtures for testing pynmon with real backend.
 Each test module defines its own app and tasks. The fixtures here start
 runners and set up pynmon clients that use the app from the test module.
-
-Note: Pynmon requires Python <3.13 due to FastAPI/Pydantic v2 dependencies.
 """
 
 from logging import Logger
 import os
 import socket
-import sys
 import threading
 import time
 from typing import TYPE_CHECKING
 
 import pytest
+import requests
+import uvicorn
 
 from pynenc_tests.util.log import create_test_logger
-
-# Skip all pynmon tests on Python 3.13+
-if sys.version_info >= (3, 13):
-    pytest.skip(
-        "Pynmon tests skipped: requires Python <3.13 (FastAPI/Pydantic limitation)",
-        allow_module_level=True,
-    )
-
-pytest.importorskip("fastapi", reason="pynmon tests require monitor dependencies")
-pytest.importorskip("jinja2", reason="pynmon tests require monitor dependencies")
-
-# All imports below must come after pytest.importorskip calls
-# ruff: noqa: E402
+import pynmon.app as pynmon_module
+from pynmon.app import _uvicorn_log_config
+from pynmon.app import all_pynenc_instances
+from pynmon.app import app as pynmon_app
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -40,14 +30,6 @@ if TYPE_CHECKING:
     from _pytest.fixtures import FixtureRequest
 
     from pynenc import Pynenc
-
-import requests
-import uvicorn
-
-from pynmon.app import _uvicorn_log_config
-from pynmon.app import all_pynenc_instances
-from pynmon.app import app as pynmon_app
-import pynmon.app as pynmon_module
 
 logger: Logger = create_test_logger("conftest")
 

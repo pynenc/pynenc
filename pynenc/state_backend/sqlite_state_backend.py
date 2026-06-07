@@ -80,14 +80,27 @@ def init_tables(sqlite_db_path: str, tables: Tables) -> None:
                 serialized_arguments TEXT NOT NULL,
                 parent_invocation_id TEXT,
                 parent_call_id TEXT,
+                parent_event_id TEXT,
                 workflow_id TEXT NOT NULL,
                 workflow_type_key TEXT NOT NULL,
                 parent_workflow_id TEXT
             )
         """
         )
+        # Lightweight migration: add parent_event_id column for pre-existing
+        # databases created before the column was introduced.
+        cursor = conn.execute(f"PRAGMA table_info({tables.INVOCATIONS})")
+        existing_cols = {row[1] for row in cursor.fetchall()}
+        cursor.close()
+        if "parent_event_id" not in existing_cols:
+            conn.execute(
+                f"ALTER TABLE {tables.INVOCATIONS} ADD COLUMN parent_event_id TEXT"
+            )
         conn.execute(
             f"CREATE INDEX IF NOT EXISTS idx_{tables.INVOCATIONS}_parent ON {tables.INVOCATIONS}(parent_invocation_id)"
+        )
+        conn.execute(
+            f"CREATE INDEX IF NOT EXISTS idx_{tables.INVOCATIONS}_parent_event ON {tables.INVOCATIONS}(parent_event_id)"
         )
         conn.execute(
             f"""
@@ -256,8 +269,9 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
                     (invocation_id, call_id_key, task_id_key, arguments_id,
                      serialized_arguments,
                      parent_invocation_id,
+                     parent_event_id,
                      workflow_id, workflow_type_key, parent_workflow_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
                         inv_dto.invocation_id,
                         call_dto.call_id.key,
@@ -265,6 +279,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
                         call_dto.call_id.args_id,
                         json.dumps(call_dto.serialized_arguments),
                         inv_dto.parent_invocation_id,
+                        inv_dto.parent_event_id,
                         wf.workflow_id,
                         wf.workflow_type.key,
                         wf.parent_workflow_id,
@@ -279,7 +294,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
         with sqlite_conn(self.sqlite_db_path) as conn:
             cursor = conn.execute(
                 f"""SELECT invocation_id, call_id_key, serialized_arguments, parent_invocation_id,
-                           workflow_id, workflow_type_key, parent_workflow_id
+                           workflow_id, workflow_type_key, parent_workflow_id, parent_event_id
                     FROM {self.tables.INVOCATIONS} WHERE invocation_id = ?""",
                 (invocation_id,),
             )
@@ -294,6 +309,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
                     wf_id,
                     wf_type_key,
                     wf_parent_id,
+                    parent_event_id,
                 ) = row
                 call_id = CallId.from_key(call_id_key)
                 workflow = WorkflowIdentity(
@@ -310,6 +326,7 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
                     parent_invocation_id=InvocationId(parent_inv_id)
                     if parent_inv_id
                     else None,
+                    parent_event_id=parent_event_id or None,
                 )
                 call_dto = CallDTO(
                     call_id=call_id,
@@ -330,6 +347,19 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
             cursor = conn.execute(
                 f"SELECT invocation_id FROM {self.tables.INVOCATIONS} WHERE parent_invocation_id = ?",
                 (parent_invocation_id,),
+            )
+            rows = cursor.fetchall()
+            cursor.close()
+        return (InvocationId(row[0]) for row in rows)
+
+    def get_invocations_by_parent_event(
+        self, parent_event_id: str
+    ) -> Iterator["InvocationId"]:
+        """Return IDs of invocations whose ``parent_event_id`` equals the argument."""
+        with sqlite_conn(self.sqlite_db_path) as conn:
+            cursor = conn.execute(
+                f"SELECT invocation_id FROM {self.tables.INVOCATIONS} WHERE parent_event_id = ?",
+                (parent_event_id,),
             )
             rows = cursor.fetchall()
             cursor.close()

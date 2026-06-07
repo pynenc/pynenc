@@ -189,6 +189,7 @@ def app(app_combination_instance: Pynenc) -> Generator[Pynenc, None, None]:
     _ = app_combination_instance.broker
     _ = app_combination_instance.state_backend
     _ = app_combination_instance.serializer
+    _ = app_combination_instance.runner
 
     yield app_combination_instance
 

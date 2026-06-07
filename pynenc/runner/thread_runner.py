@@ -118,10 +118,7 @@ class ThreadRunner(BaseRunner):
                 self._kill_and_reroute(thread_info.invocation.invocation_id)
 
     def _on_stop_runner_loop(self) -> None:
-        """
-        Internal method called after receiving a signal to stop the runner loop.
-        """
-        pass
+        """Handle a request to stop the runner loop."""
 
     def _reclaim_available_slots(self) -> int:
         """

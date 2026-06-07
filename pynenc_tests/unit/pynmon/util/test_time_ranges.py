@@ -15,7 +15,6 @@ from pynmon.util.time_ranges import (
     parse_time_range,
 )
 
-
 # ################################################################################### #
 # PARSE_TIME_RANGE TESTS
 # ################################################################################### #
@@ -210,6 +209,11 @@ def test_parse_resolution_auto() -> None:
 def test_parse_resolution_10s() -> None:
     """Test parse_resolution for 10 seconds."""
     assert parse_resolution("10s") == 10
+
+
+def test_parse_resolution_100ms() -> None:
+    """Test parse_resolution for 100 milliseconds."""
+    assert parse_resolution("100ms") == 0.1
 
 
 def test_parse_resolution_1m() -> None:

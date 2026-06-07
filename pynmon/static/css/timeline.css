@@ -40,6 +40,79 @@
   top: 0;
 }
 
+.atomic-service-period-table tbody tr.atomic-service-period-row {
+  --period-start: 0%;
+  --period-end: 100%;
+  --period-fill: rgba(13, 110, 253, 0.14);
+  --period-fill-hover: rgba(13, 110, 253, 0.22);
+  --period-surface: rgba(13, 110, 253, 0.03);
+  background-image: linear-gradient(
+    to right,
+    transparent 0,
+    transparent var(--period-start),
+    var(--period-fill) var(--period-start),
+    var(--period-fill) var(--period-end),
+    transparent var(--period-end),
+    transparent 100%
+  );
+}
+
+.atomic-service-period-table tbody tr.atomic-service-period-row:hover {
+  background-image: linear-gradient(
+    to right,
+    var(--period-surface) 0,
+    var(--period-surface) var(--period-start),
+    var(--period-fill-hover) var(--period-start),
+    var(--period-fill-hover) var(--period-end),
+    var(--period-surface) var(--period-end),
+    var(--period-surface) 100%
+  );
+}
+
+.atomic-service-period-table tbody tr.atomic-service-period-row-status-running {
+  --period-fill: rgba(13, 110, 253, 0.14);
+  --period-fill-hover: rgba(13, 110, 253, 0.22);
+  --period-surface: rgba(13, 110, 253, 0.03);
+}
+
+.atomic-service-period-table
+  tbody
+  tr.atomic-service-period-row-status-completed {
+  --period-fill: rgba(25, 135, 84, 0.16);
+  --period-fill-hover: rgba(25, 135, 84, 0.24);
+  --period-surface: rgba(25, 135, 84, 0.04);
+}
+
+.atomic-service-period-table
+  tbody
+  tr.atomic-service-period-row-status-abandoned {
+  --period-fill: rgba(255, 193, 7, 0.22);
+  --period-fill-hover: rgba(255, 193, 7, 0.3);
+  --period-surface: rgba(255, 193, 7, 0.06);
+}
+
+.atomic-service-period-table tbody tr.atomic-service-period-row-status-blocked {
+  --period-fill: rgba(108, 117, 125, 0.2);
+  --period-fill-hover: rgba(108, 117, 125, 0.28);
+  --period-surface: rgba(108, 117, 125, 0.05);
+}
+
+.atomic-service-period-table tbody tr.atomic-service-period-row > td {
+  background-color: transparent;
+  box-shadow: none;
+}
+
+.atomic-service-period-table tbody tr.atomic-service-period-row-selected > td {
+  background-color: rgba(255, 247, 237, 0.45);
+}
+
+.atomic-service-period-table
+  tbody
+  tr.atomic-service-period-row-selected
+  > td:first-child {
+  box-shadow: inset 4px 0 0 #f97316;
+}
+
 .execution-time-label {
   color: white;
   font-size: 9px;
@@ -78,4 +151,44 @@ svg [data-invocation-id] {
 }
 svg .runner-label {
   cursor: pointer;
+}
+
+/* Cursor for event markers */
+svg .event-marker-link {
+  cursor: pointer;
+}
+
+#invocation-events-section .table th,
+#invocation-events-section .table td {
+  padding: 0.25rem 0.35rem;
+  vertical-align: middle;
+}
+
+#invocation-events-section code {
+  font-size: 10px;
+  padding: 1px 4px;
+}
+
+/* Focused event marker (?focus_event=...) — pulsing highlight */
+@keyframes event-marker-pulse {
+  0% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 0 rgba(13, 110, 253, 0));
+  }
+  50% {
+    transform: scale(1.6);
+    filter: drop-shadow(0 0 6px rgba(13, 110, 253, 0.9));
+  }
+  100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 0 rgba(13, 110, 253, 0));
+  }
+}
+.event-marker-focused circle,
+.event-marker-focused rect {
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: event-marker-pulse 1.2s ease-in-out 0s 5;
+  stroke: #0d6efd !important;
+  stroke-width: 2 !important;
 }

@@ -516,8 +516,9 @@
       if (_ftLoading) return;
       _ftCurrentFocusId = focusId;
       const isExpansion = !!expandId;
-      // If a specific node is being expanded, add it to the list
-      if (expandId && !_ftExpandedIds.includes(expandId)) {
+      // If a specific node is being expanded, record every click. Repeated
+      // IDs give that subtree more server-side budget on the next render.
+      if (expandId) {
         _ftExpandedIds.push(expandId);
       }
       // Save scroll position for in-place expansions or explicit request
@@ -628,11 +629,7 @@
         e.preventDefault();
         e.stopImmediatePropagation();
         const expandId = badge.getAttribute("data-expand-id");
-        if (
-          expandId &&
-          _ftCurrentFocusId &&
-          !_ftExpandedIds.includes(expandId)
-        ) {
+        if (expandId && _ftCurrentFocusId) {
           window._ftLoadTree(_ftCurrentFocusId, expandId);
         }
         return;

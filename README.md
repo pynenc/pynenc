@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://pynenc.org/assets/img/pynenc_logo.png" alt="Pynenc" width="300">
+  <img src="https://raw.githubusercontent.com/pynenc/pynenc/main/docs/_static/logo.png" alt="Pynenc" width="300">
 </p>
 <h1 align="center">Pynenc</h1>
 <p align="center">
@@ -42,12 +42,15 @@
 
 Pynenc addresses the complex challenges of task management in distributed environments, offering a robust solution for developers looking to efficiently orchestrate asynchronous tasks across multiple systems. By combining intuitive configuration with advanced features like automatic task prioritization, Pynenc empowers developers to build scalable and reliable distributed applications with ease.
 
-## 🆕 What's New in v0.2.3
+## 🆕 What's New in v0.2.4
 
-- **Invocation status state machine diagram**: `pynenc status render` generates a text or SVG view of the state machine directly from `pynenc.invocation.status`. The SVG is committed under `docs/_static/` and embedded in the README, the docs landing page, and the invocation status guide. A pre-commit hook keeps it aligned with the implementation
-- **CLI app auto-discovery**: when the current directory contains a single Python file with a `Pynenc()` instance, `pynenc runner start` and `pynenc monitor` no longer require `--app`. Use `--app` only when more than one app is available or when running from another directory
-- **Dropped `PENDING -> FAILED` transition**: cycle-control is deprecated and the status unnecessary
-- **Hardened multi-thread shutdown**: worker SIGTERM handlers ignore repeated signals so a second termination cannot re-enter shutdown logging
+- **Trigger event monitoring**: `emit_event` persists a full `EventRecord`; purging an event cascades to linked trigger runs
+- **Pynmon `/events` area**: paginated event list, detail page, JSON endpoints, and on-demand auto-purge
+- **Invocation detail trigger context**: exposes the originating trigger run, emitted events, and downstream trigger runs; timeline overlays event markers
+- **Timeline range zoom**: drag a selection rectangle on the invocation timeline SVG to reload scoped to that window
+- **Log Explorer mini-timeline**: expands the time window to include emitter invocations referenced in pasted log lines
+- **Retention configuration**: `ConfigTrigger` age and capacity policies for events and trigger runs (`event_retention_days`, `event_max_records`, etc.)
+- **Removed `InvocationStatus.RESUMED`**: `PAUSED → RUNNING` directly after `SIGCONT`
 
 See the [Changelog](https://docs.pynenc.org/changelog.html) for the complete list of changes.
 
@@ -92,7 +95,7 @@ See the [Changelog](https://docs.pynenc.org/changelog.html) for the complete lis
   - Comprehensive state transitions with validation
 
   <p align="center">
-    <img src="docs/_static/invocation_state_machine.svg" alt="Pynenc invocation status state machine" width="100%">
+    <img src="https://raw.githubusercontent.com/pynenc/pynenc/main/docs/_static/invocation_state_machine.svg" alt="Pynenc invocation status state machine" width="100%">
   </p>
 
 - **Configurable Concurrency Management**: Pynenc offers versatile concurrency control mechanisms at various levels:
@@ -109,17 +112,20 @@ See the [Changelog](https://docs.pynenc.org/changelog.html) for the complete lis
   - Runner health monitoring with heartbeat tracking
   - Workflow visualization with parent-child relationships
   - Task details with execution history and context
+  - Trigger event browser with event-to-invocation linking and timeline overlays
   - HTMX-powered real-time updates
 
 - **Comprehensive Trigger System**: Enables declarative task scheduling and event-driven workflows:
 
   - **Diverse Trigger Conditions**: Schedule tasks using cron expressions, react to events, task status changes, results, or exceptions.
+  - **Definition-Time Reactions**: Declare the reaction on the task that should run next instead of wiring callbacks every time the upstream task is called.
   - **Flexible Argument Handling**:
     - **ArgumentProvider**: Dynamically generate arguments for triggered tasks from the context of the condition (static values or using custom functions).
     - **ArgumentFilter**: Filter task execution based on original task arguments (exact match dictionary or custom validation function).
     - **ResultFilter**: Conditionally trigger tasks based on specific result values of the preceding task.
     - **Event Payload Filtering**: Selectively process events based on payload content.
   - **Composable Conditions**: Combine multiple conditions with AND/OR logic for complex triggering rules.
+  - **Runnable Example**: See the [`trigger_demo`](https://github.com/pynenc/samples/tree/main/trigger_demo) sample for cron, events, status chains, exception compensation, and composite status/result conditions.
 
 - **Advanced Workflow System**: Sophisticated task orchestration with deterministic execution and state management:
 
@@ -278,47 +284,75 @@ To get started with Pynenc, here's a simple example that demonstrates the creati
 
 ### Using the Trigger System
 
-Here's an example of creating and using triggers:
+Triggers are declared on the task that should react. The caller of the
+upstream task does not need to remember callback wiring or chain construction.
 
 ```python
+from typing import Any
+
 from pynenc import Pynenc
-from datetime import datetime
+from pynenc.invocation.status import InvocationStatus
+from pynenc.trigger.conditions.event import EventContext
+from pynenc.trigger.trigger_builder import TriggerBuilder
 
-app = Pynenc()
+app = Pynenc()  # configure trigger_cls and trigger_task_modules for runners
+
+
+def args_from_feed_event(ctx: EventContext) -> dict[str, Any]:
+    return {
+        "source": ctx.payload.get("source", "default"),
+        "count": ctx.payload.get("count", 3),
+    }
+
+
+@app.task(
+    triggers=[
+        TriggerBuilder()
+        .on_cron("*/15 * * * *")
+        .with_args_static({"source": "scheduled", "count": 3}),
+        TriggerBuilder()
+        .on_event("feed_updated")
+        .with_args_from_event(args_from_feed_event),
+    ]
+)
+def ingest_feed(source: str, count: int) -> dict[str, Any]:
+    return {"source": source, "count": count}
+
 
 @app.task
-def process_data(data: dict) -> dict:
-    return {"processed": data, "timestamp": datetime.now().isoformat()}
+def enrich_article(article_id: str, kind: str) -> dict[str, str]:
+    return {"article_id": article_id, "kind": kind, "status": "enriched"}
 
-@app.task
-def notify_admin(result: dict, urgency: str = "normal") -> None:
-    print(f"Admin notification ({urgency}): {result}")
 
-# Create a trigger that runs when process_data completes successfully
-trigger = app.trigger.on_success(process_data).run(notify_admin)
+def args_from_enrich_status(ctx: Any) -> dict[str, Any]:
+    return {"article_id": ctx.arguments.kwargs["article_id"]}
 
-# Create a trigger with argument filtering - only trigger when data contains 'urgent'
-trigger_urgent = (app.trigger
-    .on_success(process_data)
-    .with_argument_filter(lambda args: args.get('data', {}).get('priority') == 'urgent')
-    .run(notify_admin, argument_provider=lambda ctx: [ctx.result, "high"])
+
+@app.task(
+    triggers=TriggerBuilder()
+    .on_status(
+        enrich_article,
+        statuses=[InvocationStatus.SUCCESS],
+        call_arguments={"kind": "breaking_news"},
+    )
+    .with_args_from_status(args_from_enrich_status)
 )
-
-# Create a cron-based scheduled task
-scheduled_task = (app.trigger
-    .on_cron("*/30 * * * *")  # Every 30 minutes
-    .run(process_data, argument_provider={"data": {"source": "scheduled"}})
-)
+def notify_subscribers(article_id: str) -> str:
+    return f"notified:{article_id}"
 ```
 
-For a complete guide on how to set up and run pynenc, visit our [samples library](https://github.com/pynenc/samples).
+Argument providers and custom filters must be module-level named functions so
+trigger backends can serialize their reference. Avoid lambdas in trigger
+definitions.
+
+For a complete guide, see the [Trigger System documentation](https://docs.pynenc.org/usage_guide/use_case_010_trigger_system.html) and the [`trigger_demo`](https://github.com/pynenc/samples/tree/main/trigger_demo) sample.
 
 ## Monitoring with Pynmon
 
 Pynenc includes **Pynmon**, a built-in web-based monitoring interface that provides real-time visibility into your distributed task execution — no external tooling required.
 
 <p align="center">
-  <img src="docs/_static/pynmon_dashboard.png" alt="Pynmon dashboard showing application overview, invocation status, component architecture, and configuration" width="100%">
+  <img src="https://raw.githubusercontent.com/pynenc/pynenc/main/docs/_static/pynmon_dashboard.png" alt="Pynmon dashboard showing application overview, invocation status, component architecture, and configuration" width="100%">
 </p>
 
 ### Execution Timeline
@@ -326,7 +360,7 @@ Pynenc includes **Pynmon**, a built-in web-based monitoring interface that provi
 See exactly what ran across every runner and worker, at every moment. Status transitions are color-coded with connections between parent and child invocations. Click any invocation to inspect its full status history and the runner context that executed it.
 
 <p align="center">
-  <img src="docs/_static/pynenc_runners_timeline_detail.png" alt="Pynmon timeline comparing ThreadRunner, ProcessRunner, PersistentProcessRunner, and MultiThreadRunner side by side" width="100%">
+  <img src="https://raw.githubusercontent.com/pynenc/pynenc/main/docs/_static/pynenc_runners_timeline_detail.png" alt="Pynmon timeline comparing ThreadRunner, ProcessRunner, PersistentProcessRunner, and MultiThreadRunner side by side" width="100%">
 </p>
 
 ### Family Tree & Invocation Details
@@ -334,7 +368,7 @@ See exactly what ran across every runner and worker, at every moment. Status tra
 Navigate the full hierarchy of task calls as an interactive graph. Selecting a node cross-highlights it on the timeline, and vice versa — making it trivial to understand both the logical structure and the physical execution of complex workflows.
 
 <p align="center">
-  <img src="docs/_static/pynmon_family_tree.png" alt="Pynmon family tree overlaid on timeline with cross-highlighting between graph and execution view" width="100%">
+  <img src="https://raw.githubusercontent.com/pynenc/pynenc/main/docs/_static/pynmon_family_tree.png" alt="Pynmon family tree overlaid on timeline with cross-highlighting between graph and execution view" width="100%">
 </p>
 
 ### Log Explorer
@@ -342,8 +376,12 @@ Navigate the full hierarchy of task calls as an interactive graph. Selecting a n
 Paste your Pynenc log lines and the Log Explorer augments them with full context — parsing runner contexts, invocation IDs, and task references, resolving each to its detail page. It generates a mini-timeline of all invocations mentioned in the logs and highlights runners and workers with direct links.
 
 <p align="center">
-  <img src="docs/_static/pynmon_log_explorer.png" alt="Pynmon Log Explorer parsing log lines with augmented context, mini-timeline, and links to invocation and runner details" width="100%">
+  <img src="https://raw.githubusercontent.com/pynenc/pynenc/main/docs/_static/pynmon_log_explorer.png" alt="Pynmon Log Explorer parsing log lines with augmented context, mini-timeline, and links to invocation and runner details" width="100%">
 </p>
+
+### Trigger Events
+
+Every event published with `app.trigger.emit_event(...)` is stored alongside the invocations it produced. The `/events` view in Pynmon lists emitted events, lets you filter by event code, time range, or whether they matched a registered condition, and links each event to the trigger runs and downstream invocations it created. Open an invocation that was launched by a trigger to see the originating event in its detail page, and watch the same events appear as markers on the timeline. Retention can be tuned through `event_retention_days`, `event_max_records`, `trigger_run_max_records`, and `event_auto_purge_enabled` config fields.
 
 ### Starting the Monitor
 

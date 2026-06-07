@@ -43,20 +43,32 @@ body {
 .navbar {
   background-color: var(--nav-bg) !important;
   border-bottom: 1px solid var(--nav-bg);
-  padding: 0.75rem 1rem;
+  padding: 0.35rem 0.75rem;
+  overflow: visible;
+}
+
+.navbar .container-fluid {
+  align-items: center;
+  background: var(--nav-bg);
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.15rem 0.45rem;
+  overflow: visible;
 }
 
 .navbar-brand {
   color: var(--nav-brand) !important;
   font-weight: 600;
-  font-size: 1.1rem;
+  font-size: 1rem;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.4rem;
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .navbar-logo {
-  height: 22px;
+  height: 20px;
   width: auto;
   opacity: 0.9;
 }
@@ -65,12 +77,19 @@ body {
   color: var(--nav-text-primary) !important;
   font-weight: 500;
   font-size: 14px;
-  padding: 0.5rem 1rem;
+  line-height: 1.15;
+  padding: 0.35rem 0.65rem;
   border-radius: 4px;
-  margin: 0 2px;
+  margin: 0 1px;
   transition: all 0.2s ease;
-  display: flex;
+  display: inline-flex;
   align-items: center;
+  flex-wrap: nowrap;
+  max-width: calc(100vw - 2rem);
+  min-width: max-content;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .navbar-nav .nav-link:hover {
@@ -82,13 +101,14 @@ body {
   background-color: var(--nav-hover);
   color: var(--nav-text-primary) !important;
   border-left: 2px solid var(--nav-active);
-  padding-left: 0.9rem;
+  padding-left: 0.55rem;
 }
 
 .navbar-nav .nav-link .material-icons {
-  font-size: 18px;
-  margin-right: 0.5rem;
+  font-size: 16px;
+  margin-right: 0.35rem;
   color: var(--nav-text-secondary);
+  flex: 0 0 auto;
 }
 
 .navbar-nav .nav-link.active .material-icons {
@@ -577,6 +597,28 @@ body {
   margin-bottom: 0.5rem;
 }
 
+.pynmon-responsive-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 32rem), 1fr));
+  gap: 0.75rem;
+  margin-right: 0;
+  margin-left: 0;
+}
+
+.pynmon-responsive-detail-grid > [class*="col-"] {
+  width: 100%;
+  max-width: none;
+  padding-right: 0;
+  padding-left: 0;
+  flex: none;
+}
+
+@media (min-width: 1600px) {
+  .pynmon-responsive-detail-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 38rem), 1fr));
+  }
+}
+
 /* Compact Timeline Styles */
 .compact-timeline .compact-timeline-item {
   margin-bottom: 0.75rem !important;
@@ -719,4 +761,277 @@ body > .container,
 body > #pynmon-loading {
   position: relative;
   z-index: 1;
+}
+
+/* ===== RESPONSIVE NAVBAR (wrap whole tabs, never split labels) ===== */
+/* Bootstrap's collapsed navbar stacks links as a column below 992px. Pynmon has
+ * too many tabs for that shape, so keep a wrapping row layout at every width.
+ * Each tab is an indivisible item: the link list may wrap to two or more rows,
+ * but a single tab label never wraps internally and the bar never scrolls.
+ */
+.navbar.navbar-expand-lg .navbar-toggler {
+  display: none;
+}
+
+.navbar.navbar-expand-lg .navbar-collapse {
+  align-items: center;
+  background: var(--nav-bg);
+  display: flex !important;
+  flex: 1 1 auto;
+  flex-basis: auto;
+  flex-wrap: nowrap;
+  min-width: 0;
+  overflow: visible;
+  row-gap: 0.15rem;
+}
+
+.navbar-nav {
+  align-items: center;
+  background: var(--nav-bg);
+  display: flex;
+  flex-direction: row !important;
+  flex-wrap: wrap;
+  gap: 0.12rem 0.1rem;
+  max-width: 100%;
+  min-width: 0;
+  overflow: visible;
+}
+
+.navbar-nav.me-auto {
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  justify-content: center;
+  min-width: 0;
+}
+
+.navbar-nav.ms-auto {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  margin-left: auto !important;
+  min-width: 0;
+}
+
+.navbar-nav .nav-item {
+  display: flex;
+  flex: 0 0 auto;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.navbar-nav.ms-auto .nav-link {
+  min-width: 0;
+}
+
+@media (max-width: 768px) {
+  .navbar {
+    padding: 0.35rem 0.5rem;
+  }
+
+  .navbar .container-fluid {
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+
+  .navbar.navbar-expand-lg .navbar-collapse {
+    flex-basis: 100%;
+    flex-wrap: wrap;
+  }
+
+  .navbar-nav.me-auto,
+  .navbar-nav.ms-auto {
+    flex: 1 1 100%;
+    justify-content: flex-start;
+    margin-left: 0 !important;
+  }
+}
+
+/* ===== STICKY/COMPACT FILTER BAR ===== */
+/* Apply class `pynmon-filter-bar` to the wrapping card of a filter
+ * form. When scrolled, JS adds `is-compact` which collapses the form into
+ * a one-line summary of currently-applied filters (rendered in
+ * `<div class="pynmon-filter-summary">` inside the bar).
+ */
+.pynmon-filter-bar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--card-bg);
+  transition: padding 0.15s ease, box-shadow 0.15s ease;
+}
+.pynmon-filter-bar.is-compact {
+  padding: 0.4rem 0.75rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+.pynmon-filter-bar.is-compact .pynmon-filter-heading,
+.pynmon-filter-bar.is-compact .pynmon-filter-controls {
+  display: none;
+}
+.pynmon-filter-summary {
+  display: none;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.pynmon-filter-bar.is-compact .pynmon-filter-summary {
+  display: flex;
+}
+.pynmon-filter-summary .chip {
+  background: #f1f3f4;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 0.1rem 0.55rem;
+  font-size: 11px;
+  color: var(--text-primary);
+}
+.pynmon-filter-summary .chip strong {
+  color: var(--nav-active);
+  font-weight: 600;
+  margin-right: 0.25rem;
+}
+.pynmon-filter-summary .expand-btn {
+  margin-left: auto;
+  font-size: 11px;
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.pynmon-filter-summary .expand-btn:hover {
+  color: var(--nav-active);
+  border-color: var(--nav-active);
+}
+
+.event-ref-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 12rem;
+}
+
+.event-ref-code {
+  display: inline-block;
+  max-width: 14rem;
+  padding: 0.1rem 0.25rem;
+  border: 1px solid #e9ecef;
+  border-radius: 0.25rem;
+  background: #f8f9fa;
+  color: #495057;
+  font-size: 0.72rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.event-full-link {
+  display: inline-block;
+  max-width: 28rem;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  white-space: normal;
+}
+
+.trigger-detail-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.trigger-detail-unit {
+  border: 1px solid #e9ecef;
+  border-radius: 0.25rem;
+  background: #ffffff;
+  padding: 0.45rem 0.55rem;
+  min-width: 16rem;
+}
+
+.trigger-detail-unit-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.3rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #495057;
+}
+
+.trigger-detail-type {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  border-radius: 0.25rem;
+  padding: 0.12rem 0.38rem;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: 0.72rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.trigger-detail-meta-row {
+  display: grid;
+  grid-template-columns: 8rem minmax(0, 1fr);
+  gap: 0.45rem;
+  align-items: start;
+  font-size: 0.72rem;
+  line-height: 1.25;
+}
+
+.trigger-detail-meta-row span,
+.trigger-detail-kv dt {
+  color: #6c757d;
+  font-weight: 500;
+}
+
+.trigger-detail-meta-row code,
+.trigger-detail-kv code,
+.trigger-detail-kv pre {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.trigger-detail-kv {
+  display: grid;
+  grid-template-columns: 8rem minmax(0, 1fr);
+  gap: 0.25rem 0.45rem;
+  margin: 0.35rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.25;
+}
+
+.trigger-detail-kv dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.trigger-detail-kv pre {
+  max-height: 14rem;
+  margin: 0;
+  padding: 0.35rem;
+  border: 1px solid #e9ecef;
+  border-radius: 0.25rem;
+  background: #f8f9fa;
+  font-size: 0.68rem;
+}
+
+.trigger-status-list {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.trigger-valid-condition-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+@media (max-width: 900px) {
+  .trigger-valid-condition-grid {
+    grid-template-columns: 1fr;
+  }
 }

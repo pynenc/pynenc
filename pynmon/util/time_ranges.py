@@ -20,8 +20,13 @@ TIME_RANGE_MAP: dict[str, timedelta] = {
 }
 
 # Mapping of resolution strings to seconds
-RESOLUTION_MAP: dict[str, int | None] = {
+RESOLUTION_MAP: dict[str, float | None] = {
     "auto": None,
+    "100ms": 0.1,
+    "250ms": 0.25,
+    "500ms": 0.5,
+    "1s": 1,
+    "5s": 5,
     "10s": 10,
     "30s": 30,
     "1m": 60,
@@ -79,7 +84,7 @@ def _ensure_utc(dt: datetime) -> datetime:
     return dt
 
 
-def parse_resolution(resolution: str) -> int | None:
+def parse_resolution(resolution: str) -> float | None:
     """
     Parse resolution string to seconds.
 

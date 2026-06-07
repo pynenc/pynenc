@@ -85,11 +85,20 @@
             </li>
             <li class="nav-item">
               <a
-                class="nav-link {{ 'active' if 'atomic-service' in request.url.path }}"
+                class="nav-link {{ 'active' if 'atomic-service/timeline' in request.url.path }}"
                 href="/runners/atomic-service/timeline"
               >
                 <span class="material-icons">schedule</span>
                 Atomic Service
+              </a>
+            </li>
+            <li class="nav-item">
+              <a
+                class="nav-link {{ 'active' if 'atomic-service/scheduling' in request.url.path }}"
+                href="/runners/atomic-service/scheduling"
+              >
+                <span class="material-icons">visibility</span>
+                Atomic Schedule
               </a>
             </li>
             <li class="nav-item">
@@ -148,6 +157,15 @@
             </li>
             <li class="nav-item">
               <a
+                class="nav-link {{ 'active' if '/events' in request.url.path }}"
+                href="/events"
+              >
+                <span class="material-icons">flash_on</span>
+                Events
+              </a>
+            </li>
+            <li class="nav-item">
+              <a
                 class="nav-link {{ 'active' if '/log-explorer' in request.url.path }}"
                 href="/log-explorer"
               >
@@ -193,9 +211,9 @@
     </nav>
 
     <div class="container mt-4">
+      {% block page_title %}
       <h2 class="pynmon-title mb-3">{{ title }}</h2>
-
-      {% block content %}
+      {% endblock %} {% block content %}
       <div class="row">
         <div class="col-md-6">
           <div class="card">
@@ -249,8 +267,14 @@
             link.getAttribute("href") === "#"
           )
             return;
-          link.addEventListener("click", function () {
-            overlay.classList.add("active");
+          link.addEventListener("click", function (e) {
+            // Defer activation so click handlers that call
+            // preventDefault() (e.g. SVG event-marker links handled by
+            // the timeline JS) can cancel navigation before the overlay
+            // gets stuck on screen.
+            setTimeout(function () {
+              if (!e.defaultPrevented) overlay.classList.add("active");
+            }, 0);
           });
         });
 
@@ -267,6 +291,48 @@
         window.addEventListener("pageshow", function (e) {
           if (e.persisted) overlay.classList.remove("active");
         });
+      })();
+    </script>
+
+    <!-- Sticky/compact filter bar: collapse to chip summary on scroll -->
+    <script>
+      (function () {
+        const bars = Array.from(
+          document.querySelectorAll(".pynmon-filter-bar")
+        );
+        if (!bars.length) return;
+        const threshold = 80;
+        const pinned = new WeakSet();
+        function update() {
+          bars.forEach(function (bar) {
+            if (pinned.has(bar)) return;
+            if (window.scrollY > threshold) bar.classList.add("is-compact");
+            else bar.classList.remove("is-compact");
+          });
+        }
+        bars.forEach(function (bar) {
+          const expandBtn = bar.querySelector(
+            ".pynmon-filter-summary .expand-btn"
+          );
+          if (!expandBtn) return;
+          expandBtn.addEventListener("click", function () {
+            pinned.add(bar);
+            bar.classList.remove("is-compact");
+          });
+        });
+        window.addEventListener(
+          "scroll",
+          function () {
+            if (window.scrollY < 10) {
+              bars.forEach(function (bar) {
+                pinned.delete(bar);
+              });
+            }
+            update();
+          },
+          { passive: true }
+        );
+        update();
       })();
     </script>
 

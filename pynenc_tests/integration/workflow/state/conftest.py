@@ -6,6 +6,7 @@ deterministic operations across different state backend implementations,
 following the same pattern as app combinations integration tests.
 """
 
+from collections.abc import Generator
 from typing import TYPE_CHECKING
 
 import pytest
@@ -19,7 +20,7 @@ if TYPE_CHECKING:
 
 
 @pytest.fixture
-def app(app_instance: "Pynenc") -> "Pynenc":
+def app(app_instance: "Pynenc") -> Generator["Pynenc", None, None]:
     """
     Create test app with specified state backend implementation.
 
@@ -29,7 +30,12 @@ def app(app_instance: "Pynenc") -> "Pynenc":
     """
     app_instance.purge()
     app_instance.runner = ThreadRunner(app_instance)
-    return app_instance
+    try:
+        yield app_instance
+    finally:
+        runner = app_instance.runner
+        if runner.running:
+            runner.stop_runner_loop()
 
 
 # Data task fixtures

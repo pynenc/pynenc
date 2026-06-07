@@ -41,6 +41,7 @@ class MemStateBackend(BaseStateBackend[Params, Result]):
     def __init__(self, app: "Pynenc") -> None:
         self._cache: dict[str, tuple[InvocationDTO, CallDTO]] = {}
         self._parent_to_children: dict[str, list[str]] = defaultdict(list)
+        self._event_to_children: dict[str, list[str]] = defaultdict(list)
         self._runner_contexts: dict[str, RunnerContext] = {}
         self._history: dict[InvocationId, list] = defaultdict(list)
         self._results: dict[InvocationId, str] = {}
@@ -59,6 +60,7 @@ class MemStateBackend(BaseStateBackend[Params, Result]):
         """Clears all stored data"""
         self._cache.clear()
         self._parent_to_children.clear()
+        self._event_to_children.clear()
         self._history.clear()
         self._results.clear()
         self._exceptions.clear()
@@ -82,6 +84,12 @@ class MemStateBackend(BaseStateBackend[Params, Result]):
                 children = self._parent_to_children[parent_key]
                 if child_key not in children:
                     children.append(child_key)
+            if inv_dto.parent_event_id is not None:
+                ev_key = str(inv_dto.parent_event_id)
+                child_key = str(inv_dto.invocation_id)
+                ev_children = self._event_to_children[ev_key]
+                if child_key not in ev_children:
+                    ev_children.append(child_key)
 
     def _get_invocation(
         self, invocation_id: "InvocationId"
@@ -108,6 +116,15 @@ class MemStateBackend(BaseStateBackend[Params, Result]):
         return (
             InvId(child_key)
             for child_key in self._parent_to_children.get(parent_key, [])
+        )
+
+    def get_invocations_by_parent_event(
+        self, parent_event_id: str
+    ) -> Iterator["InvocationId"]:
+        """Return IDs of invocations whose ``parent_event_id`` matches."""
+        return (
+            InvId(child_key)
+            for child_key in self._event_to_children.get(str(parent_event_id), [])
         )
 
     def _add_histories(

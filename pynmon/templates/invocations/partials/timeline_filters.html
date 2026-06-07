@@ -1,12 +1,29 @@
-<!-- Timeline left sidebar: filter form and active time range display -->
-<div class="card mb-4 filter-form">
-  <div class="card-header">
-    Filters
-    <small class="text-muted ms-2">All times in UTC</small>
-  </div>
-  <div class="card-body">
-    <form action="/invocations/timeline" method="get">
-      <div class="mb-2">
+<!-- Timeline filter panel: collapsible, compact by default -->
+<details class="timeline-filter-panel mb-3">
+  <summary>
+    <span class="material-icons" aria-hidden="true">tune</span>
+    <strong>Filters</strong>
+    <span class="timeline-filter-chip">{{ current_filters.time_range }}</span>
+    {% if current_filters.task_id %}<span class="timeline-filter-chip">task</span>{% endif %}
+    {% if current_filters.workflow_type %}<span class="timeline-filter-chip">workflow type</span>{% endif %}
+    {% if current_filters.workflow_id %}<span class="timeline-filter-chip">workflow id</span>{% endif %}
+    <span class="timeline-filter-range">
+      {{ start_datetime.strftime('%H:%M:%S.%f')[:-3] }} - {{ end_datetime.strftime('%H:%M:%S.%f')[:-3] }} UTC
+    </span>
+    {% if current_filters.inv_ids %}
+    <span class="timeline-filter-chip timeline-filter-scope-chip">
+      scope: {{ current_filters.inv_ids.split(',')|length }}
+      <a href="{{ current_filters.scope_clear_url }}" class="timeline-filter-scope-clear"
+         title="Clear invocation scope"
+        aria-label="Clear invocation scope">x</a>
+    </span>
+    {% endif %}
+  </summary>
+  <div class="timeline-filter-body">
+    <form action="/invocations/timeline" method="get" class="timeline-filter-grid">
+      {% if current_filters.focus_event %}<input type="hidden" name="focus_event" value="{{ current_filters.focus_event }}">{% endif %}
+      {% if current_filters.selected %}<input type="hidden" name="selected" value="{{ current_filters.selected }}">{% endif %}
+      <div class="timeline-filter-field">
         <label for="time_range" class="form-label">Time Range</label>
         <select class="form-select form-select-sm" id="time_range" name="time_range">
           <option value="1m"  {% if current_filters.time_range == '1m'  %}selected{% endif %}>Last 1 minute</option>
@@ -23,20 +40,26 @@
         </select>
       </div>
 
-      <div id="custom_date_range" class="mb-2 {% if current_filters.time_range != 'custom' %}d-none{% endif %}">
-        <div class="mb-2">
-          <label for="start_date" class="form-label">Start Date (UTC)</label>
-          <input type="datetime-local" class="form-control form-control-sm" id="start_date" name="start_date"
-                 value="{{ current_filters.start_date }}" step="1">
+      <div id="custom_date_range" class="timeline-filter-custom-range {% if current_filters.time_range != 'custom' %}d-none{% endif %}">
+        <div class="timeline-filter-field">
+          <label for="start_date" class="form-label">Start (UTC)</label>
+          <input type="text" class="form-control form-control-sm" id="start_date" name="start_date"
+                 value="{{ current_filters.start_date }}"
+               placeholder="2026-05-16T19:09:12.348"
+                 pattern="\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d{1,6})?"
+                 spellcheck="false" autocomplete="off">
         </div>
-        <div class="mb-2">
-          <label for="end_date" class="form-label">End Date (UTC)</label>
-          <input type="datetime-local" class="form-control form-control-sm" id="end_date" name="end_date"
-                 value="{{ current_filters.end_date }}" step="1">
+        <div class="timeline-filter-field">
+          <label for="end_date" class="form-label">End (UTC)</label>
+          <input type="text" class="form-control form-control-sm" id="end_date" name="end_date"
+                 value="{{ current_filters.end_date }}"
+               placeholder="2026-05-16T19:09:12.348"
+                 pattern="\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d{1,6})?"
+                 spellcheck="false" autocomplete="off">
         </div>
       </div>
 
-      <div class="mb-2">
+      <div class="timeline-filter-field">
         <label for="task_id" class="form-label">Task ID</label>
         <select class="form-select form-select-sm" id="task_id" name="task_id">
           <option value="">All Tasks</option>
@@ -48,7 +71,7 @@
         </select>
       </div>
 
-      <div class="mb-2">
+      <div class="timeline-filter-field timeline-filter-field-small">
         <label for="limit" class="form-label">Limit</label>
         <select class="form-select form-select-sm" id="limit" name="limit">
           <option value="100"   {% if current_filters.limit == 100   %}selected{% endif %}>100</option>
@@ -61,7 +84,22 @@
         </select>
       </div>
 
-      <div class="mb-2">
+      <div class="timeline-filter-field timeline-filter-field-small">
+        <label for="resolution" class="form-label">Resolution</label>
+        <select class="form-select form-select-sm" id="resolution" name="resolution">
+          <option value="auto"  {% if current_filters.resolution == 'auto'  %}selected{% endif %}>Auto</option>
+          <option value="100ms" {% if current_filters.resolution == '100ms' %}selected{% endif %}>100 ms</option>
+          <option value="250ms" {% if current_filters.resolution == '250ms' %}selected{% endif %}>250 ms</option>
+          <option value="500ms" {% if current_filters.resolution == '500ms' %}selected{% endif %}>500 ms</option>
+          <option value="1s"    {% if current_filters.resolution == '1s'    %}selected{% endif %}>1 sec</option>
+          <option value="5s"    {% if current_filters.resolution == '5s'    %}selected{% endif %}>5 sec</option>
+          <option value="10s"   {% if current_filters.resolution == '10s'   %}selected{% endif %}>10 sec</option>
+          <option value="30s"   {% if current_filters.resolution == '30s'   %}selected{% endif %}>30 sec</option>
+          <option value="1m"    {% if current_filters.resolution == '1m'    %}selected{% endif %}>1 min</option>
+        </select>
+      </div>
+
+      <div class="timeline-filter-field">
         <label for="workflow_type" class="form-label">Workflow Type</label>
         <select class="form-select form-select-sm" id="workflow_type" name="workflow_type">
           <option value="">All Workflow Types</option>
@@ -73,45 +111,59 @@
         </select>
       </div>
 
-      <div class="mb-2">
+      <div class="timeline-filter-field">
         <label for="workflow_id" class="form-label">Workflow ID</label>
         <input type="text" class="form-control form-control-sm" id="workflow_id" name="workflow_id"
                value="{{ current_filters.workflow_id }}" placeholder="Partial or full ID">
       </div>
 
-      <div class="mb-2 form-check">
+      <div class="timeline-filter-field timeline-filter-scope">
+        <label for="inv_ids" class="form-label">Invocation Scope</label>
+        <input type="text" class="form-control form-control-sm" id="inv_ids" name="inv_ids"
+               value="{{ current_filters.inv_ids }}" placeholder="Comma-separated invocation IDs"
+               spellcheck="false" autocomplete="off">
+      </div>
+
+      <div class="timeline-filter-check">
         <input type="hidden" id="collapse_external_hidden" name="collapse_external" value="0">
         <input class="form-check-input" type="checkbox" id="collapse_external"
                {% if current_filters.collapse_external %}checked{% endif %}
                onchange="document.getElementById('collapse_external_hidden').value = this.checked ? '1' : '0'">
-        <label class="form-check-label" for="collapse_external">Collapse External Runners</label>
+        <label class="form-check-label" for="collapse_external">Collapse external</label>
+      </div>
+
+      <div class="timeline-filter-check">
+        <input type="hidden" id="show_system_hidden" name="show_system" value="0">
+        <input class="form-check-input" type="checkbox" id="show_system"
+               {% if current_filters.show_system %}checked{% endif %}
+               onchange="document.getElementById('show_system_hidden').value = this.checked ? '1' : '0'">
+        <label class="form-check-label" for="show_system">System tasks</label>
+      </div>
+
+      <div class="timeline-filter-check">
+        <input type="hidden" id="show_atomic_service_hidden" name="show_atomic_service" value="0">
+        <input class="form-check-input" type="checkbox" id="show_atomic_service"
+               {% if current_filters.show_atomic_service %}checked{% endif %}
+               onchange="document.getElementById('show_atomic_service_hidden').value = this.checked ? '1' : '0'">
+        <label class="form-check-label" for="show_atomic_service">Atomic service</label>
       </div>
       <script>
-        // Sync hidden field with checkbox on page load
+        // Sync hidden fields with checkbox state on page load
         (function(){
-          var chk = document.getElementById('collapse_external');
-          var hid = document.getElementById('collapse_external_hidden');
-          if (chk && hid) hid.value = chk.checked ? '1' : '0';
+          ['collapse_external', 'show_system', 'show_atomic_service'].forEach(function(id){
+            var chk = document.getElementById(id);
+            var hid = document.getElementById(id + '_hidden');
+            if (chk && hid) hid.value = chk.checked ? '1' : '0';
+          });
         })();
       </script>
 
-      <button type="submit" class="btn btn-primary btn-sm w-100">Apply Filters & Refresh</button>
+      <div class="timeline-filter-actions">
+        <button type="submit" class="btn btn-primary btn-sm flex-fill">Apply</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="window.location.reload();">
+          <span class="material-icons" style="font-size: 14px; vertical-align: middle;">refresh</span>
+        </button>
+      </div>
     </form>
-    <button type="button" class="btn btn-outline-secondary btn-sm w-100 mt-2" onclick="window.location.reload();">
-      <span class="material-icons" style="font-size: 14px; vertical-align: middle;">refresh</span>
-      Refresh
-    </button>
   </div>
-</div>
-
-<div class="card mb-4">
-  <div class="card-header py-2">
-    <small class="mb-0">Time Range (UTC)</small>
-  </div>
-  <div class="card-body py-2">
-    <small class="text-muted">
-      <strong>Start:</strong> {{ start_datetime.strftime('%Y-%m-%d %H:%M:%S') }} UTC<br>
-      <strong>End:</strong> {{ end_datetime.strftime('%Y-%m-%d %H:%M:%S') }} UTC
-    </small>
-  </div>
-</div>
+</details>

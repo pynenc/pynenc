@@ -24,12 +24,13 @@ logger = logging.getLogger("pynmon.views.family_tree")
 
 def _build_svg(
     invocation_id: InvocationId,
-    expand_ids: frozenset[str] = frozenset(),
+    expand_ids: tuple[str, ...] = (),
 ) -> str | None:
     """Build the family tree SVG for an invocation (sync, runs in thread).
 
     :param invocation_id: Focus invocation ID.
     :param expand_ids: Invocation IDs whose subtrees should be expanded.
+        Repeated IDs represent repeated "load more" clicks.
     :return: SVG string, or None on failure.
     """
     app = get_pynenc_instance()
@@ -38,6 +39,7 @@ def _build_svg(
             app.state_backend,
             invocation_id,
             expand_ids=expand_ids,
+            trigger=getattr(app, "trigger", None),
         )
         if root is None:
             return None
@@ -71,7 +73,7 @@ async def invocation_family_tree(
     :param expand: Comma-separated invocation IDs to expand beyond default limits.
     :return: Rendered family tree partial.
     """
-    expand_ids = frozenset(eid.strip() for eid in expand.split(",") if eid.strip())
+    expand_ids = tuple(eid.strip() for eid in expand.split(",") if eid.strip())
     svg_content = await asyncio.to_thread(_build_svg, invocation_id, expand_ids)
     template = "partials/family_tree_bare.html" if bare else "partials/family_tree.html"
     return templates.TemplateResponse(

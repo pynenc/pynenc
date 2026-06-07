@@ -6,19 +6,21 @@ the in-memory implementation.
 """
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import Mock, patch
 
 import pytest
 
 from pynenc.invocation.status import InvocationStatus
 from pynenc.identifiers.task_id import TaskId
+from pynenc.orchestrator.atomic_service import AtomicServiceRun
 from pynenc.trigger.arguments import create_argument_filter
 from pynenc.trigger.arguments.argument_providers import StaticArgumentProvider
 from pynenc.trigger.conditions import (
     CronCondition,
     CronContext,
     EventCondition,
+    StatusContext,
     StatusCondition,
     ValidCondition,
 )
@@ -28,11 +30,19 @@ from pynenc_tests.conftest import MockPynenc
 
 if TYPE_CHECKING:
     from pynenc import Pynenc
+    from pynenc.invocation.dist_invocation import DistributedInvocation
     from pynenc.trigger import BaseTrigger
     from pynenc.models.trigger_definition_dto import TriggerDefinitionDTO
 
 # Create a test app instance
 app = MockPynenc()
+
+
+def _test_atomic_service_run() -> AtomicServiceRun:
+    return AtomicServiceRun(
+        runner_id="test-runner",
+        atomic_service_run_id="test-service-run",
+    )
 
 
 @app.task
@@ -141,6 +151,8 @@ def test_check_time_based_triggers(trigger: "BaseTrigger") -> None:
     # Set up the time for testing - noon exactly
     test_time = datetime(2024, 1, 1, 12, 0, 0)
 
+    # Cron evaluation is gated on the caller passing an ``atomic_service``
+    # pair (see BaseTrigger.check_time_based_triggers).
     # Mock is_satisfied_by to return True
     with patch.object(CronCondition, "is_satisfied_by", return_value=True):
         # Create a CronContext with our test time
@@ -148,7 +160,13 @@ def test_check_time_based_triggers(trigger: "BaseTrigger") -> None:
 
         # Patch CronContext creation to return our controlled context
         with patch("pynenc.trigger.conditions.CronContext", return_value=context):
-            trigger.check_time_based_triggers(test_time)
+            trigger.check_time_based_triggers(
+                test_time,
+                atomic_service_run=AtomicServiceRun(
+                    runner_id="test-runner",
+                    atomic_service_run_id="test-service-run",
+                ),
+            )
 
             # Verify a valid condition was recorded
             valid_conditions = trigger.get_valid_conditions()
@@ -156,6 +174,24 @@ def test_check_time_based_triggers(trigger: "BaseTrigger") -> None:
             assert cron_condition.condition_id in [
                 vc.condition.condition_id for vc in valid_conditions.values()
             ]
+
+
+def test_check_time_based_triggers_skips_when_scheduler_disabled(
+    trigger: "BaseTrigger",
+) -> None:
+    """Cron conditions are ignored when trigger scheduling is disabled."""
+    trigger.conf.enable_scheduler = False
+    cron_condition = CronCondition("0 * * * *")
+    trigger.register_condition(cron_condition)
+
+    with patch.object(CronCondition, "is_satisfied_by", return_value=True) as mocked:
+        trigger.check_time_based_triggers(
+            datetime(2024, 1, 1, 12, 0, 0),
+            atomic_service_run=_test_atomic_service_run(),
+        )
+
+    mocked.assert_not_called()
+    assert trigger.get_valid_conditions() == {}
 
 
 def test_emit_event(trigger: "BaseTrigger") -> None:
@@ -201,6 +237,39 @@ def test_report_task_status(trigger: "BaseTrigger") -> None:
         condition.condition_id
         == list(valid_conditions.values())[0].condition.condition_id
     )
+
+
+def test_single_condition_trigger_runs_once_per_valid_context(
+    trigger: "BaseTrigger",
+) -> None:
+    """Batched status contexts for one condition should not collapse to one run."""
+    task_id = add.task_id
+    status = InvocationStatus.SUCCESS
+    condition = StatusCondition(task_id, [status], create_argument_filter(None))
+    trigger.register_condition(condition)
+    trigger_def = TriggerDefinition(
+        task_id=task_id, condition_ids=[condition.condition_id]
+    )
+    trigger.register_trigger(trigger_def.to_dto(app))
+
+    first = cast("DistributedInvocation[Any, Any]", add(1, 2))
+    second = cast("DistributedInvocation[Any, Any]", add(3, 4))
+    valid_conditions = [
+        ValidCondition(condition, StatusContext.from_invocation(first, status)),
+        ValidCondition(condition, StatusContext.from_invocation(second, status)),
+    ]
+    trigger.record_valid_conditions(valid_conditions)
+
+    fake_invocation = Mock(invocation_id="triggered-invocation")
+    with (
+        patch.object(trigger, "execute_task", return_value=fake_invocation) as execute,
+        patch.object(trigger, "_record_trigger_run") as record_run,
+    ):
+        trigger.trigger_loop_iteration(_test_atomic_service_run())
+
+    assert execute.call_count == 2
+    assert record_run.call_count == 2
+    assert trigger.get_valid_conditions() == {}
 
 
 def test_register_task_triggers(trigger: "BaseTrigger") -> None:
@@ -272,13 +341,23 @@ def test_distributed_cron_execution(trigger: "BaseTrigger") -> None:
         "is_satisfied_by",
         side_effect=lambda ctx: ctx.last_execution is None,
     ):
-        assert trigger._should_trigger_cron_condition(cron_condition, time1) is not None
+        assert (
+            trigger._should_trigger_cron_condition(
+                cron_condition, time1, _test_atomic_service_run()
+            )
+            is not None
+        )
 
         # The cron last execution should now be stored
         assert trigger.get_last_cron_execution(condition_id) == time1
 
         # Second runner checks at 12:00:30 (same minute)
-        assert trigger._should_trigger_cron_condition(cron_condition, time2) is None
+        assert (
+            trigger._should_trigger_cron_condition(
+                cron_condition, time2, _test_atomic_service_run()
+            )
+            is None
+        )
 
         # Third runner checks at 12:01 (next minute)
         # Create a new mock that returns True if last_execution is time1 and current time is time3
@@ -290,7 +369,9 @@ def test_distributed_cron_execution(trigger: "BaseTrigger") -> None:
             ),
         ):
             assert (
-                trigger._should_trigger_cron_condition(cron_condition, time3)
+                trigger._should_trigger_cron_condition(
+                    cron_condition, time3, _test_atomic_service_run()
+                )
                 is not None
             )
 
@@ -426,10 +507,14 @@ def test_trigger_loop_iteration(trigger: "BaseTrigger") -> None:
         with patch.object(trigger_def, "should_trigger", return_value=True):
             # Mock execute_task to verify it's called
             with patch.object(trigger, "execute_task") as mock_execute:
-                trigger.trigger_loop_iteration()
+                trigger.trigger_loop_iteration(_test_atomic_service_run())
 
-                # Verify execute_task was called with the right arguments
-                mock_execute.assert_called_once_with(task_id, {"arg": "value"})
+                # Verify execute_task was called with the right arguments.
+                # parent_event_id is None because the satisfied condition is a
+                # CronCondition (not an EventContext-bearing one).
+                mock_execute.assert_called_once_with(
+                    task_id, {"arg": "value"}, parent_event_id=None
+                )
 
                 # Verify valid condition was cleared
                 assert len(trigger.get_valid_conditions()) == 0

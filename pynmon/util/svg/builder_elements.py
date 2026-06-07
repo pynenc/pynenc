@@ -135,6 +135,7 @@ def _add_point(
         entry.runner_info,
         order,
         sub_lane,
+        entry.registered_by_inv_id if entry.status.upper() == "REGISTERED" else None,
     )
     if lane := data.lanes.get(entry.runner_info.lane_id):
         lane.add_point(point)

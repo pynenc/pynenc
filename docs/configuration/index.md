@@ -85,31 +85,68 @@ app = Pynenc(config_filepath="/path/to/pynenc.yaml")
 
 Main application configuration (`pynenc.conf.config_pynenc.ConfigPynenc`).
 
-| Field                                   | Type    | Default                  | Description                                                     |
-| --------------------------------------- | ------- | ------------------------ | --------------------------------------------------------------- |
-| `app_id`                                | `str`   | `"pynenc"`               | Application identifier                                          |
-| `orchestrator_cls`                      | `str`   | `"MemOrchestrator"`      | Orchestrator implementation class name                          |
-| `trigger_cls`                           | `str`   | `"MemTrigger"`           | Trigger implementation class name                               |
-| `broker_cls`                            | `str`   | `"MemBroker"`            | Broker implementation class name                                |
-| `state_backend_cls`                     | `str`   | `"MemStateBackend"`      | State backend implementation class name                         |
-| `serializer_cls`                        | `str`   | `"JsonPickleSerializer"` | Serializer implementation class name                            |
-| `client_data_store_cls`                 | `str`   | `"MemClientDataStore"`   | Client data store implementation class name                     |
-| `runner_cls`                            | `str`   | `"DummyRunner"`          | Runner implementation class name                                |
-| `trigger_task_modules`                  | `set`   | `set()`                  | Modules containing trigger-dependent tasks                      |
-| `dev_mode_force_sync_tasks`             | `bool`  | `False`                  | Execute tasks synchronously in calling thread                   |
-| `logging_level`                         | `str`   | `"info"`                 | Logging level (`debug`, `info`, `warning`, `error`, `critical`) |
-| `print_arguments`                       | `bool`  | `True`                   | Print task arguments in log messages                            |
-| `truncate_arguments_length`             | `int`   | `32`                     | Maximum printed argument length                                 |
-| `argument_print_mode`                   | `str`   | `"TRUNCATED"`            | Argument display mode: `FULL`, `KEYS`, `TRUNCATED`, `HIDDEN`    |
-| `cached_status_time`                    | `float` | `0.1`                    | Invocation status cache TTL (seconds)                           |
-| `compact_log_context`                   | `bool`  | `True`                   | Truncate IDs in log context for readability                     |
-| `atomic_service_interval_minutes`       | `float` | `5.0`                    | Cycle interval for atomic recovery services                     |
-| `atomic_service_spread_margin_minutes`  | `float` | `1.0`                    | Safety margin for time-slot allocation                          |
-| `atomic_service_check_interval_minutes` | `float` | `0.5`                    | Runner check interval for atomic services                       |
-| `recover_pending_invocations_cron`      | `str`   | `"*/5 * * * *"`          | Cron expression for pending invocation recovery                 |
-| `max_pending_seconds`                   | `float` | `5.0`                    | Maximum time an invocation can remain PENDING                   |
-| `recover_running_invocations_cron`      | `str`   | `"*/15 * * * *"`         | Cron expression for running invocation recovery                 |
-| `runner_considered_dead_after_minutes`  | `float` | `10.0`                   | Heartbeat timeout before runner is considered dead              |
+| Field                                        | Type    | Default                  | Description                                                                         |
+| -------------------------------------------- | ------- | ------------------------ | ----------------------------------------------------------------------------------- |
+| `app_id`                                     | `str`   | `"pynenc"`               | Application identifier                                                              |
+| `orchestrator_cls`                           | `str`   | `"MemOrchestrator"`      | Orchestrator implementation class name                                              |
+| `trigger_cls`                                | `str`   | `"MemTrigger"`           | Trigger implementation class name                                                   |
+| `broker_cls`                                 | `str`   | `"MemBroker"`            | Broker implementation class name                                                    |
+| `state_backend_cls`                          | `str`   | `"MemStateBackend"`      | State backend implementation class name                                             |
+| `serializer_cls`                             | `str`   | `"JsonPickleSerializer"` | Serializer implementation class name                                                |
+| `client_data_store_cls`                      | `str`   | `"MemClientDataStore"`   | Client data store implementation class name                                         |
+| `runner_cls`                                 | `str`   | `"DummyRunner"`          | Runner implementation class name                                                    |
+| `trigger_task_modules`                       | `set`   | `set()`                  | Modules imported at runner startup for trigger-backed tasks                         |
+| `dev_mode_force_sync_tasks`                  | `bool`  | `False`                  | Execute tasks synchronously in calling thread                                       |
+| `logging_level`                              | `str`   | `"info"`                 | Logging level (`debug`, `info`, `warning`, `error`, `critical`)                     |
+| `print_arguments`                            | `bool`  | `True`                   | Print task arguments in log messages                                                |
+| `truncate_arguments_length`                  | `int`   | `32`                     | Maximum printed argument length                                                     |
+| `argument_print_mode`                        | `str`   | `"TRUNCATED"`            | Argument display mode: `FULL`, `KEYS`, `TRUNCATED`, `HIDDEN`                        |
+| `cached_status_time`                         | `float` | `0.1`                    | Invocation status cache TTL (seconds)                                               |
+| `compact_log_context`                        | `bool`  | `True`                   | Truncate IDs in log context for readability                                         |
+| `log_use_colors`                             | `bool`  | `True`                   | Emit ANSI colour codes in `text` log output                                         |
+| `log_stream`                                 | `str`   | `"stderr"`               | Log output stream: `"stderr"` or `"stdout"`                                         |
+| `log_format`                                 | `str`   | `"text"`                 | Log format: `"text"` (human-readable) or `"json"` (structured, one object per line) |
+| `atomic_service_interval_minutes`            | `float` | `5.0`                    | Cycle interval for atomic recovery services                                         |
+| `atomic_service_spread_margin_minutes`       | `float` | `1.0`                    | Safety margin for time-slot allocation                                              |
+| `atomic_service_check_interval_minutes`      | `float` | `0.5`                    | Runner check interval for atomic services                                           |
+| `atomic_service_execution_retention_minutes` | `float` | `60.0`                   | Retention window for atomic-service execution records (minutes)                     |
+| `atomic_service_execution_max_records`       | `int`   | `1000`                   | Capacity cap for atomic-service execution records; oldest are dropped first         |
+| `recover_pending_invocations_cron`           | `str`   | `"*/5 * * * *"`          | Cron expression for pending invocation recovery                                     |
+| `max_pending_seconds`                        | `float` | `5.0`                    | Maximum time an invocation can remain PENDING                                       |
+| `recover_running_invocations_cron`           | `str`   | `"*/15 * * * *"`         | Cron expression for running invocation recovery                                     |
+| `runner_considered_dead_after_minutes`       | `float` | `10.0`                   | Heartbeat timeout before runner is considered dead                                  |
+
+## ConfigTrigger Fields
+
+Trigger configuration (`pynenc.conf.config_trigger.ConfigTrigger`).
+
+| Field                        | Type   | Default | Description                                                                                                               |
+| ---------------------------- | ------ | ------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `scheduler_interval_seconds` | `int`  | `60`    | Minimum interval for checking time-based triggers                                                                         |
+| `enable_scheduler`           | `bool` | `True`  | Enable or disable the time-based scheduler entirely                                                                       |
+| `max_events_batch_size`      | `int`  | `100`   | Maximum number of events processed per event-loop iteration                                                               |
+| `event_retention_days`       | `int`  | `7`     | Maximum age, in days, of stored emitted events before auto-purge removes them                                             |
+| `event_auto_purge_enabled`   | `bool` | `True`  | When `True`, the trigger run loop applies the retention and capacity limits to events and trigger runs on every tick      |
+| `event_max_records`          | `int`  | `0`     | Soft cap on the total number of stored events (`0` disables capacity-based purging; only age-based purging applies)       |
+| `trigger_run_max_records`    | `int`  | `0`     | Soft cap on the total number of stored trigger runs (`0` disables capacity-based purging; only age-based purging applies) |
+
+`trigger_task_modules` belongs to the main app configuration because the
+runner uses it during startup. Normal task modules are loaded lazily when an
+invocation first reaches a runner, but trigger-backed tasks need to be known
+before any invocation exists: their conditions must already be registered
+when the app-level atomic service decides whether to create that first
+invocation.
+
+Add every module that declares `@app.task(triggers=...)`. Pynenc imports those
+modules when the runner starts and continues to lazy-load task modules that are
+not listed.
+
+```toml
+[tool.pynenc]
+trigger_cls = "SQLiteTrigger"
+trigger_task_modules = ["tasks"]
+scheduler_interval_seconds = 60
+```
 
 ## ConfigTask Fields
 

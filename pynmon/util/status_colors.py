@@ -7,13 +7,13 @@ all pynmon components including SVG timelines, HTML templates, and JavaScript.
 The color scheme follows a semantic approach:
 - Neutral states: Gray tones (REGISTERED, REROUTED)
 - Waiting states: Orange/Yellow tones (PENDING, CONCURRENCY_CONTROLLED)
-- Active states: Blue tones (RUNNING, RESUMED)
+- Active states: Blue tones (RUNNING)
 - Success states: Green tones (SUCCESS)
 - Error states: Red tones (FAILED, KILLED)
 - Special states: Purple/Teal tones (RETRY, PAUSED)
 
 Status visualization types:
-- SEGMENT statuses: Occupy the worker/runner for a duration (PENDING, RUNNING, PAUSED, RESUMED)
+- SEGMENT statuses: Occupy the worker/runner for a duration (PENDING, RUNNING, PAUSED)
 - POINT statuses: Punctual events at a specific moment (all others)
 
 Key components:
@@ -38,7 +38,6 @@ STATUS_COLORS: dict[str, str] = {
     "RUNNING": "#3498db",  # Blue - active
     "RUNNING_RECOVERY": "#e67e22",  # Dark orange - runner recovery
     "PAUSED": "#1abc9c",  # Teal - paused
-    "RESUMED": "#2980b9",  # Dark blue - resumed
     "KILLED": "#c0392b",  # Dark red - killed
     "SUCCESS": "#27ae60",  # Green - completed
     "FAILED": "#e74c3c",  # Red - error
@@ -55,7 +54,6 @@ SEGMENT_STATUSES: frozenset[str] = frozenset(
         "PENDING",  # Time between picked from queue and starting execution
         "RUNNING",  # Active execution time
         "PAUSED",  # Paused but still holding resources
-        "RESUMED",  # Resumed execution time
     }
 )
 
@@ -65,7 +63,7 @@ POINT_ONLY_STATUSES: frozenset[str] = frozenset(
     {s for s in STATUS_COLORS if s not in SEGMENT_STATUSES}
 )
 
-# Final outcome statuses that should color the preceding RUNNING/RESUMED segment
+# Final outcome statuses that should color the preceding RUNNING segment
 # When a segment ends with one of these, the segment takes this status's color
 OUTCOME_STATUSES: frozenset[str] = frozenset(
     {
@@ -88,7 +86,6 @@ STATUS_BOOTSTRAP_CLASSES: dict[str, str] = {
     "RUNNING": "info",
     "RUNNING_RECOVERY": "warning",
     "PAUSED": "primary",
-    "RESUMED": "info",
     "KILLED": "danger",
     "SUCCESS": "success",
     "FAILED": "danger",
@@ -185,7 +182,6 @@ const STATUS_COLORS = {
   'RUNNING': '#3498db',
   'RUNNING_RECOVERY': '#e67e22',
   'PAUSED': '#1abc9c',
-  'RESUMED': '#2980b9',
   'KILLED': '#c0392b',
   'SUCCESS': '#27ae60',
   'FAILED': '#e74c3c',
@@ -202,7 +198,6 @@ const STATUS_BOOTSTRAP_CLASSES = {
   'RUNNING': 'info',
   'RUNNING_RECOVERY': 'warning',
   'PAUSED': 'primary',
-  'RESUMED': 'info',
   'KILLED': 'danger',
   'SUCCESS': 'success',
   'FAILED': 'danger',
@@ -210,7 +205,7 @@ const STATUS_BOOTSTRAP_CLASSES = {
 };
 
 // Statuses that occupy worker time (rendered as segments)
-const SEGMENT_STATUSES = new Set(['RUNNING', 'RESUMED', 'PENDING']);
+const SEGMENT_STATUSES = new Set(['RUNNING', 'PENDING']);
 
 // Statuses that are instantaneous (rendered as points)
 const POINT_ONLY_STATUSES = new Set(Object.keys(STATUS_COLORS).filter(s => !SEGMENT_STATUSES.has(s)));

@@ -9,11 +9,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-pytest.importorskip("fastapi", reason="pynmon tests require monitor dependencies")
-pytest.importorskip("jinja2", reason="pynmon tests require monitor dependencies")
-
-# All imports below must come after pytest.importorskip calls
-# ruff: noqa: E402
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
@@ -28,7 +23,6 @@ from pynmon.app import (
     setup_routes,
     start_monitor,
 )
-
 
 # ################################################################################### #
 # PYTHON VERSION CHECK TESTS

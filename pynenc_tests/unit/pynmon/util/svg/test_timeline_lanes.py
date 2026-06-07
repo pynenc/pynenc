@@ -6,8 +6,8 @@ Tests lane management, bar handling, and timeline data aggregation.
 
 from datetime import UTC, datetime, timedelta
 
-
 from pynmon.util.svg.builder import RunnerInfo
+from pynmon.util.svg.event_markers import EventMarker, event_row_height
 from pynmon.util.svg.models import (
     InvocationBar,
     RunnerLane,
@@ -15,7 +15,7 @@ from pynmon.util.svg.models import (
     TimelineConfig,
     TimelineData,
 )
-
+from pynmon.util.svg.render_axis import legend_strip_height
 
 # =============================================================================
 # RunnerLane Tests
@@ -94,8 +94,12 @@ def _create_timeline_data() -> TimelineData:
 def test_timeline_total_height_empty() -> None:
     """Test height with no lanes."""
     timeline_data = _create_timeline_data()
-    # With no lanes, should have at least space for one lane plus legend
-    expected = timeline_data.config.top_margin + timeline_data.config.lane_height + 70
+    # No lanes, no event markers -> one lane placeholder + expanded legend strip.
+    expected = (
+        timeline_data.config.top_margin
+        + timeline_data.config.lane_height
+        + legend_strip_height(timeline_data.config)
+    )
     assert timeline_data.total_height == expected
 
 
@@ -113,10 +117,36 @@ def test_timeline_total_height_with_lanes() -> None:
     )
 
     config = timeline_data.config
-    # 3 lanes: top_margin + (3 * lane_height) + (2 * lane_padding) + legend_height
+    # 3 lanes: top_margin + (3 * lane_height) + (2 * lane_padding) + legend strip
     expected = (
-        config.top_margin + (3 * config.lane_height) + (2 * config.lane_padding) + 70
+        config.top_margin
+        + (3 * config.lane_height)
+        + (2 * config.lane_padding)
+        + legend_strip_height(config)
     )
+    assert timeline_data.total_height == expected
+
+
+def test_timeline_total_height_does_not_grow_for_event_markers() -> None:
+    """Event markers anchor on emitter bars and add no extra height."""
+    timeline_data = _create_timeline_data()
+    timestamp = timeline_data.bounds.start_time + timedelta(minutes=10)
+    timeline_data.event_markers = [
+        EventMarker(
+            event_id=f"evt-{index}",
+            event_code=f"audit.route.completed.{index}",
+            timestamp=timestamp,
+            triggered=False,
+            matched=True,
+        )
+        for index in range(4)
+    ]
+
+    config = timeline_data.config
+    row_height = event_row_height(timeline_data)
+    expected = config.top_margin + config.lane_height + legend_strip_height(config)
+
+    assert row_height == 0
     assert timeline_data.total_height == expected
 
 

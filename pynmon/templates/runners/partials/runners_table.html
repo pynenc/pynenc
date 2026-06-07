@@ -110,7 +110,7 @@
         <td>
           {% if runner_data.runner_info.allow_to_run_atomic_service %}
           <span class="badge bg-success">Eligible</span>
-          {% if runner_data.runner_info.last_service_start %}
+          {% if runner_data.last_service_start %}
           <span class="badge bg-info" title="Has execution history">H</span>
           {% endif %} {% else %}
           <span class="badge bg-secondary">No</span>

@@ -1,40 +1,83 @@
-<!-- Invocation details slide-in panel, populated via JS after clicking an SVG element -->
-<div id="invocation-details-panel" class="mt-4 d-none">
-  <div class="card">
-    <div
-      class="card-header d-flex justify-content-between align-items-center py-2"
-    >
-      <h6 class="mb-0">Invocation Details</h6>
-      <button
-        type="button"
-        class="btn-close btn-sm"
-        aria-label="Close"
-        id="close-details"
-      ></button>
-    </div>
-    <div class="card-body">
-      <div id="invocation-details-content">
-        <div class="d-flex justify-content-center">
-          <div
-            class="spinner-border spinner-border-sm text-primary"
-            role="status"
+<!-- Invocation + event detail panels. Both are populated via JS after
+     clicking elements in the timeline SVG. They sit side-by-side so an
+     event selection never replaces a previously chosen invocation. -->
+<div id="timeline-detail-row" class="timeline-detail-row mt-3">
+  <div
+    id="invocation-details-panel"
+    class="timeline-detail-panel timeline-detail-panel-invocation d-none"
+  >
+    <div class="timeline-detail-shell">
+      <div class="timeline-detail-header">
+        <div class="timeline-detail-heading">
+          <div class="detail-kicker">Selected invocation</div>
+          <h6 class="mb-0">Invocation details</h6>
+        </div>
+        <div class="timeline-detail-actions">
+          <a href="#" id="view-full-details" class="btn btn-primary btn-sm"
+            >View Full Details</a
           >
-            <span class="visually-hidden">Loading...</span>
+          <button
+            type="button"
+            id="zoom-to-invocation"
+            class="btn btn-outline-secondary btn-sm"
+          >
+            Zoom to Invocation
+          </button>
+        </div>
+        <button
+          type="button"
+          class="btn-close btn-sm"
+          aria-label="Close"
+          id="close-details"
+        ></button>
+      </div>
+      <div class="detail-panel-body">
+        <div id="invocation-details-content">
+          <div class="d-flex justify-content-center">
+            <div
+              class="spinner-border spinner-border-sm text-primary"
+              role="status"
+            >
+              <span class="visually-hidden">Loading...</span>
+            </div>
           </div>
         </div>
       </div>
     </div>
-    <div class="card-footer py-2 d-flex gap-2">
-      <a href="#" id="view-full-details" class="btn btn-primary btn-sm"
-        >View Full Details</a
-      >
-      <button
-        type="button"
-        id="zoom-to-invocation"
-        class="btn btn-outline-secondary btn-sm"
-      >
-        Zoom to Invocation
-      </button>
+  </div>
+
+  <div
+    id="event-details-panel"
+    class="timeline-detail-panel timeline-detail-panel-event d-none"
+  >
+    <div class="timeline-detail-shell">
+      <div class="timeline-detail-header">
+        <div class="timeline-detail-heading">
+          <div class="detail-kicker">Selected event</div>
+          <h6 class="mb-0">Event details</h6>
+        </div>
+        <div class="timeline-detail-actions">
+          <a href="#" id="view-full-event" class="btn btn-primary btn-sm"
+            >View Full Details</a
+          >
+          <button
+            type="button"
+            id="zoom-to-event"
+            class="btn btn-outline-secondary btn-sm"
+          >
+            Zoom to Event
+          </button>
+        </div>
+        <button
+          type="button"
+          class="btn-close btn-sm"
+          aria-label="Close"
+          id="close-event-details"
+        ></button>
+      </div>
+      <div class="detail-panel-body">
+        <div id="event-details-content"></div>
+      </div>
     </div>
   </div>
 </div>

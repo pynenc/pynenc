@@ -21,7 +21,7 @@ class TimelineConfig:
     :param int top_margin: Top margin for time axis in pixels
     :param int bar_height: Height of invocation bars in pixels
     :param int min_bar_width: Minimum width for very short invocations in pixels
-    :param int | None resolution_seconds: Fixed tick interval (None = auto)
+    :param float | None resolution_seconds: Fixed tick interval in seconds (None = auto)
     """
 
     width: int = 2000
@@ -31,7 +31,7 @@ class TimelineConfig:
     top_margin: int = 50
     bar_height: int = 20
     min_bar_width: int = 2
-    resolution_seconds: int | None = None
+    resolution_seconds: float | None = None
 
     @property
     def content_width(self) -> int:

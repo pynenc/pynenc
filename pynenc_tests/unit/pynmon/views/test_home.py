@@ -4,21 +4,15 @@ Minimal tests for pynmon home view.
 Tests basic functionality using real in-memory Pynenc app.
 """
 
-# Skip all pynmon tests if monitor dependencies are not available
-import pytest
-
-pytest.importorskip("fastapi", reason="pynmon tests require monitor dependencies")
-pytest.importorskip("jinja2", reason="pynmon tests require monitor dependencies")
-
-# All imports below must come after pytest.importorskip calls
-# ruff: noqa: E402
 import tempfile
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
 from pynenc import PynencBuilder
+from pynenc.trigger.monitoring import EventRecord, TriggerRunRecord
 from pynmon.app import app as pynmon_app, setup_routes
 
 setup_routes()
@@ -44,6 +38,47 @@ def test_home_displays_app_info(app_instance: "Pynenc") -> None:
             # Check that app info is in the response
             content = response.text
             assert app_instance.app_id in content
+
+
+def test_home_displays_event_activity(app_instance: "Pynenc") -> None:
+    """Dashboard includes trigger event and trigger-run indicators."""
+    app_instance.purge()
+    app_instance.trigger.store_event(
+        EventRecord(
+            event_id="evt-dashboard",
+            event_code="dashboard.event",
+            matched_condition_ids=["cond-dashboard"],
+            triggered_invocation_ids=["inv-dashboard"],
+        )
+    )
+    app_instance.trigger.store_trigger_run(
+        TriggerRunRecord(
+            trigger_run_id="run-dashboard",
+            trigger_id="trg-dashboard",
+            task_id_key="pkg.task",
+            logic_value="and",
+            event_ids=["evt-dashboard"],
+            triggered_invocation_id="inv-dashboard",
+            claimed_at=datetime.now(UTC),
+            executed_at=datetime.now(UTC),
+        )
+    )
+
+    with patch("pynmon.views.home.get_active_app", return_value=app_instance):
+        with patch(
+            "pynmon.views.home.get_all_apps",
+            return_value={app_instance.app_id: app_instance},
+        ):
+            client = TestClient(pynmon_app)
+            response = client.get("/")
+
+    assert response.status_code == 200
+    content = response.text
+    assert "Event Activity" in content
+    assert "Events" in content
+    assert "Matched" in content
+    assert "Triggered" in content
+    assert "Trigger Runs" in content
 
 
 def test_home_displays_multiple_apps() -> None:

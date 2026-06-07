@@ -51,10 +51,12 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         parent_invocation_id: InvocationId | None,
         workflow: WorkflowIdentity,
         stored_in_backend: bool,
+        parent_event_id: str | None = None,
     ) -> None:
         # Call parent init
         super().__init__(call, invocation_id)
         self.parent_invocation_id = parent_invocation_id
+        self.parent_event_id = parent_event_id
         self._workflow = workflow
 
         # Initialize additional state
@@ -79,6 +81,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         cls,
         call: Call[Params, Result],
         parent_invocation: DistributedInvocation | None = None,
+        parent_event_id: str | None = None,
     ) -> DistributedInvocation:
         """Create a new invocation as a child of an existing invocation.
 
@@ -86,6 +89,8 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             The call that this invocation will execute.
         :param DistributedInvocation | None parent_invocation:
             The parent invocation that this new invocation will be a child of. If None, the new invocation will be a main workflow task.
+        :param str | None parent_event_id:
+            Optional id of the event whose triggered firing produced this invocation.
         """
         new_invocation_id = generate_invocation_id()
         if parent_invocation is None:
@@ -115,6 +120,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             else None,
             workflow=workflow,
             stored_in_backend=False,
+            parent_event_id=parent_event_id,
         )
 
     @property
@@ -167,6 +173,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             invocation_id=self.invocation_id,
             call_id=self.call.call_id,
             parent_invocation_id=self.parent_invocation_id,
+            parent_event_id=self.parent_event_id,
             workflow=self.workflow,
         )
 
@@ -188,6 +195,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
             parent_invocation_id=dto.parent_invocation_id,
             workflow=dto.workflow,
             stored_in_backend=True,
+            parent_event_id=dto.parent_event_id,
         )
 
     def __getstate__(self) -> dict:
@@ -196,6 +204,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         state["call"] = self._call
         state["invocation_id"] = self._invocation_id
         state["parent_invocation_id"] = self.parent_invocation_id
+        state["parent_event_id"] = self.parent_event_id
         state["workflow"] = self._workflow
         state["state"] = {
             "cached_status": self._cached_status,
@@ -212,6 +221,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         self._call = state["call"]
         self._invocation_id = state["invocation_id"]
         self.parent_invocation_id = state["parent_invocation_id"]
+        self.parent_event_id = state.get("parent_event_id")
         self._workflow = state["workflow"]
         # Restore mutable state directly
         state_data = state["state"]
@@ -365,6 +375,11 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         finally:
             self.reset_context(previous_invocation_context)
 
+    def _get_waiting_invocation_id(self) -> InvocationId | None:
+        """Get the invocation ID to use for waiting on results."""
+        current_invocation = context.get_dist_invocation_context(self.app.app_id)
+        return current_invocation.invocation_id if current_invocation else None
+
     @property
     def result(self) -> Result:
         """
@@ -389,14 +404,15 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         ```
         """
         self.app.logger.debug(f"ini waiting for invocation:{self.invocation_id} result")
+        waiting_invocation_id = self._get_waiting_invocation_id()
         if not self.status.is_final():
             self.app.orchestrator.waiting_for_results(
-                self.parent_invocation_id, [self.invocation_id]
+                waiting_invocation_id, [self.invocation_id]
             )
 
         while not self.status.is_final():
             self.app.runner.waiting_for_results(
-                self.parent_invocation_id,
+                waiting_invocation_id,
                 [self.invocation_id],
                 context.get_runner_args(),
             )
@@ -405,13 +421,14 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
 
     async def async_result(self) -> Result:
         # Assuming an async_waiting_for_results will be implemented in the runner:
+        waiting_invocation_id = self._get_waiting_invocation_id()
         if not self.status.is_final():
             self.app.orchestrator.waiting_for_results(
-                self.parent_invocation_id, [self.invocation_id]
+                waiting_invocation_id, [self.invocation_id]
             )
         while not self.status.is_final():
             await self.app.runner.async_waiting_for_results(
-                self.parent_invocation_id,
+                waiting_invocation_id,
                 [self.invocation_id],
                 context.get_runner_args(),
             )
@@ -479,9 +496,11 @@ class DistributedInvocationGroup(
         waiting_invocation_ids = list(self.invocation_map.keys())
         if not waiting_invocation_ids:
             return
-        parent_invocation_id = self.invocation_map[
-            waiting_invocation_ids[0]
-        ].parent_invocation_id
+        current_invocation = context.get_dist_invocation_context(self.app.app_id)
+        waiting_parent_id = (
+            current_invocation.invocation_id if current_invocation else None
+        )
+        waiting_app = current_invocation.app if current_invocation else self.app
         notified_orchestrator = False
         while waiting_invocation_ids:
             for final_inv_id in self.app.orchestrator.filter_final(
@@ -492,21 +511,23 @@ class DistributedInvocationGroup(
             if not waiting_invocation_ids:
                 break
             if not notified_orchestrator:
-                self.app.orchestrator.waiting_for_results(
-                    parent_invocation_id, waiting_invocation_ids
+                waiting_app.orchestrator.waiting_for_results(
+                    waiting_parent_id, waiting_invocation_ids
                 )
                 notified_orchestrator = True
-            self.app.runner.waiting_for_results(
-                parent_invocation_id, waiting_invocation_ids, context.get_runner_args()
+            waiting_app.runner.waiting_for_results(
+                waiting_parent_id, waiting_invocation_ids, context.get_runner_args()
             )
 
     async def async_results(self) -> AsyncGenerator[Result, None]:
         waiting_invocation_ids = list(self.invocation_map.keys())
         if not waiting_invocation_ids:
             return
-        parent_invocation_id = self.invocation_map[
-            waiting_invocation_ids[0]
-        ].parent_invocation_id
+        current_invocation = context.get_dist_invocation_context(self.app.app_id)
+        waiting_parent_id = (
+            current_invocation.invocation_id if current_invocation else None
+        )
+        waiting_app = current_invocation.app if current_invocation else self.app
         notified_orchestrator = False
         while waiting_invocation_ids:
             for final_inv_id in self.app.orchestrator.filter_final(
@@ -517,12 +538,12 @@ class DistributedInvocationGroup(
             if not waiting_invocation_ids:
                 break
             if not notified_orchestrator:
-                self.app.orchestrator.waiting_for_results(
-                    parent_invocation_id, waiting_invocation_ids
+                waiting_app.orchestrator.waiting_for_results(
+                    waiting_parent_id, waiting_invocation_ids
                 )
                 notified_orchestrator = True
-            await self.app.runner.async_waiting_for_results(
-                parent_invocation_id, waiting_invocation_ids, context.get_runner_args()
+            await waiting_app.runner.async_waiting_for_results(
+                waiting_parent_id, waiting_invocation_ids, context.get_runner_args()
             )
 
 

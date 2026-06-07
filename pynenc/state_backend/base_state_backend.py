@@ -1,7 +1,5 @@
 import json
-import threading
 from abc import ABC, abstractmethod
-from collections import defaultdict
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -100,7 +98,6 @@ class BaseStateBackend(ABC, Generic[Params, Result]):
 
     def __init__(self, app: "Pynenc") -> None:
         self.app = app
-        self.invocation_threads: dict[str, list[threading.Thread]] = defaultdict(list)
         self._runner_context_cache: dict[str, RunnerContext] = {}
 
     @cached_property
@@ -109,22 +106,6 @@ class BaseStateBackend(ABC, Generic[Params, Result]):
             config_values=self.app.config_values,
             config_filepath=self.app.config_filepath,
         )
-
-    def wait_for_all_async_operations(self) -> None:
-        """
-        Waits for all asynchronous operations related to invocation status to complete.
-        """
-        for invocation_id in self.invocation_threads:
-            self.wait_for_invocation_async_operations(invocation_id)
-
-    def wait_for_invocation_async_operations(self, invocation_id: str) -> None:
-        """
-        Waits for all asynchronous operations for a specific invocation to complete.
-
-        :param str invocation_id: ID of the invocation.
-        """
-        for thread in self.invocation_threads[invocation_id]:
-            thread.join()
 
     @abstractmethod
     def purge(self) -> None:
@@ -309,6 +290,16 @@ class BaseStateBackend(ABC, Generic[Params, Result]):
         :return: List of child invocation IDs (may be empty).
         """
 
+    @abstractmethod
+    def get_invocations_by_parent_event(
+        self, parent_event_id: str
+    ) -> Iterator["InvocationId"]:
+        """Return IDs of invocations created in response to ``parent_event_id``.
+
+        :param parent_event_id: The event id whose triggered children are sought.
+        :return: Iterator of invocation IDs (may be empty).
+        """
+
     def add_histories(
         self,
         invocations: list["DistributedInvocation[Params, Result]"],
@@ -316,7 +307,7 @@ class BaseStateBackend(ABC, Generic[Params, Result]):
         runner_context: "RunnerContext",
     ) -> None:
         """
-        Adds a history record for invocations.
+        Persists a history record for each invocation before returning.
 
         :param list[DistributedInvocation] invocations: The invocations to add history for.
         :param InvocationStatusRecord status_record: The status record of the invocation.
@@ -335,12 +326,7 @@ class BaseStateBackend(ABC, Generic[Params, Result]):
                 runner_context_id=runner_context.runner_id,
                 registered_by_inv_id=registered_by_inv_id,
             )
-            thread = threading.Thread(
-                target=self._add_histories,
-                args=([invocation.invocation_id], invocation_history),
-            )
-            self.invocation_threads[invocation.invocation_id].append(thread)
-            thread.start()
+            self._add_histories([invocation.invocation_id], invocation_history)
 
     def add_history(
         self,
@@ -349,7 +335,7 @@ class BaseStateBackend(ABC, Generic[Params, Result]):
         runner_context: "RunnerContext",
     ) -> None:
         """
-        Adds a history record for a single invocation.
+        Persists a history record for a single invocation before returning.
 
         :param "InvocationId" invocation_id: The ID of the invocation.
         :param InvocationStatusRecord status_record: The status record.
@@ -361,11 +347,7 @@ class BaseStateBackend(ABC, Generic[Params, Result]):
             status_record=status_record,
             runner_context_id=runner_context.runner_id,
         )
-        thread = threading.Thread(
-            target=self._add_histories, args=([invocation_id], invocation_history)
-        )
-        self.invocation_threads[invocation_id].append(thread)
-        thread.start()
+        self._add_histories([invocation_id], invocation_history)
 
     def get_history(self, invocation_id: "InvocationId") -> list[InvocationHistory]:
         """

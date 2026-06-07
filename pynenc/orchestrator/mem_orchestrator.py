@@ -2,7 +2,7 @@ import pickle
 import threading
 from collections import OrderedDict, defaultdict, deque
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from time import time
 from typing import TYPE_CHECKING, Any
 
@@ -15,7 +15,12 @@ from pynenc.orchestrator.base_orchestrator import (
     BaseBlockingControl,
     BaseOrchestrator,
 )
-from pynenc.orchestrator.atomic_service import ActiveRunnerInfo
+from pynenc.orchestrator.atomic_service import (
+    ActiveRunnerInfo,
+    AtomicServiceExecution,
+    AtomicServiceExecutionStatus,
+    AtomicServiceRun,
+)
 from pynenc.types import Params, Result
 
 if TYPE_CHECKING:
@@ -189,8 +194,8 @@ class MemOrchestrator(BaseOrchestrator):
         # Runner heartbeat tracking
         self.runner_creation_time: dict[str, float] = {}
         self.runner_last_heartbeat: dict[str, float] = {}
-        self.runner_last_service_start: dict[str, datetime] = {}
-        self.runner_last_service_end: dict[str, datetime] = {}
+        self.atomic_service_executions: list[AtomicServiceExecution] = []
+        self._atomic_service_lock = threading.RLock()
         self.runner_atomic_service_eligible: dict[str, bool] = {}
 
         self._blocking_control: MemBlockingControl | None = None
@@ -555,30 +560,204 @@ class MemOrchestrator(BaseOrchestrator):
             ):
                 continue
             creation_ts = self.runner_creation_time[runner_id]
-            service_start = self.runner_last_service_start.get(runner_id)
-            service_end = self.runner_last_service_end.get(runner_id)
+            creation_time = datetime.fromtimestamp(creation_ts, tz=UTC)
             active_runners.append(
                 ActiveRunnerInfo(
                     runner_id=runner_id,
-                    creation_time=datetime.fromtimestamp(creation_ts, tz=UTC),
+                    creation_time=creation_time,
                     last_heartbeat=datetime.fromtimestamp(last_heartbeat, tz=UTC),
                     allow_to_run_atomic_service=allow_to_run_atomic_service,
-                    last_service_start=service_start,
-                    last_service_end=service_end,
                 )
             )
 
-        # Sort by creation time (oldest first)
-        active_runners.sort(key=lambda info: info.creation_time)
+        # Order matches the _get_active_runners contract: creation_time asc, runner_id asc.
+        active_runners.sort(key=lambda r: (r.creation_time, r.runner_id))
 
         return active_runners
 
-    def record_atomic_service_execution(
-        self, runner_id: str, start_time: datetime, end_time: datetime
+    def record_atomic_service_execution_start(
+        self,
+        atomic_service_run: "AtomicServiceRun",
+        started_at: datetime | None,
+        status: AtomicServiceExecutionStatus = AtomicServiceExecutionStatus.RUNNING,
+        reason: str = "",
+    ) -> bool:
+        """Insert a new atomic-service execution record."""
+        atomic_service_id = atomic_service_run.atomic_service_id
+        with self._atomic_service_lock:
+            if status == AtomicServiceExecutionStatus.RUNNING:
+                active = [
+                    execution
+                    for execution in self.atomic_service_executions
+                    if execution.is_active
+                ]
+                if active:
+                    actual_started_at = started_at or datetime.now(UTC)
+                    prior = max(active, key=lambda execution: execution.start_time)
+                    atomic_service_run.started_at = actual_started_at
+                    self.atomic_service_executions.append(
+                        AtomicServiceExecution(
+                            atomic_service_id=atomic_service_id,
+                            start_time=actual_started_at,
+                            end_time=actual_started_at,
+                            status=AtomicServiceExecutionStatus.BLOCKED,
+                            reason=reason
+                            or (
+                                f"prior_running:{prior.atomic_service_run_id} "
+                                f"runner:{prior.runner_id}"
+                            ),
+                        )
+                    )
+                    self.purge_atomic_service_executions()
+                    return False
+            actual_started_at = started_at or datetime.now(UTC)
+            atomic_service_run.started_at = actual_started_at
+            end_time: datetime | None = (
+                actual_started_at
+                if status == AtomicServiceExecutionStatus.BLOCKED
+                else None
+            )
+            self.atomic_service_executions.append(
+                AtomicServiceExecution(
+                    atomic_service_id=atomic_service_id,
+                    start_time=actual_started_at,
+                    end_time=end_time,
+                    status=status,
+                    reason=reason,
+                )
+            )
+            # Cap purge frequency by gating purge to terminal writes only; RUNNING
+            # writes happen at most once per claim per runner so the per-cycle
+            # write rate is bounded.
+            if status != AtomicServiceExecutionStatus.RUNNING:
+                self.purge_atomic_service_executions()
+            return status != AtomicServiceExecutionStatus.BLOCKED
+
+    def finalize_atomic_service_execution(
+        self,
+        atomic_service_run: "AtomicServiceRun",
+        end_time: datetime,
+        status: AtomicServiceExecutionStatus,
+        reason: str = "",
     ) -> None:
-        """Record the latest atomic service execution window for a runner."""
-        self.runner_last_service_start[runner_id] = start_time
-        self.runner_last_service_end[runner_id] = end_time
+        """Transition the RUNNING record for this run to a terminal status.
+
+        If no RUNNING record exists (the start write failed or was reaped),
+        a synthetic record is inserted so Pynmon still sees the attempt.
+        """
+        atomic_service_id = atomic_service_run.atomic_service_id
+        target_id = atomic_service_id.atomic_service_run_id
+        with self._atomic_service_lock:
+            for idx, existing in enumerate(self.atomic_service_executions):
+                if existing.atomic_service_run_id != target_id:
+                    continue
+                if not existing.is_active:
+                    # Already finalized by another caller (e.g. the reaper); keep
+                    # the first terminal write.
+                    return
+                updated = existing._replace(
+                    end_time=end_time,
+                    status=status,
+                    reason=reason or existing.reason,
+                )
+                self.atomic_service_executions[idx] = updated
+                self.purge_atomic_service_executions()
+                return
+            # No prior RUNNING record found — insert a terminal-only row.
+            self.atomic_service_executions.append(
+                AtomicServiceExecution(
+                    atomic_service_id=atomic_service_id,
+                    start_time=end_time,
+                    end_time=end_time,
+                    status=status,
+                    reason=reason,
+                )
+            )
+            self.purge_atomic_service_executions()
+
+    def get_active_atomic_service_executions(
+        self,
+    ) -> list[AtomicServiceExecution]:
+        """Return RUNNING executions, most-recently-started first."""
+        with self._atomic_service_lock:
+            active = [
+                execution
+                for execution in self.atomic_service_executions
+                if execution.is_active
+            ]
+        active.sort(key=lambda execution: execution.start_time, reverse=True)
+        return active
+
+    def get_atomic_service_executions_in_timerange(
+        self,
+        start_time: datetime,
+        end_time: datetime,
+        limit: int = 1000,
+        *,
+        runner_id: str | None = None,
+        min_duration_seconds: float = 0.0,
+    ) -> list[AtomicServiceExecution]:
+        """Retrieve atomic service execution windows overlapping a time range."""
+        with self._atomic_service_lock:
+            matches = [
+                execution
+                for execution in self.atomic_service_executions
+                if (execution.end_time or execution.start_time) >= start_time
+                and execution.start_time <= end_time
+                and (runner_id is None or execution.runner_id == runner_id)
+                and (
+                    min_duration_seconds <= 0.0
+                    or execution.duration_seconds >= min_duration_seconds
+                )
+            ]
+        matches.sort(key=lambda execution: execution.start_time, reverse=True)
+        return matches[: max(limit, 0)]
+
+    def purge_atomic_service_executions(self) -> int:
+        """Trim atomic-service execution history by age and capacity."""
+        retention_minutes = float(
+            self.app.conf.atomic_service_execution_retention_minutes
+        )
+        max_records = int(self.app.conf.atomic_service_execution_max_records)
+        # Never purge executions that are still referenced by trigger-run
+        # history — pynmon resolves trigger runs back to executions and
+        # purging them would leave dangling references.
+        protected = self.app.trigger.get_referenced_atomic_service_run_ids()
+        removed = 0
+        with self._atomic_service_lock:
+            if retention_minutes > 0 and self.atomic_service_executions:
+                cutoff = datetime.now(UTC) - timedelta(minutes=retention_minutes)
+                kept = [
+                    execution
+                    for execution in self.atomic_service_executions
+                    # Keep RUNNING records regardless of age; only finalized
+                    # records (end_time is set) are subject to retention.
+                    if execution.end_time is None
+                    or execution.end_time >= cutoff
+                    or execution.atomic_service_run_id in protected
+                ]
+                removed += len(self.atomic_service_executions) - len(kept)
+                self.atomic_service_executions = kept
+            if max_records > 0 and len(self.atomic_service_executions) > max_records:
+                # Keep the newest ``max_records`` entries (by start_time), plus
+                # any protected entries regardless of age.
+                sorted_records = sorted(
+                    self.atomic_service_executions,
+                    key=lambda execution: execution.start_time,
+                )
+                protected_records = [
+                    e for e in sorted_records if e.atomic_service_run_id in protected
+                ]
+                unprotected = [
+                    e
+                    for e in sorted_records
+                    if e.atomic_service_run_id not in protected
+                ]
+                kept_unprotected = unprotected[-max_records:]
+                kept = protected_records + kept_unprotected
+                removed += len(self.atomic_service_executions) - len(kept)
+                self.atomic_service_executions = kept
+        return removed
 
     def get_pending_invocations_for_recovery(self) -> Iterator["InvocationId"]:
         """Retrieve invocation IDs stuck in PENDING status beyond the allowed time."""
@@ -640,5 +819,4 @@ class MemOrchestrator(BaseOrchestrator):
 
         self.runner_creation_time.clear()
         self.runner_last_heartbeat.clear()
-        self.runner_last_service_start.clear()
-        self.runner_last_service_end.clear()
+        self.atomic_service_executions.clear()

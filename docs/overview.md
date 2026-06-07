@@ -35,11 +35,10 @@ Plugins register themselves via Python entry points (`pynenc.plugins`). The `Pyn
 
 When you call a task, Pynenc creates an **invocation** that progresses through a state machine:
 
-```
-REGISTERED → PENDING → RUNNING → SUCCESS
-                                → FAILED
-                                → RETRY → REGISTERED (re-queued)
-                       → PAUSED → RESUMED → RUNNING
+```{image} _static/invocation_state_machine.svg
+:alt: Pynenc invocation status state machine
+:width: 100%
+:class: shadow
 ```
 
 Each state transition is validated, and ownership is tracked to prevent multiple runners from processing the same invocation. Recovery mechanisms detect stuck invocations (via runner heartbeats) and re-route them.

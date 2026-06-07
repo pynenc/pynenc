@@ -1,66 +1,72 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="row">
-        <!-- Filters Sidebar -->
-        <div class="col-md-3">
-            <div class="card filter-form">
-                <div class="card-header">Filters</div>
-                <div class="card-body">
-                    <form action="/invocations" method="get">
-                        <div class="mb-3">
-                            <label for="status" class="form-label">Status</label>
-                            <select name="status" id="status" class="form-select status-select" multiple>
-                                {% for status in all_statuses %}
-                                <option value="{{ status }}" {% if status in current_filters.status %}selected{% endif %}>
-                                    {{ status|upper }}
-                                </option>
-                                {% endfor %}
-                            </select>
-                            <div class="form-text">Hold Ctrl to select multiple</div>
-                        </div>
-                        <div class="mb-3">
-                            <label for="task_id" class="form-label">Task ID</label>
-                            <select name="task_id" id="task_id" class="form-select">
-                                <option value="">All Tasks</option>
-                                {% for task_id in all_task_ids %}
-                                <option value="{{ task_id }}" {% if task_id == current_filters.task_id %}selected{% endif %}>
-                                    {{ task_id }}
-                                </option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="mb-3">
-                            <label for="workflow_type" class="form-label">Workflow Type</label>
-                            <select name="workflow_type" id="workflow_type" class="form-select">
-                                <option value="">All Workflow Types</option>
-                                {% for wt in all_workflow_types %}
-                                <option value="{{ wt }}" {% if wt == current_filters.workflow_type %}selected{% endif %}>
-                                    {{ wt }}
-                                </option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="mb-3">
-                            <label for="workflow_id" class="form-label">Workflow ID</label>
-                            <input type="text" class="form-control" id="workflow_id" name="workflow_id"
-                                value="{{ current_filters.workflow_id }}" placeholder="Partial or full ID">
-                        </div>
-                        <div class="mb-3">
-                            <label for="limit" class="form-label">Limit</label>
-                            <input type="number" class="form-control" id="limit" name="limit"
-                                value="{{ current_filters.limit }}">
-                        </div>
-                        <button type="submit" class="btn btn-primary w-100">Apply Filters</button>
-                    </form>
-                </div>
-            </div>
+<div class="pynmon-container">
+    <div class="card pynmon-card pynmon-filter-bar mb-3">
+        <div class="pynmon-filter-summary">
+            {% if current_filters.status %}<span class="chip"><strong>status:</strong>{{ current_filters.status|join(', ') }}</span>{% endif %}
+            {% if current_filters.task_id %}<span class="chip"><strong>task:</strong>{{ current_filters.task_id }}</span>{% endif %}
+            {% if current_filters.workflow_type %}<span class="chip"><strong>workflow:</strong>{{ current_filters.workflow_type }}</span>{% endif %}
+            {% if current_filters.workflow_id %}<span class="chip"><strong>workflow id:</strong>{{ current_filters.workflow_id }}</span>{% endif %}
+            <span class="chip"><strong>page size:</strong>{{ pagination.limit }}</span>
+            <span class="chip"><strong>{{ pagination.total_count }}</strong> invocations &middot; page {{ pagination.page }} / {{ pagination.total_pages }}</span>
+            <button class="expand-btn" type="button">Edit filters</button>
         </div>
+        <div class="card-header pynmon-card-header compact-header pynmon-filter-heading">
+            Filters
+        </div>
+        <div class="card-body pynmon-card-body pynmon-filter-controls">
+            <form action="/invocations" method="get" class="row g-2 align-items-end">
+                <div class="col-lg-2 col-md-4">
+                    <label for="status" class="form-label small mb-1">Status</label>
+                    <select name="status" id="status" class="form-select form-select-sm status-select" multiple size="2">
+                        {% for status in all_statuses %}
+                        <option value="{{ status }}" {% if status in current_filters.status %}selected{% endif %}>
+                            {{ status|upper }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-lg-3 col-md-4">
+                    <label for="task_id" class="form-label small mb-1">Task ID</label>
+                    <select name="task_id" id="task_id" class="form-select form-select-sm">
+                        <option value="">All Tasks</option>
+                        {% for task_id in all_task_ids %}
+                        <option value="{{ task_id }}" {% if task_id == current_filters.task_id %}selected{% endif %}>
+                            {{ task_id }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-lg-2 col-md-4">
+                    <label for="workflow_type" class="form-label small mb-1">Workflow Type</label>
+                    <select name="workflow_type" id="workflow_type" class="form-select form-select-sm">
+                        <option value="">All Workflow Types</option>
+                        {% for wt in all_workflow_types %}
+                        <option value="{{ wt }}" {% if wt == current_filters.workflow_type %}selected{% endif %}>
+                            {{ wt }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-lg-2 col-md-4">
+                    <label for="workflow_id" class="form-label small mb-1">Workflow ID</label>
+                    <input type="text" class="form-control form-control-sm" id="workflow_id" name="workflow_id"
+                        value="{{ current_filters.workflow_id }}" placeholder="Partial or full ID">
+                </div>
+                <div class="col-lg-1 col-md-2">
+                    <label for="limit" class="form-label small mb-1">Page size</label>
+                    <input type="number" class="form-control form-control-sm" id="limit" name="limit"
+                        min="1" max="1000" value="{{ current_filters.limit }}">
+                </div>
+                <div class="col-lg-1 col-md-2">
+                    <button type="submit" class="btn btn-sm btn-primary w-100">Filter</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
-        <!-- Main Content -->
-        <div class="col-md-9">
-            <div class="card">
+            <div class="card pynmon-card">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span>Invocations</span>
                     <button class="btn btn-sm btn-outline-primary"
@@ -146,7 +152,7 @@
                         {% endif %}
 
                         <!-- Pagination Controls -->
-                        {% if pagination %}
+                        {% if pagination and pagination.total_pages > 1 %}
                         <nav aria-label="Invocations pagination" class="d-flex justify-content-between align-items-center p-3 border-top">
                             <div class="text-muted small">
                                 Showing {{ invocations|length }} of {{ pagination.total_count }} invocations
@@ -174,58 +180,9 @@
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
-<script>
-  // View in timeline functionality for list items
-  document.addEventListener('DOMContentLoaded', function() {
-    document.querySelectorAll('.view-in-timeline-link').forEach(link => {
-      link.addEventListener('click', function(e) {
-        e.preventDefault();
-        const invocationId = this.dataset.invocationId;
-
-        // Fetch invocation history to get time range
-        fetch(`/invocations/${invocationId}/history`)
-          .then(response => response.json())
-          .then(historyData => {
-            if (!historyData || historyData.length === 0) {
-              alert('No history data available for this invocation');
-              return;
-            }
-
-            // Get first and last timestamp
-            const startTime = new Date(historyData[0].timestamp);
-            const endTime = new Date(historyData[historyData.length - 1].timestamp);
-
-            // Add 10% padding on each side
-            const durationMs = endTime - startTime;
-            const paddingMs = Math.max(durationMs * 0.1, 1000); // At least 1 second padding
-
-            const paddedStart = new Date(startTime.getTime() - paddingMs);
-            const paddedEnd = new Date(endTime.getTime() + paddingMs);
-
-            // Format for datetime-local input (YYYY-MM-DDTHH:MM:SS)
-            const formatForInput = (date) => date.toISOString().slice(0, 19);
-
-            // Build the timeline URL with custom range
-            const params = new URLSearchParams();
-            params.set('time_range', 'custom');
-            params.set('start_date', formatForInput(paddedStart));
-            params.set('end_date', formatForInput(paddedEnd));
-
-            // Navigate to timeline
-            window.location.href = '/invocations/timeline?' + params.toString();
-          })
-          .catch(error => {
-            console.error('Error fetching history:', error);
-            alert('Failed to load invocation history');
-          });
-      });
-    });
-  });
-</script>
+{% include "invocations/partials/timeline_zoom_scripts.html" %}
 {% endblock %}

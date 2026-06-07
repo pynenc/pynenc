@@ -32,7 +32,7 @@
       <div class="info-card">
         <h6 class="section-title">Service Configuration</h6>
         <div class="row">
-          <div class="col-md-6">
+          <div class="col-md-4">
             <div class="metric-item">
               <span class="metric-label">Service Interval</span>
               <span class="badge bg-info"
@@ -40,12 +40,141 @@
               >
             </div>
           </div>
-          <div class="col-md-6">
+          <div class="col-md-4">
             <div class="metric-item">
-              <span class="metric-label">Executions Recorded</span>
-              <span class="badge bg-primary">{{ timeline_data|length }}</span>
+              <span class="metric-label">Retention</span>
+              <span class="badge bg-secondary"
+                >{{ retention_minutes }} min / {{ max_records }} max</span
+              >
             </div>
           </div>
+          <div class="col-md-4">
+            <div class="metric-item">
+              <span class="metric-label">Executions Shown</span>
+              <span class="badge bg-primary"
+                >{{ pagination.start_item }}–{{ pagination.end_item }} / {{
+                pagination.total_items }}</span
+              >
+              {% if used_fallback %}
+              <span class="badge bg-warning text-dark ms-2"
+                >no recorded history</span
+              >
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <h6 class="mb-0">Filters</h6>
+        </div>
+        <div class="card-body">
+          <form method="get" class="row g-3 align-items-end">
+            {% if filter_selected_atomic_service_run_id %}
+            <input
+              type="hidden"
+              name="selected_atomic_service_run_id"
+              value="{{ filter_selected_atomic_service_run_id }}"
+            />
+            {% endif %}
+            <div class="col-md-2">
+              <label for="filter-page-size" class="form-label">Page size</label>
+              <select
+                id="filter-page-size"
+                name="page_size"
+                class="form-select form-select-sm"
+              >
+                {% for choice in page_size_choices %} {% if choice ==
+                filter_page_size %}
+                <option value="{{ choice }}" selected>{{ choice }}</option>
+                {% else %}
+                <option value="{{ choice }}">{{ choice }}</option>
+                {% endif %} {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-2">
+              <label for="filter-duration" class="form-label"
+                >Minimum duration</label
+              >
+              <select
+                id="filter-duration"
+                name="min_duration_seconds"
+                class="form-select form-select-sm"
+              >
+                {% for label, seconds in min_duration_choices %} {% if seconds
+                == filter_min_duration_seconds %}
+                <option value="{{ seconds }}" selected>{{ label }}</option>
+                {% else %}
+                <option value="{{ seconds }}">{{ label }}</option>
+                {% endif %} {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-2">
+              <label for="filter-status" class="form-label">Status</label>
+              <select
+                id="filter-status"
+                name="status"
+                class="form-select form-select-sm"
+              >
+                {% for status in status_choices %} {% if status == filter_status
+                %}
+                <option value="{{ status }}" selected>
+                  {{ status if status else 'Any' }}
+                </option>
+                {% else %}
+                <option value="{{ status }}">
+                  {{ status if status else 'Any' }}
+                </option>
+                {% endif %} {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label for="filter-runner" class="form-label">Runner ID</label>
+              <input
+                id="filter-runner"
+                name="runner_id"
+                type="text"
+                class="form-control form-control-sm"
+                placeholder="Any runner"
+                value="{{ filter_runner_id }}"
+                list="known-runner-ids"
+              />
+              <datalist id="known-runner-ids">
+                {% for known_runner_id in runner_id_choices %}
+                <option value="{{ known_runner_id }}"></option>
+                {% endfor %}
+              </datalist>
+            </div>
+            <div class="col-md-3">
+              <label for="filter-atomic-service" class="form-label"
+                >Atomic Service ID</label
+              >
+              <input
+                id="filter-atomic-service"
+                name="atomic_service_run_id"
+                type="text"
+                class="form-control form-control-sm"
+                placeholder="Any service run"
+                value="{{ filter_atomic_service_run_id }}"
+              />
+            </div>
+            <div class="col-md-2 d-flex gap-2">
+              <button type="submit" class="btn btn-sm btn-primary w-100">
+                Apply
+              </button>
+              <a
+                href="/runners/atomic-service/timeline"
+                class="btn btn-sm btn-outline-secondary w-100"
+                >Reset</a
+              >
+            </div>
+          </form>
         </div>
       </div>
     </div>
@@ -59,69 +188,223 @@
           <h6 class="mb-0">Execution Timeline</h6>
         </div>
         <div class="card-body">
-          {% if timeline_data %}
+          {% if running_atomic_service %}
+          <div class="alert alert-warning py-2 mb-3" role="alert">
+            <strong>Atomic service in progress.</strong>
+            <code>{{ running_atomic_service.runner_id }}</code> started at
+            <code
+              >{{ running_atomic_service.last_service_start.strftime('%Y-%m-%d
+              %H:%M:%S.%f')[:-3] }}</code
+            >. Other runners wait until it finishes or its heartbeat expires.
+          </div>
+          {% endif %} {% if filter_selected_atomic_service_run_id and not
+          selected_atomic_service_found %}
+          <div class="alert alert-warning py-2 mb-3" role="alert">
+            Selected atomic service
+            <code>{{ filter_selected_atomic_service_run_id }}</code> is not in
+            the current retained window or filters.
+          </div>
+          {% endif %} {% if timeline_data %}
+          <div
+            class="d-flex justify-content-between align-items-center mb-2 gap-2 flex-wrap"
+          >
+            <div class="small text-muted">
+              Window {{ pagination.start_item }}–{{ pagination.end_item }} of {{
+              pagination.total_items }} executions, newest first
+            </div>
+            {% if pagination.total_pages > 1 %}
+            <nav aria-label="Atomic service timeline pages">
+              <ul class="pagination pagination-sm mb-0">
+                <li
+                  class="page-item{% if not pagination.has_previous %} disabled{% endif %}"
+                >
+                  <a class="page-link" href="{{ pagination.first_url }}"
+                    >First</a
+                  >
+                </li>
+                <li
+                  class="page-item{% if not pagination.has_previous %} disabled{% endif %}"
+                >
+                  <a class="page-link" href="{{ pagination.previous_url }}"
+                    >Newer</a
+                  >
+                </li>
+                <li class="page-item disabled">
+                  <span class="page-link"
+                    >Page {{ pagination.page }} / {{ pagination.total_pages
+                    }}</span
+                  >
+                </li>
+                <li
+                  class="page-item{% if not pagination.has_next %} disabled{% endif %}"
+                >
+                  <a class="page-link" href="{{ pagination.next_url }}"
+                    >Older</a
+                  >
+                </li>
+                <li
+                  class="page-item{% if not pagination.has_next %} disabled{% endif %}"
+                >
+                  <a class="page-link" href="{{ pagination.last_url }}">Last</a>
+                </li>
+              </ul>
+            </nav>
+            {% endif %}
+          </div>
           <div class="table-responsive">
-            <table class="table table-sm mb-0">
+            <table class="table table-sm mb-0 atomic-service-period-table">
               <thead>
                 <tr>
-                  <th style="width: 300px">Runner ID</th>
-                  <th>Execution Period</th>
-                  <th style="width: 100px">Duration</th>
+                  <th style="width: 200px">Runner ID</th>
+                  <th style="width: 200px">Service Run ID</th>
+                  <th style="width: 170px">Start (UTC)</th>
+                  <th style="width: 170px">End (UTC)</th>
+                  <th style="width: 90px">Duration</th>
+                  <th style="width: 100px">Status</th>
+                  <th>Reason</th>
+                  <th style="width: 110px"></th>
                 </tr>
               </thead>
               <tbody>
-                {% set earliest_start = timeline_data[0].start %} {% set
-                latest_end = timeline_data|map(attribute='end')|max %} {% set
-                total_time_span = (latest_end - earliest_start).total_seconds()
-                %} {% for execution in timeline_data %}
-                <tr>
+                {% for execution in timeline_data %}
+                <tr
+                  class="atomic-service-period-row atomic-service-period-row-status-{{ execution.status }}{% if execution.is_selected %} atomic-service-period-row-selected{% endif %}"
+                  style="--period-start: {{ execution.period_start_percent }}%; --period-end: {{ execution.period_end_percent }}%"
+                  title="Start: {{ execution.start.strftime('%H:%M:%S.%f')[:-3] }} → {% if execution.end %}End: {{ execution.end.strftime('%H:%M:%S.%f')[:-3] }} (Δ {{ execution.duration|round(3) }}s){% else %}(still running){% endif %}"
+                >
                   <td>
                     <a
                       href="/runners/{{ execution.runner_id }}"
                       class="text-decoration-none"
+                      title="{{ execution.runner_id }}"
                     >
                       <code class="small text-primary"
-                        >{{ execution.runner_id }}</code
+                        >R: {{ execution.runner_id[:8] }}…</code
                       >
                     </a>
+                    {% if execution.runner_alive is sameas false %}
+                    <span
+                      class="badge bg-warning text-dark ms-1"
+                      title="Runner heartbeat expired"
+                      >dead</span
+                    >
+                    {% endif %}
                   </td>
                   <td>
-                    <div class="execution-timeline">
-                      <div class="execution-bar-container">
-                        {% if total_time_span > 0 %} {% set start_offset =
-                        (execution.start - earliest_start).total_seconds() /
-                        total_time_span * 100 %} {% set bar_width =
-                        execution.duration / total_time_span * 100 %} {% else %}
-                        {% set start_offset = 0 %} {% set bar_width = 100 %} {%
-                        endif %}
-                        <div
-                          class="execution-bar"
-                          style="left: {{ start_offset|round(2) }}%; width: {{ (bar_width if bar_width > 0.5 else 0.5)|round(2) }}%"
-                          title="Start: {{ execution.start.strftime('%H:%M:%S.%f')[:-3] }} - End: {{ execution.end.strftime('%H:%M:%S.%f')[:-3] }} - Duration: {{ execution.duration|round(3) }}s"
-                        >
-                          <span class="execution-time-label"
-                            >{{ execution.start.strftime('%H:%M:%S.%f')[:-3]
-                            }}</span
-                          >
-                        </div>
-                      </div>
-                    </div>
+                    {% if execution.atomic_service_run_id %}
+                    <a
+                      href="{{ execution.detail_url }}"
+                      class="text-decoration-none"
+                      title="{{ execution.atomic_service_run_id }}"
+                    >
+                      <code class="small text-primary"
+                        >AS: {{ execution.atomic_service_run_id[:8] }}…</code
+                      >
+                    </a>
+                    {% if execution.is_selected %}
+                    <span class="badge bg-warning text-dark ms-1"
+                      >selected</span
+                    >
+                    {% endif %} {% else %}
+                    <span class="text-muted small">—</span>
+                    {% endif %}
                   </td>
                   <td>
+                    <code class="small"
+                      >{{ execution.start.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+                      }}</code
+                    >
+                  </td>
+                  <td>
+                    {% if execution.end %}
+                    <code class="small"
+                      >{{ execution.end.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+                      }}</code
+                    >
+                    {% else %}
+                    <span class="text-muted small">—</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if execution.end %}
                     <span class="badge bg-info"
                       >{{ execution.duration|round(3) }}s</span
                     >
+                    {% else %}
+                    <span class="text-muted small">—</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if execution.status == 'running' %}
+                    <span class="badge bg-primary">running</span>
+                    {% elif execution.status == 'completed' %}
+                    <span class="badge bg-success">completed</span>
+                    {% elif execution.status == 'abandoned' %}
+                    <span class="badge bg-warning text-dark">abandoned</span>
+                    {% elif execution.status == 'blocked' %}
+                    <span class="badge bg-secondary">blocked</span>
+                    {% else %}
+                    <span class="badge bg-light text-dark"
+                      >{{ execution.status }}</span
+                    >
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if execution.reason %}
+                    <code class="small text-muted">{{ execution.reason }}</code>
+                    {% else %}
+                    <span class="text-muted small">—</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    <a
+                      href="{{ execution.timeline_url }}"
+                      class="btn btn-sm btn-outline-primary"
+                    >
+                      <span
+                        class="material-icons"
+                        style="font-size: 14px; vertical-align: middle"
+                        >timeline</span
+                      >
+                      Timeline
+                    </a>
                   </td>
                 </tr>
                 {% endfor %}
               </tbody>
             </table>
           </div>
-
-          {% else %}
+          {% if pagination.total_pages > 1 %}
+          <div class="d-flex justify-content-end mt-2">
+            <nav aria-label="Atomic service timeline pages bottom">
+              <ul class="pagination pagination-sm mb-0">
+                <li
+                  class="page-item{% if not pagination.has_previous %} disabled{% endif %}"
+                >
+                  <a class="page-link" href="{{ pagination.previous_url }}"
+                    >Newer</a
+                  >
+                </li>
+                <li class="page-item disabled">
+                  <span class="page-link"
+                    >Page {{ pagination.page }} / {{ pagination.total_pages
+                    }}</span
+                  >
+                </li>
+                <li
+                  class="page-item{% if not pagination.has_next %} disabled{% endif %}"
+                >
+                  <a class="page-link" href="{{ pagination.next_url }}"
+                    >Older</a
+                  >
+                </li>
+              </ul>
+            </nav>
+          </div>
+          {% endif %} {% else %}
           <div class="text-center py-4">
             <p class="text-muted mb-0">
-              No atomic service executions recorded yet
+              No atomic service executions match the current filters.
             </p>
           </div>
           {% endif %}

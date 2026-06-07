@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from pynenc.conf.validation_atomic_service import AtomicServiceConfigError
 from pynenc.exceptions import RunnerNotExecutableError
 from pynenc.runner.base_runner import DummyRunner
 from pynenc_tests.conftest import MockPynenc
@@ -54,6 +55,21 @@ def test_keyboard_interrupt_handling_in_run_method() -> None:
         log_output = log_buffer.getvalue()
         assert "KeyboardInterrupt received" in log_output
         assert "Stopping runner" in log_output
+
+
+def test_runner_start_validates_atomic_service_config() -> None:
+    # spread >= interval → no slot even for a single runner → hard failure
+    app = MockPynenc(
+        {
+            "atomic_service_interval_minutes": 1.0,
+            "atomic_service_spread_margin_minutes": 1.0,
+        }
+    )
+
+    with pytest.raises(AtomicServiceConfigError, match="spread_margin"):
+        app.runner.on_start()
+
+    app.runner._on_start.assert_not_called()
 
 
 def test_dummy_runner() -> None:

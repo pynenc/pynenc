@@ -22,7 +22,6 @@ The diagram below is generated from `pynenc/invocation/status.py`. If a status o
 | `PENDING`                      | Task was picked by a runner but not yet executed (owned by runner)         |
 | `RUNNING`                      | Task is currently executing (owned by runner)                              |
 | `PAUSED`                       | Task execution is paused (owned by runner)                                 |
-| `RESUMED`                      | Task execution has been resumed after pause (owned by runner)              |
 | `KILLED`                       | Task execution was terminated and can be rerouted                          |
 | `RETRY`                        | Task finished with a retriable exception, available for re-execution       |
 | `SUCCESS`                      | Task completed successfully (final)                                        |
@@ -54,7 +53,6 @@ These statuses require ownership validation - only the owning runner can modify 
 | `PENDING` | Task was picked by a runner but not yet executing   |
 | `RUNNING` | Task is currently being executed                    |
 | `PAUSED`  | Task execution is paused (waiting for dependencies) |
-| `RESUMED` | Task execution has been resumed after pausing       |
 
 ### Recovery Statuses
 

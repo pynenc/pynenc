@@ -129,6 +129,41 @@ class ConfigPynenc(ConfigPynencBase):
         This is the polling interval - each runner checks every N minutes to see if it's within
         its assigned time slot. Should be significantly less than atomic_service_interval_minutes
         to ensure runners don't miss their execution window. Default 0.5 minutes (30 seconds).
+    :cvar float atomic_service_execution_retention_minutes:
+        Age-based retention for recorded atomic-service execution windows used by
+        pynmon. Records whose ``end_time`` is older than this many minutes are
+        purged on the next ``finalize_atomic_service_execution`` call. ``0`` keeps
+        records forever (still capped by ``atomic_service_execution_max_records``).
+        Default is 60.0 minutes.
+    :cvar int atomic_service_execution_max_records:
+        Capacity-based retention for atomic-service execution windows. When greater
+        than zero, only the most recent N records (across all runners) are kept.
+        ``0`` disables the capacity check. Default is 1000.
+    :cvar float atomic_service_max_start_slot_fraction:
+        Fraction of the runner's assigned slot that may elapse between
+        ``slot_start`` and the scheduled run's ``started_at`` timestamp before
+        the run is aborted as a late start. Values must be in ``(0, 1]``.
+        A value of ``1.0`` disables the check. Default is ``0.5`` (abort if more
+        than half the slot is consumed before the run begins). Late-start aborts
+        are recorded as ``AtomicServiceDecisionReason.LATE_START`` events.
+    :cvar float atomic_service_membership_stabilization_minutes:
+        How long a newly registered atomic-service-eligible runner stays in the
+        scheduling membership set (so its slot is reserved) without being
+        eligible to start runs. The runner is recognised in slot assignment
+        from its first heartbeat but cannot start a scheduled run until
+        ``now - creation_time >= stabilization_minutes``. A
+        value of ``0`` disables the grace window (runners are runnable as
+        soon as they appear). Slots assigned to runners still in the
+        grace window emit ``AtomicServiceDecisionReason.SCHEDULED_RUNNER_IN_GRACE``
+        events. Default ``0.0`` minutes (disabled).
+    :cvar float atomic_service_min_run_margin_seconds:
+        Minimum number of seconds that must remain in the runner's slot
+        between the ``RUNNING`` write and ``slot_end`` for the run to
+        actually execute. If the remaining margin is below this value the
+        runner immediately marks the execution ``ABANDONED:no_margin``
+        without doing any work. This prevents a runner that barely scraped
+        into its slot from overrunning into the next runner's window.
+        Default ``0.05`` seconds. Set to ``0`` to disable the check.
 
     =============================
     Recovery & Heartbeat
@@ -186,6 +221,11 @@ class ConfigPynenc(ConfigPynencBase):
     atomic_service_interval_minutes = ConfigField(5.0)
     atomic_service_spread_margin_minutes = ConfigField(1.0)
     atomic_service_check_interval_minutes = ConfigField(0.5)
+    atomic_service_execution_retention_minutes = ConfigField(60.0)
+    atomic_service_execution_max_records = ConfigField(1000)
+    atomic_service_max_start_slot_fraction = ConfigField(0.5)
+    atomic_service_membership_stabilization_minutes = ConfigField(0.0)
+    atomic_service_min_run_margin_seconds = ConfigField(0.05)
 
     # Pending Invocation Recovery Service
     recover_pending_invocations_cron = ConfigField("*/5 * * * *")  # Every 5 minutes

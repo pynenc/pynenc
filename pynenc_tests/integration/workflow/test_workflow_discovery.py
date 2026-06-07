@@ -40,6 +40,14 @@ def another_workflow(value: int) -> dict[str, str | int]:
     return {"workflow_id": workflow_id, "value": value}
 
 
+def _stop_runner_thread(runner_thread: threading.Thread) -> None:
+    runner = app.runner
+    if runner.running:
+        runner.stop_runner_loop()
+    runner_thread.join(timeout=0)
+    check_all_status_transitions(app)
+
+
 def test_get_all_workflows_single_workflow() -> None:
     """Test workflow discovery with a single workflow execution."""
     # Purge any existing data
@@ -67,9 +75,7 @@ def test_get_all_workflows_single_workflow() -> None:
         assert len(workflows) >= 1
         assert simple_workflow.task_id in workflows
     finally:
-        # Stop the runner
-        app.runner.stop_runner_loop()
-        check_all_status_transitions(app)
+        _stop_runner_thread(runner_thread)
 
 
 def test_get_all_workflows_multiple_workflows() -> None:
@@ -103,9 +109,7 @@ def test_get_all_workflows_multiple_workflows() -> None:
         assert simple_workflow.task_id in workflows
         assert another_workflow.task_id in workflows
     finally:
-        # Stop the runner
-        app.runner.stop_runner_loop()
-        check_all_status_transitions(app)
+        _stop_runner_thread(runner_thread)
 
 
 def test_get_all_workflow_runs() -> None:
@@ -149,9 +153,7 @@ def test_get_all_workflow_runs() -> None:
         for run in workflow_runs:
             assert run.workflow_type == simple_workflow.task_id
     finally:
-        # Stop the runner
-        app.runner.stop_runner_loop()
-        check_all_status_transitions(app)
+        _stop_runner_thread(runner_thread)
 
 
 def test_workflow_runs() -> None:
@@ -188,5 +190,4 @@ def test_workflow_runs() -> None:
         assert {another_workflow.task_id} == another_workflow_types
 
     finally:
-        app.runner.stop_runner_loop()
-        check_all_status_transitions(app)
+        _stop_runner_thread(runner_thread)

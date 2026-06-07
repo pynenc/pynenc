@@ -62,7 +62,7 @@ See {doc}`usage_guide/use_case_004_auto_orchestration`.
 ::::{grid-item-card} Invocation Lifecycle
 Every task call becomes a tracked **invocation** through a validated state
 machine: `REGISTERED → PENDING → RUNNING → SUCCESS / FAILED`. Tasks that
-block on a dependency transition through `PAUSED → RESUMED` without holding
+block on a dependency transition through `PAUSED → RUNNING` without holding
 a runner thread. Status, ownership, results, and exceptions are all
 persisted — no silent drops, no double execution.
 
@@ -81,9 +81,23 @@ independently.
 
 ::::{grid-item-card} Trigger System
 Schedule tasks declaratively: cron expressions, task status transitions,
-result conditions, or custom events registered via decorator. Trigger state
-is distributed — backends include `MemTrigger` for tests, `SqliteTrigger`
-for single-host, and `RedisTrigger` / `MongoTrigger` for production.
+result conditions, exceptions, or custom events registered via decorator.
+Trigger state is distributed — backends include `MemTrigger` for tests,
+`SQLiteTrigger` for single-host, and `RedisTrigger` / `MongoTrigger` /
+`RabbitMQTrigger` for production. The `trigger_demo` sample shows cron, events, pipelines,
+compensation, and composite status/result conditions in one local SQLite app.
+
+Pynenc normally imports a task module only when a runner receives an invocation
+for a task in that module. Trigger-backed tasks cannot wait for that first
+invocation: the atomic service needs their conditions before it can create one.
+List every module that declares `@app.task(triggers=...)` in
+`trigger_task_modules` so runners import and register those definitions at
+startup.
+
+```toml
+[tool.pynenc]
+trigger_task_modules = ["myapp.scheduled_tasks", "myapp.event_handlers"]
+```
 
 {doc}`usage_guide/use_case_010_trigger_system`
 ::::

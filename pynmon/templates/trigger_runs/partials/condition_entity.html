@@ -1,0 +1,63 @@
+{% from "partials/status_badge.html" import status_badge %} {% macro
+render_condition_entity(view) %}
+<div class="trigger-detail-unit">
+  <div class="trigger-detail-unit-title">
+    <span class="trigger-detail-type">{{ view.type }}</span>
+  </div>
+  {% if view.id %}
+  <div class="trigger-detail-meta-row">
+    <span>ID</span>
+    {% if view.detail_url %}
+    <a href="{{ view.detail_url }}" title="{{ view.id }}"
+      ><code>{{ view.id_short }}</code></a
+    >
+    {% else %}
+    <code title="{{ view.id }}">{{ view.id_short }}</code>
+    {% endif %}
+  </div>
+  {% endif %} {% if view.timestamp %}
+  <div class="trigger-detail-meta-row">
+    <span>Timestamp</span>
+    <code>{{ view.timestamp }}</code>
+  </div>
+  {% endif %} {% if view.summary %}
+  <div class="trigger-detail-meta-row">
+    <span>Summary</span>
+    <code>{{ view.summary }}</code>
+  </div>
+  {% endif %} {% if view["items"] %}
+  <dl class="trigger-detail-kv">
+    {% for item in view["items"] %}
+    <dt>{{ item.label }}</dt>
+    <dd>
+      {% if item.render == "status_badges" %}
+      <span class="trigger-status-list">
+        {% for status in item.statuses %}{{ status_badge(status, 'small') }}{%
+        endfor %}
+      </span>
+      {% elif item.multiline %}
+      <pre>{{ item.value }}</pre>
+      {% else %}
+      <code>{{ item.value }}</code>
+      {% endif %}
+    </dd>
+    {% endfor %}
+  </dl>
+  {% elif not view.available %}
+  <div class="text-muted small">
+    Details unavailable for this archived record.
+  </div>
+  {% endif %}
+</div>
+{% endmacro %} {% macro render_valid_condition_id(view) %} {% if view.id %}
+<div class="trigger-detail-meta-row mb-1">
+  <span>ValidCondition ID</span>
+  {% if view.detail_url %}
+  <a href="{{ view.detail_url }}" title="{{ view.id }}"
+    ><code>{{ view.id_short }}</code></a
+  >
+  {% else %}
+  <code title="{{ view.id }}">{{ view.id_short }}</code>
+  {% endif %}
+</div>
+{% endif %} {% endmacro %}

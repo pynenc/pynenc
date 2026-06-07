@@ -1,0 +1,413 @@
+{% extends "base.html" %} {% from "trigger_runs/partials/condition_entity.html"
+import render_condition_entity, render_valid_condition_id %} {% from
+"partials/event_pill.html" import event_pill %} {% block content %}
+<div class="pynmon-container">
+  <div class="row">
+    <div class="col-12">
+      <div class="card pynmon-card">
+        <div
+          class="card-header pynmon-card-header d-flex justify-content-between align-items-center flex-wrap gap-2"
+        >
+          <span class="compact-header">Trigger Run Details</span>
+          <div class="d-flex justify-content-end flex-wrap gap-2">
+            <a
+              href="javascript:history.back()"
+              class="btn btn-sm btn-outline-secondary pynmon-action-btn"
+            >
+              Back
+            </a>
+            <a
+              href="{{ timeline_url }}"
+              class="btn btn-sm btn-outline-primary pynmon-action-btn"
+              title="Open the timeline around this trigger run"
+            >
+              Show in Timeline
+            </a>
+            {% if run.triggered_invocation_id %}
+            <a
+              href="/invocations/{{ run.triggered_invocation_id }}"
+              class="btn btn-sm btn-outline-info pynmon-action-btn"
+            >
+              View Triggered Invocation
+            </a>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="card-body pynmon-card-body">
+          <p class="text-muted mb-3" style="font-size: 12px">
+            A <strong>trigger run</strong> is the record produced when a
+            trigger's set of conditions matched and registered a new invocation.
+            It is the hub linking upstream causes (events, source invocations)
+            to the downstream effect (the triggered invocation).
+          </p>
+
+          <div class="row pynmon-row-compact pynmon-responsive-detail-grid">
+            <div class="col-md-6">
+              <div class="card pynmon-card">
+                <div class="card-header pynmon-card-header compact-header">
+                  Identity
+                </div>
+                <div class="card-body pynmon-card-body">
+                  <table class="table pynmon-table">
+                    <tbody>
+                      <tr>
+                        <th>Run ID:</th>
+                        <td>
+                          <code style="font-size: 11px; word-break: break-all"
+                            >{{ run.trigger_run_id }}</code
+                          >
+                        </td>
+                      </tr>
+                      <tr>
+                        <th>Trigger ID:</th>
+                        <td>
+                          <a href="/triggers/{{ run.trigger_id|urlencode }}"
+                            ><code
+                              style="font-size: 11px; word-break: break-all"
+                              >{{ run.trigger_id }}</code
+                            ></a
+                          >
+                        </td>
+                      </tr>
+                      <tr>
+                        <th>Task:</th>
+                        <td>
+                          <a href="/tasks/{{ run.task_id_key }}"
+                            ><code>{{ run.task_id_key }}</code></a
+                          >
+                        </td>
+                      </tr>
+                      <tr>
+                        <th>Logic:</th>
+                        <td>
+                          <span class="badge bg-info"
+                            >{{ run.logic_value }}</span
+                          >
+                        </td>
+                      </tr>
+                      <tr>
+                        <th>Claimed at (UTC):</th>
+                        <td>
+                          {% if run.claimed_at %}
+                          <code>{{ run.claimed_at }}</code>
+                          {% else %}<span class="text-muted">—</span>{% endif %}
+                        </td>
+                      </tr>
+                      <tr>
+                        <th>Executed at (UTC):</th>
+                        <td>
+                          {% if run.executed_at %}
+                          <code>{{ run.executed_at }}</code>
+                          {% else %}<span class="text-muted">—</span>{% endif %}
+                        </td>
+                      </tr>
+                      <tr>
+                        <th>Atomic-service runner:</th>
+                        <td>
+                          {% if run.atomic_service_runner_id %}
+                          <a
+                            href="/runners/atomic-service/timeline?runner_id={{ run.atomic_service_runner_id|urlencode }}"
+                            class="text-decoration-none"
+                          >
+                            <code style="font-size: 11px; word-break: break-all"
+                              >{{ run.atomic_service_runner_id }}</code
+                            >
+                          </a>
+                          {% else %}<span class="text-muted">—</span>{% endif %}
+                        </td>
+                      </tr>
+                      <tr>
+                        <th>Atomic-service run:</th>
+                        <td>
+                          {% if run.atomic_service_run_id %}
+                          <a
+                            href="/runners/atomic-service/runs/{{ run.atomic_service_run_id|urlencode }}"
+                            class="text-decoration-none"
+                          >
+                            <code style="font-size: 11px; word-break: break-all"
+                              >{{ run.atomic_service_run_id }}</code
+                            >
+                          </a>
+                          {% else %}<span class="text-muted">—</span>{% endif %}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-6">
+              <div class="card pynmon-card">
+                <div class="card-header pynmon-card-header compact-header">
+                  Outcome
+                </div>
+                <div class="card-body pynmon-card-body">
+                  <table class="table pynmon-table">
+                    <tbody>
+                      <tr>
+                        <th>Triggered invocation:</th>
+                        <td>
+                          {% if run.triggered_invocation_id %} {% set s =
+                          source_inv_summaries.get(run.triggered_invocation_id,
+                          {}) %}
+                          <a
+                            href="/invocations/{{ run.triggered_invocation_id }}"
+                            class="inv-summary-card"
+                          >
+                            <div class="inv-summary-id">
+                              {{ run.triggered_invocation_id }}
+                            </div>
+                            {% if s.get("func_name") %}
+                            <div class="inv-summary-task">
+                              {{ s.func_name }}
+                            </div>
+                            {% endif %}
+                            <div class="inv-summary-meta">
+                              {% if s.get("status") %}
+                              <span
+                                class="badge {% if s.status == 'SUCCESS' %}bg-success{% elif s.status == 'FAILED' %}bg-danger{% elif s.status == 'RUNNING' %}bg-primary{% else %}bg-secondary{% endif %}"
+                                style="font-size: 9px"
+                                >{{ s.status }}</span
+                              >
+                              {% endif %} {% if s.get("duration_seconds") is not
+                              none %}
+                              <span class="inv-summary-duration"
+                                >{{ "%.2f"|format(s.duration_seconds) }}s</span
+                              >
+                              {% endif %}
+                            </div>
+                          </a>
+                          {% else %}
+                          <span class="text-muted">—</span>
+                          {% endif %}
+                        </td>
+                      </tr>
+                      <tr>
+                        <th>Source invocations:</th>
+                        <td>
+                          {% if run.source_invocation_ids %}
+                          <div class="inv-summary-card-row">
+                            {% for sid in run.source_invocation_ids %} {% set s
+                            = source_inv_summaries.get(sid, {}) %}
+                            <a
+                              href="/invocations/{{ sid }}"
+                              class="inv-summary-card"
+                            >
+                              <div class="inv-summary-id">{{ sid }}</div>
+                              {% if s.get("func_name") %}
+                              <div class="inv-summary-task">
+                                {{ s.func_name }}
+                              </div>
+                              {% endif %}
+                              <div class="inv-summary-meta">
+                                {% if s.get("status") %}
+                                <span
+                                  class="badge {% if s.status == 'SUCCESS' %}bg-success{% elif s.status == 'FAILED' %}bg-danger{% elif s.status == 'RUNNING' %}bg-primary{% else %}bg-secondary{% endif %}"
+                                  style="font-size: 9px"
+                                  >{{ s.status }}</span
+                                >
+                                {% endif %} {% if s.get("duration_seconds") is
+                                not none %}
+                                <span class="inv-summary-duration"
+                                  >{{ "%.2f"|format(s.duration_seconds)
+                                  }}s</span
+                                >
+                                {% endif %}
+                              </div>
+                            </a>
+                            {% endfor %}
+                          </div>
+                          {% else %}<span class="text-muted">—</span>{% endif %}
+                        </td>
+                      </tr>
+                      <tr>
+                        <th>Events ({{ (run.event_ids or [])|length }}):</th>
+                        <td>
+                          {% if run.event_ids %}
+                          <div class="event-pill-row">
+                            {% for eid in run.event_ids %} {{ event_pill(eid,
+                            source_event_summaries.get(eid)) }} {% endfor %}
+                          </div>
+                          {% else %}<span class="text-muted">—</span>{% endif %}
+                        </td>
+                      </tr>
+                      {% if not run.participants %}
+                      <tr>
+                        <th>
+                          Conditions ({{ (run.condition_details or [])|length
+                          }}):
+                        </th>
+                        <td>
+                          {% if run.condition_details %}
+                          <div class="trigger-detail-list">
+                            {% for condition in run.condition_details %} {{
+                            render_condition_entity(condition) }} {% endfor %}
+                          </div>
+                          {% else %}<span class="text-muted">—</span>{% endif %}
+                        </td>
+                      </tr>
+                      {% endif %}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {% if run.participants %}
+          <div class="row pynmon-row-compact">
+            <div class="col-12">
+              <div class="card pynmon-card">
+                <div class="card-header pynmon-card-header compact-header">
+                  Participants
+                  <span class="badge bg-secondary ms-2"
+                    >{{ run.participants|length }}</span
+                  >
+                </div>
+                <div class="card-body pynmon-card-body">
+                  <p class="text-muted mb-2" style="font-size: 11px">
+                    One row per valid condition that matched. A condition ID
+                    identifies the trigger rule. A valid condition ID combines
+                    that rule with the concrete context that satisfied it.
+                  </p>
+                  <table class="table table-sm pynmon-table">
+                    <thead>
+                      <tr>
+                        <th>Trigger condition</th>
+                        <th>Valid condition context</th>
+                        {% if run.show_participant_event_column %}
+                        <th>Event</th>
+                        {% endif %} {% if run.show_participant_source_column %}
+                        <th>Source invocation</th>
+                        {% endif %}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for p in run.participants %}
+                      <tr>
+                        <td>{{ render_condition_entity(p.condition_view) }}</td>
+                        <td>
+                          {{ render_valid_condition_id(p.valid_condition_view)
+                          }} {{ render_condition_entity(p.context_view) }}
+                        </td>
+                        {% if run.show_participant_event_column %}
+                        <td>
+                          {% if p.event_id %}
+                          <a
+                            href="/events/{{ p.event_id }}"
+                            title="{{ p.event_id }}"
+                            ><code
+                              style="font-size: 11px; word-break: break-all"
+                              >{{ p.event_id }}</code
+                            ></a
+                          >
+                          {% else %}<span class="text-muted">—</span>{% endif %}
+                        </td>
+                        {% endif %} {% if run.show_participant_source_column %}
+                        <td>
+                          {% if p.source_invocation_id %} {% set s =
+                          source_inv_summaries.get(p.source_invocation_id, {})
+                          %}
+                          <a
+                            href="/invocations/{{ p.source_invocation_id }}"
+                            class="inv-summary-card"
+                          >
+                            <div class="inv-summary-id">
+                              {{ p.source_invocation_id }}
+                            </div>
+                            {% if s.get("func_name") %}
+                            <div class="inv-summary-task">
+                              {{ s.func_name }}
+                            </div>
+                            {% endif %}
+                            <div class="inv-summary-meta">
+                              {% if s.get("status") %}
+                              <span
+                                class="badge {% if s.status == 'SUCCESS' %}bg-success{% elif s.status == 'FAILED' %}bg-danger{% elif s.status == 'RUNNING' %}bg-primary{% else %}bg-secondary{% endif %}"
+                                style="font-size: 9px"
+                                >{{ s.status }}</span
+                              >
+                              {% endif %} {% if s.get("duration_seconds") is not
+                              none %}
+                              <span class="inv-summary-duration"
+                                >{{ "%.2f"|format(s.duration_seconds) }}s</span
+                              >
+                              {% endif %}
+                            </div>
+                          </a>
+                          {% else %}<span class="text-muted">—</span>{% endif %}
+                        </td>
+                        {% endif %}
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+          {% endif %} {% if related_events %}
+          <div class="row pynmon-row-compact">
+            <div class="col-12">
+              <div class="card pynmon-card">
+                <div class="card-header pynmon-card-header compact-header">
+                  Related Events
+                  <span class="badge bg-secondary ms-2"
+                    >{{ related_events|length }}</span
+                  >
+                </div>
+                <div class="card-body pynmon-card-body">
+                  <table class="table table-sm pynmon-table">
+                    <thead>
+                      <tr>
+                        <th>Code</th>
+                        <th>Event ID</th>
+                        <th>Timestamp (UTC)</th>
+                        <th>State</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for e in related_events %}
+                      <tr>
+                        <td>
+                          <code style="font-size: 11px"
+                            >{{ e.event_code }}</code
+                          >
+                        </td>
+                        <td>
+                          <a href="/events/{{ e.event_id }}"
+                            ><code
+                              style="font-size: 10px; word-break: break-all"
+                              >{{ e.event_id }}</code
+                            ></a
+                          >
+                        </td>
+                        <td>
+                          <code style="font-size: 10px">{{ e.timestamp }}</code>
+                        </td>
+                        <td>
+                          {% if e.triggered %}
+                          <span class="badge bg-success">triggered</span>
+                          {% elif e.matched %}
+                          <span class="badge bg-primary">matched</span>
+                          {% else %}
+                          <span class="badge bg-secondary">recorded</span>
+                          {% endif %}
+                        </td>
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

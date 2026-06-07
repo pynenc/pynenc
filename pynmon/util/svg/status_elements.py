@@ -50,6 +50,7 @@ class StatusPoint:
     tooltip: str = ""
     order: int = 0
     sub_lane: int = 0
+    registered_by_inv_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -57,7 +58,7 @@ class StatusSegment:
     """
     Bar representing a status that occupies worker time.
 
-    Segment statuses (RUNNING, PENDING, RESUMED) show as bars.
+    Segment statuses (RUNNING, PENDING) show as bars.
 
     :param str invocation_id: Invocation identifier
     :param datetime start_time: When this status began

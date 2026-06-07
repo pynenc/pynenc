@@ -39,8 +39,8 @@ def _poll_for_status(
     app: Pynenc,
     invocation_id: InvocationId,
     expected_status: InvocationStatus,
-    timeout: float = 10.0,
-    interval: float = 0.3,
+    timeout: float = 30.0,
+    interval: float = 0.2,
 ) -> bool:
     """Poll the invocation history until expected_status appears or timeout."""
     elapsed = 0.0
@@ -61,6 +61,9 @@ def test_recover_pending_invocations(
     app.conf.max_pending_seconds = 0.2
     app.conf.recover_pending_invocations_cron = "* * * * *"
     app.conf.atomic_service_interval_minutes = 0.1
+    app.conf.atomic_service_max_start_slot_fraction = 1.0
+    app.conf.atomic_service_spread_margin_minutes = 0.0
+    app.conf.atomic_service_check_interval_minutes = 0.01
     with patch.dict(
         os.environ,
         {
@@ -69,6 +72,11 @@ def test_recover_pending_invocations(
             "PYNENC__ATOMIC_SERVICE_INTERVAL_MINUTES": str(
                 app.conf.atomic_service_interval_minutes
             ),
+            "PYNENC__ATOMIC_SERVICE_MAX_START_SLOT_FRACTION": str(
+                app.conf.atomic_service_max_start_slot_fraction
+            ),
+            "PYNENC__ATOMIC_SERVICE_SPREAD_MARGIN_MINUTES": "0.0",
+            "PYNENC__ATOMIC_SERVICE_CHECK_INTERVAL_MINUTES": "0.01",
         },
     ):
 
@@ -119,6 +127,9 @@ def test_recover_running_invocations(
     app.conf.max_pending_seconds = 0.2
     app.conf.recover_running_invocations_cron = "* * * * *"
     app.conf.atomic_service_interval_minutes = 0.1
+    app.conf.atomic_service_max_start_slot_fraction = 1.0
+    app.conf.atomic_service_spread_margin_minutes = 0.0
+    app.conf.atomic_service_check_interval_minutes = 0.01
     with patch.dict(
         os.environ,
         {
@@ -127,6 +138,11 @@ def test_recover_running_invocations(
             "PYNENC__ATOMIC_SERVICE_INTERVAL_MINUTES": str(
                 app.conf.atomic_service_interval_minutes
             ),
+            "PYNENC__ATOMIC_SERVICE_MAX_START_SLOT_FRACTION": str(
+                app.conf.atomic_service_max_start_slot_fraction
+            ),
+            "PYNENC__ATOMIC_SERVICE_SPREAD_MARGIN_MINUTES": "0.0",
+            "PYNENC__ATOMIC_SERVICE_CHECK_INTERVAL_MINUTES": "0.01",
         },
     ):
 

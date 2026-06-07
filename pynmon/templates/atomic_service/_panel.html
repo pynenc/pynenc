@@ -1,0 +1,213 @@
+{# Shared body for the atomic-service page (full render + HTMX refresh). #}
+
+<div class="row g-3">
+  <!-- Configuration -->
+  <div class="col-lg-4">
+    <div class="metric-card">
+      <h6 class="section-title">Scheduling Configuration</h6>
+      <div class="metric-grid">
+        <div class="metric-item">
+          <span class="metric-label">Cycle Interval</span>
+          <span class="badge bg-info">{{ config.interval_minutes }} min</span>
+        </div>
+        <div class="metric-item">
+          <span class="metric-label">Spread Margin</span>
+          <span class="badge bg-info"
+            >{{ config.spread_margin_minutes }} min</span
+          >
+        </div>
+        <div class="metric-item">
+          <span class="metric-label">Check Interval</span>
+          <span class="badge bg-info"
+            >{{ config.check_interval_minutes }} min</span
+          >
+        </div>
+        <div class="metric-item">
+          <span class="metric-label">Runner Dead After</span>
+          <span class="badge bg-secondary">
+            {{ config.runner_dead_after_minutes }} min
+          </span>
+        </div>
+      </div>
+      <hr />
+      <div class="metric-item">
+        <span class="metric-label">Now (UTC)</span>
+        <code class="small">{{ cycle.now }}</code>
+      </div>
+      <div class="metric-item">
+        <span class="metric-label">Cycle Start</span>
+        <code class="small">{{ cycle.cycle_start or "—" }}</code>
+      </div>
+      <div class="metric-item">
+        <span class="metric-label">Cycle End</span>
+        <code class="small">{{ cycle.cycle_end or "—" }}</code>
+      </div>
+    </div>
+  </div>
+
+  <!-- Schedule view: per-runner slot ownership for current cycle -->
+  <div class="col-lg-8">
+    <div class="metric-card">
+      <h6 class="section-title">
+        Current-Cycle Slot Assignment ({{ total_runners }} runner{{ '' if
+        total_runners == 1 else 's' }})
+      </h6>
+      {% if slot_rows %}
+      <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle">
+          <thead>
+            <tr>
+              <th>Position</th>
+              <th>Runner</th>
+              <th>Slot Start</th>
+              <th>Slot End</th>
+              <th>State</th>
+              <th>Decision Reason</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in slot_rows %}
+            <tr class="{% if row.is_current_owner %}table-success{% endif %}">
+              <td>
+                <span class="badge bg-secondary"
+                  >{{ row.position if row.position is not none else "—" }}</span
+                >
+              </td>
+              <td><code class="small">{{ row.runner_id }}</code></td>
+              <td><code class="small">{{ row.slot_start or "—" }}</code></td>
+              <td><code class="small">{{ row.slot_end or "—" }}</code></td>
+              <td>
+                {% if row.is_current_owner %}
+                <span class="badge bg-success">Owns slot</span>
+                {% else %}
+                <span class="badge bg-light text-dark">Waiting</span>
+                {% endif %}
+              </td>
+              <td><code class="small">{{ row.reason }}</code></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-muted mb-0">
+        No active runners are eligible for atomic-service scheduling.
+      </p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Active runner table -->
+<div class="row g-3 mt-1">
+  <div class="col-12">
+    <div class="metric-card">
+      <h6 class="section-title">Active Runners (heartbeat + last execution)</h6>
+      {% if runner_rows %}
+      <div class="table-responsive">
+        <table class="table table-sm table-striped align-middle">
+          <thead>
+            <tr>
+              <th>Runner</th>
+              <th>Created</th>
+              <th>Last Heartbeat</th>
+              <th>Eligible</th>
+              <th>Last Service Start</th>
+              <th>Last Service End</th>
+              <th>Decision</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in runner_rows %}
+            <tr>
+              <td><code class="small">{{ row.runner_id }}</code></td>
+              <td><code class="small">{{ row.creation_time }}</code></td>
+              <td><code class="small">{{ row.last_heartbeat }}</code></td>
+              <td>
+                {% if row.allow_to_run_atomic_service %}
+                <span class="badge bg-success">yes</span>
+                {% if row.in_membership_grace %}
+                <div>
+                  <span class="badge bg-warning text-dark mt-1">grace</span>
+                </div>
+                {% elif row.in_runnable_set %}
+                <div><span class="badge bg-info mt-1">runnable</span></div>
+                {% endif %} {% else %}
+                <span class="badge bg-secondary">no</span>
+                {% endif %}
+              </td>
+              <td>
+                <code class="small">{{ row.last_service_start or "—" }}</code>
+              </td>
+              <td>
+                <code class="small">{{ row.last_service_end or "—" }}</code>
+              </td>
+              <td>
+                {% if row.decision %} {% if row.decision.should_try_start %}
+                <span class="badge bg-success">try-start</span>
+                {% else %}
+                <span class="badge bg-light text-dark">skip</span>
+                {% endif %}
+                <code class="small d-block mt-1"
+                  >{{ row.decision.reason }}</code
+                >
+                {% else %} — {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-muted mb-0">No active runners.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Skip-event feed -->
+<div class="row g-3 mt-1">
+  <div class="col-12">
+    <div class="metric-card">
+      <h6 class="section-title">Recent Skip Events</h6>
+      {% if events %}
+      <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle">
+          <thead>
+            <tr>
+              <th>Created (UTC)</th>
+              <th>Reason</th>
+              <th>Cycle Start</th>
+              <th>Slot Start</th>
+              <th>Slot End</th>
+              <th>Observer</th>
+              <th>Message</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for event in events %}
+            <tr>
+              <td><code class="small">{{ event.created_at }}</code></td>
+              <td>
+                <span class="badge bg-warning text-dark"
+                  >{{ event.reason }}</span
+                >
+              </td>
+              <td><code class="small">{{ event.cycle_start or "—" }}</code></td>
+              <td><code class="small">{{ event.slot_start or "—" }}</code></td>
+              <td><code class="small">{{ event.slot_end or "—" }}</code></td>
+              <td><code class="small">{{ event.runner_id }}</code></td>
+              <td class="small">{{ event.message or "—" }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-muted mb-0">
+        No skip events recorded yet (derived from BLOCKED execution rows).
+      </p>
+      {% endif %}
+    </div>
+  </div>
+</div>

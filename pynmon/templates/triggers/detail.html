@@ -1,0 +1,65 @@
+{% extends "base.html" %} {% from "trigger_runs/partials/condition_entity.html"
+import render_condition_entity %} {% block content %}
+<div class="pynmon-container">
+  <div class="card pynmon-card">
+    <div
+      class="card-header pynmon-card-header d-flex justify-content-between align-items-center flex-wrap gap-2"
+    >
+      <span class="compact-header">Trigger Definition</span>
+      <a
+        href="javascript:history.back()"
+        class="btn btn-sm btn-outline-secondary pynmon-action-btn"
+        >Back</a
+      >
+    </div>
+    <div class="card-body pynmon-card-body">
+      <div class="row pynmon-row-compact pynmon-responsive-detail-grid">
+        <div class="col-md-6">
+          <table class="table pynmon-table mb-0">
+            <tbody>
+              <tr>
+                <th>Trigger ID:</th>
+                <td>
+                  <code style="font-size: 11px; word-break: break-all"
+                    >{{ trigger.id }}</code
+                  >
+                </td>
+              </tr>
+              <tr>
+                <th>Task:</th>
+                <td>
+                  <a href="/tasks/{{ trigger.task_id }}"
+                    ><code>{{ trigger.task_id }}</code></a
+                  >
+                </td>
+              </tr>
+              <tr>
+                <th>Logic:</th>
+                <td><span class="badge bg-info">{{ trigger.logic }}</span></td>
+              </tr>
+              <tr>
+                <th>Conditions:</th>
+                <td>
+                  <span class="badge bg-secondary"
+                    >{{ trigger.condition_count }}</span
+                  >
+                </td>
+              </tr>
+              <tr>
+                <th>Arguments:</th>
+                <td><code>{{ trigger.argument_provider }}</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="col-md-6">
+          <div class="trigger-detail-list">
+            {% for condition in trigger.conditions %} {{
+            render_condition_entity(condition) }} {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

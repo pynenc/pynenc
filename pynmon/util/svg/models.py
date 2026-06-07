@@ -8,6 +8,7 @@ everything so existing imports continue to work without changes.
 
 from pynmon.util.svg.bounds import TimelineBounds
 from pynmon.util.svg.config import TimelineConfig
+from pynmon.util.svg.atomic_service import AtomicServiceWindow
 from pynmon.util.svg.lane_models import LaneGroup, RunnerLane
 from pynmon.util.svg.status_elements import (
     InvocationBar,
@@ -20,6 +21,7 @@ from pynmon.util.svg.timeline_data import TimelineData
 __all__ = [
     "TimelineConfig",
     "TimelineBounds",
+    "AtomicServiceWindow",
     "InvocationBar",
     "StatusPoint",
     "StatusSegment",

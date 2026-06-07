@@ -1,14 +1,19 @@
 {% extends "base.html" %} {% block content %}
-<div class="container-fluid mt-4">
-  <div class="row">
-    <div class="col-md-2">
-      {% include "invocations/partials/timeline_filters.html" %}
-    </div>
+<div class="container-fluid mt-2">
+  {% include "invocations/partials/timeline_filters.html" %}
 
-    <div class="col-md-10">
+  <div class="row">
+    <div class="col-12">
       <div class="card">
-        <div class="card-header py-2">
+        <div class="card-header py-2 timeline-card-header">
           <h5 class="mb-0">Invocations Timeline</h5>
+          <div class="timeline-card-tools">
+            <button id="timeline-range-zoom" class="btn btn-outline-secondary btn-sm timeline-zoom-tool" type="button"
+                    aria-label="Select timeline range to zoom" aria-pressed="false"
+                    title="Select timeline range to zoom">
+              <span class="material-icons" aria-hidden="true">zoom_in</span>
+            </button>
+          </div>
         </div>
         <div class="card-body p-2">
           <!-- SVG Timeline Container -->

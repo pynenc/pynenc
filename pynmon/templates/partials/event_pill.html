@@ -1,0 +1,31 @@
+{# Rich pill for a source event. Pass `summary` dict (from _fetch_event_summary)
+when available; falls back to bare id otherwise. #} {% macro
+event_pill(event_id, summary=None) -%} {% set s = summary or {} %} {% set code =
+s.get("event_code") %} {% set state = s.get("state") %}
+<a
+  href="/events/{{ event_id }}"
+  class="event-pill-rich event-full-link"
+  data-event-id="{{ event_id }}"
+  {%
+  if
+  state
+  %}data-event-state="{{ state }}"
+  {%
+  endif
+  %}
+  title="{{ event_id }}"
+>
+  {% if code %}<span class="event-pill-code">{{ code }}</span>{% endif %}
+  <span class="event-pill-id"><code>{{ event_id }}</code></span>
+  <span class="event-pill-meta">
+    {% if state %}<span class="event-pill-state state-{{ state }}"
+      >{{ state }}</span
+    >{% endif %} {% if s.get("timestamp") %}<span class="event-pill-time"
+      >{{ s.timestamp }}</span
+    >{% endif %} {% if s.get("triggered_count") %}<span
+      class="event-pill-triggered"
+      >→ {{ s.triggered_count }} inv</span
+    >{% endif %}
+  </span>
+</a>
+{%- endmacro %}

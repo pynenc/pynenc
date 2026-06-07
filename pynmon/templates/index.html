@@ -177,6 +177,85 @@
   </div>
 </div>
 
+<!-- Trigger Event Summary -->
+<div class="row g-3 mb-4">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header">
+        <span class="material-icons align-middle me-1" style="font-size: 18px"
+          >bolt</span
+        >
+        Event Activity
+      </div>
+      <div class="card-body py-3">
+        <div class="row g-2 text-center">
+          <div class="col">
+            <a href="/events" class="text-decoration-none">
+              <div
+                class="p-2 rounded"
+                style="background: rgba(13, 110, 253, 0.06)"
+              >
+                <div class="text-primary fw-bold h4 mb-0">
+                  {{ event_summary.total }}
+                </div>
+                <small class="text-muted">Events</small>
+              </div>
+            </a>
+          </div>
+          <div class="col">
+            <a href="/events?matched=yes" class="text-decoration-none">
+              <div
+                class="p-2 rounded"
+                style="background: rgba(13, 202, 240, 0.08)"
+              >
+                <div class="fw-bold h4 mb-0" style="color: var(--info-teal)">
+                  {{ event_summary.matched }}
+                </div>
+                <small class="text-muted">Matched</small>
+              </div>
+            </a>
+          </div>
+          <div class="col">
+            <a href="/events?triggered=yes" class="text-decoration-none">
+              <div
+                class="p-2 rounded"
+                style="background: rgba(25, 135, 84, 0.08)"
+              >
+                <div class="text-success fw-bold h4 mb-0">
+                  {{ event_summary.triggered }}
+                </div>
+                <small class="text-muted">Triggered</small>
+              </div>
+            </a>
+          </div>
+          <div class="col">
+            <div
+              class="p-2 rounded"
+              style="background: rgba(108, 117, 125, 0.06)"
+            >
+              <div class="text-muted fw-bold h4 mb-0">
+                {{ event_summary.event_codes }}
+              </div>
+              <small class="text-muted">Event Codes</small>
+            </div>
+          </div>
+          <div class="col">
+            <div
+              class="p-2 rounded"
+              style="background: rgba(255, 193, 7, 0.08)"
+            >
+              <div class="text-warning fw-bold h4 mb-0">
+                {{ event_summary.trigger_runs }}
+              </div>
+              <small class="text-muted">Trigger Runs</small>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Component Architecture -->
 <div class="row mb-4">
   <div class="col-12">

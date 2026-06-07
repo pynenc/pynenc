@@ -1,0 +1,38 @@
+{% extends "base.html" %} {% from "trigger_runs/partials/condition_entity.html"
+import render_condition_entity %} {% block content %}
+<div class="pynmon-container">
+  <div class="card pynmon-card">
+    <div
+      class="card-header pynmon-card-header d-flex justify-content-between align-items-center flex-wrap gap-2"
+    >
+      <span class="compact-header">Valid Condition</span>
+      <a
+        href="javascript:history.back()"
+        class="btn btn-sm btn-outline-secondary pynmon-action-btn"
+        >Back</a
+      >
+    </div>
+    <div class="card-body pynmon-card-body">
+      <div class="trigger-detail-meta-row mb-2">
+        <span>ValidCondition ID</span>
+        <code title="{{ valid_condition_id }}"
+          >{{ valid_condition_id_short }}</code
+        >
+      </div>
+      {% if source == "snapshot" %}
+      <div class="alert alert-info py-2 mb-2">
+        This valid condition was reconstructed from trigger-run history. {% if
+        trigger_run_id %}
+        <a href="/trigger-runs/{{ trigger_run_id|urlencode }}"
+          >Open trigger run <code>{{ trigger_run_id_short }}</code></a
+        >. {% endif %}
+      </div>
+      {% endif %}
+      <div class="trigger-valid-condition-grid">
+        {{ render_condition_entity(condition) }} {{
+        render_condition_entity(context) }}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

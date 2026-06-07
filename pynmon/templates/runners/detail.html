@@ -294,5 +294,114 @@
       </div>
     </div>
   </div>
+
+  {% if atomic_service_history %}
+  <div class="row mt-3">
+    <div class="col-12">
+      <div class="card">
+        <div
+          class="card-header d-flex justify-content-between align-items-center"
+        >
+          <h6 class="mb-0">Recent Atomic Service Runs</h6>
+          <a
+            href="/runners/atomic-service/timeline?runner_id={{ runner_info.runner_id }}"
+            class="btn btn-sm btn-outline-primary"
+            >View full timeline</a
+          >
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-sm mb-0">
+              <thead>
+                <tr>
+                  <th>Start</th>
+                  <th>End</th>
+                  <th style="width: 100px">Duration</th>
+                  <th style="width: 100px">Status</th>
+                  <th>Reason</th>
+                  <th style="width: 200px">Service Run ID</th>
+                  <th style="width: 130px"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for execution in atomic_service_history %}
+                <tr>
+                  <td>
+                    {{ execution.start.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3] }}
+                  </td>
+                  <td>
+                    {% if execution.end %} {{ execution.end.strftime('%Y-%m-%d
+                    %H:%M:%S.%f')[:-3] }} {% else %}
+                    <span class="text-muted small">—</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if execution.end %}
+                    <span class="badge bg-info"
+                      >{{ execution.duration|round(3) }}s</span
+                    >
+                    {% else %}
+                    <span class="text-muted small">—</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if execution.status == 'running' %}
+                    <span class="badge bg-primary">running</span>
+                    {% elif execution.status == 'completed' %}
+                    <span class="badge bg-success">completed</span>
+                    {% elif execution.status == 'abandoned' %}
+                    <span class="badge bg-warning text-dark">abandoned</span>
+                    {% elif execution.status == 'blocked' %}
+                    <span class="badge bg-secondary">blocked</span>
+                    {% else %}
+                    <span class="badge bg-light text-dark"
+                      >{{ execution.status }}</span
+                    >
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if execution.reason %}
+                    <code class="small text-muted">{{ execution.reason }}</code>
+                    {% else %}
+                    <span class="text-muted small">—</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if execution.atomic_service_run_id %}
+                    <a
+                      href="{{ execution.detail_url }}"
+                      class="text-decoration-none"
+                    >
+                      <code class="small text-primary"
+                        >{{ execution.atomic_service_run_id }}</code
+                      >
+                    </a>
+                    {% else %}
+                    <span class="text-muted small">—</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    <a
+                      href="{{ execution.timeline_url }}"
+                      class="btn btn-sm btn-outline-primary"
+                    >
+                      <span
+                        class="material-icons"
+                        style="font-size: 14px; vertical-align: middle"
+                        >timeline</span
+                      >
+                      Timeline
+                    </a>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 </div>
 {% endblock %}

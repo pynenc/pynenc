@@ -1,0 +1,312 @@
+{% extends "base.html" %} {% block content %}
+<div class="pynmon-container">
+  <div class="d-flex justify-content-end align-items-center gap-2 mb-3">
+    <button
+      id="event-purge-btn"
+      class="btn btn-sm btn-outline-warning"
+      hx-post="/events/auto-purge"
+      hx-confirm="This will delete events and trigger runs older than the configured retention. Continue?"
+      hx-target="#event-purge-result"
+    >
+      Purge old events
+    </button>
+    <button
+      class="btn btn-sm btn-outline-primary"
+      onclick="window.location.reload()"
+    >
+      Refresh
+    </button>
+  </div>
+
+  <div id="event-purge-result"></div>
+
+  <div class="card pynmon-card pynmon-filter-bar mb-3">
+    <div class="pynmon-filter-summary">
+      {% if filters.event_code %}<span class="chip"
+        ><strong>code:</strong>{{ filters.event_code }}</span
+      >{% endif %} {% if filters.start %}<span class="chip"
+        ><strong>from:</strong>{{ filters.start }}</span
+      >{% endif %} {% if filters.end %}<span class="chip"
+        ><strong>to:</strong>{{ filters.end }}</span
+      >{% endif %} {% if filters.matched != "all" %}<span class="chip"
+        ><strong>matched:</strong>{{ filters.matched }}</span
+      >{% endif %} {% if filters.triggered != "all" %}<span class="chip"
+        ><strong>triggered:</strong>{{ filters.triggered }}</span
+      >{% endif %}
+      <span class="chip"><strong>page size:</strong>{{ page_size }}</span>
+      <span class="chip"
+        ><strong>{{ total }}</strong> events &middot; page {{ page }} / {{
+        total_pages }}</span
+      >
+      <button class="expand-btn" type="button">Edit filters</button>
+    </div>
+    <div
+      class="card-header pynmon-card-header compact-header pynmon-filter-heading"
+    >
+      Filters
+    </div>
+    <div class="card-body pynmon-card-body pynmon-filter-controls">
+      <form method="get" action="/events" class="row g-2 align-items-end">
+        <div class="col-lg-3 col-md-4">
+          <label for="event_code" class="form-label small mb-1"
+            >Event code</label
+          >
+          <select
+            name="event_code"
+            id="event_code"
+            class="form-select form-select-sm"
+          >
+            <option value="">All codes</option>
+            {% for code in event_codes %} {% if code == filters.event_code %}
+            <option value="{{ code }}" selected>{{ code }}</option>
+            {% else %}
+            <option value="{{ code }}">{{ code }}</option>
+            {% endif %} {% endfor %}
+          </select>
+        </div>
+        <div class="col-lg-2 col-md-4">
+          <label for="start" class="form-label small mb-1">From (UTC)</label>
+          <input
+            type="datetime-local"
+            name="start"
+            id="start"
+            value="{{ filters.start }}"
+            class="form-control form-control-sm"
+          />
+        </div>
+        <div class="col-lg-2 col-md-4">
+          <label for="end" class="form-label small mb-1">To (UTC)</label>
+          <input
+            type="datetime-local"
+            name="end"
+            id="end"
+            value="{{ filters.end }}"
+            class="form-control form-control-sm"
+          />
+        </div>
+        <div class="col-lg-2 col-md-4">
+          <label for="matched" class="form-label small mb-1">Matched</label>
+          <select
+            name="matched"
+            id="matched"
+            class="form-select form-select-sm"
+          >
+            {% if filters.matched == "all" %}
+            <option value="all" selected>All</option>
+            {% else %}
+            <option value="all">All</option>
+            {% endif %} {% if filters.matched == "yes" %}
+            <option value="yes" selected>Matched</option>
+            {% else %}
+            <option value="yes">Matched</option>
+            {% endif %} {% if filters.matched == "no" %}
+            <option value="no" selected>Unmatched</option>
+            {% else %}
+            <option value="no">Unmatched</option>
+            {% endif %}
+          </select>
+        </div>
+        <div class="col-lg-2 col-md-4">
+          <label for="triggered" class="form-label small mb-1">Triggered</label>
+          <select
+            name="triggered"
+            id="triggered"
+            class="form-select form-select-sm"
+          >
+            {% if filters.triggered == "all" %}
+            <option value="all" selected>All</option>
+            {% else %}
+            <option value="all">All</option>
+            {% endif %} {% if filters.triggered == "yes" %}
+            <option value="yes" selected>Triggered</option>
+            {% else %}
+            <option value="yes">Triggered</option>
+            {% endif %} {% if filters.triggered == "no" %}
+            <option value="no" selected>Not triggered</option>
+            {% else %}
+            <option value="no">Not triggered</option>
+            {% endif %}
+          </select>
+        </div>
+        <div class="col-lg-1 col-md-2">
+          <label for="page_size" class="form-label small mb-1">Page size</label>
+          <input
+            type="number"
+            name="page_size"
+            id="page_size"
+            min="1"
+            max="200"
+            value="{{ page_size }}"
+            class="form-control form-control-sm"
+          />
+        </div>
+        <div class="col-lg-1 col-md-2">
+          <button type="submit" class="btn btn-sm btn-primary w-100">
+            Filter
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card pynmon-card">
+    <div
+      class="card-header pynmon-card-header d-flex justify-content-between align-items-center"
+    >
+      <span class="compact-header">Events</span>
+      <span class="text-muted small"
+        >Showing {{ events|length }} of {{ total }} events &middot; Page {{ page
+        }} of {{ total_pages }}</span
+      >
+    </div>
+    <div class="card-body pynmon-card-body p-0">
+      {% if events %}
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Timestamp (UTC)</th>
+              <th>Event code</th>
+              <th>Event ID</th>
+              <th>Conditions</th>
+              <th>Triggered invocations</th>
+              <th>Emitter invocation</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for event in events %}
+            <tr>
+              <td>
+                <code>{{ event.timestamp.isoformat(timespec="seconds") }}</code>
+              </td>
+              <td>{{ event.event_code }}</td>
+              <td>
+                <a
+                  href="/events/{{ event.event_id }}"
+                  title="Open event details"
+                >
+                  <code class="event-full-link">{{ event.event_id }}</code>
+                </a>
+              </td>
+              <td>
+                {% if event.matched %}
+                <div class="event-ref-list">
+                  <span class="badge bg-success"
+                    >{{ event.matched_condition_ids|length }} matched</span
+                  >
+                  {% for cid in event.matched_condition_ids[:3] %}
+                  <a
+                    href="/trigger-runs/condition?condition_id={{ cid|urlencode }}"
+                    title="Open condition details"
+                    ><code class="event-ref-code" title="{{ cid }}"
+                      >{{ cid[:16] }}{% if cid|length > 16 %}…{% endif %}</code
+                    ></a
+                  >
+                  {% endfor %} {% if event.matched_condition_ids|length > 3 %}
+                  <span class="text-muted small"
+                    >+{{ event.matched_condition_ids|length - 3 }}</span
+                  >
+                  {% endif %}
+                </div>
+                {% else %}
+                <span class="badge bg-secondary">0</span>
+                {% endif %} {% if event.valid_condition_ids|length >
+                event.matched_condition_ids|length %}
+                <div class="text-muted small">
+                  {{ event.valid_condition_ids|length }} evaluated
+                </div>
+                {% endif %}
+              </td>
+              <td>
+                {% if event.triggered %}
+                <div class="event-ref-list">
+                  <span class="badge bg-primary"
+                    >{{ event.triggered_invocation_ids|length }}</span
+                  >
+                  {% for iid in event.triggered_invocation_ids[:3] %}
+                  <a href="/invocations/{{ iid }}" title="{{ iid }}"
+                    ><code class="event-ref-code"
+                      >{{ iid[:16] }}{% if iid|length > 16 %}…{% endif %}</code
+                    ></a
+                  >
+                  {% endfor %} {% if event.triggered_invocation_ids|length > 3
+                  %}
+                  <span class="text-muted small"
+                    >+{{ event.triggered_invocation_ids|length - 3 }}</span
+                  >
+                  {% endif %}
+                </div>
+                {% else %}
+                <span class="badge bg-secondary">0</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if event.emitted_by_invocation_id %}
+                <a
+                  href="/invocations/{{ event.emitted_by_invocation_id }}"
+                  title="{{ event.emitted_by_invocation_id }}"
+                >
+                  <code class="event-full-link"
+                    >{{ event.emitted_by_invocation_id }}</code
+                  >
+                </a>
+                {% else %}
+                <span class="text-muted">external</span>
+                {% endif %}
+              </td>
+              <td>
+                <a
+                  href="/events/{{ event.event_id }}"
+                  class="btn btn-sm btn-outline-primary"
+                  >Details</a
+                >
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {% if total_pages > 1 %}
+      <nav
+        aria-label="Events pagination"
+        class="d-flex justify-content-between align-items-center p-3 border-top"
+      >
+        <div class="text-muted small">Page {{ page }} of {{ total_pages }}</div>
+        <ul class="pagination pagination-sm mb-0">
+          {% set base_args = "event_code=" ~ filters.event_code ~ "&start=" ~
+          filters.start ~ "&end=" ~ filters.end ~ "&matched=" ~ filters.matched
+          ~ "&triggered=" ~ filters.triggered ~ "&page_size=" ~ page_size %}
+          <li class="page-item {{ 'disabled' if page <= 1 }}">
+            <a class="page-link" href="?{{ base_args }}&page=1">First</a>
+          </li>
+          <li class="page-item {{ 'disabled' if page <= 1 }}">
+            <a class="page-link" href="?{{ base_args }}&page={{ page - 1 }}"
+              >Previous</a
+            >
+          </li>
+          <li class="page-item active">
+            <span class="page-link">{{ page }}</span>
+          </li>
+          <li class="page-item {{ 'disabled' if page >= total_pages }}">
+            <a class="page-link" href="?{{ base_args }}&page={{ page + 1 }}"
+              >Next</a
+            >
+          </li>
+          <li class="page-item {{ 'disabled' if page >= total_pages }}">
+            <a class="page-link" href="?{{ base_args }}&page={{ total_pages }}"
+              >Last</a
+            >
+          </li>
+        </ul>
+      </nav>
+      {% endif %} {% else %}
+      <div class="alert alert-info m-3">
+        No events match the current filters.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

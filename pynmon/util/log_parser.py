@@ -29,6 +29,11 @@ import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
+from pynenc.trigger.log_messages import (
+    TRIGGER_ENTITY_LIST_KINDS,
+    TRIGGER_ENTITY_REF_KINDS,
+)
+
 # ── regex ──────────────────────────────────────────────────────────────────────
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 _BRACKET_RE = re.compile(r"\[([^\]]+)\]")
@@ -49,18 +54,48 @@ _LOG_LINE_START_RE = re.compile(
 )
 
 # Structured references: key:value where value is a UUID or similar ID
+# Trigger-system kinds (event/trigger/trigger-run/condition/valid-condition/
+# source-invocation/triggered-invocation/cron/atomic-service-run) come from
+# pynenc.trigger.log_messages so the producer and parser share one vocabulary.
+# Values intentionally allow ':' and '+' because cron timestamps and
+# valid-condition IDs can contain ISO datetimes (e.g. +00:00). Trigger
+# condition IDs also use '#'. Cron condition IDs are the only current entity
+# refs with spaces, so they get a narrow 5-field cron-expression branch.
+_CORE_REF_KINDS: tuple[str, ...] = (
+    "invocation",
+    "runner",
+    "worker",
+    "task",
+    "parent-invocation",
+    "child-invocation",
+    "new-invocation",
+    "current-owner-runner",
+    "attempted-owner-runner",
+    "workflow",
+    "sub-workflow",
+    "parent-workflow",
+    "context",
+)
+# Order longest-first so multi-segment kinds (e.g. ``trigger-run`` /
+# ``valid-condition``) win over their shorter prefixes in the alternation.
+_ALL_REF_KINDS: tuple[str, ...] = tuple(
+    sorted(_CORE_REF_KINDS + TRIGGER_ENTITY_REF_KINDS, key=len, reverse=True)
+)
 _ENTITY_REF_RE = re.compile(
-    r"(?:invocation|runner|worker|task"
-    r"|parent-invocation|child-invocation|new-invocation"
-    r"|current-owner-runner|attempted-owner-runner"
-    r"|workflow|sub-workflow|parent-workflow)"
-    r":([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
-    r"|[0-9a-zA-Z._-]+)",
+    r"condition:cron_(?:\S+\s+){4}\S+"
+    r"|(?:" + "|".join(_ALL_REF_KINDS) + r")"
+    r":[0-9a-zA-Z._:+#-]+",
     re.IGNORECASE,
 )
 # List form: invocations:[id,id,...] / workflows:[id,id,...]
+# Plurals must include trigger-system list forms so high-cardinality messages
+# (composite triggers, batch event matches) parse cleanly.
+_CORE_LIST_KINDS: tuple[str, ...] = ("invocations", "runners", "workers", "workflows")
+_ALL_LIST_KINDS: tuple[str, ...] = tuple(
+    sorted(_CORE_LIST_KINDS + TRIGGER_ENTITY_LIST_KINDS, key=len, reverse=True)
+)
 _ENTITY_LIST_RE = re.compile(
-    r"(invocations|runners|workers|workflows):\[([^\]]*)\]",
+    r"(" + "|".join(_ALL_LIST_KINDS) + r"):\[([^\]]*)\]",
     re.IGNORECASE,
 )
 
@@ -112,6 +147,7 @@ class ParsedLogLine:
     runners: list[ParsedRunner] = field(default_factory=list)
     invocation_id: str | None = None
     task_key: str | None = None
+    atomic_service_run_id: str | None = None
     raw_bracket: str | None = None
     timestamp: datetime | None = None
     level: str | None = None
@@ -263,7 +299,14 @@ def _extract_bracket(text: str) -> str | None:
 
 
 def _parse_bracket(bracket: str) -> ParsedLogLine:
-    runners = [ParsedRunner(cls, pid) for cls, pid in _RUNNER_RE.findall(bracket)]
+    raw_runners = _RUNNER_RE.findall(bracket)
+    runners: list[ParsedRunner] = []
+    atomic_service_run_id: str | None = None
+    for cls, pid in raw_runners:
+        if cls == "AS":
+            atomic_service_run_id = pid
+        else:
+            runners.append(ParsedRunner(cls, pid))
     inv_match = _UUID_RE.search(bracket)
     inv_id = inv_match.group(0) if inv_match else None
     task_key = _extract_task_key(bracket, inv_id)
@@ -271,8 +314,9 @@ def _parse_bracket(bracket: str) -> ParsedLogLine:
         runners=runners,
         invocation_id=inv_id,
         task_key=task_key,
+        atomic_service_run_id=atomic_service_run_id,
         raw_bracket=bracket,
-        is_valid=bool(runners or inv_id or task_key),
+        is_valid=bool(runners or inv_id or task_key or atomic_service_run_id),
     )
 
 

@@ -11,10 +11,11 @@ Key components:
 
 import asyncio
 import logging
-from collections import OrderedDict
-from datetime import timedelta
-from typing import TYPE_CHECKING, cast
 from collections.abc import Callable
+from collections import OrderedDict
+from datetime import datetime, timedelta
+from typing import TYPE_CHECKING, cast
+from urllib.parse import urlencode
 
 from pynenc.exceptions import InvocationNotFoundError
 from pynenc.identifiers.invocation_id import InvocationId
@@ -171,7 +172,7 @@ def build_timeline_qs(
 ) -> str:
     """Build a timeline query string scoped to the log timestamp.
 
-    Uses a tight window (±1s) to match invocation detail zoom precision.
+    Uses a tight window (±250ms) so millisecond-scale logs remain readable.
 
     :param ParsedLogLine parsed: Parsed log line with optional timestamp
     :param str | None selected: Invocation ID to highlight in the timeline
@@ -179,20 +180,22 @@ def build_timeline_qs(
     """
     ts_utc = timestamp_to_utc(parsed.timestamp)
     if ts_utc:
-        start = (ts_utc - timedelta(seconds=1)).strftime("%Y-%m-%dT%H:%M:%S")
-        end = (ts_utc + timedelta(seconds=1)).strftime("%Y-%m-%dT%H:%M:%S")
-        qs = f"time_range=custom&start_date={start}&end_date={end}"
+        return build_timeline_qs_for_range(
+            ts_utc - timedelta(milliseconds=250),
+            ts_utc + timedelta(milliseconds=250),
+            selected=selected,
+        )
     else:
-        qs = "time_range=1h"
+        params = {"time_range": "1h"}
     if selected:
-        qs += f"&selected={selected}"
-    return qs
+        params["selected"] = selected
+    return urlencode(params)
 
 
 def build_shared_timeline_qs(parsed_lines: list[ParsedLogLine]) -> str:
     """Build a timeline query string spanning all log timestamps.
 
-    Uses 10% duration padding (min 1s) so invocations are clearly visible.
+    Uses 10% duration padding (min 250ms) so invocations stay close to pasted logs.
 
     :param list parsed_lines: All parsed log lines
     :return: URL query string (without leading ``?``)
@@ -201,9 +204,32 @@ def build_shared_timeline_qs(parsed_lines: list[ParsedLogLine]) -> str:
     if not utc_timestamps:
         return "time_range=1h"
     padding = _compute_padding(utc_timestamps)
-    start = (min(utc_timestamps) - padding).strftime("%Y-%m-%dT%H:%M:%S")
-    end = (max(utc_timestamps) + padding).strftime("%Y-%m-%dT%H:%M:%S")
-    return f"time_range=custom&start_date={start}&end_date={end}"
+    return build_timeline_qs_for_range(
+        min(utc_timestamps) - padding,
+        max(utc_timestamps) + padding,
+    )
+
+
+def build_timeline_qs_for_range(
+    start: datetime,
+    end: datetime,
+    selected: str | None = None,
+) -> str:
+    """Build a custom timeline query string for an exact UTC range."""
+    params = {
+        "time_range": "custom",
+        "start_date": _format_timeline_datetime(start),
+        "end_date": _format_timeline_datetime(end),
+        "resolution": "100ms",
+    }
+    if selected:
+        params["selected"] = selected
+    return urlencode(params)
+
+
+def _format_timeline_datetime(value: datetime) -> str:
+    """Format datetimes for timeline query params accepted by datetime-local."""
+    return value.replace(tzinfo=None).isoformat(timespec="microseconds")
 
 
 def _compute_padding(timestamps: list) -> timedelta:
@@ -213,7 +239,7 @@ def _compute_padding(timestamps: list) -> timedelta:
     :return: Padding timedelta
     """
     duration = (max(timestamps) - min(timestamps)).total_seconds()
-    return timedelta(seconds=max(duration * 0.1, 1.0))
+    return timedelta(seconds=max(duration * 0.1, 0.25))
 
 
 # ── extra invocation enrichment ───────────────────────────────────────────────
@@ -224,6 +250,11 @@ _INV_KINDS = frozenset(
         "parent-invocation",
         "child-invocation",
         "new-invocation",
+        # Trigger-related invocation roles emitted by BaseTrigger logs.
+        # Treat them as plain invocations so the existing batch enrichment
+        # fetches their status/task in one round-trip.
+        "source-invocation",
+        "triggered-invocation",
     }
 )
 
@@ -323,8 +354,144 @@ def _collect_bracket_refs(
         key = ("task", la.parsed.task_key)
         if key not in seen:
             seen[key] = EntityRef(kind="task", value=la.parsed.task_key)
+    if la.parsed.atomic_service_run_id:
+        key = ("atomic-service-run", la.parsed.atomic_service_run_id)
+        if key not in seen:
+            seen[key] = EntityRef(
+                kind="atomic-service-run", value=la.parsed.atomic_service_run_id
+            )
     for rm in la.runner_matches:
         fid = full_runner_id(rm)
         key = ("runner", fid)
         if key not in seen:
             seen[key] = EntityRef(kind="runner", value=fid)
+
+
+# ── trigger entity enrichment ─────────────────────────────────────────────────
+
+
+async def enrich_trigger_entities(
+    app: "Pynenc",
+    all_refs: list[EntityRef],
+    details: dict[str, dict[str, str]],
+) -> None:
+    """Fetch summaries for event, trigger-run, condition, and trigger refs.
+
+    Populates ``details`` in place with kind-prefixed keys so templates can
+    look up ``details["event:<id>"]`` etc. without per-template lookups.
+    Missing records are silently skipped — purged or unknown IDs render as
+    plain chips without metadata.
+    """
+    await asyncio.gather(
+        _enrich_events(app, all_refs, details),
+        _enrich_trigger_runs(app, all_refs, details),
+        _enrich_conditions(app, all_refs, details),
+        _enrich_triggers(app, all_refs, details),
+    )
+
+
+async def _enrich_events(
+    app: "Pynenc",
+    all_refs: list[EntityRef],
+    details: dict[str, dict[str, str]],
+) -> None:
+    """Fetch :class:`EventRecord` summaries for ``event:<id>`` refs."""
+    missing = [
+        ref.value
+        for ref in all_refs
+        if ref.kind == "event" and f"event:{ref.value}" not in details
+    ]
+    if not missing:
+        return
+    records = await asyncio.to_thread(app.trigger.get_events_batch, missing)
+    for eid, rec in records.items():
+        if rec is None:
+            continue
+        details[f"event:{eid}"] = {
+            "code": rec.event_code,
+            "matched": "1" if rec.matched else "",
+            "triggered": "1" if rec.triggered else "",
+            "emitted_by_invocation_id": rec.emitted_by_invocation_id or "",
+            "emitted_by_task_id": rec.emitted_by_task_id or "",
+            "timestamp": rec.timestamp.isoformat() if rec.timestamp else "",
+        }
+
+
+async def _enrich_trigger_runs(
+    app: "Pynenc",
+    all_refs: list[EntityRef],
+    details: dict[str, dict[str, str]],
+) -> None:
+    """Fetch :class:`TriggerRunRecord` summaries for ``trigger-run:<id>`` refs."""
+    missing = [
+        ref.value
+        for ref in all_refs
+        if ref.kind == "trigger-run" and f"trigger-run:{ref.value}" not in details
+    ]
+    if not missing:
+        return
+    records = await asyncio.to_thread(app.trigger.get_trigger_runs_batch, missing)
+    from pynmon.util.trigger_timeline import timeline_url_for_trigger_run
+
+    for rid, rec in records.items():
+        if rec is None:
+            continue
+        details[f"trigger-run:{rid}"] = {
+            "trigger_id": rec.trigger_id,
+            "task": rec.task_id_key,
+            "logic": rec.logic_value,
+            "triggered_invocation_id": rec.triggered_invocation_id or "",
+            "executed_at": rec.executed_at.isoformat() if rec.executed_at else "",
+            "timeline_url": timeline_url_for_trigger_run(rec),
+        }
+
+
+async def _enrich_conditions(
+    app: "Pynenc",
+    all_refs: list[EntityRef],
+    details: dict[str, dict[str, str]],
+) -> None:
+    """Fetch :class:`TriggerCondition` summaries for ``condition:<id>`` refs.
+
+    ``valid-condition`` refs are intentionally not enriched here because
+    they are per-evaluation records, not durable conditions. The Log
+    Explorer renders them as styled chips without a detail page.
+    """
+    missing = [
+        ref.value
+        for ref in all_refs
+        if ref.kind == "condition" and f"condition:{ref.value}" not in details
+    ]
+    if not missing:
+        return
+    records = await asyncio.to_thread(app.trigger.get_conditions_batch, missing)
+    for cid, cond in records.items():
+        if cond is None:
+            continue
+        details[f"condition:{cid}"] = {
+            "type": type(cond).__name__,
+        }
+
+
+async def _enrich_triggers(
+    app: "Pynenc",
+    all_refs: list[EntityRef],
+    details: dict[str, dict[str, str]],
+) -> None:
+    """Fetch :class:`TriggerDefinition` summaries for ``trigger:<id>`` refs."""
+    missing = [
+        ref.value
+        for ref in all_refs
+        if ref.kind == "trigger" and f"trigger:{ref.value}" not in details
+    ]
+    if not missing:
+        return
+    records = await asyncio.to_thread(app.trigger.get_triggers_batch, missing)
+    for tid, trig in records.items():
+        if trig is None:
+            continue
+        details[f"trigger:{tid}"] = {
+            "task": str(trig.task_id),
+            "logic": trig.logic.value,
+            "conditions": str(len(trig.condition_ids)),
+        }

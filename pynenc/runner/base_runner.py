@@ -13,6 +13,9 @@ from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
 from pynenc import context
+from pynenc.conf.validation_atomic_service import (
+    validate_atomic_service_config,
+)
 from pynenc.conf.config_runner import ConfigRunner
 from pynenc.exceptions import (
     InvocationStatusError,
@@ -21,6 +24,10 @@ from pynenc.exceptions import (
     PynencError,
 )
 from pynenc.invocation.status import InvocationStatus
+from pynenc.orchestrator.atomic_service import (
+    AtomicServiceExecutionStatus,
+    AtomicServiceRun,
+)
 from pynenc.runner.runner_context import RunnerContext
 from pynenc.runner.shutdown_diagnostics import classify_signal, log_runner_shutdown
 
@@ -142,6 +149,7 @@ class BaseRunner(ABC):
         self.app.logger.info(
             f"Starting {self.__class__.__name__} runner:{self.runner_id}"
         )
+        validate_atomic_service_config(self.app.conf, self.conf)
         if threading.current_thread() is threading.main_thread():
             signal.signal(signal.SIGINT, self.stop_runner_loop)
             signal.signal(signal.SIGTERM, self.stop_runner_loop)
@@ -356,8 +364,8 @@ class BaseRunner(ABC):
         """
         Check and run atomic global services if this runner is authorized.
 
-        Executes trigger processing and invocation recovery in a single
-        atomic window to prevent conflicts across distributed runners.
+        Executes trigger processing and invocation recovery when this runner
+        owns the current atomic-service scheduling slot.
         Handles any PynencError exceptions to prevent service failures from
         stopping the runner loop.
         """
@@ -371,29 +379,41 @@ class BaseRunner(ABC):
 
         self._last_atomic_service_check_time = current_time
 
-        start_time = None
+        atomic_service_run: AtomicServiceRun | None = None
+        run_exception: BaseException | None = None
         try:
-            if not self.app.orchestrator.should_run_atomic_service(self.runner_context):
-                return
-            start_time = datetime.now(UTC)
-            self.app.logger.info(
-                f"runner:{self.runner_id} executing atomic global services"
+            atomic_service_run = self.app.orchestrator.try_claim_atomic_service_run(
+                self.runner_context
             )
-            self.app.trigger.trigger_loop_iteration()
+            if atomic_service_run is None:
+                return
+
+            self.app.logger.debug(f"atomic service claimed: {atomic_service_run}")
+            self.app.trigger.trigger_loop_iteration(atomic_service_run)
         except PynencError as e:
+            run_exception = e
             self.app.logger.error(
                 f"Error during atomic service execution: {e}", exc_info=True
             )
         except Exception as e:
+            run_exception = e
             self.app.logger.exception(
                 f"Unexpected error during atomic service execution: {e}"
             )
             raise
         finally:
-            if start_time is not None:
-                end_time = datetime.now(UTC)
-                self.app.orchestrator.record_atomic_service_execution(
-                    self.runner_context.runner_id, start_time, end_time
+            if atomic_service_run is not None:
+                if run_exception is None:
+                    status = AtomicServiceExecutionStatus.COMPLETED
+                    reason = ""
+                else:
+                    status = AtomicServiceExecutionStatus.ABANDONED
+                    reason = f"exception:{type(run_exception).__name__}"
+                self.app.orchestrator.finalize_atomic_service_execution(
+                    atomic_service_run,
+                    datetime.now(UTC),
+                    status,
+                    reason,
                 )
 
     def run(self) -> None:

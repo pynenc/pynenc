@@ -41,6 +41,14 @@ def _build_sibling_app(app: Pynenc, sibling_app_id: str) -> Pynenc:
     return sibling
 
 
+def _stop_runner(app: Pynenc, thread: threading.Thread) -> None:
+    """Stop a runner thread before its app data is purged."""
+    runner = app.runner
+    if runner.running:
+        runner.stop_runner_loop()
+    thread.join(timeout=0)
+
+
 def test_isolation_should_execute_tasks_independently(
     app_instance: Pynenc,
 ) -> None:
@@ -80,8 +88,8 @@ def test_isolation_should_execute_tasks_independently(
             == 0
         )
     finally:
-        app_a.runner.stop_runner_loop()
-        app_b.runner.stop_runner_loop()
+        _stop_runner(app_a, thread_a)
+        _stop_runner(app_b, thread_b)
         app_a.purge()
         app_b.purge()
 
@@ -109,7 +117,7 @@ def test_isolation_purge_should_not_affect_sibling_results(
         assert inv_a.result == app_a.app_id
         assert inv_b.result == app_b.app_id
 
-        app_a.runner.stop_runner_loop()
+        _stop_runner(app_a, thread_a)
 
         # Purge app_a completely
         app_a.purge()
@@ -127,6 +135,7 @@ def test_isolation_purge_should_not_affect_sibling_results(
             == 1
         )
     finally:
-        app_b.runner.stop_runner_loop()
+        _stop_runner(app_a, thread_a)
+        _stop_runner(app_b, thread_b)
         app_a.purge()
         app_b.purge()

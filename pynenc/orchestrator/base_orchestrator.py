@@ -15,13 +15,20 @@ from pynenc.exceptions import (
 )
 from pynenc.invocation.dist_invocation import DistributedInvocation, ReusedInvocation
 from pynenc.invocation.status import InvocationStatus, InvocationStatusRecord
-from pynenc.orchestrator.atomic_service import can_run_atomic_service
+from pynenc.orchestrator.atomic_service import (
+    AtomicServiceExecutionStatus,
+    AtomicServiceRun,
+    decide_atomic_service_claim,
+)
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
     from pynenc.call import Call, PreSerializedCall, CallId
     from pynenc.identifiers.invocation_id import InvocationId
-    from pynenc.orchestrator.atomic_service import ActiveRunnerInfo
+    from pynenc.orchestrator.atomic_service import (
+        ActiveRunnerInfo,
+        AtomicServiceExecution,
+    )
     from pynenc.runner.runner_context import RunnerContext
     from pynenc.task import Task, TaskId
     from pynenc.types import Params, Result
@@ -763,8 +770,11 @@ class BaseOrchestrator(ABC):
         :return: The newly created `DistributedInvocation` for the call.
         :rtype: DistributedInvocation[Params, Result]
         """
-        parent_invocation = context.get_dist_invocation_context(self.app.app_id)
-        new_invocation = DistributedInvocation.from_parent(call, parent_invocation)
+        new_invocation = DistributedInvocation.from_parent(
+            call,
+            parent_invocation=context.get_dist_invocation_context(self.app.app_id),
+            parent_event_id=context.get_trigger_event_context(self.app.app_id),
+        )
         self.register_new_invocations([new_invocation])
         if (
             call.task.conf.registration_concurrency != ConcurrencyControlType.DISABLED
@@ -915,12 +925,15 @@ class BaseOrchestrator(ABC):
         Retrieve runners that are considered active based on heartbeat activity.
 
         A runner is considered "active" if it has sent a heartbeat within the timeout period.
-        This is used for atomic service scheduling to determine which runners are eligible
-        to participate in time slot distribution.
+        Implementations must return runners ordered by ``creation_time`` ascending,
+        then ``runner_id`` ascending. Atomic-service slots are calculated from that
+        exact order, so every runner must observe the same order for the same backend
+        snapshot. Runners registered after a snapshot are naturally considered only
+        in later queries, and later creation times place them after existing runners.
 
         :param float timeout_seconds: Heartbeat timeout in seconds (typically from runner_considered_dead_after_minutes config)
         :param bool | None can_run_atomic_service: If specified, filters runners based on their eligibility to run atomic services
-        :return: List of active runners ordered by creation time (oldest first)
+        :return: List of active runners ordered by creation time, then runner ID
         :rtype: list["ActiveRunnerInfo"]
         """
 
@@ -931,11 +944,11 @@ class BaseOrchestrator(ABC):
         Retrieve runners that are considered active based on heartbeat activity.
 
         A runner is considered "active" if it has sent a heartbeat within the timeout period.
-        This is used for atomic service scheduling to determine which runners are eligible
-        to participate in time slot distribution.
+        Runners are returned in the deterministic order required by
+        ``_get_active_runners``: creation time ascending, then runner ID ascending.
 
         :param bool | None can_run_atomic_service: If specified, filters runners based on their eligibility to run atomic services
-        :return: List of active runners ordered by creation time (oldest first)
+        :return: List of active runners ordered by creation time, then runner ID
         :rtype: list["ActiveRunnerInfo"]
         """
         timeout_seconds = self.app.conf.runner_considered_dead_after_minutes * 60
@@ -981,44 +994,122 @@ class BaseOrchestrator(ABC):
         timeout_seconds = self.app.conf.runner_considered_dead_after_minutes * 60
         return self._get_running_invocations_for_recovery(timeout_seconds)
 
-    def should_run_atomic_service(self, runner_ctx: "RunnerContext") -> bool:
+    def try_claim_atomic_service_run(
+        self,
+        runner_ctx: "RunnerContext",
+    ) -> AtomicServiceRun | None:
+        """Return a claimed run, or ``None`` if this runner does not own the slot.
+
+        ``decide_atomic_service_claim`` selects the runner that owns the
+        current slot. The backend claim write is still responsible for
+        cluster-wide mutual exclusion because runners can observe slightly
+        different membership snapshots while workers are starting/stopping.
         """
-        Determine if the current runner should execute atomic global services.
-
-        This method has a side effect: it registers a heartbeat for the runner with can_run_atomic_service=True.
-        This ensures that only runners actively checking for atomic service eligibility are considered for atomic service distribution.
-
-        Uses runner count and timing to distribute service execution across runners,
-        preventing simultaneous execution and race conditions.
-
-        :param RunnerContext runner_ctx: The context of the current runner.
-        :return: True if this runner should execute services now.
-        :rtype: bool
-        """
+        conf = self.app.conf
         self.register_runner_heartbeats(
             [runner_ctx.runner_id], can_run_atomic_service=True
         )
-        active_runners = self.get_active_runners(can_run_atomic_service=True)
-
-        return can_run_atomic_service(
+        now = time()
+        claim = decide_atomic_service_claim(
             runner_id=runner_ctx.runner_id,
-            active_runners=active_runners,
-            current_time=time(),
-            service_interval_minutes=self.app.conf.atomic_service_interval_minutes,
-            spread_margin_minutes=self.app.conf.atomic_service_spread_margin_minutes,
+            active_runners=self.get_active_runners(can_run_atomic_service=True),
+            current_time=now,
+            service_interval_minutes=conf.atomic_service_interval_minutes,
+            spread_margin_minutes=conf.atomic_service_spread_margin_minutes,
+            membership_stabilization_seconds=(
+                float(conf.atomic_service_membership_stabilization_minutes) * 60.0
+            ),
+            max_start_slot_fraction=float(conf.atomic_service_max_start_slot_fraction),
         )
+        if (run := claim.atomic_service_run) is None:
+            return None
+        if not self.record_atomic_service_execution_start(run, None):
+            return None
+        return run
 
     @abstractmethod
-    def record_atomic_service_execution(
-        self, runner_id: str, start_time: datetime, end_time: datetime
-    ) -> None:
+    def record_atomic_service_execution_start(
+        self,
+        atomic_service_run: AtomicServiceRun,
+        started_at: datetime | None,
+        status: AtomicServiceExecutionStatus = AtomicServiceExecutionStatus.RUNNING,
+        reason: str = "",
+    ) -> bool:
+        """Insert a new atomic-service execution record.
+
+        Implementations MUST store ``status`` (defaulting to ``RUNNING``)
+        and the free-form ``reason`` so that subsequent backend queries
+        can decide whether the slot is still being held.
+
+        For the default ``RUNNING`` status this method is the storage-level
+        atomic gate: at most one active execution may be recorded. If another
+        execution is already active, implementations MUST NOT leave this run in
+        ``RUNNING`` and SHOULD record a zero-width ``BLOCKED`` diagnostic row.
+        The return value tells callers whether the run may execute work.
+
+        :param AtomicServiceRun atomic_service_run: The claimed run identity.
+        :param datetime | None started_at: When the runner began its claim
+            attempt (UTC timezone-aware). Runtime callers may pass ``None`` so
+            the backend stamps the row at the storage admission point. For
+            ``BLOCKED`` records this is also the ``end_time`` because no work
+            was performed.
+        :param AtomicServiceExecutionStatus status: Initial status of the
+            record. ``RUNNING`` for successful claims; ``BLOCKED`` for
+            recorded skip attempts.
+        :param str reason: Free-form diagnostic detail, surfaced in Pynmon.
+        :return: ``True`` when the execution is allowed to run work.
         """
-        Record the latest atomic service execution window for a runner.
 
-        Replaces any previous execution record for this runner with the current one.
-        Used for diagnostics and detecting potential collisions.
+    @abstractmethod
+    def finalize_atomic_service_execution(
+        self,
+        atomic_service_run: AtomicServiceRun,
+        end_time: datetime,
+        status: AtomicServiceExecutionStatus,
+        reason: str = "",
+    ) -> None:
+        """Transition a previously-inserted record to a terminal status.
 
-        :param str runner_id: The runner that executed the service
-        :param datetime start_time: When execution started (UTC timezone-aware)
-        :param datetime end_time: When execution ended (UTC timezone-aware)
+        Idempotent: backends may be called more than once for the same
+        ``atomic_service_run`` (for example, the runner's normal
+        ``COMPLETED`` finalisation racing the reaper's ``ABANDONED``
+        cleanup). The first terminal finalisation wins.
+
+        If no prior ``RUNNING`` record exists for this run (the start
+        write failed), implementations MUST insert one with
+        ``start_time == end_time`` so the row is still visible.
+
+        :param AtomicServiceRun atomic_service_run: The claimed run identity.
+        :param datetime end_time: When execution ended (UTC).
+        :param AtomicServiceExecutionStatus status: Terminal status
+            (``COMPLETED`` / ``ABANDONED`` / ``BLOCKED``).
+        :param str reason: Diagnostic detail; empty for clean completion.
+        """
+
+    @abstractmethod
+    def get_active_atomic_service_executions(
+        self,
+    ) -> list["AtomicServiceExecution"]:
+        """Return every execution currently in ``RUNNING`` status.
+
+        Used by the claim flow to enforce mutual exclusion and by Pynmon
+        to surface in-flight runs. Ordered most-recently-started first.
+        """
+
+    @abstractmethod
+    def get_atomic_service_executions_in_timerange(
+        self,
+        start_time: datetime,
+        end_time: datetime,
+        limit: int = 1000,
+        *,
+        runner_id: str | None = None,
+        min_duration_seconds: float = 0.0,
+    ) -> list["AtomicServiceExecution"]:
+        """Retrieve atomic-service execution windows that overlap a time range."""
+
+    @abstractmethod
+    def purge_atomic_service_executions(self) -> int:
+        """Drop old / excess atomic-service execution records.
+        :return: Number of records purged.
         """

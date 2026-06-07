@@ -111,6 +111,14 @@ class TimelineDataBuilder:
             except (AttributeError, TypeError, ValueError, KeyError):
                 continue
 
+    def add_runner_context(self, runner_context: "RunnerContext") -> str:
+        """Track a runner that owns timeline activity without invocation history."""
+        runner_info = self._maybe_collapse_external(
+            RunnerInfo.from_context(runner_context)
+        )
+        self._track_runner(runner_info)
+        return runner_info.lane_id
+
     def _add_history_entry(
         self, history: "InvocationHistory", runner_context: "RunnerContext"
     ) -> None:
@@ -187,6 +195,68 @@ class TimelineDataBuilder:
             )
         )
 
+    def _remap_registered_to_parent_runner(self) -> None:
+        """Pin REGISTERED entries onto the parent invocation's executing runner.
+
+        REGISTERED rows are written with ``runner_context_id`` set to whatever
+        runner happened to be active in the calling thread. In multi-process
+        setups (PersistentProcessRunner spawning PPRWorker processes) the
+        parent invocation runs on a worker, but ``RunnerContext.current()``
+        in the parent's task code still resolves to the worker's owning
+        runner, so the REGISTERED entry lands on the parent-runner lane that
+        has no actual bars. The status dot then renders "between lanes",
+        detached from the parent it conceptually belongs to.
+
+        Pynmon already enforces this anchoring in
+        :func:`pynmon.util.svg.lane_assignment.assign_lanes`, but only within
+        a single runner: when parent and REGISTERED entry disagree on
+        runner_id, the parent-lane lookup fails and a fresh sub-lane is
+        created instead. Here we normalise the data so the lane assignment
+        always sees parent and child on the same runner.
+
+        Rule: when a REGISTERED entry's ``registered_by_inv_id`` is known,
+        replace its ``runner_info`` with the parent invocation's executing
+        ``runner_info`` (any non-REGISTERED entry of the parent). If the
+        parent has no executing entries (only REGISTERED itself), leave the
+        entry untouched — the existing lane assignment fallback will handle
+        it.
+        """
+        # Cache one representative "executing" runner_info per invocation —
+        # the first non-REGISTERED entry, which is the runner that actually
+        # picked up the invocation.
+        executing_runner: dict[str, RunnerInfo] = {}
+        for inv_id, entries in self._history_by_invocation.items():
+            for entry in entries:
+                if entry.status.upper() != "REGISTERED":
+                    executing_runner[inv_id] = entry.runner_info
+                    break
+
+        for inv_id, entries in self._history_by_invocation.items():
+            remapped: list[HistoryEntry] = []
+            changed = False
+            for entry in entries:
+                if (
+                    entry.status.upper() == "REGISTERED"
+                    and entry.registered_by_inv_id
+                    and entry.registered_by_inv_id in executing_runner
+                ):
+                    parent_runner = executing_runner[entry.registered_by_inv_id]
+                    if parent_runner.lane_id != entry.runner_info.lane_id:
+                        remapped.append(
+                            HistoryEntry(
+                                timestamp=entry.timestamp,
+                                status=entry.status,
+                                runner_info=parent_runner,
+                                registered_by_inv_id=entry.registered_by_inv_id,
+                            )
+                        )
+                        self._track_runner(parent_runner)
+                        changed = True
+                        continue
+                remapped.append(entry)
+            if changed:
+                self._history_by_invocation[inv_id] = remapped
+
     def build(
         self,
         start_time: datetime | None = None,
@@ -200,7 +270,11 @@ class TimelineDataBuilder:
         :return: Complete TimelineData ready for rendering
         """
         if self._min_time is None or self._max_time is None:
-            return self._create_empty_timeline(start_time, end_time)
+            timeline_data = self._create_empty_timeline(start_time, end_time)
+            if self._runners:
+                groups_info, child_runners = self._collect_groups_info()
+                self._create_lanes(timeline_data, groups_info, child_runners)
+            return timeline_data
 
         actual_start = start_time or self._min_time
         actual_end = end_time or self._max_time
@@ -208,6 +282,7 @@ class TimelineDataBuilder:
         n_inv = len(self._history_by_invocation)
 
         t0 = _time.monotonic()
+        self._remap_registered_to_parent_runner()
         groups_info, child_runners = self._collect_groups_info()
         self._create_lanes(timeline_data, groups_info, child_runners)
         logger.debug(
@@ -487,6 +562,9 @@ class TimelineDataBuilder:
             runner_info=entry.runner_info,
             order=order,
             sub_lane=sub_lane,
+            registered_by_inv_id=entry.registered_by_inv_id
+            if entry.status.upper() == "REGISTERED"
+            else None,
         )
         if lane := data.lanes.get(entry.runner_info.lane_id):
             lane.add_point(point)
