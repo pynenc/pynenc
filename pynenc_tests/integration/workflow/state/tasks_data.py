@@ -13,7 +13,7 @@ from pynenc import Pynenc
 mock_app = Pynenc()
 
 
-@mock_app.task
+@mock_app.workflow
 def workflow_data_test_runner() -> dict[str, bool]:
     """
     Test workflow data operations within a single workflow context.
@@ -107,7 +107,7 @@ def workflow_data_test_runner() -> dict[str, bool]:
     return results
 
 
-@mock_app.task
+@mock_app.workflow
 def multi_counter_workflow() -> dict[str, int]:
     """
     Test multiple counter operations within a single workflow.
@@ -134,7 +134,7 @@ def multi_counter_workflow() -> dict[str, int]:
     return results
 
 
-@mock_app.task
+@mock_app.workflow
 def isolated_workflow_test(value: int) -> dict[str, Any]:
     """
     Test workflow that stores data and returns workflow identity.
@@ -158,7 +158,7 @@ def isolated_workflow_test(value: int) -> dict[str, Any]:
     }
 
 
-@mock_app.task
+@mock_app.workflow
 def counter_workflow() -> int:
     """
     A workflow that maintains a counter within a single workflow execution.

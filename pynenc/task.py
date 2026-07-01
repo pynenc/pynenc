@@ -24,7 +24,7 @@ from pynenc.invocation.dist_invocation import (
 )
 from pynenc.identifiers.task_id import TaskId
 from pynenc.types import Func, Params, Result
-from pynenc.workflow.workflow_context import WorkflowContext
+from pynenc.workflow.workflow_context import WorkflowContext, WorkflowRootContext
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
@@ -59,6 +59,24 @@ class Task(Generic[Params, Result]):
         self.options = options
         self.validate_options()
 
+    @classmethod
+    def create_for_app(cls, app: Pynenc, func: Func, options: dict[str, Any]) -> Task:
+        """Create the app-bound task object that matches resolved task config."""
+        task_id = TaskId(func.__module__, func.__name__)
+        task_conf = ConfigTask(
+            task_id=task_id,
+            config_values=app.config_values,
+            config_filepath=app.config_filepath,
+            task_options=options,
+        )
+        task_cls: type[Task] = WorkflowTask if task_conf.is_workflow_task else Task
+        return task_cls(app, func, options)
+
+    @classmethod
+    def clone_for_app(cls, app: Pynenc, source_task: Task) -> Task:
+        """Create an app-bound copy of an imported module-level task."""
+        return cls.create_for_app(app, source_task.func, source_task.options)
+
     def validate_options(self) -> None:
         """
         validate that all the option fields exists in the config_fields
@@ -72,6 +90,16 @@ class Task(Generic[Params, Result]):
             raise InvalidTaskOptionsError(
                 self.task_id, f"Invalid options: {invalid_options}"
             )
+
+    @property
+    def is_workflow_root_task(self) -> bool:
+        """Return whether invoking this task defines a workflow root.
+
+        This is a task-level configuration property. It does not mean the
+        current invocation belongs to a workflow; ordinary tasks can inherit
+        workflow membership only at invocation time.
+        """
+        return self.conf.is_workflow_task
 
     @cached_property
     def conf(self) -> ConfigTask:
@@ -99,36 +127,25 @@ class Task(Generic[Params, Result]):
     @cached_property
     def wf(self) -> WorkflowContext:
         """
-        Access workflow functionality for this task.
+        Access shared workflow functionality for this task.
 
-        Provides methods for workflow state management, deterministic operations,
-        and durability features like pause/resume and continue-as-new.
+        Ordinary tasks only expose workflow identity and workflow data when they
+        are running inside a workflow. Root-only orchestration is available from
+        ``WorkflowTask.wf.root``.
 
         :return: A helper object with workflow functionality
 
         Example:
         ```python
         @app.task
-        def main_wf_task(data: dict) -> str:
-            # Save workflow state
-            state = main_wf_task.wf.get_state({"step": 0})
+        def main_wf_task(data: dict) -> dict:
+            main_wf_task.wf.set_data("status", "started")
 
-            # Use deterministic random
-            if main_wf_task.wf.random() > 0.5:
-                state["path"] = "A"
-            else:
-                state["path"] = "B"
-
-            # Save updated state
-            main_wf_task.wf.save_state(state)
-
-            # Conditionally pause workflow
-            if needs_human_approval(data):
-                main_wf_task.wf.pause("Waiting for approval")
-
-            return f"Completed via path {state['path']}"
+            main_wf_task.wf.set_data("status", "completed")
         ```
         """
+        if self.is_workflow_root_task:
+            return WorkflowRootContext(self)
         return WorkflowContext(self)
 
     def __getstate__(self) -> dict:
@@ -181,7 +198,7 @@ class Task(Generic[Params, Result]):
         if isinstance(function, Task):
             # Create an app-bound copy rather than returning the module-level
             # Task whose .app points to a possibly different app instance.
-            task: Task = Task(app, function.func, function.options)
+            task = _clone_task_for_app(app, function)
             app._tasks[task_id] = task
             return task
 
@@ -196,7 +213,7 @@ class Task(Generic[Params, Result]):
         # direct_task's __pynenc_task__, Celery shims with pynenc_task, or
         # any other wrapper pattern without hardcoding attribute names.
         if source_task := _extract_task_from_wrapper(function):
-            task = Task(app, source_task.func, source_task.options)
+            task = _clone_task_for_app(app, source_task)
             app._tasks[task_id] = task
             return task
         # After importing the module, the decorator may have registered the
@@ -525,3 +542,17 @@ def distribute_batch_calls(
     task.logger.info(f"Batch processed {len(invocations)} calls in {elapsed:.2f}s")
 
     return DistributedInvocationGroup(task, invocations)
+
+
+class WorkflowTask(Task[Params, Result]):
+    """A task that explicitly defines a workflow or sub-workflow root."""
+
+    @cached_property
+    def wf(self) -> WorkflowRootContext:
+        """Access shared workflow data and root-only orchestration operations."""
+        return WorkflowRootContext(self)
+
+
+def _clone_task_for_app(app: Pynenc, source_task: Task) -> Task:
+    """Create an app-bound copy of a module-level task."""
+    return Task.clone_for_app(app, source_task)

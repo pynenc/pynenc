@@ -33,6 +33,11 @@ def dummy_task_with_args(a: int, b: int) -> int:
     return a + b
 
 
+@mock_app.workflow
+def dummy_workflow() -> None:
+    pass
+
+
 @pytest.fixture
 def invocation(app_instance: "Pynenc") -> "DistributedInvocation":
     """Helper to create a dummy invocation."""
@@ -670,13 +675,15 @@ def test_get_invocation_ids_by_workflow_should_filter_by_workflow_id(
 ) -> None:
     """Test filtering invocations by workflow_id."""
     backend = app_instance.state_backend
-    dummy_task.app = app_instance
+    dummy_workflow.app = app_instance
 
-    inv1: DistributedInvocation = dummy_task()  # type: ignore
-    inv2: DistributedInvocation = dummy_task()  # type: ignore
+    inv1: DistributedInvocation = dummy_workflow()  # type: ignore
+    inv2: DistributedInvocation = dummy_workflow()  # type: ignore
 
     # Query by the first invocation's workflow_id
-    wf_id_str = str(inv1.workflow.workflow_id)
+    workflow = inv1.workflow
+    assert workflow is not None
+    wf_id_str = str(workflow.workflow_id)
     result = list(backend.get_invocation_ids_by_workflow(workflow_id=wf_id_str))
     result_strs = {str(r) for r in result}
     assert str(inv1.invocation_id) in result_strs
@@ -689,13 +696,14 @@ def test_get_invocation_ids_by_workflow_should_filter_by_type(
 ) -> None:
     """Test filtering invocations by workflow_type_key."""
     backend = app_instance.state_backend
-    dummy_task.app = app_instance
-    dummy_task_with_args.app = app_instance
+    dummy_workflow.app = app_instance
 
-    inv1: DistributedInvocation = dummy_task()  # type: ignore
+    inv1: DistributedInvocation = dummy_workflow()  # type: ignore
 
-    # Filter by dummy_task's task_id key as workflow_type
-    wt_key = str(inv1.workflow.workflow_type)
+    # Filter by dummy_workflow's task_id key as workflow_type
+    workflow = inv1.workflow
+    assert workflow is not None
+    wt_key = str(workflow.workflow_type)
     result = list(backend.get_invocation_ids_by_workflow(workflow_type_key=wt_key))
     result_strs = {str(r) for r in result}
     assert str(inv1.invocation_id) in result_strs

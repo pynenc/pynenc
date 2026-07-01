@@ -21,6 +21,7 @@ from pynenc.workflow.workflow_identity import WorkflowIdentity
 
 if TYPE_CHECKING:
     from pynenc.runner import RunnerContext
+    from pynenc.workflow.workflow_deterministic import DeterministicExecutor
 
 
 class DistributedInvocation(BaseInvocation[Params, Result]):
@@ -49,7 +50,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         call: Call[Params, Result],
         invocation_id: InvocationId,
         parent_invocation_id: InvocationId | None,
-        workflow: WorkflowIdentity,
+        workflow: WorkflowIdentity | None,
         stored_in_backend: bool,
         parent_event_id: str | None = None,
     ) -> None:
@@ -57,7 +58,8 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         super().__init__(call, invocation_id)
         self.parent_invocation_id = parent_invocation_id
         self.parent_event_id = parent_event_id
-        self._workflow = workflow
+        self.workflow = workflow
+        self._deterministic_runtime: DeterministicExecutor | None = None
 
         # Initialize additional state
         self._result: Result | None = None
@@ -92,41 +94,35 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         :param str | None parent_event_id:
             Optional id of the event whose triggered firing produced this invocation.
         """
-        new_invocation_id = generate_invocation_id()
-        if parent_invocation is None:
-            workflow = WorkflowIdentity.new_workflow(
-                invocation_id=new_invocation_id, task_id=call.task.task_id
+        if call.task.is_workflow_root_task:
+            return WorkflowInvocation.from_parent(
+                call=call,
+                parent_invocation=parent_invocation,
+                parent_event_id=parent_event_id,
             )
-            call.app.logger.info(f"Creating a new main workflow:{workflow.workflow_id}")
-        elif call.task.conf.force_new_workflow:
-            workflow = WorkflowIdentity.new_subworkflow(
-                invocation_id=new_invocation_id,
-                task_id=call.task.task_id,
-                parent_workflow_id=parent_invocation.workflow.workflow_id,
-            )
-            call.app.logger.info(
-                f"Creating a new sub-workflow:{workflow.workflow_id} from parent-workflow:{parent_invocation.workflow.workflow_id}"
-            )
-        else:
-            workflow = parent_invocation.workflow
-            call.app.logger.debug(
-                f"Inheriting workflow from parent-workflow:{workflow.workflow_id} for new-invocation:{new_invocation_id}"
-            )
-        return cls(
+        return TaskInvocation.from_parent(
             call=call,
-            invocation_id=new_invocation_id,
-            parent_invocation_id=parent_invocation.invocation_id
-            if parent_invocation
-            else None,
-            workflow=workflow,
-            stored_in_backend=False,
+            parent_invocation=parent_invocation,
             parent_event_id=parent_event_id,
         )
 
     @property
-    def workflow(self) -> WorkflowIdentity:
-        """Get the workflow identity for this invocation."""
+    def workflow(self) -> WorkflowIdentity | None:
         return self._workflow
+
+    @workflow.setter
+    def workflow(self, value: WorkflowIdentity | None) -> None:
+        self._workflow = value
+
+    def _get_deterministic_runtime(self) -> DeterministicExecutor:
+        if self._deterministic_runtime is None:
+            from pynenc.workflow.workflow_deterministic import DeterministicExecutor
+
+            workflow = self.workflow
+            if workflow is None:
+                raise ValueError("Workflow replay requires workflow membership")
+            self._deterministic_runtime = DeterministicExecutor(workflow, self.app)
+        return self._deterministic_runtime
 
     def store_in_backend(self) -> None:
         """Store the invocation in the state backend."""
@@ -189,7 +185,18 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         :param Call call: The call for this invocation (usually a LazyCall).
         :return: A fully reconstructed DistributedInvocation.
         """
-        return cls(
+        if call.task.is_workflow_root_task:
+            if dto.workflow is None:
+                raise ValueError("WorkflowInvocation requires a workflow identity")
+            return WorkflowInvocation(
+                call=call,
+                invocation_id=dto.invocation_id,
+                parent_invocation_id=dto.parent_invocation_id,
+                workflow=dto.workflow,
+                stored_in_backend=True,
+                parent_event_id=dto.parent_event_id,
+            )
+        return TaskInvocation(
             call=call,
             invocation_id=dto.invocation_id,
             parent_invocation_id=dto.parent_invocation_id,
@@ -205,7 +212,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         state["invocation_id"] = self._invocation_id
         state["parent_invocation_id"] = self.parent_invocation_id
         state["parent_event_id"] = self.parent_event_id
-        state["workflow"] = self._workflow
+        state["workflow"] = self.workflow
         state["state"] = {
             "cached_status": self._cached_status,
             "cached_status_time": self._cached_status_time,
@@ -222,7 +229,8 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         self._invocation_id = state["invocation_id"]
         self.parent_invocation_id = state["parent_invocation_id"]
         self.parent_event_id = state.get("parent_event_id")
-        self._workflow = state["workflow"]
+        self.workflow = state["workflow"]
+        self._deterministic_runtime = None
         # Restore mutable state directly
         state_data = state["state"]
         self._cached_status = state_data["cached_status"]
@@ -231,31 +239,22 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         self._num_retries = state_data["num_retries"]
         self._result = state_data["result"]
 
-    def is_main_workflow_task(self) -> bool:
-        """Check if the task is the main workflow task.
-
-        :return: True if the task is the main workflow task, False otherwise
-
-        ```{note}
-            All tasks run within a workflow, the main workflow task is just the first task in the workflow.
-            To determine that, we check if the task_id of the workflow task is the same as the task_id of the current task.
-        ```
-        """
-        return self.workflow.workflow_type == self.task.task_id
-
     def _register_workflow_run(self) -> None:
         """Register workflow tracking for this invocation start."""
-        if self.is_main_workflow_task():
-            self.app.state_backend.store_workflow_run(self.workflow)
-            if self.workflow.parent_workflow_id:
+        workflow = self.workflow
+        if workflow is None:
+            return
+        if self.task.is_workflow_root_task:
+            self.app.state_backend.store_workflow_run(workflow)
+            if workflow.parent_workflow_id:
                 self.app.state_backend.store_workflow_sub_invocation(
-                    self.workflow.parent_workflow_id,
-                    self.workflow.workflow_id,
+                    workflow.parent_workflow_id,
+                    workflow.workflow_id,
                 )
             return
 
         self.app.state_backend.store_workflow_sub_invocation(
-            self.workflow.workflow_id,
+            workflow.workflow_id,
             self.invocation_id,
         )
 
@@ -320,6 +319,7 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         :raises Exception:
             Raises the original exception if a non-retriable exception occurs or the maximum retries are reached for a retriable exception.
         """
+        self._deterministic_runtime = None
         # runner_args are passed from/to the runner (e.g. used to sync subprocesses)
         # Always set runner_args in thread-local storage so nested invocations can access them
         context.set_runner_args(runner_args)
@@ -456,6 +456,83 @@ class DistributedInvocation(BaseInvocation[Params, Result]):
         return self.app.state_backend.get_result(self.invocation_id)
 
 
+class WorkflowInvocation(DistributedInvocation[Params, Result]):
+    """Distributed invocation that defines a workflow or sub-workflow run."""
+
+    @classmethod
+    def from_parent(
+        cls,
+        call: Call[Params, Result],
+        parent_invocation: DistributedInvocation | None = None,
+        parent_event_id: str | None = None,
+    ) -> WorkflowInvocation[Params, Result]:
+        """Create a workflow-root invocation from an optional parent."""
+        invocation_id = generate_invocation_id()
+        parent_workflow = parent_invocation.workflow if parent_invocation else None
+        parent_invocation_id = (
+            parent_invocation.invocation_id if parent_invocation else None
+        )
+        if parent_workflow is None:
+            workflow = WorkflowIdentity.new_workflow(
+                invocation_id=invocation_id,
+                task_id=call.task.task_id,
+            )
+            call.app.logger.info(f"Creating a new workflow:{workflow.workflow_id}")
+        else:
+            workflow = WorkflowIdentity.new_subworkflow(
+                invocation_id=invocation_id,
+                task_id=call.task.task_id,
+                parent_workflow_id=parent_workflow.workflow_id,
+            )
+            call.app.logger.info(
+                f"Creating a new sub-workflow:{workflow.workflow_id} "
+                f"from parent-workflow:{parent_workflow.workflow_id}"
+            )
+        return cls(
+            call=call,
+            invocation_id=invocation_id,
+            parent_invocation_id=parent_invocation_id,
+            workflow=workflow,
+            stored_in_backend=False,
+            parent_event_id=parent_event_id,
+        )
+
+
+class TaskInvocation(DistributedInvocation[Params, Result]):
+    """Distributed invocation for ordinary task/activity execution."""
+
+    @classmethod
+    def from_parent(
+        cls,
+        call: Call[Params, Result],
+        parent_invocation: DistributedInvocation | None = None,
+        parent_event_id: str | None = None,
+    ) -> TaskInvocation[Params, Result]:
+        """Create an ordinary task invocation from an optional parent."""
+        invocation_id = generate_invocation_id()
+        workflow = parent_invocation.workflow if parent_invocation else None
+        parent_invocation_id = (
+            parent_invocation.invocation_id if parent_invocation else None
+        )
+        if workflow is None:
+            call.app.logger.debug(
+                f"Creating standalone task invocation:{invocation_id}"
+            )
+        else:
+            call.app.logger.debug(
+                f"Inheriting workflow from parent-workflow:{workflow.workflow_id} "
+                f"for new-invocation:{invocation_id}"
+            )
+        return cls(
+            call=call,
+            invocation_id=invocation_id,
+            parent_invocation_id=parent_invocation_id,
+            workflow=workflow,
+            stored_in_backend=False,
+            parent_event_id=parent_event_id,
+        )
+
+
 class DistributedInvocationGroup(
     BaseInvocationGroup[Params, Result, DistributedInvocation]
 ):
@@ -575,11 +652,12 @@ class ReusedInvocation(DistributedInvocation):
                 "Cannot reuse an invocation that is not stored in the backend"
             )
         super().__init__(
-            existing_invocation.call,
-            existing_invocation.invocation_id,
-            existing_invocation.parent_invocation_id,
-            existing_invocation.workflow,
-            existing_invocation._stored_in_backend,
+            call=existing_invocation.call,
+            invocation_id=existing_invocation.invocation_id,
+            parent_invocation_id=existing_invocation.parent_invocation_id,
+            workflow=existing_invocation.workflow,
+            stored_in_backend=existing_invocation._stored_in_backend,
+            parent_event_id=existing_invocation.parent_event_id,
         )
         self.diff_arg = diff_arg
 

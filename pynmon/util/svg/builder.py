@@ -92,6 +92,17 @@ class TimelineDataBuilder:
         self._runners: dict[str, RunnerInfo] = {}
         # Track child runners per parent: parent_runner_id -> set of child runner_ids
         self._child_runners_by_parent: dict[str, set[str]] = defaultdict(set)
+        self._workflow_root_invocation_ids: set[str] = set()
+
+    def mark_workflow_root(self, invocation_id: str) -> None:
+        """Mark an invocation as a workflow-defining invocation."""
+        self._workflow_root_invocation_ids.add(str(invocation_id))
+
+    def mark_workflow_roots(self, invocation_ids: set[str]) -> None:
+        """Mark several invocations as workflow-defining invocations."""
+        self._workflow_root_invocation_ids.update(
+            str(inv_id) for inv_id in invocation_ids
+        )
 
     def add_history_batch(
         self,
@@ -565,6 +576,7 @@ class TimelineDataBuilder:
             registered_by_inv_id=entry.registered_by_inv_id
             if entry.status.upper() == "REGISTERED"
             else None,
+            is_workflow_root=inv_id in self._workflow_root_invocation_ids,
         )
         if lane := data.lanes.get(entry.runner_info.lane_id):
             lane.add_point(point)
@@ -590,6 +602,7 @@ class TimelineDataBuilder:
                 status=prev_status,
                 next_status=current_entry.status.upper(),
                 sub_lane=prev_sub_lane,
+                is_workflow_root=inv_id in self._workflow_root_invocation_ids,
             )
         )
 
@@ -646,6 +659,7 @@ class TimelineDataBuilder:
                 status=status,
                 sub_lane=sub_lane,
                 is_ongoing=True,
+                is_workflow_root=inv_id in self._workflow_root_invocation_ids,
             )
         )
 
@@ -659,3 +673,4 @@ class TimelineDataBuilder:
         self._history_by_invocation.clear()
         self._runners.clear()
         self._child_runners_by_parent.clear()
+        self._workflow_root_invocation_ids.clear()

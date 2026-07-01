@@ -47,10 +47,10 @@ class MemStateBackend(BaseStateBackend[Params, Result]):
         self._results: dict[InvocationId, str] = {}
         self._exceptions: dict[InvocationId, str] = {}
         self._workflow_data: dict[InvocationId, dict[str, Any]] = defaultdict(dict)
-        self._workflow_types: set[TaskId] = set()  # Stores workflow_task_ids
+        self._workflow_types: set[TaskId] = set()  # Stores workflow types
         self._workflow_runs: dict[TaskId, set[WorkflowIdentity]] = defaultdict(
             set
-        )  # workflow_task_id -> runs
+        )  # workflow type -> runs
         self._workflow_sub_invocations: dict[InvocationId, set[InvocationId]] = (
             defaultdict(set)
         )  # workflow_id -> sub_invocation_ids
@@ -255,9 +255,9 @@ class MemStateBackend(BaseStateBackend[Params, Result]):
 
     def get_all_workflow_types(self) -> Iterator["TaskId"]:
         """
-        Retrieve all workflow types (workflow_task_ids) stored in this state backend.
+        Retrieve all workflow types stored in this state backend.
 
-        :return: Iterator of workflow task IDs representing different workflow types
+        :return: Iterator of task IDs representing different workflow types
         """
         return iter(self._workflow_types)
 
@@ -391,6 +391,8 @@ class MemStateBackend(BaseStateBackend[Params, Result]):
         """Retrieve invocation IDs filtered by workflow criteria."""
         for _inv_id, (inv_dto, _call_dto) in self._cache.items():
             wf = inv_dto.workflow
+            if wf is None:
+                continue
             if workflow_id and str(wf.workflow_id) != workflow_id:
                 continue
             if workflow_type_key and wf.workflow_type.key != workflow_type_key:

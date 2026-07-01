@@ -1,4 +1,26 @@
 {% from "partials/status_badge.html" import status_badge %} {% if invocations %}
+<div
+  class="d-flex justify-content-between align-items-center px-3 py-2 border-bottom"
+>
+  <div class="small text-muted">
+    {{ invocations|length }} invocation{{ "" if invocations|length == 1 else "s"
+    }} in this list
+  </div>
+  {% if list_timeline_url %}
+  <button
+    type="button"
+    id="view-list-in-timeline-btn"
+    class="btn btn-sm btn-outline-secondary"
+    data-list-timeline-url="{{ list_timeline_url }}"
+    title="Show the current list in the timeline"
+  >
+    <span class="material-icons" style="font-size: 16px; vertical-align: middle"
+      >timeline</span
+    >
+    Timeline for List
+  </button>
+  {% endif %}
+</div>
 <div class="table-responsive">
   <table class="table table-hover mb-0">
     <thead>
@@ -12,8 +34,9 @@
       </tr>
     </thead>
     <tbody>
-      {% for invocation in invocations %}
-      <tr>
+      {% for invocation in invocations %} {% set timeline_url =
+      invocation_timeline_urls.get(invocation.invocation_id|string) %}
+      <tr data-invocation-id="{{ invocation.invocation_id }}">
         <td>
           <a
             href="/invocations/{{ invocation.invocation_id }}"
@@ -21,13 +44,27 @@
           >
             <code class="text-primary">{{ invocation.invocation_id }}</code>
           </a>
+          {% if timeline_url %}
+          <a
+            href="{{ timeline_url }}"
+            class="ms-2 view-in-timeline-link"
+            data-invocation-id="{{ invocation.invocation_id }}"
+            title="View in timeline"
+          >
+            <span
+              class="material-icons"
+              style="font-size: 14px; vertical-align: middle; color: #28a745"
+              >timeline</span
+            >
+          </a>
+          {% endif %}
         </td>
         <td>
           <a
             href="/tasks/{{ invocation.task.task_id }}"
             class="text-decoration-none"
           >
-            {{ invocation.task.task_id.split('.')[-1] }}
+            {{ invocation.task.task_id.func_name }}
           </a>
         </td>
         <td>

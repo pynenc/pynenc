@@ -51,6 +51,7 @@ class StatusPoint:
     order: int = 0
     sub_lane: int = 0
     registered_by_inv_id: str | None = None
+    is_workflow_root: bool = False
 
 
 @dataclass(frozen=True)
@@ -80,6 +81,7 @@ class StatusSegment:
     next_status: str | None = None
     sub_lane: int = 0
     is_ongoing: bool = False
+    is_workflow_root: bool = False
 
     @property
     def duration_seconds(self) -> float:

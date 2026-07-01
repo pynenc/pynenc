@@ -466,7 +466,7 @@ class BaseStateBackend(ABC, Generic[Params, Result]):
     @abstractmethod
     def get_all_workflow_types(self) -> Iterator["TaskId"]:
         """
-        Retrieve all workflow types (workflow_task_ids) stored in this state backend.
+        Retrieve all workflow types stored in this state backend.
 
         :return: Iterator of workflow task IDs representing different workflow types
         """

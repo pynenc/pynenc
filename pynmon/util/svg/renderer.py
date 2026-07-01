@@ -138,6 +138,8 @@ class TimelineSVGRenderer:
             f'    <clipPath id="label-clip"><rect x="0" y="0" width="{lm - 10}" height="100%"/></clipPath>\n'
             f'    <pattern id="ongoing-stripes" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">'
             f'<line x1="0" y1="0" x2="0" y2="8" stroke="rgba(255,255,255,0.3)" stroke-width="4"/></pattern>\n'
+            f'    <pattern id="workflow-root-hatch" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(45)">'
+            f'<line x1="0" y1="0" x2="0" y2="7" stroke="rgba(17,24,39,0.32)" stroke-width="1.4"/></pattern>\n'
             f"  </defs>"
         )
 

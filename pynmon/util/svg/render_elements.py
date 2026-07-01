@@ -94,17 +94,29 @@ def _segment_svg(
     x = bounds.time_to_x(seg.start_time)
     w = bounds.duration_to_width(seg.duration_seconds)
     y = lane_y + seg.sub_lane * (config.bar_height + 2)
+    workflow_attrs = (
+        ' data-workflow-root="true" stroke="#111827" stroke-width="2.4"'
+        if seg.is_workflow_root
+        else ""
+    )
     base = (
         f'  <g class="status-segment">'
         f'<rect x="{x:.1f}" y="{y}" width="{w:.1f}" height="{config.bar_height}" '
         f'fill="{seg.color}" rx="{style.bar_rx}" opacity="{style.bar_opacity}" filter="url(#shadow)" '
-        f'data-invocation-id="{escape(seg.invocation_id)}" data-status="{escape(seg.status)}">'
+        f'data-invocation-id="{escape(seg.invocation_id)}" data-status="{escape(seg.status)}"'
+        f"{workflow_attrs}>"
         f"<title>{escape(seg.tooltip)}</title></rect>"
     )
     if seg.is_ongoing:
         base += (
             f'<rect x="{x:.1f}" y="{y}" width="{w:.1f}" height="{config.bar_height}" '
             f'fill="url(#ongoing-stripes)" rx="{style.bar_rx}"/>'
+        )
+    if seg.is_workflow_root:
+        base += (
+            f'<rect x="{x:.1f}" y="{y}" width="{w:.1f}" height="{config.bar_height}" '
+            f'fill="url(#workflow-root-hatch)" rx="{style.bar_rx}" '
+            f'pointer-events="none"/>'
         )
     return base + "</g>"
 
@@ -118,11 +130,22 @@ def _point_svg(
 ) -> str:
     x = bounds.time_to_x(pt.timestamp)
     y = base_y + pt.sub_lane * (config.bar_height + 2)
+    if pt.is_workflow_root:
+        stroke = "#111827"
+        stroke_width = "2.4"
+        radius = style.point_radius + 1
+        workflow_attr = ' data-workflow-root="true"'
+    else:
+        stroke = "#ffffff"
+        stroke_width = "1.5"
+        radius = style.point_radius
+        workflow_attr = ""
     return (
         f'  <g class="status-point">'
-        f'<circle cx="{x:.1f}" cy="{y}" r="{style.point_radius}" '
-        f'fill="{pt.color}" stroke="#ffffff" stroke-width="1.5" '
-        f'data-invocation-id="{escape(pt.invocation_id)}" data-status="{escape(pt.status)}">'
+        f'<circle cx="{x:.1f}" cy="{y}" r="{radius}" '
+        f'fill="{pt.color}" stroke="{stroke}" stroke-width="{stroke_width}" '
+        f'data-invocation-id="{escape(pt.invocation_id)}" data-status="{escape(pt.status)}"'
+        f"{workflow_attr}>"
         f"<title>{escape(pt.tooltip)}</title></circle></g>"
     )
 

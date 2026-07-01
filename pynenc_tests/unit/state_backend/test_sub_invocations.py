@@ -15,20 +15,20 @@ def child_task(x: int) -> int:
     return x * 2
 
 
-@app.task
+@app.workflow
 def parent_workflow(numbers: list[int]) -> dict:
     """A workflow that executes child tasks, creating sub-invocations."""
     results = []
 
     # Execute multiple child tasks within this workflow
     for num in numbers:
-        result = parent_workflow.wf.execute_task(child_task, num)
+        result = parent_workflow.wf.root.execute_task(child_task, num)
         results.append(result.result)
 
     return {
         "original": numbers,
         "doubled": results,
-        "workflow_id": parent_workflow.invocation.workflow.workflow_id,
+        "workflow_id": parent_workflow.wf.identity.workflow_id,
     }
 
 

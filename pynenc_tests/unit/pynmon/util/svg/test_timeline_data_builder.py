@@ -13,6 +13,7 @@ from pynenc.state_backend.base_state_backend import InvocationHistory
 from pynmon.util.status_colors import STATUS_COLORS
 from pynmon.util.svg.builder import TimelineDataBuilder
 from pynmon.util.svg.models import TimelineConfig
+from pynmon.util.svg.renderer import TimelineSVGRenderer
 
 
 def create_runner_context(runner_id: str, hostname: str) -> RunnerContext:
@@ -91,6 +92,33 @@ def test_single_history_entry() -> None:
     assert len(lane.points) == 1
     assert len(lane.segments) == 1
     assert lane.points[0].status == "RUNNING"
+
+
+def test_workflow_root_marker_reaches_svg() -> None:
+    """Workflow-defining invocations are marked for distinct timeline styling."""
+    builder = TimelineDataBuilder()
+    timestamp = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
+
+    runner_ctx = create_runner_context("ThreadRunner@host1-1234", "host1")
+    history = create_history(
+        invocation_id="workflow-inv-123",
+        status=InvocationStatus.RUNNING,
+        runner_context_id=runner_ctx.runner_id,
+        timestamp=timestamp,
+    )
+
+    builder.mark_workflow_root("workflow-inv-123")
+    builder.add_history_batch([history], {runner_ctx.runner_id: runner_ctx})
+    data = builder.build()
+
+    lane = data.lanes["ThreadRunner@host1-1234"]
+    assert lane.points[0].is_workflow_root is True
+    assert lane.segments[0].is_workflow_root is True
+
+    svg = TimelineSVGRenderer().render(data)
+    assert 'data-workflow-root="true"' in svg
+    assert "workflow-root-hatch" in svg
+    assert "workflow root" in svg
 
 
 def test_multiple_runners() -> None:

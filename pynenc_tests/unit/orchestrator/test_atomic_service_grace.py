@@ -15,8 +15,10 @@ from pynenc.orchestrator.atomic_service import (
 def _runner(
     runner_id: str,
     creation_offset: float = 0.0,
+    *,
+    now: float | None = None,
 ) -> ActiveRunnerInfo:
-    now = time()
+    now = time() if now is None else now
     creation = datetime.fromtimestamp(now + creation_offset, tz=UTC)
     return ActiveRunnerInfo(
         runner_id=runner_id,
@@ -28,8 +30,8 @@ def _runner(
 
 def test_single_runner_in_grace_window_should_not_start() -> None:
     """A lone runner inside its grace window should skip the cycle."""
-    now = time()
-    runner = _runner("runner-1", creation_offset=-10.0)
+    now = 120.0
+    runner = _runner("runner-1", creation_offset=-10.0, now=now)
     claim = decide_atomic_service_claim(
         runner_id=runner.runner_id,
         active_runners=[runner],
@@ -46,8 +48,8 @@ def test_single_runner_in_grace_window_should_not_start() -> None:
 
 def test_single_runner_outside_grace_window_should_start() -> None:
     """Once the runner has been eligible longer than the grace, it starts."""
-    now = time()
-    runner = _runner("runner-1", creation_offset=-120.0)
+    now = 120.0
+    runner = _runner("runner-1", creation_offset=-120.0, now=now)
     claim = decide_atomic_service_claim(
         runner_id=runner.runner_id,
         active_runners=[runner],
@@ -63,9 +65,9 @@ def test_single_runner_outside_grace_window_should_start() -> None:
 
 def test_multi_runner_assigned_runner_in_grace_holds_slot() -> None:
     """When the assigned runner is still in grace the slot is held."""
-    now = time()
-    older = _runner("older", creation_offset=-1000.0)
-    newer = _runner("newer", creation_offset=-5.0)
+    now = 120.0
+    older = _runner("older", creation_offset=-1000.0, now=now)
+    newer = _runner("newer", creation_offset=-5.0, now=now)
     runners = [older, newer]
 
     assigned_runner_id = None
@@ -100,8 +102,8 @@ def test_multi_runner_assigned_runner_in_grace_holds_slot() -> None:
 
 def test_grace_disabled_when_stabilization_is_zero() -> None:
     """With stabilization=0 the grace check is bypassed entirely."""
-    now = time()
-    runner = _runner("runner-1", creation_offset=-1.0)
+    now = 120.0
+    runner = _runner("runner-1", creation_offset=-1.0, now=now)
     claim = decide_atomic_service_claim(
         runner_id=runner.runner_id,
         active_runners=[runner],
@@ -117,8 +119,8 @@ def test_grace_disabled_when_stabilization_is_zero() -> None:
 
 def test_grace_applies_from_creation_time() -> None:
     """Creation time is the source of truth for grace-window checks."""
-    now = time()
-    runner = _runner("runner-1", creation_offset=-1.0)
+    now = 120.0
+    runner = _runner("runner-1", creation_offset=-1.0, now=now)
     claim = decide_atomic_service_claim(
         runner_id=runner.runner_id,
         active_runners=[runner],

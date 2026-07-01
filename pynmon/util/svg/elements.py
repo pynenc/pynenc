@@ -26,6 +26,7 @@ def create_status_point(
     order: int = 0,
     sub_lane: int = 0,
     registered_by_inv_id: str | None = None,
+    is_workflow_root: bool = False,
 ) -> StatusPoint:
     """Create a StatusPoint with auto-generated tooltip and color."""
     color = STATUS_COLORS.get(status, DEFAULT_STATUS_COLOR)
@@ -39,6 +40,7 @@ def create_status_point(
         order=order,
         sub_lane=sub_lane,
         registered_by_inv_id=registered_by_inv_id,
+        is_workflow_root=is_workflow_root,
     )
 
 
@@ -53,6 +55,7 @@ class SegmentParams:
     next_status: str | None = None
     sub_lane: int = 0
     is_ongoing: bool = False
+    is_workflow_root: bool = False
 
 
 def create_status_segment(params: SegmentParams) -> StatusSegment:
@@ -75,6 +78,7 @@ def create_status_segment(params: SegmentParams) -> StatusSegment:
         next_status=params.next_status,
         sub_lane=params.sub_lane,
         is_ongoing=params.is_ongoing,
+        is_workflow_root=params.is_workflow_root,
     )
 
 

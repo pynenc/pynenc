@@ -632,7 +632,24 @@
     return html;
   }
 
+  function buildWorkflowRoleHtml(role) {
+    if (!role) return '<span class="text-muted">—</span>';
+    const subworkflowBadge = role.is_subworkflow
+      ? ' <span class="badge bg-dark" style="font-size:9px;">sub-workflow</span>'
+      : "";
+    const description = role.description
+      ? `<span class="text-muted" style="font-size:10px;">${role.description}</span>`
+      : "";
+    return `<span class="badge ${role.badge_class}">${
+      role.label
+    }</span>${subworkflowBadge}${
+      description ? ` <span class="ms-1">${description}</span>` : ""
+    }`;
+  }
+
   function buildSummaryRows(invocationId, apiData, historyData) {
+    const workflowRole = apiData?.workflow_role || null;
+    const workflow = apiData?.workflow || null;
     let html = `<div class="timeline-detail-summary">
       <div class="detail-kicker">Invocation</div>
       <div class="timeline-detail-id"><code>${invocationId}</code></div>
@@ -660,17 +677,14 @@
           <code style="font-size:11px;color:inherit;">${pid}</code></a></td></tr>`;
     }
 
-    if (apiData?.workflow) {
-      const wf = apiData.workflow;
-      html += `<tr><th>Workflow</th>
-        <td><a href="/workflows/${encodeURIComponent(
-          wf.workflow_type
-        )}" class="text-decoration-none">
-          <code style="font-size:11px;">${wf.workflow_type}</code></a>`;
-      if (wf.is_subworkflow)
-        html += ` <span class="badge bg-secondary" style="font-size:9px;">sub-workflow</span>`;
-      html += `</td></tr>`;
+    html += `<tr><th>Workflow</th><td>${buildWorkflowRoleHtml(workflowRole)}`;
+    if (workflow) {
+      html += ` <a href="/workflows/${encodeURIComponent(
+        workflow.workflow_type
+      )}" class="text-decoration-none ms-1">
+          <code style="font-size:11px;">${workflow.workflow_type}</code></a>`;
     }
+    html += `</td></tr>`;
 
     if (historyData?.length > 0) {
       const last = historyData[historyData.length - 1];

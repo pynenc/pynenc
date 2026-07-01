@@ -10,6 +10,12 @@ text[:22] }}...{{ text[-12:] }}{% else %}{{ text }}{% endif %} {%- endmacro %}
       <h1>{{ task.task_id.func_name }}</h1>
       <div class="invocation-hero-meta">
         {{ status_badge(invocation.status.name) }}
+        <span class="badge {{ workflow_role.badge_class }}"
+          >{{ workflow_role.label }}</span
+        >
+        {% if workflow_role.is_subworkflow %}
+        <span class="badge bg-dark">sub-workflow</span>
+        {% endif %}
         <code>{{ invocation.invocation_id }}</code>
         {% if duration %}<span>{{ duration }}</span>{% endif %}
       </div>
@@ -81,6 +87,20 @@ text[:22] }}...{{ text[-12:] }}{% else %}{{ text }}{% endif %} {%- endmacro %}
                 <tr>
                   <th>Status:</th>
                   <td>{{ status_badge(invocation.status.name) }}</td>
+                </tr>
+                <tr>
+                  <th>Workflow role:</th>
+                  <td>
+                    <span class="badge {{ workflow_role.badge_class }}"
+                      >{{ workflow_role.label }}</span
+                    >
+                    {% if workflow_role.is_subworkflow %}
+                    <span class="badge bg-dark ms-1">sub-workflow</span>
+                    {% endif %}
+                    <div class="text-muted small mt-1">
+                      {{ workflow_role.description }}
+                    </div>
+                  </td>
                 </tr>
                 <tr>
                   <th>Retries:</th>

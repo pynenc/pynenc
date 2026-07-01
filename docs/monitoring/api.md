@@ -74,7 +74,6 @@ Complete list of HTTP endpoints exposed by the Pynmon monitoring server.
 | `GET /workflows/runs/refresh`       | HTMX partial refresh   |
 | `GET /workflows/{type_key}`         | Workflow type detail   |
 | `GET /workflows/{type_key}/refresh` | HTMX partial refresh   |
-| `GET /workflows/debug`              | Debug overview (dev)   |
 
 ## State Backend (`/state-backend/`)
 

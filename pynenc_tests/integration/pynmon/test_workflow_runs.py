@@ -35,7 +35,9 @@ app = (
 
 # Sub-task definitions for hierarchical workflows
 @app.task
-def validate_input_data(data: dict[str, Any]) -> dict[str, Any]:
+def validate_input_data(
+    data: dict[str, Any], validation_id: str, validated_at: str
+) -> dict[str, Any]:
     """
     Validate input data structure and content.
 
@@ -54,82 +56,81 @@ def validate_input_data(data: dict[str, Any]) -> dict[str, Any]:
         return {
             "valid": True,
             "normalized_data": normalized_data,
-            "validation_id": validate_input_data.wf.uuid(),
-            "validated_at": validate_input_data.wf.utc_now().isoformat(),
+            "validation_id": validation_id,
+            "validated_at": validated_at,
         }
     else:
         return {
             "valid": False,
             "errors": ["Missing required fields: user_id, email"],
-            "validation_id": validate_input_data.wf.uuid(),
-            "validated_at": validate_input_data.wf.utc_now().isoformat(),
+            "validation_id": validation_id,
+            "validated_at": validated_at,
         }
 
 
 @app.task
-def process_user_data(user_data: dict[str, Any]) -> dict[str, Any]:
+def process_user_data(
+    user_data: dict[str, Any], profile_id: str, processing_timestamp_iso: str
+) -> dict[str, Any]:
     """
     Process user data and create user profile.
 
     :param user_data: Validated user data
     :return: Processing result with user profile
     """
-    # Generate deterministic values
-    profile_id = process_user_data.wf.uuid()
-    processing_timestamp = process_user_data.wf.utc_now()
-
     # Store processing data in workflow
     process_user_data.wf.set_data("profile_id", profile_id)
-    process_user_data.wf.set_data("processed_at", processing_timestamp.isoformat())
+    process_user_data.wf.set_data("processed_at", processing_timestamp_iso)
 
     return {
         "profile_id": profile_id,
         "user_id": user_data["user_id"],
         "email": user_data["email"],
         "status": "processed",
-        "created_at": processing_timestamp.isoformat(),
+        "created_at": processing_timestamp_iso,
         "metadata": user_data.get("metadata", {}),
     }
 
 
 @app.task
-def generate_user_report(profile_data: dict[str, Any]) -> dict[str, Any]:
+def generate_user_report(
+    profile_data: dict[str, Any], report_id: str, report_timestamp_iso: str
+) -> dict[str, Any]:
     """
     Generate user report based on profile data.
 
     :param profile_data: User profile data
     :return: Generated report information
     """
-    report_id = generate_user_report.wf.uuid()
-    report_timestamp = generate_user_report.wf.utc_now()
-
     # Generate report content
     report_content = {
         "user_summary": f"User {profile_data['user_id']} with email {profile_data['email']}",
         "profile_id": profile_data["profile_id"],
-        "generation_time": report_timestamp.isoformat(),
+        "generation_time": report_timestamp_iso,
         "report_type": "user_onboarding",
     }
 
     return {
         "report_id": report_id,
         "content": report_content,
-        "generated_at": report_timestamp.isoformat(),
+        "generated_at": report_timestamp_iso,
         "status": "completed",
     }
 
 
 @app.task
-def analyze_data_batch(batch_data: list[dict[str, Any]]) -> dict[str, Any]:
+def analyze_data_batch(
+    batch_data: list[dict[str, Any]],
+    analysis_id: str,
+    analysis_start_iso: str,
+    analysis_end_iso: str,
+) -> dict[str, Any]:
     """
     Analyze a batch of data items.
 
     :param batch_data: List of data items to analyze
     :return: Analysis results
     """
-    analysis_id = analyze_data_batch.wf.uuid()
-    analysis_start = analyze_data_batch.wf.utc_now()
-
     # Store batch info in workflow
     analyze_data_batch.wf.set_data("batch_size", len(batch_data))
     analyze_data_batch.wf.set_data("analysis_id", analysis_id)
@@ -142,7 +143,10 @@ def analyze_data_batch(batch_data: list[dict[str, Any]]) -> dict[str, Any]:
         if "value" in item and isinstance(item["value"], int | float):
             processed_items += 1
 
-    analysis_end = analyze_data_batch.wf.utc_now()
+    from datetime import datetime
+
+    analysis_start = datetime.fromisoformat(analysis_start_iso)
+    analysis_end = datetime.fromisoformat(analysis_end_iso)
     processing_time = (analysis_end - analysis_start).total_seconds()
 
     return {
@@ -151,12 +155,12 @@ def analyze_data_batch(batch_data: list[dict[str, Any]]) -> dict[str, Any]:
         "processed_items": processed_items,
         "success_rate": processed_items / total_items if total_items > 0 else 0,
         "processing_time_seconds": processing_time,
-        "completed_at": analysis_end.isoformat(),
+        "completed_at": analysis_end_iso,
     }
 
 
 # Main workflow definitions
-@app.task(force_new_workflow=True)
+@app.workflow
 def user_onboarding_workflow(user_input: dict[str, Any]) -> dict[str, Any]:
     """
     Main user onboarding workflow that orchestrates multiple sub-tasks.
@@ -168,7 +172,7 @@ def user_onboarding_workflow(user_input: dict[str, Any]) -> dict[str, Any]:
     :return: Complete onboarding result
     """
     workflow_id = user_onboarding_workflow.wf.identity.workflow_id
-    start_time = user_onboarding_workflow.wf.utc_now()
+    start_time = user_onboarding_workflow.wf.root.utc_now()
 
     # Store workflow metadata
     user_onboarding_workflow.wf.set_data("workflow_type", "user_onboarding")
@@ -177,8 +181,11 @@ def user_onboarding_workflow(user_input: dict[str, Any]) -> dict[str, Any]:
 
     try:
         # Step 1: Validate input data
-        validation_result = user_onboarding_workflow.wf.execute_task(
-            validate_input_data, user_input
+        validation_result = user_onboarding_workflow.wf.root.execute_task(
+            validate_input_data,
+            user_input,
+            user_onboarding_workflow.wf.root.uuid(),
+            user_onboarding_workflow.wf.root.utc_now().isoformat(),
         )
 
         if not validation_result.result["valid"]:
@@ -188,21 +195,27 @@ def user_onboarding_workflow(user_input: dict[str, Any]) -> dict[str, Any]:
                 "status": "failed",
                 "step": "validation",
                 "error": validation_result.result["errors"],
-                "completed_at": user_onboarding_workflow.wf.utc_now().isoformat(),
+                "completed_at": user_onboarding_workflow.wf.root.utc_now().isoformat(),
             }
 
         # Step 2: Process user data
-        processing_result = user_onboarding_workflow.wf.execute_task(
-            process_user_data, validation_result.result["normalized_data"]
+        processing_result = user_onboarding_workflow.wf.root.execute_task(
+            process_user_data,
+            validation_result.result["normalized_data"],
+            user_onboarding_workflow.wf.root.uuid(),
+            user_onboarding_workflow.wf.root.utc_now().isoformat(),
         )
 
         # Step 3: Generate user report
-        report_result = user_onboarding_workflow.wf.execute_task(
-            generate_user_report, processing_result.result
+        report_result = user_onboarding_workflow.wf.root.execute_task(
+            generate_user_report,
+            processing_result.result,
+            user_onboarding_workflow.wf.root.uuid(),
+            user_onboarding_workflow.wf.root.utc_now().isoformat(),
         )
 
         # Mark workflow as completed
-        end_time = user_onboarding_workflow.wf.utc_now()
+        end_time = user_onboarding_workflow.wf.root.utc_now()
         user_onboarding_workflow.wf.set_data("status", "completed")
         user_onboarding_workflow.wf.set_data("completed_at", end_time.isoformat())
 
@@ -217,7 +230,7 @@ def user_onboarding_workflow(user_input: dict[str, Any]) -> dict[str, Any]:
         }
 
     except Exception as e:
-        error_time = user_onboarding_workflow.wf.utc_now()
+        error_time = user_onboarding_workflow.wf.root.utc_now()
         user_onboarding_workflow.wf.set_data("status", "error")
         user_onboarding_workflow.wf.set_data("error", str(e))
         user_onboarding_workflow.wf.set_data("error_at", error_time.isoformat())
@@ -230,7 +243,7 @@ def user_onboarding_workflow(user_input: dict[str, Any]) -> dict[str, Any]:
         }
 
 
-@app.task(force_new_workflow=True)
+@app.workflow
 def data_analysis_workflow(batch_config: dict[str, Any]) -> dict[str, Any]:
     """
     Main data analysis workflow that processes multiple data batches.
@@ -242,7 +255,7 @@ def data_analysis_workflow(batch_config: dict[str, Any]) -> dict[str, Any]:
     :return: Aggregated analysis results
     """
     workflow_id = data_analysis_workflow.wf.identity.workflow_id
-    start_time = data_analysis_workflow.wf.utc_now()
+    start_time = data_analysis_workflow.wf.root.utc_now()
 
     # Store workflow metadata
     data_analysis_workflow.wf.set_data("workflow_type", "data_analysis")
@@ -262,7 +275,7 @@ def data_analysis_workflow(batch_config: dict[str, Any]) -> dict[str, Any]:
             batch_data = []
             for item_num in range(batch_size):
                 # Use workflow random for deterministic data generation
-                value = data_analysis_workflow.wf.random() * 100
+                value = data_analysis_workflow.wf.root.random() * 100
                 batch_data.append(
                     {
                         "id": f"item_{batch_num}_{item_num}",
@@ -272,8 +285,12 @@ def data_analysis_workflow(batch_config: dict[str, Any]) -> dict[str, Any]:
                 )
 
             # Execute analysis task for this batch
-            batch_result = data_analysis_workflow.wf.execute_task(
-                analyze_data_batch, batch_data
+            batch_result = data_analysis_workflow.wf.root.execute_task(
+                analyze_data_batch,
+                batch_data,
+                data_analysis_workflow.wf.root.uuid(),
+                data_analysis_workflow.wf.root.utc_now().isoformat(),
+                data_analysis_workflow.wf.root.utc_now().isoformat(),
             )
             analysis_results.append(batch_result.result)
 
@@ -292,7 +309,7 @@ def data_analysis_workflow(batch_config: dict[str, Any]) -> dict[str, Any]:
             result["processing_time_seconds"] for result in analysis_results
         )
 
-        end_time = data_analysis_workflow.wf.utc_now()
+        end_time = data_analysis_workflow.wf.root.utc_now()
         data_analysis_workflow.wf.set_data("status", "completed")
         data_analysis_workflow.wf.set_data("completed_at", end_time.isoformat())
 
@@ -312,7 +329,7 @@ def data_analysis_workflow(batch_config: dict[str, Any]) -> dict[str, Any]:
         }
 
     except Exception as e:
-        error_time = data_analysis_workflow.wf.utc_now()
+        error_time = data_analysis_workflow.wf.root.utc_now()
         data_analysis_workflow.wf.set_data("status", "error")
         data_analysis_workflow.wf.set_data("error", str(e))
         data_analysis_workflow.wf.set_data("error_at", error_time.isoformat())

@@ -9,9 +9,18 @@ import datetime
 from typing import Any
 
 from pynenc import Pynenc
+from pynenc.invocation import DistributedInvocation
+from pynenc.workflow.workflow_deterministic import DeterministicExecutor
 
 # Create a mock app for task registration
 mock_app = Pynenc()
+
+
+def _replay_executor(task: Any) -> DeterministicExecutor:
+    """Return the current invocation deterministic runtime for test introspection."""
+    invocation = task.invocation
+    assert isinstance(invocation, DistributedInvocation)
+    return invocation._get_deterministic_runtime()
 
 
 @mock_app.task
@@ -26,7 +35,7 @@ def simple_add_task(a: int, b: int) -> int:
     return a + b
 
 
-@mock_app.task
+@mock_app.workflow
 def deterministic_random_workflow() -> dict[str, Any]:
     """
     Test deterministic random number generation.
@@ -36,7 +45,7 @@ def deterministic_random_workflow() -> dict[str, Any]:
     # Generate multiple random numbers
     random_values = []
     for _ in range(5):
-        random_values.append(deterministic_random_workflow.wf.random())
+        random_values.append(deterministic_random_workflow.wf.root.random())
 
     return {
         "random_values": random_values,
@@ -47,7 +56,7 @@ def deterministic_random_workflow() -> dict[str, Any]:
     }
 
 
-@mock_app.task
+@mock_app.workflow
 def deterministic_time_workflow() -> dict[str, Any]:
     """
     Test deterministic time operations.
@@ -57,10 +66,10 @@ def deterministic_time_workflow() -> dict[str, Any]:
     # Generate multiple timestamps
     timestamps = []
     for _ in range(3):
-        timestamps.append(deterministic_time_workflow.wf.utc_now())
+        timestamps.append(deterministic_time_workflow.wf.root.utc_now())
 
     # Get base time for comparison
-    base_time = deterministic_time_workflow.wf.deterministic.get_base_time()
+    base_time = _replay_executor(deterministic_time_workflow).get_base_time()
 
     return {
         "timestamps": [ts.isoformat() for ts in timestamps],
@@ -72,7 +81,7 @@ def deterministic_time_workflow() -> dict[str, Any]:
     }
 
 
-@mock_app.task
+@mock_app.workflow
 def deterministic_uuid_workflow() -> dict[str, Any]:
     """
     Test deterministic UUID generation.
@@ -82,7 +91,7 @@ def deterministic_uuid_workflow() -> dict[str, Any]:
     # Generate multiple UUIDs
     uuids = []
     for _ in range(4):
-        uuids.append(deterministic_uuid_workflow.wf.uuid())
+        uuids.append(deterministic_uuid_workflow.wf.root.uuid())
 
     return {
         "uuids": uuids,
@@ -95,7 +104,7 @@ def deterministic_uuid_workflow() -> dict[str, Any]:
     }
 
 
-@mock_app.task
+@mock_app.workflow
 def deterministic_mixed_workflow() -> dict[str, Any]:
     """
     Test mixed deterministic operations within a single workflow.
@@ -105,40 +114,33 @@ def deterministic_mixed_workflow() -> dict[str, Any]:
     results: dict[str, Any] = {}
 
     # Random operations
-    results["random1"] = deterministic_mixed_workflow.wf.random()
-    results["random2"] = deterministic_mixed_workflow.wf.random()
+    results["random1"] = deterministic_mixed_workflow.wf.root.random()
+    results["random2"] = deterministic_mixed_workflow.wf.root.random()
 
     # Time operations
-    results["time1"] = deterministic_mixed_workflow.wf.utc_now().isoformat()
-    results["time2"] = deterministic_mixed_workflow.wf.utc_now().isoformat()
+    results["time1"] = deterministic_mixed_workflow.wf.root.utc_now().isoformat()
+    results["time2"] = deterministic_mixed_workflow.wf.root.utc_now().isoformat()
 
     # UUID operations
-    results["uuid1"] = deterministic_mixed_workflow.wf.uuid()
-    results["uuid2"] = deterministic_mixed_workflow.wf.uuid()
+    results["uuid1"] = deterministic_mixed_workflow.wf.root.uuid()
+    results["uuid2"] = deterministic_mixed_workflow.wf.root.uuid()
 
     # Another random to test sequence
-    results["random3"] = deterministic_mixed_workflow.wf.random()
+    results["random3"] = deterministic_mixed_workflow.wf.root.random()
 
     # Base time for reference
-    results["base_time"] = (
-        deterministic_mixed_workflow.wf.deterministic.get_base_time().isoformat()
-    )
+    replay_executor = _replay_executor(deterministic_mixed_workflow)
+    results["base_time"] = replay_executor.get_base_time().isoformat()
 
     # Operation counts
-    results["random_count"] = (
-        deterministic_mixed_workflow.wf.deterministic.get_operation_count("random")
-    )
-    results["time_count"] = (
-        deterministic_mixed_workflow.wf.deterministic.get_operation_count("time")
-    )
-    results["uuid_count"] = (
-        deterministic_mixed_workflow.wf.deterministic.get_operation_count("uuid")
-    )
+    results["random_count"] = replay_executor.get_operation_count("random")
+    results["time_count"] = replay_executor.get_operation_count("time")
+    results["uuid_count"] = replay_executor.get_operation_count("uuid")
 
     return results
 
 
-@mock_app.task
+@mock_app.workflow
 def deterministic_task_execution_workflow() -> dict[str, Any]:
     """
     Test deterministic task execution within a workflow.
@@ -148,28 +150,40 @@ def deterministic_task_execution_workflow() -> dict[str, Any]:
     results = {}
 
     # Execute the same task multiple times with different parameters
-    results["task_result_1"] = deterministic_task_execution_workflow.wf.execute_task(
-        simple_add_task, 10, 20
+    results["task_result_1"] = (
+        deterministic_task_execution_workflow.wf.root.execute_task(
+            simple_add_task, 10, 20
+        )
     )
-    results["task_result_2"] = deterministic_task_execution_workflow.wf.execute_task(
-        simple_add_task, 5, 15
+    results["task_result_2"] = (
+        deterministic_task_execution_workflow.wf.root.execute_task(
+            simple_add_task, 5, 15
+        )
     )
-    results["task_result_3"] = deterministic_task_execution_workflow.wf.execute_task(
-        simple_add_task, 100, 200
+    results["task_result_3"] = (
+        deterministic_task_execution_workflow.wf.root.execute_task(
+            simple_add_task, 100, 200
+        )
     )
 
     # Execute the same task with same parameters again (should be deterministic)
     results["task_result_1_repeat"] = (
-        deterministic_task_execution_workflow.wf.execute_task(simple_add_task, 10, 20)
+        deterministic_task_execution_workflow.wf.root.execute_task(
+            simple_add_task, 10, 20
+        )
     )
 
     # Mix with other deterministic operations
-    results["random_between_tasks"] = deterministic_task_execution_workflow.wf.random()
-    results["uuid_between_tasks"] = deterministic_task_execution_workflow.wf.uuid()
+    results["random_between_tasks"] = (
+        deterministic_task_execution_workflow.wf.root.random()
+    )
+    results["uuid_between_tasks"] = deterministic_task_execution_workflow.wf.root.uuid()
 
     # Execute another task
-    results["task_result_4"] = deterministic_task_execution_workflow.wf.execute_task(
-        simple_add_task, 7, 8
+    results["task_result_4"] = (
+        deterministic_task_execution_workflow.wf.root.execute_task(
+            simple_add_task, 7, 8
+        )
     )
 
     return results

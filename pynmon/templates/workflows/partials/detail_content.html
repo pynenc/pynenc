@@ -71,7 +71,7 @@
       >{{ workflow_runs|length }} Total Runs</span
     >
     <a
-      href="/tasks/{{ workflow_task_id }}"
+      href="/tasks/{{ workflow_type.key }}"
       class="btn btn-sm btn-outline-info pynmon-action-btn"
     >
       View Task Details
@@ -98,31 +98,33 @@
       <tr>
         <td>
           <a
-            href="/invocations/{{ run.workflow_invocation_id }}"
+            href="/invocations/{{ run.workflow_id }}"
             class="text-decoration-none"
           >
-            <code class="clickable-code">{{ run.workflow_invocation_id }}</code>
+            <code class="clickable-code">{{ run.workflow_id }}</code>
           </a>
         </td>
         <td>
-          {% if run.parent_workflow %}
-          <div>
+          {% if run.parent_workflow_id %}
+          <div class="d-flex flex-column gap-1">
+            {% if run.parent_workflow %}
             <a
-              href="/workflows/{{ run.parent_workflow.workflow_task_id.key }}"
-              class="text-decoration-none text-muted"
+              href="/workflows/{{ run.parent_workflow.workflow_type.key }}"
+              class="text-decoration-none"
             >
-              {{ run.parent_workflow.workflow_task_id }}
+              {{ run.parent_workflow.workflow_type }}
             </a>
-            <br />
-            <small class="metadata-text">
-              (<a
-                href="/invocations/{{ run.parent_workflow.workflow_invocation_id }}"
-                class="text-decoration-none"
-                ><code class="clickable-code"
-                  >{{ run.parent_workflow.workflow_invocation_id[:8] }}...</code
-                ></a
-              >)
-            </small>
+            {% else %}
+            <span class="text-muted">Parent workflow</span>
+            {% endif %}
+            <a
+              href="/invocations/{{ run.parent_workflow_id }}"
+              class="text-decoration-none"
+            >
+              <code class="clickable-code text-break"
+                >{{ run.parent_workflow_id }}</code
+              >
+            </a>
           </div>
           {% else %}
           <span class="text-muted">-</span>
@@ -135,13 +137,14 @@
           >
             View All Invocations
           </a>
+          {% if run.parent_workflow %}
           <a
-            href="/invocations/{{ run.workflow_id }}"
+            href="/workflows/{{ run.parent_workflow.workflow_type.key }}"
             class="btn btn-sm btn-outline-secondary pynmon-action-btn ms-1"
-            title="View family tree for this workflow run"
           >
-            Family Tree
+            Parent Workflow Details
           </a>
+          {% endif %}
         </td>
       </tr>
       {% endfor %}

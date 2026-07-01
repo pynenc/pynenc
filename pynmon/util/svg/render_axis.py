@@ -255,6 +255,14 @@ def _render_runner_overlay_legend(
         f'stroke-width="1"/>',
         _legend_item_text(x, y, label, style),
     ]
+    x += len(label) * 7 + 34
+    parts += [
+        f'  <rect x="{x}" y="{y + 1}" width="14" height="10" '
+        f'fill="#e5e7eb" rx="1.5" stroke="#111827" stroke-width="1.6"/>',
+        f'  <rect x="{x}" y="{y + 1}" width="14" height="10" '
+        f'fill="url(#workflow-root-hatch)" rx="1.5"/>',
+        _legend_item_text(x + 4, y, "workflow root", style),
+    ]
     return y
 
 

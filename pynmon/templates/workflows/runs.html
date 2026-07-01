@@ -50,7 +50,7 @@
               <table class="table table-hover pynmon-table">
                 <thead>
                   <tr>
-                    <th>Workflow Task ID</th>
+                    <th>Workflow Type</th>
                     <th>Invocation ID</th>
                     <th>Parent Workflow</th>
                     <th>Actions</th>
@@ -75,10 +75,25 @@
                       >
                     </td>
                     <td>
-                      {% if run.parent_workflow %}
-                      <span class="font-monospace text-muted">
-                        {{ run.parent_workflow.workflow_id[:8] }}...
-                      </span>
+                      {% if run.parent_workflow_id %}
+                      <div class="d-flex flex-column gap-1">
+                        {% if run.parent_workflow %}
+                        <a
+                          href="/workflows/{{ run.parent_workflow.workflow_type.key }}"
+                          class="text-decoration-none"
+                        >
+                          {{ run.parent_workflow.workflow_type }}
+                        </a>
+                        {% else %}
+                        <span class="text-muted">Parent workflow</span>
+                        {% endif %}
+                        <a
+                          href="/invocations/{{ run.parent_workflow_id }}"
+                          class="font-monospace text-decoration-none text-break"
+                        >
+                          {{ run.parent_workflow_id }}
+                        </a>
+                      </div>
                       {% else %}
                       <span class="text-muted">-</span>
                       {% endif %}
@@ -90,6 +105,14 @@
                       >
                         View Invocations
                       </a>
+                      {% if run.parent_workflow %}
+                      <a
+                        href="/workflows/{{ run.parent_workflow.workflow_type.key }}"
+                        class="btn btn-sm btn-outline-secondary ms-1"
+                      >
+                        Parent Workflow Details
+                      </a>
+                      {% endif %}
                     </td>
                   </tr>
                   {% endfor %}

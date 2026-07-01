@@ -21,7 +21,7 @@ class InvocationDTO:
 
     :param str invocation_id: Unique invocation identifier
     :param CallId call_id: Call identifier (links to CallDTO)
-    :param WorkflowIdentity workflow: Workflow identity
+    :param WorkflowIdentity | None workflow: Workflow membership, if any.
     :param InvocationReference | None parent_reference: Optional reference to parent invocation
     :param str | None parent_event_id: Optional id of the event whose trigger firing
         produced this invocation.
@@ -29,6 +29,6 @@ class InvocationDTO:
 
     invocation_id: "InvocationId"
     call_id: "CallId"
-    workflow: "WorkflowIdentity"
+    workflow: "WorkflowIdentity | None"
     parent_invocation_id: "InvocationId | None"
     parent_event_id: "str | None" = None

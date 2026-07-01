@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import datetime
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, NoReturn, TypeVar
 
-from pynenc.workflow.workflow_deterministic import DeterministicExecutor
+from pynenc.workflow.workflow_exceptions import (
+    DeterministicOperationScopeError,
+    WorkflowMembershipError,
+)
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
+    from pynenc.invocation.dist_invocation import DistributedInvocation
     from pynenc.task import Task
+    from pynenc.workflow.workflow_deterministic import DeterministicExecutor
     from pynenc.workflow.workflow_identity import WorkflowIdentity
 
 S = TypeVar("S")
@@ -17,8 +22,8 @@ class WorkflowContext:
     """
     Provides workflow capabilities for tasks within Pynenc.
 
-    This class exposes methods for workflow state management, determinism, and
-    durability. It's accessible via the `wf` property on any Pynenc task.
+    This class exposes shared workflow state for any task that is running inside
+    a workflow. Root-only orchestration lives on ``WorkflowRootContext.root``.
 
     :param task: The task this helper is attached to
     """
@@ -26,16 +31,6 @@ class WorkflowContext:
     def __init__(self, task: Task):
         """Initialize the workflow helper with its associated task."""
         self.task = task
-        self._deterministic: DeterministicExecutor | None = None
-
-    @property
-    def deterministic(self) -> DeterministicExecutor:
-        """Get the deterministic executor for this workflow context."""
-        if self._deterministic is None:
-            self._deterministic = DeterministicExecutor(
-                self.task.invocation.workflow, self.task.app
-            )
-        return self._deterministic
 
     @property
     def app(self) -> Pynenc:
@@ -45,7 +40,14 @@ class WorkflowContext:
     @property
     def identity(self) -> WorkflowIdentity:
         """Get the workflow identity for the current execution."""
-        return self.task.invocation.workflow
+        invocation = self.task.invocation
+        if invocation.workflow is None:
+            raise WorkflowMembershipError(
+                operation_name="workflow",
+                task_id=self.task.task_id.key,
+                invocation_id=str(invocation.invocation_id),
+            )
+        return invocation.workflow
 
     def get_data(self, key: str, default: Any = None) -> Any:
         """
@@ -63,15 +65,74 @@ class WorkflowContext:
         """
         Set a value in the workflow's data store.
 
-        Only the main workflow task can write workflow data.
+        Any task within the workflow can write data.
 
         :param key: The data key to set
         :param value: The value to store
-        :raises WorkflowAccessError: If a non-owner task attempts to modify data
         """
         self.app.state_backend.set_workflow_data(self.identity, key, value)
 
-    # DETERMINISTIC OPERATION METHODS
+
+class WorkflowRootOps:
+    """
+    Root-only workflow orchestration operations.
+
+    The public ``wf.root`` boundary makes it explicit that these methods are
+    only valid on the workflow-defining invocation. The deterministic replay
+    cursor itself is stored on the active invocation object, not on the cached
+    task-level workflow context.
+    """
+
+    def __init__(self, task: Task):
+        self.task = task
+
+    @property
+    def _invocation(self) -> DistributedInvocation:
+        from pynenc.invocation.dist_invocation import DistributedInvocation
+
+        invocation = self.task.invocation
+        if not isinstance(invocation, DistributedInvocation):
+            self._raise_scope_error("workflow orchestration")
+        return invocation
+
+    def _raise_scope_error(self, operation_name: str) -> NoReturn:
+        invocation = None
+        workflow = None
+        invocation_id = None
+        is_workflow_defining = False
+        try:
+            invocation = self.task.invocation
+            invocation_id = str(invocation.invocation_id)
+            workflow = invocation.workflow
+            is_workflow_defining = bool(invocation.task.is_workflow_root_task)
+        except Exception:
+            pass
+        raise DeterministicOperationScopeError(
+            operation_name=operation_name,
+            task_id=self.task.task_id.key,
+            invocation_id=invocation_id,
+            workflow_id=str(workflow.workflow_id) if workflow else None,
+            workflow_type=workflow.workflow_type.key if workflow else None,
+            parent_workflow_id=str(workflow.parent_workflow_id)
+            if workflow and workflow.parent_workflow_id
+            else None,
+            is_workflow_defining_invocation=is_workflow_defining,
+        )
+
+    def _ensure_root_workflow_operation_allowed(
+        self, operation_name: str
+    ) -> DistributedInvocation:
+        invocation = self._invocation
+        if (
+            not invocation.task.is_workflow_root_task
+            or invocation.task.task_id != self.task.task_id
+        ):
+            self._raise_scope_error(operation_name)
+        return invocation
+
+    def _deterministic(self, operation_name: str) -> DeterministicExecutor:
+        invocation = self._ensure_root_workflow_operation_allowed(operation_name)
+        return invocation._get_deterministic_runtime()
 
     def random(self) -> float:
         """
@@ -81,7 +142,7 @@ class WorkflowContext:
 
         :return: A random float between 0.0 and 1.0
         """
-        return self.deterministic.random()
+        return self._deterministic("random").random()
 
     def utc_now(self) -> datetime.datetime:
         """
@@ -91,7 +152,7 @@ class WorkflowContext:
 
         :return: Current datetime with UTC timezone
         """
-        return self.deterministic.utc_now()
+        return self._deterministic("utc_now").utc_now()
 
     def uuid(self) -> str:
         """
@@ -101,7 +162,7 @@ class WorkflowContext:
 
         :return: UUID string
         """
-        return self.deterministic.uuid()
+        return self._deterministic("uuid").uuid()
 
     # CHILD WORKFLOW/TASK EXECUTION
 
@@ -116,4 +177,12 @@ class WorkflowContext:
         :param kwargs: Keyword arguments for the task
         :return: Task result
         """
-        return self.deterministic.execute_task(task, *args, **kwargs)
+        return self._deterministic("execute_task").execute_task(task, *args, **kwargs)
+
+
+class WorkflowRootContext(WorkflowContext):
+    """Workflow context for workflow-defining tasks."""
+
+    def __init__(self, task: Task):
+        super().__init__(task)
+        self.root = WorkflowRootOps(task)

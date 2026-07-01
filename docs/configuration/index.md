@@ -163,8 +163,21 @@ Per-task configuration (`pynenc.conf.config_task.ConfigTask`). Configurable glob
 | `on_diff_non_key_args_raise`     | `bool`  | `False`         | Raise error when non-key arguments differ in concurrency check            |
 | `call_result_cache`              | `bool`  | `False`         | Cache results by call arguments                                           |
 | `disable_cache_args`             | `tuple` | `()`            | Arguments to exclude from cache key                                       |
-| `force_new_workflow`             | `bool`  | `False`         | Always create a new workflow context                                      |
+| `is_workflow_task`               | `bool`  | `False`         | Internal marker used by `@app.workflow` to define workflow roots          |
 | `reroute_on_concurrency_control` | `bool`  | `False`         | Reroute blocked tasks instead of marking final                            |
+
+```{important}
+`is_workflow_task` is documented because it is the internal switch that makes a
+task define a workflow root or sub-workflow root. It enables workflow-defining
+invocations and allows root-only APIs such as `task.wf.root.execute_task(...)`,
+`task.wf.root.uuid()`, `task.wf.root.random()`, and `task.wf.root.utc_now()`.
+
+Prefer `@app.workflow` instead of setting `is_workflow_task` through environment
+variables, YAML, TOML, or direct config values. External configuration can mark a
+task as a workflow at runtime, but it bypasses the clearer public API and the
+`WorkflowTask` type returned by the decorator. Use that escape hatch only for
+internal migration or controlled experiments.
+```
 
 ### Per-Task Configuration
 

@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 app = PynencBuilder().memory().thread_runner().app_id("test-workflow-discovery").build()
 
 
-@app.task
+@app.workflow
 def simple_workflow() -> dict[str, str]:
     """Simple workflow for testing workflow discovery."""
     workflow_id = simple_workflow.wf.identity.workflow_id
@@ -30,7 +30,7 @@ def simple_workflow() -> dict[str, str]:
     return {"workflow_id": workflow_id}
 
 
-@app.task
+@app.workflow
 def another_workflow(value: int) -> dict[str, str | int]:
     """Another workflow for testing with parameters."""
     workflow_id = another_workflow.wf.identity.workflow_id
