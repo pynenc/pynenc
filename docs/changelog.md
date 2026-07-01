@@ -4,6 +4,31 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-07-01
+
+### Added
+
+- Explicit workflow tasks through `@app.workflow`, with `WorkflowTask`,
+  workflow-defining invocations, and root-only workflow orchestration APIs under
+  `wf.root`.
+- `DeterministicOperationScopeError` for attempts to call deterministic
+  workflow orchestration APIs outside workflow-defining invocations.
+
+### Changed
+
+- Ordinary `@app.task` calls are standalone task invocations unless they are
+  called from inside a workflow. They no longer implicitly define workflow
+  roots.
+- Deterministic workflow values and child replay are now exposed through
+  `wf.root.uuid()`, `wf.root.random()`, `wf.root.utc_now()`, and
+  `wf.root.execute_task(...)`.
+- Pynmon timeline views visually outline workflow-defining invocations.
+
+### Removed
+
+- `force_new_workflow` from the public task configuration model. Define
+  workflow roots and sub-workflow roots with `@app.workflow`.
+
 ## [0.2.4] - 2026-05-10
 
 ### Added

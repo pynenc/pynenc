@@ -263,6 +263,20 @@ From zero to a working distributed task — step by step.
 Concurrency, orchestration, workflows, triggers, serializers, testing.
 :::
 
+:::{grid-item-card} 🔁 Workflows
+:link: workflows/index
+:link-type: doc
+:shadow: sm
+Workflow identity, durable data, deterministic replay, and sub-workflows.
+:::
+
+:::{grid-item-card} 🧭 Invocation Context
+:link: invocation/index
+:link-type: doc
+:shadow: sm
+Runtime context, current invocation, runner context, and invocation attempts.
+:::
+
 :::{grid-item-card} ⚙️ Configuration
 :link: configuration/index
 :link-type: doc
@@ -307,6 +321,8 @@ usage_guide/index
 :caption: Understand
 
 overview
+workflows/index
+invocation/index
 faq
 ```
 

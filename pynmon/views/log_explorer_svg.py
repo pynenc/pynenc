@@ -259,18 +259,32 @@ def _build_sync(
     _register_event_runner_contexts(app, builder, markers)
     contexts: dict[str, RunnerContext] = {}
     seen_invocation_ids: set[str] = set()
+    workflow_root_checked: set[str] = set()
     for batch in app.state_backend.iter_history_in_timerange(start, end):
         filtered = [h for h in batch if str(h.invocation_id) in scope.inv_ids]
         if not filtered:
             continue
         seen_invocation_ids.update(str(h.invocation_id) for h in filtered)
         _fetch_new_contexts(filtered, app, contexts)
+        _mark_workflow_root_invocations(filtered, app, builder, workflow_root_checked)
         builder.add_history_batch(filtered, contexts)
     _backfill_visible_boundary_history(
-        app, builder, contexts, seen_invocation_ids, start, end
+        app,
+        builder,
+        contexts,
+        seen_invocation_ids,
+        start,
+        end,
+        workflow_root_checked,
     )
     _backfill_referenced_history(
-        app, builder, contexts, scope.inv_ids - seen_invocation_ids, start, end
+        app,
+        builder,
+        contexts,
+        scope.inv_ids - seen_invocation_ids,
+        start,
+        end,
+        workflow_root_checked,
     )
     data = builder.build(start_time=start, end_time=end)
     data.atomic_service_windows = _load_atomic_service_windows(
@@ -346,6 +360,7 @@ def _backfill_referenced_history(
     missing_inv_ids: set[str],
     start: datetime,
     end: datetime,
+    workflow_root_checked: set[str],
 ) -> None:
     """Add clipped history for referenced invocations outside the log window."""
     if not missing_inv_ids:
@@ -359,6 +374,7 @@ def _backfill_referenced_history(
     if not ghost_batch:
         return
     _fetch_new_contexts(ghost_batch, app, contexts)
+    _mark_workflow_root_invocations(ghost_batch, app, builder, workflow_root_checked)
     builder.add_history_batch(ghost_batch, contexts)
 
 
@@ -369,6 +385,7 @@ def _backfill_visible_boundary_history(
     seen_invocation_ids: set[str],
     start: datetime,
     end: datetime,
+    workflow_root_checked: set[str],
 ) -> None:
     """Add clipped left-edge segments for invocations with visible points."""
     if not seen_invocation_ids:
@@ -382,7 +399,34 @@ def _backfill_visible_boundary_history(
     if not synthetic_batch:
         return
     _fetch_new_contexts(synthetic_batch, app, contexts)
+    _mark_workflow_root_invocations(
+        synthetic_batch, app, builder, workflow_root_checked
+    )
     builder.add_history_batch(synthetic_batch, contexts)
+
+
+def _mark_workflow_root_invocations(
+    batch: list["InvocationHistory"],
+    app: "Pynenc",
+    builder: TimelineDataBuilder,
+    checked: set[str],
+) -> None:
+    """Mark workflow-defining invocations in a compact timeline builder."""
+    root_ids: set[str] = set()
+    for entry in batch:
+        inv_id = str(entry.invocation_id)
+        if inv_id in checked:
+            continue
+        checked.add(inv_id)
+        try:
+            invocation = app.state_backend.get_invocation(InvocationId(inv_id))
+        except Exception:
+            logger.debug("workflow-root lookup failed for %s", inv_id, exc_info=True)
+            continue
+        if invocation.task.is_workflow_root_task:
+            root_ids.add(inv_id)
+    if root_ids:
+        builder.mark_workflow_roots(root_ids)
 
 
 def _left_boundary_segment_entry(

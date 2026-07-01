@@ -10,7 +10,7 @@ from pynenc import Pynenc
 from pynenc.conf.config_task import ConcurrencyControlType, ConfigTask
 from pynenc.exceptions import InvalidTaskOptionsError
 from pynenc.identifiers.task_id import TASK_ID_SEPARATOR, TaskId
-from pynenc.task import Task
+from pynenc.task import Task, WorkflowTask
 
 app = Pynenc()
 
@@ -29,11 +29,15 @@ class CustomException(Exception):
     on_diff_non_key_args_raise=True,
     call_result_cache=False,
     disable_cache_args=("*",),
-    force_new_workflow=True,
     reroute_on_concurrency_control=False,
 )
 def store_with_opt(id: int, value: int) -> None:
     del id, value
+    pass
+
+
+@app.workflow
+def workflow_with_opt() -> None:
     pass
 
 
@@ -57,9 +61,15 @@ def test_all_config_field_checked() -> None:
     """
     config_fields = ConfigTask.config_fields()
     option_fields = list(store_with_opt.conf.task_options.keys())
+    public_task_config_fields = set(config_fields) - {"is_workflow_task"}
     assert option_fields
-    assert len(config_fields) == len(option_fields)
-    assert set(config_fields) == set(option_fields)
+    assert len(public_task_config_fields) == len(option_fields)
+    assert public_task_config_fields == set(option_fields)
+
+
+def test_workflow_config_from_decorator_options() -> None:
+    assert isinstance(workflow_with_opt, WorkflowTask)
+    assert workflow_with_opt.conf.is_workflow_task is True
 
 
 def test_options_serialization() -> None:
@@ -156,7 +166,7 @@ def test_all_task_options_in_task_decorator() -> None:
     """
     Test that all the task options are defined as optional parameters in the task decorator
     """
-    config_task_fields = set(ConfigTask.config_fields())
+    config_task_fields = set(ConfigTask.config_fields()) - {"is_workflow_task"}
 
     # Using inspect to get the parameters of the task decorator
     task_decorator_params = set(inspect.signature(Pynenc.task).parameters.keys()) - {

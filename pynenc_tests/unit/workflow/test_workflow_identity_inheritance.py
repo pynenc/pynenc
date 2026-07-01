@@ -1,4 +1,5 @@
 from pynenc import Pynenc
+from pynenc.invocation import DistributedInvocation
 
 config = {"app_id": "test_workflow_identity", "runner_cls": "ThreadRunner"}
 app = Pynenc(config_values=config)
@@ -10,7 +11,7 @@ def standalone_task() -> str:
     return "standalone"
 
 
-@app.task
+@app.workflow
 def workflow_chain_1() -> str:
     """First task in a chain."""
     return workflow_chain_2().result
@@ -28,18 +29,15 @@ def workflow_chain_3() -> str:
     return "chain completed"
 
 
-def test_standalone_task_creates_workflow(runner: None) -> None:
+def test_standalone_task_has_no_workflow(runner: None) -> None:
     """
-    Test that a standalone task automatically creates its own workflow.
+    Test that a standalone ordinary task does not create an implicit workflow.
     """
     inv = standalone_task()
+    assert isinstance(inv, DistributedInvocation)
     assert inv.result == "standalone"
 
-    # Verify workflow was created
-    assert inv.workflow is not None
-    assert inv.workflow.workflow_type == standalone_task.task_id
-    assert inv.workflow.workflow_id == inv.invocation_id
-    assert inv.workflow.parent_workflow_id is None
+    assert inv.workflow is None
 
 
 def test_workflow_inheritance_in_chain(runner: None) -> None:
@@ -66,5 +64,7 @@ def test_workflow_inheritance_in_chain(runner: None) -> None:
     assert chain_2_inv.workflow == chain_3_inv.workflow
 
     # Verify workflow identity matches the first task (chain_1)
-    assert chain_1_inv.workflow.workflow_type == workflow_chain_1.task_id
-    assert chain_1_inv.workflow.workflow_id == chain_1_inv.invocation_id
+    workflow = chain_1_inv.workflow
+    assert workflow is not None
+    assert workflow.workflow_type == workflow_chain_1.task_id
+    assert workflow.workflow_id == chain_1_inv.invocation_id

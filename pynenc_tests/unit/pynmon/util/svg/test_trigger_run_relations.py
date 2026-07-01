@@ -439,6 +439,7 @@ def test_legend_names_all_timeline_relation_colours() -> None:
     legend = render_legend(td, SVGStyle())
 
     assert "atomic service run" in legend
+    assert "workflow root" in legend
     assert "Runner" in legend
     assert "event origin" in legend
     assert "event trigger" in legend

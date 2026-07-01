@@ -40,17 +40,15 @@
 
 ---
 
-Pynenc addresses the complex challenges of task management in distributed environments, offering a robust solution for developers looking to efficiently orchestrate asynchronous tasks across multiple systems. By combining intuitive configuration with advanced features like automatic task prioritization, Pynenc empowers developers to build scalable and reliable distributed applications with ease.
+Pynenc is a Python task orchestration framework for distributed workers. It gives each task invocation a tracked lifecycle, lets the orchestrator enforce concurrency and retry rules, and keeps enough state to inspect what happened after the fact.
 
-## 🆕 What's New in v0.2.4
+## 🆕 What's New in v0.3.0
 
-- **Trigger event monitoring**: `emit_event` persists a full `EventRecord`; purging an event cascades to linked trigger runs
-- **Pynmon `/events` area**: paginated event list, detail page, JSON endpoints, and on-demand auto-purge
-- **Invocation detail trigger context**: exposes the originating trigger run, emitted events, and downstream trigger runs; timeline overlays event markers
-- **Timeline range zoom**: drag a selection rectangle on the invocation timeline SVG to reload scoped to that window
-- **Log Explorer mini-timeline**: expands the time window to include emitter invocations referenced in pasted log lines
-- **Retention configuration**: `ConfigTrigger` age and capacity policies for events and trigger runs (`event_retention_days`, `event_max_records`, etc.)
-- **Removed `InvocationStatus.RESUMED`**: `PAUSED → RUNNING` directly after `SIGCONT`
+- **Explicit workflow tasks**: `@app.workflow` now marks the task that defines a workflow or sub-workflow root
+- **Root workflow operations**: deterministic orchestration lives under `wf.root.uuid()`, `wf.root.random()`, `wf.root.utc_now()`, and `wf.root.execute_task(...)`
+- **Ordinary task behavior**: top-level `@app.task` calls are standalone task invocations unless they are called from inside a workflow
+- **Workflow scope errors**: invalid root-only workflow calls raise `DeterministicOperationScopeError` with invocation and workflow context
+- **Pynmon workflow markers**: timeline views outline workflow-defining invocations so workflow roots and sub-workflow roots are easier to spot
 
 See the [Changelog](https://docs.pynenc.org/changelog.html) for the complete list of changes.
 
@@ -98,13 +96,13 @@ See the [Changelog](https://docs.pynenc.org/changelog.html) for the complete lis
     <img src="https://raw.githubusercontent.com/pynenc/pynenc/main/docs/_static/invocation_state_machine.svg" alt="Pynenc invocation status state machine" width="100%">
   </p>
 
-- **Configurable Concurrency Management**: Pynenc offers versatile concurrency control mechanisms at various levels:
+- **Configurable Concurrency Management**: Pynenc supports concurrency control at several levels:
 
   - **Task-Level Concurrency**: Ensures only one instance of a specific task is in a running state at any given time.
   - **Argument-Level Concurrency**: Limits concurrent execution based on the arguments of the task, allowing only one task with a unique set of arguments to be running or pending.
   - **Key Argument-Level Concurrency**: Pick a subset of arguments (e.g. `key_arguments=("account_id",)`) and serialise only invocations that share that key — perfect for per-tenant external API calls. Different keys still run fully in parallel. See the [`concurrency_demo`](https://github.com/pynenc/samples/tree/main/concurrency_demo) sample for a runnable FastAPI-based walkthrough.
 
-  This structured approach to concurrency management in Pynenc allows for precise control over task execution, ensuring efficient handling of tasks without overloading the system and adhering to specified constraints.
+  This gives the orchestrator enough information to avoid duplicate work, protect shared resources, and keep unrelated work running in parallel.
 
 - **Real-Time Monitoring with Pynmon**: Built-in web-based monitoring interface featuring:
 
@@ -115,9 +113,9 @@ See the [Changelog](https://docs.pynenc.org/changelog.html) for the complete lis
   - Trigger event browser with event-to-invocation linking and timeline overlays
   - HTMX-powered real-time updates
 
-- **Comprehensive Trigger System**: Enables declarative task scheduling and event-driven workflows:
+- **Trigger System**: Enables declarative task scheduling and event-driven workflows:
 
-  - **Diverse Trigger Conditions**: Schedule tasks using cron expressions, react to events, task status changes, results, or exceptions.
+  - **Trigger Conditions**: Schedule tasks using cron expressions, react to events, task status changes, results, or exceptions.
   - **Definition-Time Reactions**: Declare the reaction on the task that should run next instead of wiring callbacks every time the upstream task is called.
   - **Flexible Argument Handling**:
     - **ArgumentProvider**: Dynamically generate arguments for triggered tasks from the context of the condition (static values or using custom functions).
@@ -127,13 +125,13 @@ See the [Changelog](https://docs.pynenc.org/changelog.html) for the complete lis
   - **Composable Conditions**: Combine multiple conditions with AND/OR logic for complex triggering rules.
   - **Runnable Example**: See the [`trigger_demo`](https://github.com/pynenc/samples/tree/main/trigger_demo) sample for cron, events, status chains, exception compensation, and composite status/result conditions.
 
-- **Advanced Workflow System**: Sophisticated task orchestration with deterministic execution and state management:
+- **Workflow System**: Durable orchestration for multi-step task processes:
 
-  - **Deterministic Execution**: All non-deterministic operations (random numbers, UUIDs, timestamps) are made deterministic for perfect replay.
-  - **Workflow Identity**: Unique workflow contexts with parent-child relationships and inheritance.
-  - **State Persistence**: Automatic key-value storage for workflow data with failure recovery capabilities.
-  - **Task Integration**: Integration with existing Pynenc tasks using `force_new_workflow` decorator option.
-  - **Failure Recovery**: Workflows can resume from exact points of failure with identical replay behavior.
+  - **Explicit Workflow Tasks**: Use `@app.workflow` for orchestration and `@app.task` for ordinary activity work.
+  - **Deterministic Root Operations**: `wf.root.uuid()`, `wf.root.random()`, and `wf.root.utc_now()` replay values when a workflow invocation is retried.
+  - **Workflow Identity**: Workflow roots and sub-workflow roots have durable ids and parent workflow links.
+  - **Workflow Data**: `wf.set_data()` and `wf.get_data()` store workflow-scoped milestones and decisions.
+  - **Child Invocation Replay**: `wf.root.execute_task(...)` records child calls so retries can reuse completed work when arguments are stable.
 
 - **Core Services & Automatic Recovery**: Built-in recovery tasks automatically detect and re-queue stuck invocations:
 

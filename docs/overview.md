@@ -121,15 +121,24 @@ See {doc}`configuration/index` for the complete configuration reference.
 
 ## Workflow System
 
-The workflow system adds deterministic execution on top of the task system. When a task runs inside a workflow context:
+The workflow system adds explicit, deterministic orchestration on top of the
+task system. Workflow roots are declared with `@app.workflow`; ordinary
+`@app.task` functions remain standalone tasks unless a workflow calls them.
 
-- Random numbers, timestamps, and UUIDs are seeded and stored, so replays produce identical values
-- Sub-task executions are recorded and replayed from stored results
-- Workflow state persists across failures, enabling resume from the exact point of interruption
+- Root-only random numbers, timestamps, and UUIDs are stored by workflow id, so
+  retrying the workflow invocation replays identical values
+- Child task executions are recorded at the workflow level so retries can reuse
+  existing child invocations
+- Workflow data persists across retries, preserving business milestones and
+  decisions
+- Ordinary child tasks can share workflow data but cannot call root-only
+  orchestration APIs
 
-This enables complex multi-step business processes that survive crashes without explicit checkpoint code.
+This enables complex multi-step business processes to retry without duplicating
+child work that already completed.
 
-See {doc}`usage_guide/use_case_011_workflow_system` for usage examples.
+See {doc}`workflows/index` for the workflow model and
+{doc}`usage_guide/use_case_011_workflow_system` for usage examples.
 
 ## Monitoring (Pynmon)
 

@@ -27,7 +27,7 @@ app = (
 )
 
 
-@app.task
+@app.workflow
 def simple_workflow_task() -> dict[str, str]:
     """Simple workflow for testing pynmon workflow views."""
     workflow_id = simple_workflow_task.wf.identity.workflow_id
@@ -39,7 +39,7 @@ def simple_workflow_task() -> dict[str, str]:
     return {"workflow_id": workflow_id, "status": "completed"}
 
 
-@app.task
+@app.workflow
 def data_processing_workflow(batch_size: int) -> dict[str, str | int]:
     """Data processing workflow with parameters."""
     workflow_id = data_processing_workflow.wf.identity.workflow_id
@@ -47,16 +47,16 @@ def data_processing_workflow(batch_size: int) -> dict[str, str | int]:
     # Store processing parameters
     data_processing_workflow.wf.set_data("batch_size", batch_size)
     data_processing_workflow.wf.set_data(
-        "start_time", data_processing_workflow.wf.utc_now().isoformat()
+        "start_time", data_processing_workflow.wf.root.utc_now().isoformat()
     )
 
     # Simulate processing steps
     for step in range(3):
-        step_id = data_processing_workflow.wf.uuid()
+        step_id = data_processing_workflow.wf.root.uuid()
         data_processing_workflow.wf.set_data(f"step_{step}_id", step_id)
 
     data_processing_workflow.wf.set_data(
-        "end_time", data_processing_workflow.wf.utc_now().isoformat()
+        "end_time", data_processing_workflow.wf.root.utc_now().isoformat()
     )
 
     return {"workflow_id": workflow_id, "batch_size": batch_size, "status": "processed"}
@@ -261,12 +261,6 @@ def test_workflow_detail_view_error_reproduction(pynmon_client: "PynmonClient") 
             print(f"Response status: {response.status_code}")
             print(f"Response headers: {response.headers}")
             print(f"Response content: {response.text[:500]}...")  # First 500 chars
-
-            # Try to get more debugging info
-            debug_response = pynmon_client.get("/workflows/debug/info")
-            print(f"Debug info response status: {debug_response.status_code}")
-            if debug_response.status_code == 200:
-                print(f"Debug info: {debug_response.text}")
 
             # Also try to access the invocation directly if we can extract it
             runs_response = pynmon_client.get("/workflows/runs")

@@ -77,7 +77,7 @@ class BaseInvocation(ABC, Generic[Params, Result]):
 
     @property
     @abstractmethod
-    def workflow(self) -> WorkflowIdentity:
+    def workflow(self) -> WorkflowIdentity | None:
         """"""
 
     @property

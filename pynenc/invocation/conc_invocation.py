@@ -42,10 +42,8 @@ class ConcurrentInvocation(BaseInvocation[Params, Result]):
         return result
 
     @property
-    def workflow(self) -> WorkflowIdentity:
-        raise NotImplementedError(
-            "ConcurrentInvocation does not support workflow identity"
-        )
+    def workflow(self) -> WorkflowIdentity | None:
+        return None
 
     @property
     def status(self) -> InvocationStatus:

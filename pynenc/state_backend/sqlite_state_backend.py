@@ -17,7 +17,7 @@ from pynenc.conf.config_state_backend import ConfigStateBackendSQLite
 from pynenc.identifiers.call_id import CallId
 from pynenc.identifiers.invocation_id import InvocationId
 from pynenc.models.call_dto import CallDTO
-from pynenc.invocation.dist_invocation import InvocationDTO
+from pynenc.models.invocation_dto import InvocationDTO
 from pynenc.runner.runner_context import RunnerContext
 from pynenc.state_backend.base_state_backend import BaseStateBackend, InvocationHistory
 from pynenc.identifiers.task_id import TaskId
@@ -51,6 +51,27 @@ class Tables(TableNames):
         self.WORKFLOW_SUB_INVOCATIONS = f"{p}_workflow_sub_invocations"
 
 
+def _create_invocations_table(conn: Any, table_name: str) -> None:
+    """Create the current invocations table shape."""
+    conn.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS {table_name} (
+            invocation_id TEXT PRIMARY KEY,
+            call_id_key TEXT NOT NULL,
+            task_id_key TEXT NOT NULL,
+            arguments_id TEXT NOT NULL,
+            serialized_arguments TEXT NOT NULL,
+            parent_invocation_id TEXT,
+            parent_call_id TEXT,
+            parent_event_id TEXT,
+            workflow_id TEXT,
+            workflow_type_key TEXT,
+            parent_workflow_id TEXT
+        )
+    """
+    )
+
+
 def init_tables(sqlite_db_path: str, tables: Tables) -> None:
     """Initialize SQLite tables for state backend."""
     with sqlite_conn(sqlite_db_path) as conn:
@@ -81,21 +102,12 @@ def init_tables(sqlite_db_path: str, tables: Tables) -> None:
                 parent_invocation_id TEXT,
                 parent_call_id TEXT,
                 parent_event_id TEXT,
-                workflow_id TEXT NOT NULL,
-                workflow_type_key TEXT NOT NULL,
+                workflow_id TEXT,
+                workflow_type_key TEXT,
                 parent_workflow_id TEXT
             )
         """
         )
-        # Lightweight migration: add parent_event_id column for pre-existing
-        # databases created before the column was introduced.
-        cursor = conn.execute(f"PRAGMA table_info({tables.INVOCATIONS})")
-        existing_cols = {row[1] for row in cursor.fetchall()}
-        cursor.close()
-        if "parent_event_id" not in existing_cols:
-            conn.execute(
-                f"ALTER TABLE {tables.INVOCATIONS} ADD COLUMN parent_event_id TEXT"
-            )
         conn.execute(
             f"CREATE INDEX IF NOT EXISTS idx_{tables.INVOCATIONS}_parent ON {tables.INVOCATIONS}(parent_invocation_id)"
         )
@@ -280,9 +292,9 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
                         json.dumps(call_dto.serialized_arguments),
                         inv_dto.parent_invocation_id,
                         inv_dto.parent_event_id,
-                        wf.workflow_id,
-                        wf.workflow_type.key,
-                        wf.parent_workflow_id,
+                        wf.workflow_id if wf else None,
+                        wf.workflow_type.key if wf else None,
+                        wf.parent_workflow_id if wf else None,
                     ),
                 )
             conn.commit()
@@ -312,12 +324,16 @@ class SQLiteStateBackend(BaseStateBackend[Params, Result]):
                     parent_event_id,
                 ) = row
                 call_id = CallId.from_key(call_id_key)
-                workflow = WorkflowIdentity(
-                    workflow_id=InvocationId(wf_id),
-                    workflow_type=TaskId.from_key(wf_type_key),
-                    parent_workflow_id=InvocationId(wf_parent_id)
-                    if wf_parent_id
-                    else None,
+                workflow = (
+                    WorkflowIdentity(
+                        workflow_id=InvocationId(wf_id),
+                        workflow_type=TaskId.from_key(wf_type_key),
+                        parent_workflow_id=InvocationId(wf_parent_id)
+                        if wf_parent_id
+                        else None,
+                    )
+                    if wf_id and wf_type_key
+                    else None
                 )
                 inv_dto = InvocationDTO(
                     invocation_id=InvocationId(inv_id),

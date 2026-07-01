@@ -18,6 +18,11 @@ from pynenc.invocation.status import InvocationStatus
 from pynmon.app import get_pynenc_instance, templates
 from pynmon.util.formatting import RunnerContextInfo
 from pynmon.util.time_ranges import parse_time_range, parse_resolution
+from pynmon.util.timeline_zoom import (
+    calculate_timeline_zoom_window,
+    invocation_history_timestamps,
+    invocation_zoom_window,
+)
 from pynmon.util.view_helpers import format_call_arguments
 from pynmon.util.svg.atomic_service import (
     AtomicServiceWindow,
@@ -73,12 +78,127 @@ class _IterState:
     skipped_by_task_filter: int = 0
     skipped_system_tasks: int = 0
     batch_number: int = 0
+    workflow_root_checked_invocation_ids: set[str] = field(default_factory=set)
 
 
 router = APIRouter(prefix="/invocations", tags=["invocations"])
 logger = logging.getLogger("pynmon.views.invocations")
 
 _SYSTEM_TASK_PREFIX = "pynenc.core_tasks."
+
+
+def _format_timeline_datetime(value: datetime) -> str:
+    """Format UTC datetimes for timeline URL query parameters."""
+    return value.replace(tzinfo=None).isoformat(timespec="microseconds")
+
+
+def _timeline_url_for_invocation(
+    app: "Pynenc",
+    invocation: "DistributedInvocation",
+    current_filters: dict[str, Any] | None = None,
+) -> str:
+    """Return a timeline URL focused on one invocation's execution window."""
+    invocation_id = str(invocation.invocation_id)
+    params: dict[str, str] = {
+        "selected": invocation_id,
+        "inv_ids": invocation_id,
+        "resolution": "100ms",
+    }
+    if window := invocation_zoom_window(app, invocation.invocation_id):
+        start_time, end_time = window
+        params.update(
+            {
+                "time_range": "custom",
+                "start_date": _format_timeline_datetime(start_time),
+                "end_date": _format_timeline_datetime(end_time),
+            }
+        )
+    if workflow := invocation.workflow:
+        params["workflow_id"] = str(workflow.workflow_id)
+        params["workflow_type"] = workflow.workflow_type.key
+
+    filters = current_filters or {}
+    if task_id := filters.get("task_id"):
+        if str(invocation.task.task_id) == task_id:
+            params["task_id"] = task_id
+    if limit := filters.get("limit"):
+        params["limit"] = str(limit)
+    return "/invocations/timeline?" + urlencode(params)
+
+
+def _timeline_url_for_invocation_list(
+    app: "Pynenc",
+    invocations: list["DistributedInvocation"],
+    current_filters: dict[str, Any] | None = None,
+) -> str | None:
+    """Return a timeline URL scoped to the currently displayed invocation list."""
+    invocation_ids = [str(invocation.invocation_id) for invocation in invocations]
+    if not invocation_ids:
+        return None
+
+    params: dict[str, str] = {
+        "inv_ids": ",".join(invocation_ids),
+        "resolution": "100ms",
+    }
+    timestamps = [
+        timestamp
+        for invocation in invocations
+        for timestamp in invocation_history_timestamps(app, invocation.invocation_id)
+    ]
+    if window := calculate_timeline_zoom_window(timestamps):
+        start_time, end_time = window
+        params.update(
+            {
+                "time_range": "custom",
+                "start_date": _format_timeline_datetime(start_time),
+                "end_date": _format_timeline_datetime(end_time),
+            }
+        )
+
+    filters = current_filters or {}
+    for key in ("task_id", "workflow_id", "workflow_type"):
+        value = filters.get(key)
+        if value:
+            params[key] = str(value)
+    return "/invocations/timeline?" + urlencode(params)
+
+
+def _workflow_role_for_invocation(
+    invocation: "DistributedInvocation",
+) -> dict[str, Any]:
+    """Return a compact workflow-role description for monitoring views."""
+    workflow = invocation.workflow
+    if workflow is None:
+        return {
+            "kind": "none",
+            "label": "No workflow",
+            "badge_class": "bg-secondary",
+            "description": "Standalone invocation with no workflow membership.",
+            "is_subworkflow": False,
+        }
+
+    if (
+        invocation.task.is_workflow_root_task
+        and workflow.workflow_id == invocation.invocation_id
+    ):
+        description = "Defines the root workflow run."
+        if workflow.is_subworkflow:
+            description = "Defines a sub-workflow inside a parent workflow."
+        return {
+            "kind": "root",
+            "label": "Workflow root",
+            "badge_class": "bg-success",
+            "description": description,
+            "is_subworkflow": workflow.is_subworkflow,
+        }
+
+    return {
+        "kind": "member",
+        "label": "Workflow member",
+        "badge_class": "bg-primary",
+        "description": "Runs inside an existing workflow.",
+        "is_subworkflow": False,
+    }
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -138,6 +258,22 @@ async def invocations_list(
         return invocations, total_count
 
     all_invocations, total_count = await asyncio.to_thread(_fetch_invocations)
+    current_filters = {
+        "status": status_list or [],
+        "task_id": task_id or "",
+        "workflow_id": workflow_id or "",
+        "workflow_type": workflow_type or "",
+        "limit": limit,
+    }
+    invocation_timeline_urls = {
+        str(invocation.invocation_id): _timeline_url_for_invocation(
+            app, invocation, current_filters
+        )
+        for invocation in all_invocations
+    }
+    list_timeline_url = _timeline_url_for_invocation_list(
+        app, all_invocations, current_filters
+    )
 
     # Get all possible statuses for filter dropdown
     all_statuses = [status.name.lower() for status in InvocationStatus]
@@ -160,13 +296,9 @@ async def invocations_list(
             "all_statuses": all_statuses,
             "all_task_ids": all_task_ids,
             "all_workflow_types": all_workflow_types,
-            "current_filters": {
-                "status": status_list or [],
-                "task_id": task_id or "",
-                "workflow_id": workflow_id or "",
-                "workflow_type": workflow_type or "",
-                "limit": limit,
-            },
+            "current_filters": current_filters,
+            "invocation_timeline_urls": invocation_timeline_urls,
+            "list_timeline_url": list_timeline_url,
             "pagination": {
                 "page": page,
                 "limit": limit,
@@ -476,6 +608,7 @@ def _build_svg_timeline(req: TimelineRequest) -> str:
     )
     _register_event_runner_contexts(req, state, markers)
     _accumulate_history(req, state)
+    _load_explicit_scope_history(req, state)
     # Complete the left boundary for invocations that already have at least
     # one visible status point. ``iter_history_in_timerange`` only returns
     # in-window records, so a SUCCESS/FAILED point can appear without the
@@ -555,7 +688,10 @@ def _load_task_invocation_ids(req: TimelineRequest) -> set | None:
     if not req.task_id:
         return None
     load_start = time.time()
-    ids = set(req.app.orchestrator.get_task_invocation_ids(req.task_id))
+    ids = {
+        str(invocation_id)
+        for invocation_id in req.app.orchestrator.get_task_invocation_ids(req.task_id)
+    }
     logger.info(
         f"Pre-loaded {len(ids)} invocation IDs for task {req.task_id} "
         f"in {time.time() - load_start:.2f}s"
@@ -679,8 +815,30 @@ def _process_batch(batch: list, req: TimelineRequest, state: _IterState) -> bool
     filtered = _filter_batch(batch, req.limit, state)
     _fetch_new_runner_contexts(filtered, req.app, state)
     if filtered:
+        _mark_workflow_root_invocations(filtered, req.app, state)
         state.builder.add_history_batch(filtered, state.runner_contexts)
     return not (req.limit and len(state.invocations_seen) >= req.limit)
+
+
+def _mark_workflow_root_invocations(
+    batch: list, app: "Pynenc", state: _IterState
+) -> None:
+    """Mark workflow-defining invocations in the timeline builder."""
+    root_ids: set[str] = set()
+    for entry in batch:
+        inv_id = str(entry.invocation_id)
+        if inv_id in state.workflow_root_checked_invocation_ids:
+            continue
+        state.workflow_root_checked_invocation_ids.add(inv_id)
+        try:
+            invocation = app.state_backend.get_invocation(InvocationId(inv_id))
+        except Exception:
+            logger.debug("workflow-root lookup failed for %s", inv_id, exc_info=True)
+            continue
+        if invocation.task.is_workflow_root_task:
+            root_ids.add(inv_id)
+    if root_ids:
+        state.builder.mark_workflow_roots(root_ids)
 
 
 def _filter_batch(batch: list, limit: int | None, state: _IterState) -> list:
@@ -693,7 +851,7 @@ def _filter_batch(batch: list, limit: int | None, state: _IterState) -> list:
     for entry in batch:
         # Skip entries not matching task filter
         if state.allowed_invocation_ids is not None:
-            if entry.invocation_id not in state.allowed_invocation_ids:
+            if str(entry.invocation_id) not in state.allowed_invocation_ids:
                 state.skipped_by_task_filter += 1
                 continue
         if str(entry.invocation_id) in state.excluded_invocation_ids:
@@ -850,10 +1008,49 @@ def _load_visible_invocation_boundary_history(
     if not synthetic_batch:
         return
     _fetch_new_runner_contexts(synthetic_batch, req.app, state)
+    _mark_workflow_root_invocations(synthetic_batch, req.app, state)
     state.builder.add_history_batch(synthetic_batch, state.runner_contexts)
     logger.info(
         "Visible invocation boundary backfilled: %d clipped segment entries",
         len(synthetic_batch),
+    )
+
+
+def _load_explicit_scope_history(req: TimelineRequest, state: _IterState) -> None:
+    """Backfill scoped invocation history when the window has no status point."""
+    if not req.inv_ids_filter:
+        return
+    seen_str = {str(invocation_id) for invocation_id in state.invocations_seen}
+    missing = req.inv_ids_filter - seen_str - state.excluded_invocation_ids
+    if state.allowed_invocation_ids is not None:
+        missing &= {str(inv_id) for inv_id in state.allowed_invocation_ids}
+    if not missing:
+        return
+
+    scoped_batch: list = []
+    for inv_id_str in sorted(missing):
+        try:
+            history = req.app.state_backend.get_history(InvocationId(inv_id_str))
+        except Exception:
+            logger.debug(
+                "scoped-history lookup failed for %s", inv_id_str, exc_info=True
+            )
+            continue
+        clipped = _clip_history_to_window(history, req.start_time, req.end_time)
+        if not clipped:
+            continue
+        scoped_batch.extend(clipped)
+        state.invocations_seen.add(inv_id_str)
+    if not scoped_batch:
+        return
+
+    _fetch_new_runner_contexts(scoped_batch, req.app, state)
+    _mark_workflow_root_invocations(scoped_batch, req.app, state)
+    state.builder.add_history_batch(scoped_batch, state.runner_contexts)
+    state.history_count += len(scoped_batch)
+    logger.info(
+        "Explicit invocation scope backfilled: %d clipped history entries",
+        len(scoped_batch),
     )
 
 
@@ -895,6 +1092,7 @@ def _load_ghost_invocation_history(
     if not ghost_batch:
         return
     _fetch_new_runner_contexts(ghost_batch, req.app, state)
+    _mark_workflow_root_invocations(ghost_batch, req.app, state)
     state.builder.add_history_batch(ghost_batch, state.runner_contexts)
     logger.info(
         "Ghost history backfilled: %d entries across %d invocations",
@@ -1012,7 +1210,14 @@ async def invocations_timeline(
                     "focus_event": focus_event or "",
                     "selected": selected or "",
                     "inv_ids": inv_ids or "",
-                    "scope_clear_url": _timeline_scope_clear_url(request),
+                    "scope_clear_url": _timeline_filter_clear_url(request, "inv_ids"),
+                    "task_clear_url": _timeline_filter_clear_url(request, "task_id"),
+                    "workflow_type_clear_url": _timeline_filter_clear_url(
+                        request, "workflow_type"
+                    ),
+                    "workflow_id_clear_url": _timeline_filter_clear_url(
+                        request, "workflow_id"
+                    ),
                 },
                 "focus_event": focus_event or "",
             },
@@ -1302,12 +1507,13 @@ def _collect_source_event_summaries(
     return {eid: _fetch_event_summary(app, eid) for eid in ids}
 
 
-def _timeline_scope_clear_url(request: Request) -> str:
-    """Return the current timeline URL without the invocation scope filter."""
+def _timeline_filter_clear_url(request: Request, *clear_keys: str) -> str:
+    """Return the current timeline URL without selected query parameters."""
+    keys = set(clear_keys)
     params = [
         (key, value)
         for key, value in request.query_params.multi_items()
-        if key != "inv_ids"
+        if key not in keys
     ]
     query = urlencode(params)
     return "/invocations/timeline" + (f"?{query}" if query else "")
@@ -1348,6 +1554,7 @@ async def invocation_detail(
         ) = _get_invocation_timestamps_and_duration(formatted_history)
 
         formatted_arguments = format_call_arguments(call)
+        workflow_role = _workflow_role_for_invocation(invocation)
 
         # Get workflow identity
         workflow = None
@@ -1452,6 +1659,7 @@ async def invocation_detail(
                     if duration_seconds is not None
                     else None
                 ),
+                "workflow_role": workflow_role,
                 "workflow": workflow,
                 "triggered_by": triggered_by,
                 "triggered_by_participants": triggered_by_participants,
@@ -1580,11 +1788,12 @@ async def invocation_api(
             "num_retries": invocation.num_retries,
             "parent_invocation_id": invocation.parent_invocation_id,
             "parent_event_id": invocation.parent_event_id,
+            "workflow_role": _workflow_role_for_invocation(invocation),
         }
 
         # Add workflow information if available
-        try:
-            wf = invocation.workflow
+        wf = invocation.workflow
+        if wf is not None:
             invocation_data["workflow"] = {
                 "workflow_id": str(wf.workflow_id),
                 "workflow_type": str(wf.workflow_type),
@@ -1593,7 +1802,7 @@ async def invocation_api(
                 ),
                 "is_subworkflow": wf.is_subworkflow,
             }
-        except Exception:
+        else:
             invocation_data["workflow"] = None
 
         # Trigger origin (None if not produced by a trigger run).
@@ -1757,6 +1966,8 @@ async def invocations_table(
     request: Request,
     status: str | None = None,
     task_id: str | None = None,
+    workflow_id: str | None = None,
+    workflow_type: str | None = None,
     limit: int = 50,
 ) -> HTMLResponse:
     """Return just the invocations table for HTMX refresh."""
@@ -1764,6 +1975,7 @@ async def invocations_table(
     # This is essentially the same logic as invocations_list but returns only the table partial
     app = get_pynenc_instance()
     parsed_task_id = TaskId.from_key(task_id) if task_id else None
+    workflow_inv_ids = _load_workflow_invocation_ids(app, workflow_id, workflow_type)
 
     # Parse status parameter
     status_list = None
@@ -1780,12 +1992,12 @@ async def invocations_table(
             except KeyError:
                 continue
 
-    def _fetch_table_invocations() -> list[InvocationId]:
-        result = []
+    def _fetch_table_invocations() -> list["DistributedInvocation"]:
+        result_ids: list[InvocationId] = []
         if parsed_task_id:
             if parsed_task_id in app.tasks:
                 task = app.tasks[parsed_task_id]
-                result = list(
+                result_ids = list(
                     app.orchestrator.get_existing_invocations(
                         task=task,
                         statuses=statuses,
@@ -1799,16 +2011,41 @@ async def invocations_table(
                         statuses=statuses,
                     )
                 )
-                result.extend(invocations)
-                if len(result) >= limit:
-                    result = result[:limit]
+                result_ids.extend(invocations)
+                if len(result_ids) >= limit:
+                    result_ids = result_ids[:limit]
                     break
-        return result
+        if workflow_inv_ids is not None:
+            result_ids = [
+                invocation_id
+                for invocation_id in result_ids
+                if str(invocation_id) in workflow_inv_ids
+            ]
+        return [app.state_backend.get_invocation(inv_id) for inv_id in result_ids]
 
     all_invocations = await asyncio.to_thread(_fetch_table_invocations)
+    current_filters = {
+        "task_id": task_id or "",
+        "workflow_id": workflow_id or "",
+        "workflow_type": workflow_type or "",
+        "limit": limit,
+    }
+    invocation_timeline_urls = {
+        str(invocation.invocation_id): _timeline_url_for_invocation(
+            app, invocation, current_filters
+        )
+        for invocation in all_invocations
+    }
+    list_timeline_url = _timeline_url_for_invocation_list(
+        app, all_invocations, current_filters
+    )
 
     return templates.TemplateResponse(
         request,
         "invocations/partials/table.html",
-        context={"invocations": all_invocations},
+        context={
+            "invocations": all_invocations,
+            "invocation_timeline_urls": invocation_timeline_urls,
+            "list_timeline_url": list_timeline_url,
+        },
     )

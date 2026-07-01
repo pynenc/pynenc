@@ -43,12 +43,19 @@ def multiply_task(a: int, b: int) -> int:
     return a * b
 
 
+@mock_app.workflow
+def shipping_workflow(order_id: str) -> str:
+    """Workflow-root task for workflow visibility tests."""
+    return order_id
+
+
 @pytest.fixture
 def app(request: "FixtureRequest", app_instance: "Pynenc") -> "Pynenc":
     app = app_instance
     app._tasks = mock_app._tasks
     add_task.app = app
     multiply_task.app = app
+    shipping_workflow.app = app
     app.purge()
     request.addfinalizer(app.purge)
     return app
@@ -98,6 +105,8 @@ def test_invocations_list_shows_invocations(app: "Pynenc") -> None:
         assert invocation2.invocation_id[:8] in content
         assert "add_task" in content
         assert "multiply_task" in content
+        assert f"/invocations/timeline?selected={invocation1.invocation_id}" in content
+        assert f"/invocations/timeline?selected={invocation2.invocation_id}" in content
         assert "window.openInvocationInTimeline = openInvocationInTimeline" in content
         assert 'params.set("selected", invocationId)' in content
         assert 'params.set("resolution", "100ms")' in content
@@ -182,7 +191,7 @@ def test_invocations_list_with_status_filter(app: "Pynenc") -> None:
     import re
 
     app.purge()
-    _create_invocations_with_statuses(app)
+    _, success_invocation, failed_invocation = _create_invocations_with_statuses(app)
 
     setup_routes()
 
@@ -193,16 +202,8 @@ def test_invocations_list_with_status_filter(app: "Pynenc") -> None:
         assert response.status_code == 200
         content = response.text
 
-        # Should contain only the SUCCESS status badge
-        assert re.search(r"bg-success[^>]*>[^<]*SUCCESS[^<]*</span>", content), (
-            "Expected SUCCESS badge not found"
-        )
-        assert not re.search(r"bg-dark[^>]*>[^<]*REGISTERED[^<]*</span>", content), (
-            "REGISTERED badge should not be present"
-        )
-        assert not re.search(r"bg-danger[^>]*>[^<]*FAILED[^<]*</span>", content), (
-            "FAILED badge should not be present"
-        )
+        assert str(success_invocation.invocation_id) in content
+        assert str(failed_invocation.invocation_id) not in content
 
         # Exactly one invocation (2 links: ID column + Details button)
         detail_links = re.findall(r"/invocations/[a-f0-9-]+", content)
@@ -306,6 +307,47 @@ def test_invocation_detail_shows_invocation_info(app: "Pynenc") -> None:
         assert f'data-invocation-id="{invocation.invocation_id}"' in content
 
 
+def test_invocation_detail_shows_workflow_role_states(app: "Pynenc") -> None:
+    """Invocation detail should distinguish root, member, and standalone invocations."""
+    app.purge()
+
+    root_invocation = DistributedInvocation.isolated(
+        Call(shipping_workflow, Arguments({"order_id": "ORD-1"}))
+    )
+    workflow_member = DistributedInvocation.from_parent(
+        Call(add_task, Arguments({"x": 2, "y": 3})),
+        parent_invocation=root_invocation,
+    )
+    standalone = DistributedInvocation.isolated(
+        Call(multiply_task, Arguments({"a": 4, "b": 5}))
+    )
+    app.orchestrator.register_new_invocations(
+        [root_invocation, workflow_member, standalone]
+    )
+
+    setup_routes()
+
+    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=app):
+        client = TestClient(pynmon_app)
+        root_response = client.get(f"/invocations/{root_invocation.invocation_id}")
+        member_response = client.get(f"/invocations/{workflow_member.invocation_id}")
+        standalone_response = client.get(f"/invocations/{standalone.invocation_id}")
+
+    assert root_response.status_code == 200
+    assert "Workflow root" in root_response.text
+    assert "Defines the root workflow run." in root_response.text
+
+    assert member_response.status_code == 200
+    assert "Workflow member" in member_response.text
+    assert "Runs inside an existing workflow." in member_response.text
+
+    assert standalone_response.status_code == 200
+    assert "No workflow" in standalone_response.text
+    assert (
+        "Standalone invocation with no workflow membership." in standalone_response.text
+    )
+
+
 def test_invocation_detail_nonexistent_invocation(app: "Pynenc") -> None:
     """Test that invocation detail handles nonexistent invocations."""
     # Setup routes before creating test client
@@ -343,6 +385,148 @@ def test_invocations_timeline_basic(app: "Pynenc") -> None:
         assert "zoom_in" in response.text
 
 
+def test_invocations_timeline_scoped_workflow_list_renders_histories(
+    app: "Pynenc",
+) -> None:
+    """Workflow-scoped inv_ids timeline should not filter out all history."""
+    app.purge()
+    root_invocation = DistributedInvocation.isolated(
+        Call(shipping_workflow, Arguments({"order_id": "ORD-3"}))
+    )
+    workflow_member = DistributedInvocation.from_parent(
+        Call(add_task, Arguments({"x": 11, "y": 12})),
+        parent_invocation=root_invocation,
+    )
+    app.orchestrator.register_new_invocations([root_invocation, workflow_member])
+    runner_ctx = RunnerContext.from_runner(app.runner)
+    for invocation in (root_invocation, workflow_member):
+        app.orchestrator.set_invocation_status(
+            invocation.invocation_id, InvocationStatus.PENDING, runner_ctx
+        )
+        app.orchestrator.set_invocation_status(
+            invocation.invocation_id, InvocationStatus.RUNNING, runner_ctx
+        )
+        app.orchestrator.set_invocation_status(
+            invocation.invocation_id, InvocationStatus.SUCCESS, runner_ctx
+        )
+
+    setup_routes()
+
+    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=app):
+        client = TestClient(pynmon_app)
+        response = client.get(
+            "/invocations/timeline",
+            params={
+                "time_range": "1h",
+                "workflow_id": str(root_invocation.invocation_id),
+                "inv_ids": ",".join(
+                    [
+                        str(root_invocation.invocation_id),
+                        str(workflow_member.invocation_id),
+                    ]
+                ),
+                "resolution": "100ms",
+            },
+        )
+
+    assert response.status_code == 200
+    assert "No invocations found for the selected time range." not in response.text
+    assert str(root_invocation.invocation_id) in response.text
+    assert str(workflow_member.invocation_id) in response.text
+
+
+def test_invocations_timeline_explicit_scope_backfills_segment_without_points(
+    app: "Pynenc",
+) -> None:
+    """Explicit inv_ids should render an invocation active inside the window."""
+    from pynenc.invocation.status import InvocationStatusRecord
+    from pynenc.state_backend.base_state_backend import InvocationHistory
+    from pynenc.trigger.monitoring import EventMarkerPage
+    from pynmon.util.svg.models import TimelineConfig
+    from pynmon.views.invocations import TimelineRequest, _build_svg_timeline
+
+    app.purge()
+    invocation = DistributedInvocation.isolated(
+        Call(add_task, Arguments({"x": 5, "y": 6}))
+    )
+    app.orchestrator.register_new_invocations([invocation])
+    runner_ctx = RunnerContext.from_runner(app.runner)
+    app.state_backend.store_runner_context(runner_ctx)
+
+    window_start = datetime(2026, 6, 29, 17, 58, 35, tzinfo=UTC)
+    window_end = window_start + timedelta(seconds=1)
+    running = InvocationHistory(
+        invocation_id=str(invocation.invocation_id),
+        status_record=InvocationStatusRecord(status=InvocationStatus.RUNNING),
+        runner_context_id=runner_ctx.runner_id,
+    )
+    running._timestamp = window_start - timedelta(seconds=2)
+    success = InvocationHistory(
+        invocation_id=str(invocation.invocation_id),
+        status_record=InvocationStatusRecord(status=InvocationStatus.SUCCESS),
+        runner_context_id=runner_ctx.runner_id,
+    )
+    success._timestamp = window_end + timedelta(seconds=2)
+
+    with (
+        patch.object(
+            app.state_backend,
+            "iter_history_in_timerange",
+            return_value=iter([]),
+        ),
+        patch.object(app.state_backend, "get_history", return_value=[running, success]),
+        patch.object(
+            app.trigger,
+            "get_event_markers_in_timerange",
+            return_value=EventMarkerPage(markers=[], total=0, truncated=False),
+        ),
+        patch.object(app.trigger, "get_trigger_runs_in_timerange", return_value=[]),
+    ):
+        svg = _build_svg_timeline(
+            TimelineRequest(
+                app=app,
+                start_time=window_start,
+                end_time=window_end,
+                config=TimelineConfig(resolution_seconds=0.1),
+                limit=500,
+                inv_ids_filter={str(invocation.invocation_id)},
+                show_atomic_service=False,
+            )
+        )
+
+    assert 'class="status-segment"><rect' in svg
+    assert (
+        f'data-invocation-id="{invocation.invocation_id}" data-status="RUNNING"' in svg
+    )
+
+
+def test_invocations_list_exposes_list_timeline_action(app: "Pynenc") -> None:
+    """The invocations list provides a timeline action for the whole visible list."""
+    app.purge()
+    invocation1 = DistributedInvocation.isolated(
+        Call(add_task, Arguments({"x": 1, "y": 2}))
+    )
+    invocation2 = DistributedInvocation.isolated(
+        Call(multiply_task, Arguments({"a": 3, "b": 4}))
+    )
+    app.orchestrator.register_new_invocations([invocation1, invocation2])
+
+    setup_routes()
+
+    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=app):
+        client = TestClient(pynmon_app)
+        response = client.get("/invocations/")
+
+    assert response.status_code == 200
+    assert 'id="view-list-in-timeline-btn"' in response.text
+    assert "Timeline for List" in response.text
+    assert (
+        "window.openInvocationListInTimeline = openInvocationListInTimeline"
+        in response.text
+    )
+    assert 'class="btn btn-sm btn-outline-secondary ms-1"' not in response.text
+
+
 def test_invocations_timeline_exposes_scope_filter_and_date_examples(
     app: "Pynenc",
 ) -> None:
@@ -357,6 +541,9 @@ def test_invocations_timeline_exposes_scope_filter_and_date_examples(
             "?time_range=custom"
             "&start_date=2026-05-18T17:50:49"
             "&end_date=2026-05-18T17:50:49.600"
+            "&task_id=tasks.workflow_root"
+            "&workflow_type=tasks.order_workflow"
+            "&workflow_id=workflow-123"
             "&inv_ids=inv-a,inv-b"
         )
 
@@ -369,14 +556,24 @@ def test_invocations_timeline_exposes_scope_filter_and_date_examples(
     assert "scope: 2" in content
     assert "timeline-filter-scope-clear" in content
     assert "Clear invocation scope" in content
+    assert "Clear task filter" in content
+    assert "Clear workflow type filter" in content
+    assert "Clear workflow id filter" in content
     import re
 
     clear_link = re.search(
-        r'href="([^"]+)" class="timeline-filter-scope-clear"', content
+        r'href="([^"]+)" class="timeline-filter-scope-clear"\s+title="Clear invocation scope"',
+        content,
     )
     assert clear_link is not None
     assert "inv_ids" not in clear_link.group(1)
     assert "time_range=custom" in clear_link.group(1)
+    workflow_clear_link = re.search(
+        r'href="([^"]+)" class="timeline-filter-scope-clear"\s+title="Clear workflow id filter"',
+        content,
+    )
+    assert workflow_clear_link is not None
+    assert "workflow_id" not in workflow_clear_link.group(1)
     assert 'placeholder="2026-05-16T19:09:12.348"' in content
     assert "ISO 8601 with ms/us" not in content
 
@@ -863,6 +1060,46 @@ def test_invocation_api_endpoint(app: "Pynenc") -> None:
         # Should contain invocation data
         assert "invocation_id" in data
         assert data["invocation_id"] == invocation.invocation_id
+
+
+def test_invocation_api_exposes_workflow_role(app: "Pynenc") -> None:
+    """Timeline API should expose workflow role classification."""
+    app.purge()
+
+    root_invocation = DistributedInvocation.isolated(
+        Call(shipping_workflow, Arguments({"order_id": "ORD-2"}))
+    )
+    workflow_member = DistributedInvocation.from_parent(
+        Call(add_task, Arguments({"x": 5, "y": 6})),
+        parent_invocation=root_invocation,
+    )
+    standalone = DistributedInvocation.isolated(
+        Call(multiply_task, Arguments({"a": 7, "b": 8}))
+    )
+    app.orchestrator.register_new_invocations(
+        [root_invocation, workflow_member, standalone]
+    )
+
+    setup_routes()
+
+    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=app):
+        client = TestClient(pynmon_app)
+        root_data = client.get(
+            f"/invocations/{root_invocation.invocation_id}/api"
+        ).json()
+        member_data = client.get(
+            f"/invocations/{workflow_member.invocation_id}/api"
+        ).json()
+        standalone_data = client.get(
+            f"/invocations/{standalone.invocation_id}/api"
+        ).json()
+
+    assert root_data["workflow_role"]["kind"] == "root"
+    assert root_data["workflow_role"]["label"] == "Workflow root"
+    assert member_data["workflow_role"]["kind"] == "member"
+    assert member_data["workflow_role"]["label"] == "Workflow member"
+    assert standalone_data["workflow_role"]["kind"] == "none"
+    assert standalone_data["workflow_role"]["label"] == "No workflow"
 
 
 def test_invocation_history_endpoint(app: "Pynenc") -> None:

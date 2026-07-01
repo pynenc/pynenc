@@ -4,9 +4,29 @@
     <span class="material-icons" aria-hidden="true">tune</span>
     <strong>Filters</strong>
     <span class="timeline-filter-chip">{{ current_filters.time_range }}</span>
-    {% if current_filters.task_id %}<span class="timeline-filter-chip">task</span>{% endif %}
-    {% if current_filters.workflow_type %}<span class="timeline-filter-chip">workflow type</span>{% endif %}
-    {% if current_filters.workflow_id %}<span class="timeline-filter-chip">workflow id</span>{% endif %}
+    {% if current_filters.task_id %}
+    <span class="timeline-filter-chip timeline-filter-scope-chip">
+      task
+      <a href="{{ current_filters.task_clear_url }}" class="timeline-filter-scope-clear"
+         title="Clear task filter" aria-label="Clear task filter">x</a>
+    </span>
+    {% endif %}
+    {% if current_filters.workflow_type %}
+    <span class="timeline-filter-chip timeline-filter-scope-chip">
+      workflow type
+      <a href="{{ current_filters.workflow_type_clear_url }}" class="timeline-filter-scope-clear"
+         title="Clear workflow type filter"
+         aria-label="Clear workflow type filter">x</a>
+    </span>
+    {% endif %}
+    {% if current_filters.workflow_id %}
+    <span class="timeline-filter-chip timeline-filter-scope-chip">
+      workflow id
+      <a href="{{ current_filters.workflow_id_clear_url }}" class="timeline-filter-scope-clear"
+         title="Clear workflow id filter"
+         aria-label="Clear workflow id filter">x</a>
+    </span>
+    {% endif %}
     <span class="timeline-filter-range">
       {{ start_datetime.strftime('%H:%M:%S.%f')[:-3] }} - {{ end_datetime.strftime('%H:%M:%S.%f')[:-3] }} UTC
     </span>

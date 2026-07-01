@@ -1,517 +1,338 @@
-# Workflow System
+# Use Case 11: Workflow System
 
-## Overview
+This use case shows how to build a durable multi-step workflow with normal
+Pynenc code. It focuses on the practical shape of workflow code: workflow data,
+root-only deterministic values, child task replay, sub-workflows, failure
+recovery, and Pynmon inspection.
 
-The Pynenc Workflow System enables sophisticated task orchestration with deterministic execution, state management, and automatic replay capabilities. It provides a foundation for building complex, multi-step workflows that can recover from failures and maintain consistency across distributed environments.
-
-## Philosophy and Design
-
-### Core Principles
-
-1. **Deterministic Execution**: All non-deterministic operations (random numbers, timestamps, UUIDs) are made deterministic through seeded generation and state storage, enabling perfect replay of workflow execution.
-
-2. **Workflow Identity**: Each workflow has a unique identity that tracks its lineage and relationships, allowing for hierarchical workflow structures and context inheritance.
-
-3. **State Persistence**: Workflow state is automatically persisted, enabling recovery from failures and resumption from exact points of interruption.
-
-4. **Task Integration**: Workflows seamlessly integrate with Pynenc's existing task system, allowing any task to participate in workflow execution.
-
-### Design Concepts
-
-- **Workflow Context**: Tasks executed within a workflow automatically inherit the workflow context, enabling access to workflow-specific operations and state.
-
-- **Parent-Child Relationships**: Workflows can spawn child workflows, creating hierarchical structures while maintaining clear boundaries and inheritance rules.
-
-- **Deterministic Operations**: Built-in support for deterministic random numbers, timestamps, UUIDs, and task execution that replay identically.
-
-- **Automatic State Management**: The system automatically manages workflow state without requiring explicit state handling in user code.
+For the full conceptual model, see {doc}`../workflows/index`. For invocation
+runtime details, see {doc}`../invocation/index`.
 
 ## Scenario
 
-Consider an e-commerce order processing system that needs to:
+We will model order fulfillment:
 
-1. Process payment with retry logic
-2. Generate unique tracking numbers
-3. Schedule delivery notifications
-4. Handle complex business logic with multiple decision points
-5. Maintain audit trails and enable recovery from failures
+1. validate an order
+2. reserve inventory
+3. charge payment
+4. create a shipment in a sub-workflow
+5. notify the customer
+6. compensate by releasing inventory if payment fails
+7. retry safely after a controlled transient failure
 
-The workflow system ensures that even if the system crashes mid-processing, the workflow can resume from exactly where it left off, with all random numbers, timestamps, and business decisions replaying identically.
+The runnable sample is in:
 
-## Implementation
+```text
+samples/workflow_order_fulfillment
+```
 
-### Basic Workflow Usage
+## App Setup
+
+Use SQLite so the sample can run locally while still exercising durable state:
 
 ```python
-from pynenc import Pynenc
-from datetime import timedelta
+from pynenc import PynencBuilder
+
+
+app = (
+    PynencBuilder()
+    .app_id("workflow_order_fulfillment")
+    .sqlite("workflow_order_fulfillment.db")
+    .thread_runner(min_threads=1, max_threads=10)
+    .build()
+)
+```
+
+## Step Tasks
+
+Keep side effects in child tasks. Child tasks can read and write shared workflow
+data when they are called from a workflow, but deterministic IDs and child
+orchestration should come from the workflow root.
+
+```python
 from typing import Any
 
-app = Pynenc()
 
-@app.task(force_new_workflow=True)
-def process_order_workflow(order_id: str) -> dict[str, Any]:
-    """
-    Main order processing workflow with explicit workflow boundary.
+class TransientFulfillmentError(RuntimeError):
+    pass
 
-    Using force_new_workflow=True ensures this task always creates a new workflow
-    context, providing access to deterministic operations and state management.
-    """
-    # All random operations are deterministic and will replay identically
-    tracking_number = generate_tracking_number(order_id)
 
-    # Process payment with deterministic retry logic
-    payment_result = process_payment_workflow.wf.execute_task(
-        process_payment, order_id
-    )
+@app.task
+def validate_order(order: dict[str, Any], validated_at: str) -> dict[str, Any]:
+    valid = bool(order.get("customer_id") and order.get("items"))
+    validate_order.wf.set_data("validated_at", validated_at)
+    return {"valid": valid, "total": order.get("total", 0)}
 
-    # Schedule notifications using deterministic timestamps
-    notification_time = process_order_workflow.wf.utc_now() + timedelta(hours=1)
 
-    # Store workflow data for later retrieval
-    process_order_workflow.wf.set_data("tracking_number", tracking_number)
-    process_order_workflow.wf.set_data("notification_time", notification_time.isoformat())
+@app.task
+def reserve_inventory(
+    order_id: str,
+    items: list[dict[str, Any]],
+    reservation_id: str,
+) -> dict[str, Any]:
+    reserve_inventory.wf.set_data("reservation_id", reservation_id)
+    return {"reserved": True, "reservation_id": reservation_id}
 
+
+@app.task
+def charge_payment(
+    order_id: str,
+    amount: float,
+    payment_token: str,
+    payment_id: str,
+) -> dict[str, Any]:
+    approved = payment_token != "decline"
+    if approved:
+        charge_payment.wf.set_data("payment_id", payment_id)
+    return {"approved": approved, "payment_id": payment_id}
+
+
+@app.task
+def release_inventory(
+    order_id: str,
+    reservation_id: str,
+    reason: str,
+    release_id: str,
+) -> dict[str, Any]:
+    release_inventory.wf.set_data("inventory_release_id", release_id)
     return {
         "order_id": order_id,
-        "tracking_number": tracking_number,
-        "payment_status": payment_result.result,
-        "notification_scheduled": notification_time.isoformat()
-    }
-
-def generate_tracking_number(order_id: str) -> str:
-    """Generate a deterministic tracking number."""
-    # This random number will be the same on replay
-    random_suffix = int(process_order_workflow.wf.random() * 100000)
-    return f"TRK-{order_id}-{random_suffix:05d}"
-
-@app.task
-def process_payment(order_id: str) -> dict[str, Any]:
-    """Process payment for an order."""
-    # Simulate payment processing
-    payment_id = process_payment.wf.uuid()
-    processing_time = process_payment.wf.utc_now()
-
-    return {
-        "payment_id": payment_id,
-        "processed_at": processing_time.isoformat(),
-        "status": "completed"
-    }
-```
-
-### Creating New Workflow Boundaries
-
-```python
-@app.task(force_new_workflow=True)
-def independent_workflow(data: dict[str, Any]) -> dict[str, Any]:
-    """
-    This task always creates a new workflow, regardless of calling context.
-
-    Use force_new_workflow=True when you want to create a clear workflow boundary
-    and ensure that this task starts its own workflow context.
-    """
-    workflow_id = independent_workflow.workflow.workflow_id
-
-    # This workflow has its own deterministic context
-    unique_value = independent_workflow.wf.random()
-    timestamp = independent_workflow.wf.utc_now()
-
-    return {
-        "workflow_id": workflow_id,
-        "unique_value": unique_value,
-        "timestamp": timestamp.isoformat(),
-        "data": data
-    }
-
-@app.task
-def call_independent_workflow(input_data: dict[str, Any]) -> dict[str, Any]:
-    """Demonstrate calling a task that creates its own workflow."""
-
-    # This task runs in its own workflow context
-    parent_workflow_id = call_independent_workflow.workflow.workflow_id
-
-    # Execute a task that forces a new workflow
-    child_result = call_independent_workflow.wf.execute_task(
-        independent_workflow, input_data
-    )
-
-    # The child workflow has a different workflow ID
-    child_workflow_id = child_result.workflow.workflow_id
-
-    return {
-        "parent_workflow_id": parent_workflow_id,
-        "child_workflow_id": child_workflow_id,
-        "child_result": child_result.result,
-        "workflows_are_different": parent_workflow_id != child_workflow_id
-    }
-```
-
-### Deterministic Operations
-
-The workflow system provides several deterministic operations that ensure reproducible execution:
-
-```python
-@app.task
-def deterministic_operations_example() -> dict[str, Any]:
-    """Demonstrate deterministic operations in workflows."""
-
-    # Deterministic random number (0.0 to 1.0)
-    random_value = deterministic_operations_example.wf.random()
-
-    # Deterministic UUID generation
-    unique_id = deterministic_operations_example.wf.uuid()
-
-    # Deterministic timestamp progression
-    start_time = deterministic_operations_example.wf.utc_now()
-
-    # Each call advances time deterministically
-    later_time = deterministic_operations_example.wf.utc_now()
-
-    # Custom deterministic operation
-    def generate_sequence_number() -> int:
-        return random.randint(1000, 9999)
-
-    sequence = deterministic_operations_example.wf.deterministic._deterministic_operation(
-        "sequence", generate_sequence_number
-    )
-
-    return {
-        "random_value": random_value,
-        "unique_id": unique_id,
-        "start_time": start_time.isoformat(),
-        "later_time": later_time.isoformat(),
-        "sequence_number": sequence
-    }
-```
-
-### Workflow State Management
-
-```python
-@app.task
-def stateful_workflow(user_id: str) -> dict[str, Any]:
-    """Demonstrate workflow state management."""
-
-    # Store workflow data that persists across executions
-    stateful_workflow.wf.set_data("user_id", user_id)
-    stateful_workflow.wf.set_data("started_at", stateful_workflow.wf.utc_now().isoformat())
-
-    # Perform some operations
-    processing_steps = []
-
-    for step in range(3):
-        step_id = stateful_workflow.wf.uuid()
-        step_time = stateful_workflow.wf.utc_now()
-
-        processing_steps.append({
-            "step": step + 1,
-            "step_id": step_id,
-            "timestamp": step_time.isoformat()
-        })
-
-        # Store intermediate results
-        stateful_workflow.wf.set_data(f"step_{step + 1}_result", step_id)
-
-    # Retrieve stored data
-    user_id_retrieved = stateful_workflow.wf.get_data("user_id")
-    started_at = stateful_workflow.wf.get_data("started_at")
-
-    return {
-        "user_id": user_id_retrieved,
-        "started_at": started_at,
-        "processing_steps": processing_steps,
-        "completed_at": stateful_workflow.wf.utc_now().isoformat()
-    }
-```
-
-### Task Execution Within Workflows
-
-```python
-@app.task
-def parent_workflow(data: dict[str, Any]) -> dict[str, Any]:
-    """Parent workflow that executes child tasks."""
-
-    # Execute tasks deterministically within the workflow
-    validation_result = parent_workflow.wf.execute_task(
-        validate_data, data
-    )
-
-    if validation_result.result["valid"]:
-        # Execute processing task only if validation succeeds
-        processing_result = parent_workflow.wf.execute_task(
-            process_data, data, validation_result.result["normalized_data"]
-        )
-
-        # Execute notification task
-        notification_result = parent_workflow.wf.execute_task(
-            send_notification, processing_result.result
-        )
-
-        return {
-            "status": "completed",
-            "validation": validation_result.result,
-            "processing": processing_result.result,
-            "notification": notification_result.result
-        }
-    else:
-        return {
-            "status": "failed",
-            "validation": validation_result.result,
-            "error": "Data validation failed"
-        }
-
-@app.task
-def validate_data(data: dict[str, Any]) -> dict[str, Any]:
-    """Validate input data."""
-    # Validation logic here
-    normalized_data = {k.lower(): v for k, v in data.items()}
-
-    return {
-        "valid": len(normalized_data) > 0,
-        "normalized_data": normalized_data,
-        "validated_at": validate_data.wf.utc_now().isoformat()
-    }
-
-@app.task
-def process_data(original_data: dict[str, Any], normalized_data: dict[str, Any]) -> dict[str, Any]:
-    """Process the validated data."""
-    processing_id = process_data.wf.uuid()
-
-    return {
-        "processing_id": processing_id,
-        "processed_records": len(normalized_data),
-        "processed_at": process_data.wf.utc_now().isoformat()
-    }
-
-@app.task
-def send_notification(processing_result: dict[str, Any]) -> dict[str, Any]:
-    """Send processing completion notification."""
-    notification_id = send_notification.wf.uuid()
-
-    return {
-        "notification_id": notification_id,
-        "sent_at": send_notification.wf.utc_now().isoformat(),
-        "processing_id": processing_result["processing_id"]
-    }
-```
-
-### Complex Workflow with Error Handling
-
-```python
-@app.task
-def robust_processing_workflow(order_data: dict[str, Any]) -> dict[str, Any]:
-    """Complex workflow with built-in error handling and retry logic."""
-
-    workflow_start = robust_processing_workflow.wf.utc_now()
-    order_id = order_data.get("order_id", robust_processing_workflow.wf.uuid())
-
-    # Store initial workflow state
-    robust_processing_workflow.wf.set_data("order_id", order_id)
-    robust_processing_workflow.wf.set_data("started_at", workflow_start.isoformat())
-    robust_processing_workflow.wf.set_data("status", "processing")
-
-    try:
-        # Step 1: Validate order
-        validation_result = robust_processing_workflow.wf.execute_task(
-            validate_order, order_data
-        )
-
-        if not validation_result.result["valid"]:
-            robust_processing_workflow.wf.set_data("status", "validation_failed")
-            return {
-                "order_id": order_id,
-                "status": "failed",
-                "step": "validation",
-                "error": validation_result.result["errors"]
-            }
-
-        # Step 2: Process payment
-        payment_result = robust_processing_workflow.wf.execute_task(
-            process_payment_with_retry, order_data
-        )
-
-        robust_processing_workflow.wf.set_data("payment_id", payment_result.result["payment_id"])
-
-        # Step 3: Reserve inventory
-        inventory_result = robust_processing_workflow.wf.execute_task(
-            reserve_inventory, order_data
-        )
-
-        robust_processing_workflow.wf.set_data("reservation_id", inventory_result.result["reservation_id"])
-
-        # Step 4: Generate shipping
-        shipping_result = robust_processing_workflow.wf.execute_task(
-            generate_shipping_label, order_id, inventory_result.result
-        )
-
-        # Mark workflow as completed
-        robust_processing_workflow.wf.set_data("status", "completed")
-        completion_time = robust_processing_workflow.wf.utc_now()
-
-        return {
-            "order_id": order_id,
-            "status": "completed",
-            "payment_id": payment_result.result["payment_id"],
-            "reservation_id": inventory_result.result["reservation_id"],
-            "tracking_number": shipping_result.result["tracking_number"],
-            "started_at": workflow_start.isoformat(),
-            "completed_at": completion_time.isoformat(),
-            "processing_time_seconds": (completion_time - workflow_start).total_seconds()
-        }
-
-    except Exception as e:
-        # Handle workflow errors
-        robust_processing_workflow.wf.set_data("status", "error")
-        robust_processing_workflow.wf.set_data("error", str(e))
-
-        # Execute cleanup if needed
-        cleanup_result = robust_processing_workflow.wf.execute_task(
-            cleanup_failed_order, order_id
-        )
-
-        return {
-            "order_id": order_id,
-            "status": "error",
-            "error": str(e),
-            "cleanup_result": cleanup_result.result
-        }
-
-@app.task
-def validate_order(order_data: dict[str, Any]) -> dict[str, Any]:
-    """Validate order data with deterministic processing."""
-    validation_id = validate_order.wf.uuid()
-    validated_at = validate_order.wf.utc_now()
-
-    errors = []
-    if not order_data.get("customer_id"):
-        errors.append("Missing customer_id")
-    if not order_data.get("items"):
-        errors.append("No items in order")
-
-    return {
-        "validation_id": validation_id,
-        "valid": len(errors) == 0,
-        "errors": errors,
-        "validated_at": validated_at.isoformat()
-    }
-
-@app.task
-def process_payment_with_retry(order_data: dict[str, Any]) -> dict[str, Any]:
-    """Process payment with deterministic retry logic."""
-    payment_id = process_payment_with_retry.wf.uuid()
-    attempt_time = process_payment_with_retry.wf.utc_now()
-
-    # Simulate processing logic with deterministic behavior
-    success_chance = process_payment_with_retry.wf.random()
-
-    if success_chance > 0.1:  # 90% success rate
-        return {
-            "payment_id": payment_id,
-            "status": "completed",
-            "amount": order_data.get("total", 0),
-            "processed_at": attempt_time.isoformat()
-        }
-    else:
-        # In a real implementation, this would trigger retry logic
-        return {
-            "payment_id": payment_id,
-            "status": "failed",
-            "error": "Payment processing failed",
-            "attempted_at": attempt_time.isoformat()
-        }
-
-@app.task
-def reserve_inventory(order_data: dict[str, Any]) -> dict[str, Any]:
-    """Reserve inventory for order items."""
-    reservation_id = reserve_inventory.wf.uuid()
-    reserved_at = reserve_inventory.wf.utc_now()
-
-    items = order_data.get("items", [])
-    reserved_items = []
-
-    for item in items:
-        item_reservation_id = reserve_inventory.wf.uuid()
-        reserved_items.append({
-            "item_id": item.get("id"),
-            "quantity": item.get("quantity"),
-            "reservation_id": item_reservation_id
-        })
-
-    return {
         "reservation_id": reservation_id,
-        "reserved_items": reserved_items,
-        "reserved_at": reserved_at.isoformat()
-    }
-
-@app.task
-def generate_shipping_label(order_id: str, inventory_data: dict[str, Any]) -> dict[str, Any]:
-    """Generate shipping label for reserved inventory."""
-    tracking_number = f"TRK-{order_id}-{int(generate_shipping_label.wf.random() * 100000):05d}"
-    label_id = generate_shipping_label.wf.uuid()
-    generated_at = generate_shipping_label.wf.utc_now()
-
-    return {
-        "label_id": label_id,
-        "tracking_number": tracking_number,
-        "order_id": order_id,
-        "reservation_id": inventory_data["reservation_id"],
-        "generated_at": generated_at.isoformat()
-    }
-
-@app.task
-def cleanup_failed_order(order_id: str) -> dict[str, Any]:
-    """Clean up resources for a failed order."""
-    cleanup_id = cleanup_failed_order.wf.uuid()
-    cleaned_at = cleanup_failed_order.wf.utc_now()
-
-    return {
-        "cleanup_id": cleanup_id,
-        "order_id": order_id,
-        "actions": ["released_inventory", "voided_payment", "notified_customer"],
-        "cleaned_at": cleaned_at.isoformat()
+        "release_id": release_id,
+        "reason": reason,
     }
 ```
 
-## Features
+Notice that these child tasks receive stable IDs and timestamps as arguments.
+That keeps deterministic orchestration in the workflow-defining invocation while
+still allowing child tasks to write workflow data.
 
-### Deterministic Execution
+## Sub-Workflow
 
-- **Random Numbers**: `task.wf.random()` generates deterministic random numbers
-- **Timestamps**: `task.wf.utc_now()` provides deterministic time progression
-- **UUIDs**: `task.wf.uuid()` creates deterministic unique identifiers
-- **Task Execution**: `task.wf.execute_task()` ensures deterministic task invocation
+Use `@app.workflow` when a nested part of the process deserves its own workflow
+identity and workflow data:
 
-### Workflow State Management
+```python
+@app.task
+def choose_carrier(order_id: str, address: dict[str, str]) -> dict[str, str]:
+    service_level = "priority" if address.get("postal_code", "").startswith("8") else "standard"
+    return {"carrier": "SwissPost", "service_level": service_level}
 
-- **Data Storage**: `task.wf.set_data(key, value)` and `task.wf.get_data(key)` for persistent key-value storage
-- **Workflow Identity**: Each workflow has a unique identity that tracks relationships and lineage
-- **Context Inheritance**: Child tasks automatically inherit parent workflow context
 
-### Integration with Task System
+@app.task
+def purchase_shipping_label(
+    order_id: str,
+    carrier: str,
+    shipment_id: str,
+    tracking_number: str,
+) -> dict[str, str]:
+    purchase_shipping_label.wf.set_data("shipment_id", shipment_id)
+    purchase_shipping_label.wf.set_data("tracking_number", tracking_number)
+    return {"shipment_id": shipment_id, "tracking_number": tracking_number}
 
-- **Seamless Integration**: Any task can participate in workflows without modification
-- **Automatic Context**: Tasks executed within workflows automatically get workflow context
-- **Flexible Boundaries**: Control when new workflows are created with `force_new_workflow`
 
-### Replay and Recovery
+@app.workflow
+def shipping_workflow(order_id: str, address: dict[str, str]) -> dict[str, Any]:
+    shipping_workflow.wf.set_data("order_id", order_id)
+    shipping_workflow.wf.set_data("status", "shipping_started")
 
-- **Perfect Replay**: Workflows replay identically, including all random operations and timestamps
-- **State Persistence**: All workflow state is automatically persisted across executions
-- **Failure Recovery**: Workflows can resume from exact points of failure
+    carrier_inv = shipping_workflow.wf.root.execute_task(
+        choose_carrier,
+        order_id,
+        address,
+    )
+    carrier = carrier_inv.result
 
-## Best Practices
+    shipment_id = shipping_workflow.wf.root.uuid()
+    tracking_number = (
+        f"{carrier['carrier'][:3].upper()}-"
+        f"{int(shipping_workflow.wf.root.random() * 1_000_000):06d}"
+    )
+    label_inv = shipping_workflow.wf.root.execute_task(
+        purchase_shipping_label,
+        order_id,
+        carrier["carrier"],
+        shipment_id,
+        tracking_number,
+    )
+    label = label_inv.result
 
-1. **Use Deterministic Operations**: Always use workflow-provided operations (`wf.random()`, `wf.utc_now()`, `wf.uuid()`) instead of standard library functions for reproducibility.
+    shipping_workflow.wf.set_data("status", "shipping_label_created")
+    return {
+        "workflow_id": str(shipping_workflow.wf.identity.workflow_id),
+        "parent_workflow_id": str(shipping_workflow.wf.identity.parent_workflow_id),
+        "carrier": carrier,
+        "label": label,
+    }
+```
 
-2. **Store Important State**: Use `wf.set_data()` to store critical workflow state that should persist across executions.
+The shipping workflow appears in Pynmon as its own workflow run, linked back to
+the parent order workflow.
 
-3. **Design for Idempotency**: Ensure workflow steps can be safely re-executed without side effects.
+## Main Workflow
 
-4. **Handle Errors Gracefully**: Implement proper error handling and cleanup logic within workflows.
+The main workflow coordinates the process with `wf.root.execute_task(...)`. That
+API records child invocation ids at the workflow-run level, so retrying the
+workflow can reuse child work that already completed.
 
-5. **Use Workflow Boundaries**: Use `force_new_workflow=True` to create clear boundaries between independent workflow contexts.
+```python
+@app.workflow(
+    retry_for=(TransientFulfillmentError,),
+    max_retries=1,
+)
+def fulfill_order_workflow(order: dict[str, Any]) -> dict[str, Any]:
+    order_id = order["order_id"]
+    attempt = fulfill_order_workflow.wf.get_data("attempt_count", 0) + 1
 
-6. **Keep Workflows Focused**: Design workflows with clear, single purposes rather than overly complex multi-purpose workflows.
+    fulfill_order_workflow.wf.set_data("attempt_count", attempt)
+    fulfill_order_workflow.wf.set_data("order_id", order_id)
+    fulfill_order_workflow.wf.set_data("status", "started")
 
-7. **Test Replay Behavior**: Test that your workflows behave correctly when replayed from stored state.
+    validated_at = fulfill_order_workflow.wf.root.utc_now().isoformat()
+    validation_inv = fulfill_order_workflow.wf.root.execute_task(
+        validate_order,
+        order,
+        validated_at,
+    )
+    validation = validation_inv.result
+    if not validation["valid"]:
+        fulfill_order_workflow.wf.set_data("status", "validation_failed")
+        return {"status": "validation_failed", "attempt_count": attempt}
 
-The Pynenc Workflow System provides a robust foundation for building complex, reliable task orchestration with built-in state management, deterministic execution, and automatic replay capabilities.
+    reservation_id = fulfill_order_workflow.wf.root.uuid()
+    reservation_inv = fulfill_order_workflow.wf.root.execute_task(
+        reserve_inventory,
+        order_id,
+        order["items"],
+        reservation_id,
+    )
+    reservation = reservation_inv.result
+
+    payment_id = fulfill_order_workflow.wf.root.uuid()
+    payment_inv = fulfill_order_workflow.wf.root.execute_task(
+        charge_payment,
+        order_id,
+        validation["total"],
+        order["payment_token"],
+        payment_id,
+    )
+    payment = payment_inv.result
+
+    if not payment["approved"]:
+        release_id = fulfill_order_workflow.wf.root.uuid()
+        release_inv = fulfill_order_workflow.wf.root.execute_task(
+            release_inventory,
+            order_id,
+            reservation["reservation_id"],
+            "payment_declined",
+            release_id,
+        )
+        fulfill_order_workflow.wf.set_data("status", "payment_failed")
+        fulfill_order_workflow.wf.set_data("failure_reason", "payment_declined")
+        return {
+            "status": "payment_failed",
+            "attempt_count": attempt,
+            "release": release_inv.result,
+        }
+
+    shipment_inv = fulfill_order_workflow.wf.root.execute_task(
+        shipping_workflow,
+        order_id,
+        order["shipping_address"],
+    )
+    shipment = shipment_inv.result
+
+    if order.get("simulate_transient_after_shipping") and not fulfill_order_workflow.wf.get_data("transient_probe_raised"):
+        fulfill_order_workflow.wf.set_data("transient_probe_raised", True)
+        raise TransientFulfillmentError("controlled transient failure after label creation")
+
+    fulfill_order_workflow.wf.set_data("status", "fulfilled")
+    return {
+        "workflow_id": str(fulfill_order_workflow.wf.identity.workflow_id),
+        "status": "fulfilled",
+        "attempt_count": attempt,
+        "reservation_id": reservation["reservation_id"],
+        "payment_id": payment["payment_id"],
+        "shipment": shipment,
+    }
+```
+
+The transient failure branch is intentional. The first attempt fails after the
+shipping label is created. The retry runs the workflow function again, but the
+validation, inventory, payment, and shipping child calls can resolve to already
+recorded invocations.
+
+## Running The Sample
+
+From the sample directory:
+
+```bash
+cd samples/workflow_order_fulfillment
+uv sync
+uv run python sample.py
+```
+
+The script purges old state, starts a worker subprocess, runs the happy path,
+the replay scenario, and the payment-failure scenario, then prints a compact
+summary.
+
+For an interactive run with Pynmon, use three terminals:
+
+```bash
+# Terminal 1: worker
+uv run pynenc --app tasks.app runner start
+
+# Terminal 2: enqueue scenarios
+uv run python enqueue.py happy --purge
+uv run python enqueue.py replay
+uv run python enqueue.py payment_failure
+
+# Terminal 3: monitoring UI
+uv run pynenc --app tasks.app monitor
+```
+
+Open <http://127.0.0.1:8000>.
+
+## What To Inspect In Pynmon
+
+Useful views:
+
+- `/workflows/` lists workflow types such as `fulfill_order_workflow` and
+  `shipping_workflow`.
+- `/workflows/runs` lists every workflow run.
+- The main workflow invocation detail page shows retry status history.
+- Timeline views outline workflow roots and sub-workflow roots.
+- The family tree shows the parent workflow, child tasks, and the nested
+  shipping workflow.
+- `/invocations?workflow_id=<workflow-id>` filters the invocation table to one
+  workflow run.
+
+The replay scenario should show the same workflow id being retried, with child
+steps before the failure point already completed.
+
+## Checklist
+
+Use this checklist when designing a workflow:
+
+1. Put orchestration in an explicit `@app.workflow`.
+2. Put side effects in child tasks called with `wf.root.execute_task(...)`.
+3. Use `wf.root.uuid()`, `wf.root.random()`, and `wf.root.utc_now()` for values
+   that must replay when the workflow invocation is retried.
+4. Pass deterministic values into child tasks instead of generating them inside
+   ordinary tasks.
+5. Store business milestones in `wf.set_data(...)`.
+6. Keep child task arguments stable across retry when you want replay.
+7. Add distinct arguments when two child calls must produce separate
+   invocations.
+8. Use compensating tasks for business failures.
+9. Use task retries for transient failures.
+10. Inspect workflow runs and invocation family trees in Pynmon.
+
+## Related Reading
+
+- {doc}`../workflows/index` explains workflow identity, data, replay, and
+  root-only orchestration.
+- {doc}`../invocation/index` explains current invocation context and invocation
+  kinds.
+- {doc}`../monitoring/index` explains the Pynmon views used to inspect workflow
+  runs.

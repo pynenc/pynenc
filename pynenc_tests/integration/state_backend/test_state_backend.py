@@ -181,6 +181,7 @@ def test_set_pynenc_exceptions(
             "invocation_id": inv_id,
             "task_id": task_id,
             "message": "fake_message",
+            "operation_name": "fake_operation",
             "existing_invocation_id": other_inv_id,
             "new_call_id": other_call_id,
             "diff": "fake_diff",
@@ -204,12 +205,18 @@ def test_set_pynenc_exceptions(
             "current_owner": None,
             "attempted_owner": "fake_attempted_owner",
             "reason": "fake_reason",
+            "workflow_id": "fake_workflow_id",
+            "workflow_type": "fake_workflow_type",
+            "parent_workflow_id": "fake_parent_workflow_id",
+            "is_workflow_defining_invocation": False,
         }
         # Filter out the keys that are not in the __init__ of the exception class
         if init_params := get_init_var_names(exception_cls):
             filtered_fake_data = {
                 k: v for k, v in fake_data.items() if k in init_params
             }
+            if "operation_name" in init_params and "task_id" in filtered_fake_data:
+                filtered_fake_data["task_id"] = task_id.key
         else:
             # not necessary to test an Empty exception subclass
             # (we will call the parent class instead)

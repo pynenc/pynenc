@@ -10,6 +10,24 @@
         .replace(/(\.\d{3})$/, "$1000");
     }
 
+    function parseDateFromParam(value) {
+      if (!value) return null;
+      const utcValue = /(?:Z|[+-]\d{2}:\d{2})$/.test(value)
+        ? value
+        : `${value}Z`;
+      const date = new Date(utcValue);
+      return Number.isNaN(date.getTime()) ? null : date;
+    }
+
+    function applyInvocationListScope(params) {
+      const taskId = document.getElementById("task_id")?.value;
+      const workflowType = document.getElementById("workflow_type")?.value;
+      const workflowId = document.getElementById("workflow_id")?.value?.trim();
+      if (taskId) params.set("task_id", taskId);
+      if (workflowType) params.set("workflow_type", workflowType);
+      if (workflowId) params.set("workflow_id", workflowId);
+    }
+
     async function openInvocationInTimeline(invocationId) {
       try {
         const response = await fetch(`/invocations/${invocationId}/history`);
@@ -59,7 +77,84 @@
       }
     }
 
+    function openInvocationListInTimeline() {
+      const listButton = document.getElementById("view-list-in-timeline-btn");
+      const links = Array.from(
+        document.querySelectorAll(
+          "#invocations-table .view-in-timeline-link[data-invocation-id]"
+        )
+      );
+      if (!links.length) {
+        alert("No invocation timeline data available for this list");
+        return;
+      }
+
+      const invocationIds = Array.from(
+        new Set(
+          links
+            .map((link) => link.dataset.invocationId || "")
+            .filter((value) => value)
+        )
+      );
+      if (!invocationIds.length) {
+        alert("No invocation timeline data available for this list");
+        return;
+      }
+
+      const startDates = [];
+      const endDates = [];
+      links.forEach((link) => {
+        try {
+          const url = new URL(link.href, window.location.origin);
+          const startDate = parseDateFromParam(
+            url.searchParams.get("start_date")
+          );
+          const endDate = parseDateFromParam(url.searchParams.get("end_date"));
+          if (startDate) startDates.push(startDate);
+          if (endDate) endDates.push(endDate);
+        } catch (error) {
+          console.error("Error parsing timeline link:", error);
+        }
+      });
+
+      const params = new URLSearchParams();
+      params.set("inv_ids", invocationIds.join(","));
+      params.set("resolution", "100ms");
+      applyInvocationListScope(params);
+
+      if (startDates.length && endDates.length) {
+        const startTime = new Date(
+          Math.min(...startDates.map((date) => date.getTime()))
+        );
+        const endTime = new Date(
+          Math.max(...endDates.map((date) => date.getTime()))
+        );
+        params.set("time_range", "custom");
+        params.set("start_date", formatTimelineDate(startTime));
+        params.set("end_date", formatTimelineDate(endTime));
+      } else if (listButton?.dataset.listTimelineUrl) {
+        try {
+          const fallbackUrl = new URL(
+            listButton.dataset.listTimelineUrl,
+            window.location.origin
+          );
+          const startDate = fallbackUrl.searchParams.get("start_date");
+          const endDate = fallbackUrl.searchParams.get("end_date");
+          if (startDate && endDate) {
+            params.set("time_range", "custom");
+            params.set("start_date", startDate);
+            params.set("end_date", endDate);
+          }
+        } catch (error) {
+          console.error("Error parsing list timeline URL:", error);
+        }
+      }
+
+      window.location.href = "/invocations/timeline?" + params.toString();
+    }
+
     window.openInvocationInTimeline = openInvocationInTimeline;
+    window.openInvocationListInTimeline = openInvocationListInTimeline;
     document.addEventListener("click", function (event) {
       const link = event.target.closest(".view-in-timeline-link");
       if (!link) return;
@@ -67,6 +162,12 @@
       if (!invocationId) return;
       event.preventDefault();
       openInvocationInTimeline(invocationId);
+    });
+    document.addEventListener("click", function (event) {
+      const button = event.target.closest("#view-list-in-timeline-btn");
+      if (!button) return;
+      event.preventDefault();
+      openInvocationListInTimeline();
     });
   })();
 </script>

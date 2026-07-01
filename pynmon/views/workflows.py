@@ -6,6 +6,7 @@ It includes listing all workflows, viewing workflow runs, and workflow details.
 """
 
 import logging
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
@@ -15,9 +16,43 @@ from pynenc.identifiers.task_id import TaskId
 from pynmon.app import get_pynenc_instance, templates
 from pynmon.util.formatting import format_task_extra_info
 
+if TYPE_CHECKING:
+    from pynenc.app import Pynenc
+    from pynenc.workflow.workflow_identity import WorkflowIdentity
+
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
 logger = logging.getLogger("pynmon.views.workflows")
+
+
+def _workflow_run_rows(
+    app: "Pynenc", workflow_runs: list["WorkflowIdentity"]
+) -> list[dict[str, Any]]:
+    """Build workflow run rows with parent workflow details when available."""
+    rows: list[dict[str, Any]] = []
+    for run in workflow_runs:
+        parent_workflow = None
+        if run.parent_workflow_id:
+            try:
+                parent_invocation = app.state_backend.get_invocation(
+                    run.parent_workflow_id
+                )
+                parent_workflow = parent_invocation.workflow
+            except Exception:
+                logger.debug(
+                    "Could not load parent workflow invocation %s",
+                    run.parent_workflow_id,
+                    exc_info=True,
+                )
+        rows.append(
+            {
+                "workflow_id": run.workflow_id,
+                "workflow_type": run.workflow_type,
+                "parent_workflow_id": run.parent_workflow_id,
+                "parent_workflow": parent_workflow,
+            }
+        )
+    return rows
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -37,8 +72,7 @@ async def workflows_list(request: Request) -> HTMLResponse:
             runs = list(app.state_backend.get_workflow_runs(workflow_type))
             workflows_with_runs.append(
                 {
-                    # The workflow type is the same as the workflow_task_id
-                    "workflow_task_id": workflow_type,
+                    "workflow_type": workflow_type,
                     "run_count": len(runs),
                     "latest_run": runs[0] if runs else None,
                 }
@@ -74,11 +108,11 @@ async def refresh_workflows_list(request: Request) -> HTMLResponse:
 
         # Get workflow runs for each type
         workflows_with_runs = []
-        for workflow_task_id in workflow_types:
-            runs = list(app.state_backend.get_workflow_runs(workflow_task_id))
+        for workflow_type in workflow_types:
+            runs = list(app.state_backend.get_workflow_runs(workflow_type))
             workflows_with_runs.append(
                 {
-                    "workflow_task_id": workflow_task_id,
+                    "workflow_type": workflow_type,
                     "run_count": len(runs),
                     "latest_run": runs[0] if runs else None,
                 }
@@ -123,7 +157,7 @@ async def workflow_runs_list(request: Request) -> HTMLResponse:
         context={
             "title": "Workflow Runs",
             "app_id": app.app_id,
-            "workflow_runs": sorted_runs,
+            "workflow_runs": _workflow_run_rows(app, sorted_runs),
         },
     )
 
@@ -151,7 +185,7 @@ async def refresh_workflow_runs_list(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "workflows/partials/runs_content.html",
-        context={"workflow_runs": sorted_runs},
+        context={"workflow_runs": _workflow_run_rows(app, sorted_runs)},
     )
 
 
@@ -188,7 +222,7 @@ async def workflow_detail(request: Request, workflow_type_key: str) -> HTMLRespo
                 "title": "Workflow Details",
                 "app_id": app.app_id,
                 "workflow_type": workflow_type,
-                "workflow_runs": sorted_runs,
+                "workflow_runs": _workflow_run_rows(app, sorted_runs),
                 "task": task,
                 "task_extra": task_extra,
             },
@@ -201,7 +235,7 @@ async def workflow_detail(request: Request, workflow_type_key: str) -> HTMLRespo
 
         return templates.TemplateResponse(
             request,
-            "error.html",
+            "shared/error.html",
             context={
                 "title": "Error",
                 "app_id": app.app_id,
@@ -243,7 +277,7 @@ async def refresh_workflow_detail(
             "workflows/partials/detail_content.html",
             context={
                 "workflow_type": workflow_type,
-                "workflow_runs": sorted_runs,
+                "workflow_runs": _workflow_run_rows(app, sorted_runs),
                 "task": task,
                 "task_extra": task_extra,
             },
@@ -256,58 +290,5 @@ async def refresh_workflow_detail(
 
         return HTMLResponse(
             f'<div class="alert alert-danger">Error loading workflow: {str(e)}</div>',
-            status_code=500,
-        )
-
-
-@router.get("/debug", response_class=HTMLResponse)
-async def debug_info(request: Request) -> HTMLResponse:
-    """Debug endpoint to test if the server is working and show basic info."""
-    app = get_pynenc_instance()
-
-    try:
-        # Try to get some basic info
-        info = {
-            "app_id": app.app_id,
-            "tasks_count": len(app.tasks),
-            "task_names": list(app.tasks.keys()) if app.tasks else [],
-        }
-
-        # Try to get workflow runs count
-        try:
-            all_workflow_runs = list(app.state_backend.get_all_workflow_runs())
-            info["total_workflow_runs"] = len(all_workflow_runs)
-        except Exception as e:
-            info["workflow_runs_error"] = str(e)
-
-        logger.info(f"Debug info retrieved successfully: {info}")
-
-        return HTMLResponse(
-            f"""
-            <html>
-                <head><title>Pynmon Debug Info</title></head>
-                <body>
-                    <h1>Pynmon Debug Info</h1>
-                    <pre>{info}</pre>
-                    <p>Server is working! Check logs for detailed information.</p>
-                </body>
-            </html>
-        """
-        )
-
-    except Exception as e:
-        logger.exception(f"Error in debug endpoint: {e}")
-
-        return HTMLResponse(
-            f"""
-            <html>
-                <head><title>Pynmon Debug Error</title></head>
-                <body>
-                    <h1>Pynmon Debug Error</h1>
-                    <pre>Error: {e}</pre>
-                    <p>Check logs for full traceback.</p>
-                </body>
-            </html>
-        """,
             status_code=500,
         )

@@ -17,7 +17,7 @@ from pynenc.plugin_loader import load_all_plugins
 from pynenc.runner.base_runner import BaseRunner
 from pynenc.serializer.base_serializer import BaseSerializer
 from pynenc.state_backend.base_state_backend import BaseStateBackend
-from pynenc.task import Task
+from pynenc.task import Task, WorkflowTask
 from pynenc.trigger.base_trigger import BaseTrigger
 from pynenc.trigger.trigger_builder import on_cron
 from pynenc.util.log import create_logger
@@ -433,7 +433,6 @@ class Pynenc:
         call_result_cache: bool | None = None,
         disable_cache_args: tuple[str, ...] | None = None,
         triggers: "TriggerBuilder | list[TriggerBuilder] | None" = None,
-        force_new_workflow: bool | None = None,
         reroute_on_concurrency_control: bool | None = None,
     ) -> "Task": ...
 
@@ -452,7 +451,6 @@ class Pynenc:
         call_result_cache: bool | None = None,
         disable_cache_args: tuple[str, ...] | None = None,
         triggers: "TriggerBuilder | list[TriggerBuilder] | None" = None,
-        force_new_workflow: bool | None = None,
         reroute_on_concurrency_control: bool | None = None,
     ) -> Callable[["Func"], "Task"]: ...
 
@@ -470,7 +468,6 @@ class Pynenc:
         call_result_cache: bool | None = None,
         disable_cache_args: tuple[str, ...] | None = None,
         triggers: "TriggerBuilder | list[TriggerBuilder] | None" = None,
-        force_new_workflow: bool | None = None,
         reroute_on_concurrency_control: bool | None = None,
     ) -> "Task | Callable[[Func], Task]":
         """
@@ -503,11 +500,6 @@ class Pynenc:
         :param TriggerBuilder | list[TriggerBuilder] | None triggers:
             Trigger definitions that determine when this task should execute automatically.
             Can be a single TriggerBuilder or a list of builders for multiple trigger conditions.
-        :param bool | None force_new_workflow:
-            If True, this task will always create a new workflow when invoked.
-            Even when called from within another workflow, it creates a subworkflow
-            that maintains a reference to its parent workflow.
-
         :return: A Task instance or a callable that when called returns a Task instance.
 
         :example:
@@ -564,7 +556,6 @@ class Pynenc:
             "on_diff_non_key_args_raise": on_diff_non_key_args_raise,
             "call_result_cache": call_result_cache,
             "disable_cache_args": disable_cache_args,
-            "force_new_workflow": force_new_workflow,
             "reroute_on_concurrency_control": reroute_on_concurrency_control,
         }
         options = {k: v for k, v in options.items() if v is not None}
@@ -574,7 +565,7 @@ class Pynenc:
                 raise ValueError(
                     "Decorated function must be defined at the module level."
                 )
-            task: Task = Task(self, _func, options)
+            task = Task.create_for_app(self, _func, options)
             self._tasks[task.task_id] = task
             self._store_deferred_trigger(task, triggers)
             return task
@@ -582,6 +573,91 @@ class Pynenc:
         if func is None:
             return init_task
         return init_task(func)
+
+    @overload
+    def workflow(
+        self,
+        func: "Func",
+        *,
+        parallel_batch_size: int | None = None,
+        retry_for: tuple[type[Exception], ...] | None = None,
+        max_retries: int | None = None,
+        running_concurrency: ConcurrencyControlType | None = None,
+        registration_concurrency: ConcurrencyControlType | None = None,
+        key_arguments: tuple[str, ...] | None = None,
+        on_diff_non_key_args_raise: bool | None = None,
+        call_result_cache: bool | None = None,
+        disable_cache_args: tuple[str, ...] | None = None,
+        triggers: "TriggerBuilder | list[TriggerBuilder] | None" = None,
+        reroute_on_concurrency_control: bool | None = None,
+    ) -> "WorkflowTask": ...
+
+    @overload
+    def workflow(
+        self,
+        func: None = None,
+        *,
+        parallel_batch_size: int | None = None,
+        retry_for: tuple[type[Exception], ...] | None = None,
+        max_retries: int | None = None,
+        running_concurrency: ConcurrencyControlType | None = None,
+        registration_concurrency: ConcurrencyControlType | None = None,
+        key_arguments: tuple[str, ...] | None = None,
+        on_diff_non_key_args_raise: bool | None = None,
+        call_result_cache: bool | None = None,
+        disable_cache_args: tuple[str, ...] | None = None,
+        triggers: "TriggerBuilder | list[TriggerBuilder] | None" = None,
+        reroute_on_concurrency_control: bool | None = None,
+    ) -> Callable[["Func"], "WorkflowTask"]: ...
+
+    def workflow(
+        self,
+        func: "Func | None" = None,
+        *,
+        parallel_batch_size: int | None = None,
+        retry_for: tuple[type[Exception], ...] | None = None,
+        max_retries: int | None = None,
+        running_concurrency: ConcurrencyControlType | None = None,
+        registration_concurrency: ConcurrencyControlType | None = None,
+        key_arguments: tuple[str, ...] | None = None,
+        on_diff_non_key_args_raise: bool | None = None,
+        call_result_cache: bool | None = None,
+        disable_cache_args: tuple[str, ...] | None = None,
+        triggers: "TriggerBuilder | list[TriggerBuilder] | None" = None,
+        reroute_on_concurrency_control: bool | None = None,
+    ) -> "WorkflowTask | Callable[[Func], WorkflowTask]":
+        """Decorate a function as an explicit workflow task."""
+        options = {
+            "parallel_batch_size": parallel_batch_size,
+            "retry_for": retry_for,
+            "max_retries": max_retries,
+            "running_concurrency": running_concurrency,
+            "registration_concurrency": registration_concurrency,
+            "key_arguments": key_arguments,
+            "on_diff_non_key_args_raise": on_diff_non_key_args_raise,
+            "call_result_cache": call_result_cache,
+            "disable_cache_args": disable_cache_args,
+            "reroute_on_concurrency_control": reroute_on_concurrency_control,
+            "is_workflow_task": True,
+        }
+        options = {k: v for k, v in options.items() if v is not None}
+
+        def init_workflow(_func: "Func") -> WorkflowTask["Params", "Result"]:
+            if _func.__qualname__ != _func.__name__:
+                raise ValueError(
+                    "Decorated function must be defined at the module level."
+                )
+            task = Task.create_for_app(self, _func, options)
+            if not isinstance(task, WorkflowTask):
+                raise RuntimeError("@app.workflow must create a WorkflowTask")
+            workflow_task = task
+            self._tasks[workflow_task.task_id] = workflow_task
+            self._store_deferred_trigger(workflow_task, triggers)
+            return workflow_task
+
+        if func is None:
+            return init_workflow
+        return init_workflow(func)
 
     @overload
     def direct_task(
@@ -599,7 +675,6 @@ class Pynenc:
         on_diff_non_key_args_raise: bool | None = None,
         call_result_cache: bool | None = None,
         disable_cache_args: tuple[str, ...] | None = None,
-        force_new_workflow: bool | None = None,
         reroute_on_concurrency_control: bool | None = None,
     ) -> "Func": ...
 
@@ -619,7 +694,6 @@ class Pynenc:
         on_diff_non_key_args_raise: bool | None = None,
         call_result_cache: bool | None = None,
         disable_cache_args: tuple[str, ...] | None = None,
-        force_new_workflow: bool | None = None,
         reroute_on_concurrency_control: bool | None = None,
     ) -> "Func": ...
 
@@ -639,7 +713,6 @@ class Pynenc:
         on_diff_non_key_args_raise: bool | None = None,
         call_result_cache: bool | None = None,
         disable_cache_args: tuple[str, ...] | None = None,
-        force_new_workflow: bool | None = None,
         reroute_on_concurrency_control: bool | None = None,
     ) -> Callable[["Func[Params, Result]"], "Func[Params, Result]"]: ...
 
@@ -658,7 +731,6 @@ class Pynenc:
         on_diff_non_key_args_raise: bool | None = None,
         call_result_cache: bool | None = None,
         disable_cache_args: tuple[str, ...] | None = None,
-        force_new_workflow: bool | None = None,
         reroute_on_concurrency_control: bool | None = None,
     ) -> (
         "Func[Params, Result] | Callable[[Func[Params, Result]], Func[Params, Result]]"
@@ -722,11 +794,6 @@ class Pynenc:
             otherwise it will trigger a new invocation as expected.
         :param tuple[str, ...] | None disable_cache_args:
             Arguments to exclude from caching, it will accept "*" to disable caching for all arguments.
-        :param bool | None force_new_workflow:
-            If True, this task will always create a new workflow when invoked.
-            Even when called from within another workflow, it creates a subworkflow
-            that maintains a reference to its parent workflow.
-
         :return: A function that behaves like the original but is backed by a distributed task system.
 
         :note:
@@ -799,7 +866,6 @@ class Pynenc:
                 "on_diff_non_key_args_raise": on_diff_non_key_args_raise,
                 "call_result_cache": call_result_cache,
                 "disable_cache_args": disable_cache_args,
-                "force_new_workflow": force_new_workflow,
                 "reroute_on_concurrency_control": reroute_on_concurrency_control,
             }
             task_options = {k: v for k, v in task_options.items() if v is not None}

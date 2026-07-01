@@ -571,67 +571,58 @@ For a detailed guide and examples, see {doc}`./use_case_010_trigger_system`.
 
 📖 {doc}`Full step-by-step guide <./use_case_011_workflow_system>`
 
-Discover Pynenc's advanced workflow system for building sophisticated task orchestration with deterministic execution, state management, and automatic replay capabilities. The workflow system enables complex multi-step processes that can recover from failures and maintain consistency across distributed environments.
+Discover Pynenc's workflow system for deterministic, stateful task orchestration. Workflows are explicit `@app.workflow` functions with shared workflow data, root-only deterministic operations, sub-workflow boundaries, and child invocations that can be reused when the workflow invocation is retried.
 
 ```python
+from typing import Any
+
 from pynenc import Pynenc
 
 app = Pynenc()
 
-@app.task
+@app.workflow
 def process_order_workflow(order_id: str) -> dict[str, Any]:
-    """
-    Order processing workflow with deterministic operations.
-
-    All random operations and timestamps are deterministic and will
-    replay identically during failure recovery.
-    """
-    # Generate deterministic tracking number
-    tracking_number = f"TRK-{order_id}-{int(process_order_workflow.wf.random() * 100000):05d}"
-
-    # Execute payment processing within workflow context
-    payment_result = process_order_workflow.wf.execute_task(
-        process_payment, order_id
+    payment_id = process_order_workflow.wf.root.uuid()
+    tracking_number = (
+        f"TRK-{order_id}-"
+        f"{int(process_order_workflow.wf.root.random() * 100000):05d}"
+    )
+    payment_result = process_order_workflow.wf.root.execute_task(
+        process_payment, order_id, payment_id
     )
 
-    # Store workflow state for persistence
     process_order_workflow.wf.set_data("tracking_number", tracking_number)
     process_order_workflow.wf.set_data("payment_id", payment_result.result["payment_id"])
+    process_order_workflow.wf.set_data("status", "paid")
 
     return {
         "order_id": order_id,
         "tracking_number": tracking_number,
         "payment_status": payment_result.result["status"],
-        "workflow_id": process_order_workflow.workflow.workflow_id
+        "workflow_id": str(process_order_workflow.wf.identity.workflow_id),
     }
 
-@app.task(force_new_workflow=True)
-def independent_audit_workflow(order_id: str) -> dict[str, Any]:
-    """
-    Independent audit workflow with force_new_workflow=True.
 
-    This always creates a new workflow context regardless of calling context.
-    """
-    audit_id = independent_audit_workflow.wf.uuid()
+@app.task
+def process_payment(order_id: str, payment_id: str) -> dict[str, str]:
     return {
-        "audit_id": audit_id,
-        "order_id": order_id,
-        "workflow_id": independent_audit_workflow.workflow.workflow_id
+        "payment_id": payment_id,
+        "status": "approved",
     }
 ```
 
-The workflow system provides essential features for enterprise-grade task orchestration:
+The workflow system provides the core pieces needed for durable orchestration:
 
-- **Deterministic Execution**: All non-deterministic operations (random, UUID, timestamps) are made deterministic for perfect replay
-- **Workflow Identity**: Unique workflow contexts with parent-child relationships and inheritance
-- **State Persistence**: Automatic state management with key-value storage for workflow data
-- **Task Integration**: Seamless integration with existing Pynenc tasks and execution infrastructure
-- **Workflow Boundaries**: Use `force_new_workflow=True` decorator to create independent workflow contexts
-- **Failure Recovery**: Workflows can resume from exact points of failure with identical replay behavior
+- **Deterministic execution**: `wf.root.random()`, `wf.root.uuid()`, and `wf.root.utc_now()` replay stored values when the workflow invocation is retried
+- **Workflow identity**: explicit workflow invocations define workflow runs, with optional parent workflow tracking for sub-workflows
+- **Workflow data**: `wf.set_data()` and `wf.get_data()` persist workflow-scoped milestones
+- **Durable child calls**: `wf.root.execute_task()` records child invocations by task and arguments
+- **Workflow boundaries**: `@app.workflow` creates explicit main workflows or sub-workflows
 
-This use case demonstrates how to build robust, stateful workflows that can handle complex business logic while providing reliability guarantees and failure recovery capabilities.
+This use case demonstrates how to build stateful workflows that can retry without duplicating child work that already completed.
 
-For a detailed guide and examples, see {doc}`./use_case_011_workflow_system`.
+For a practical guide, see {doc}`./use_case_011_workflow_system`.
+For the deeper model, see {doc}`../workflows/index`.
 
 ## Invocation Status System
 

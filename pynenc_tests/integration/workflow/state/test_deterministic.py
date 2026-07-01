@@ -209,6 +209,7 @@ def test_state_backend_value_storage(deterministic_mixed_workflow: "Task") -> No
 
     # Debug: Check what's actually stored in the state backend
     workflow_identity = invocation.workflow
+    assert workflow_identity is not None
 
     # Check if ANY deterministic values were stored
     _stored_random = app.state_backend.get_workflow_data(workflow_identity, "random:1")
@@ -268,6 +269,7 @@ def test_cross_backend_storage_compatibility(
 
     # Test that storage and retrieval operations work
     workflow_identity = invocation.workflow
+    assert workflow_identity is not None
 
     # Test storing and retrieving a custom value
     test_key = "test_custom_value"

@@ -86,10 +86,19 @@ def build_all_elements(
     data: TimelineData,
     end_time: datetime,
     sub_lane_map: dict[ElementLaneKey, int],
+    workflow_root_invocation_ids: set[str] | None = None,
 ) -> None:
     """Attach StatusPoint, StatusSegment, and StatusLine to their lanes."""
+    workflow_root_invocation_ids = workflow_root_invocation_ids or set()
     for inv_id, entries in history.items():
-        _build_invocation_elements(inv_id, entries, data, end_time, sub_lane_map)
+        _build_invocation_elements(
+            inv_id,
+            entries,
+            data,
+            end_time,
+            sub_lane_map,
+            inv_id in workflow_root_invocation_ids,
+        )
 
 
 def _build_invocation_elements(
@@ -98,6 +107,7 @@ def _build_invocation_elements(
     data: TimelineData,
     end_time: datetime,
     sub_lane_map: dict[ElementLaneKey, int],
+    is_workflow_root: bool = False,
 ) -> None:
     """Build all visual elements for one invocation."""
     if not entries:
@@ -106,13 +116,13 @@ def _build_invocation_elements(
     prev = None
     for order, entry in enumerate(sorted_entries):
         sub = _get_sub_lane(inv_id, entry, sub_lane_map)
-        _add_point(data, inv_id, entry, order, sub)
+        _add_point(data, inv_id, entry, order, sub, is_workflow_root)
         if prev is not None:
             prev_sub = _get_sub_lane(inv_id, prev, sub_lane_map)
-            _maybe_add_segment(data, inv_id, prev, entry, prev_sub)
+            _maybe_add_segment(data, inv_id, prev, entry, prev_sub, is_workflow_root)
             _add_line(data, inv_id, prev, entry, prev_sub, sub)
         prev = entry
-    _handle_final_segment(data, inv_id, prev, end_time, sub_lane_map)
+    _handle_final_segment(data, inv_id, prev, end_time, sub_lane_map, is_workflow_root)
 
 
 def _get_sub_lane(
@@ -125,7 +135,12 @@ def _get_sub_lane(
 
 
 def _add_point(
-    data: TimelineData, inv_id: str, entry: "HistoryEntry", order: int, sub_lane: int
+    data: TimelineData,
+    inv_id: str,
+    entry: "HistoryEntry",
+    order: int,
+    sub_lane: int,
+    is_workflow_root: bool,
 ) -> None:
     """Create and attach a StatusPoint to the appropriate lane."""
     point = create_status_point(
@@ -136,6 +151,7 @@ def _add_point(
         order,
         sub_lane,
         entry.registered_by_inv_id if entry.status.upper() == "REGISTERED" else None,
+        is_workflow_root,
     )
     if lane := data.lanes.get(entry.runner_info.lane_id):
         lane.add_point(point)
@@ -147,6 +163,7 @@ def _maybe_add_segment(
     prev: "HistoryEntry",
     current: "HistoryEntry",
     prev_sub: int,
+    is_workflow_root: bool,
 ) -> None:
     """Add a StatusSegment if the previous status was a segment status."""
     status = prev.status.upper()
@@ -160,6 +177,7 @@ def _maybe_add_segment(
             status=status,
             next_status=current.status.upper(),
             sub_lane=prev_sub,
+            is_workflow_root=is_workflow_root,
         )
     )
     if lane := data.lanes.get(prev.runner_info.lane_id):
@@ -195,6 +213,7 @@ def _handle_final_segment(
     last: "HistoryEntry | None",
     end_time: datetime,
     sub_lane_map: dict[ElementLaneKey, int],
+    is_workflow_root: bool,
 ) -> None:
     """Handle an ongoing segment if the last entry is still a segment status."""
     if last is None:
@@ -205,7 +224,13 @@ def _handle_final_segment(
     sub_lane = _get_sub_lane(inv_id, last, sub_lane_map)
     segment = create_status_segment(
         SegmentParams(
-            inv_id, last.timestamp, end_time, status, sub_lane=sub_lane, is_ongoing=True
+            inv_id,
+            last.timestamp,
+            end_time,
+            status,
+            sub_lane=sub_lane,
+            is_ongoing=True,
+            is_workflow_root=is_workflow_root,
         )
     )
     if lane := data.lanes.get(last.runner_info.lane_id):
