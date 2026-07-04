@@ -51,6 +51,28 @@ def test_module_registers_in_sys_modules(tmp_path: Path) -> None:
     sys.modules.pop("mymod", None)
 
 
+def test_file_fallback_registers_module_before_execution_for_dataclasses(
+    tmp_path: Path,
+) -> None:
+    """Dataclass decoration needs the executing module present in sys.modules."""
+    tasks_file = tmp_path / "dataclass_tasks.py"
+    tasks_file.write_text(
+        "from dataclasses import dataclass\n"
+        "from pynenc import Pynenc\n"
+        "@dataclass(frozen=True)\n"
+        "class Order:\n"
+        "    order_id: str\n"
+        "app = Pynenc()\n"
+    )
+
+    with patch("os.getcwd", return_value=str(tmp_path)):
+        with patch("importlib.import_module", side_effect=ModuleNotFoundError):
+            result = import_app.find_app_instance("dataclass_tasks.app")
+
+    assert isinstance(result, Pynenc)
+    sys.modules.pop("dataclass_tasks", None)
+
+
 def test_file_dir_added_to_sys_path(tmp_path: Path) -> None:
     """The file's directory should be added to sys.path."""
     tasks_file = tmp_path / "pathmod.py"

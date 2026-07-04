@@ -218,15 +218,25 @@ def _load_module_from_file(file_path: str) -> types.ModuleType:
         raise ValueError(f"Could not create module spec for '{file_path}'.")
 
     module = importlib.util.module_from_spec(spec)
+    previous_module = sys.modules.get(module_name)
+    sys.modules[module_name] = module
     try:
         spec.loader.exec_module(module)
     except ModuleNotFoundError as exc:
+        if previous_module is None:
+            sys.modules.pop(module_name, None)
+        else:
+            sys.modules[module_name] = previous_module
         raise ModuleNotFoundError(
             f"Failed to load '{file_path}': {exc}.\n"
             f"Ensure all imports in the file are installed and available."
         ) from exc
-
-    sys.modules[module_name] = module
+    except Exception:
+        if previous_module is None:
+            sys.modules.pop(module_name, None)
+        else:
+            sys.modules[module_name] = previous_module
+        raise
     return module
 
 
@@ -372,19 +382,14 @@ def _find_app_variable_in_module(module: types.ModuleType, app: "Pynenc") -> str
     :return: Attribute name, or ``None`` if not found.
     """
     try:
-        names = dir(module)
-    except (ImportError, TypeError):
+        attrs = vars(module)
+    except TypeError:
         return None
-    for name in names:
+    for name, value in attrs.items():
         if name.startswith("_"):
             continue
-        try:
-            if getattr(module, name) is app:
-                return name
-        except (AttributeError, TypeError, ImportError):
-            continue
-        except Exception:
-            continue
+        if value is app:
+            return name
     return None
 
 
@@ -472,25 +477,12 @@ def _find_pynenc_by_id_in_module(
     :return: The matching instance, or ``None``.
     """
     try:
-        attrs = dir(module)
-    except (AttributeError, ImportError):
+        attrs = vars(module)
+    except TypeError:
         return None
 
-    for attr_name in attrs:
+    for attr_name, attr in attrs.items():
         if attr_name.startswith("_"):
-            continue
-        try:
-            attr = getattr(module, attr_name)
-        except (AttributeError, TypeError, ImportError):
-            continue
-        except Exception as e:
-            logger.debug(
-                "Unexpected %s accessing %s.%s — skipping",
-                type(e).__name__,
-                mod_name,
-                attr_name,
-                exc_info=True,
-            )
             continue
         if isinstance(attr, Pynenc) and attr.app_id == app_id:
             logger.info("Found app %s in module %s", app_id, mod_name)

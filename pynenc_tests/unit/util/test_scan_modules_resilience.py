@@ -7,6 +7,7 @@ exceptions from lazy-loading modules (e.g. ``six.moves`` triggering
 
 import logging
 import types
+import warnings
 from unittest.mock import patch
 
 import pytest
@@ -57,6 +58,31 @@ def test_finds_matching_app_id() -> None:
 
     result = import_app._find_pynenc_by_id_in_module(module, "good_mod", app.app_id)
     assert result is app
+
+
+def test_module_scan_does_not_touch_lazy_deprecated_attrs() -> None:
+    """Scanning module dictionaries must not trigger module-level __getattr__ warnings."""
+    app = Pynenc()
+
+    class DeprecatedAttrsModule(types.ModuleType):
+        def __getattr__(self, name: str) -> object:
+            warnings.warn(f"{name} is deprecated", DeprecationWarning, stacklevel=2)
+            raise AttributeError(name)
+
+    module = DeprecatedAttrsModule("deprecated_attrs_mod")
+    module.app = app  # type: ignore[attr-defined]
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        var_name = import_app._find_app_variable_in_module(module, app)
+        found_app = import_app._find_pynenc_by_id_in_module(
+            module,
+            "deprecated_attrs_mod",
+            app.app_id,
+        )
+
+    assert var_name == "app"
+    assert found_app is app
 
 
 def test_skips_non_matching_app_id() -> None:

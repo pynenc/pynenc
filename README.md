@@ -42,7 +42,7 @@
 
 Pynenc is a Python task orchestration framework for distributed workers. It gives each task invocation a tracked lifecycle, lets the orchestrator enforce concurrency and retry rules, and keeps enough state to inspect what happened after the fact.
 
-## 🆕 What's New in v0.3.0
+## 🆕 What's New in v0.3.1
 
 - **Explicit workflow tasks**: `@app.workflow` now marks the task that defines a workflow or sub-workflow root
 - **Root workflow operations**: deterministic orchestration lives under `wf.root.uuid()`, `wf.root.random()`, `wf.root.utc_now()`, and `wf.root.execute_task(...)`
@@ -407,7 +407,7 @@ pip install pynenc[monitor]
 
 ## Requirements
 
-- **Python 3.11+**
+- **Python 3.12+**
 - **Core package**: No external infrastructure needed — includes memory and SQLite backends for development and testing
 - **Production**: Install a backend plugin (`pynenc-redis`, `pynenc-mongodb`, or `pynenc-rabbitmq`) and ensure the corresponding service is running
 
