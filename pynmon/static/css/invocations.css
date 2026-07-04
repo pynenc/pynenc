@@ -31,6 +31,10 @@
   top: 0;
 }
 
+.pynmon-status-marker {
+  background-color: var(--pynmon-status-bg, #7f8c8d);
+}
+
 .timeline-content {
   padding-bottom: 10px;
 }

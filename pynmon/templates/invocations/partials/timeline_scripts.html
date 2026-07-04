@@ -13,6 +13,63 @@
     currentX: 0,
     suppressNextClick: false,
   };
+  const STATUS_COLOR_STYLES = {{ STATUS_COLOR_STYLES | tojson }};
+  const DEFAULT_STATUS_STYLE = {{ DEFAULT_STATUS_STYLE | tojson }};
+  const STATUS_BADGE_TEXT_COLOR = {{ STATUS_BADGE_TEXT_COLOR | tojson }};
+
+  function normalizeStatusName(status) {
+    const value = String(status ?? "").trim().toUpperCase();
+    return value === "RETRYING" ? "RETRY" : value;
+  }
+
+  function getStatusStyle(status) {
+    return (
+      STATUS_COLOR_STYLES[normalizeStatusName(status)] || DEFAULT_STATUS_STYLE
+    );
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (char) => {
+      const escaped = {
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      }[char];
+      return escaped || char;
+    });
+  }
+
+  function getStatusBadgeStyle(status) {
+    const colors = getStatusStyle(status);
+    return `background-color: ${colors.background}; color: ${STATUS_BADGE_TEXT_COLOR};`;
+  }
+
+  function renderStatusBadge(status, size = "normal", label = null) {
+    const sizeClass = size === "small" ? " badge-sm" : "";
+    const displayLabel = label ?? status ?? "";
+    return `<span class="badge pynmon-status-badge${sizeClass}" style="${getStatusBadgeStyle(
+      status
+    )}">${escapeHtml(displayLabel)}</span>`;
+  }
+
+  function getHistoryStatus(entry) {
+    return (
+      entry?.status ??
+      entry?.status_name ??
+      entry?.statusName ??
+      entry?.status_record?.status ??
+      entry?.statusRecord?.status ??
+      ""
+    );
+  }
+
+  function renderHistoryStatusBadge(entry) {
+    const status = String(getHistoryStatus(entry) ?? "").trim();
+    const displayLabel = status ? status.toLowerCase() : "unknown";
+    return renderStatusBadge(status || "unknown", "small", displayLabel);
+  }
 
   // ── Cross-highlight helpers ──────────────────────────────────────────
   // Highlight / unhighlight an invocation across BOTH the timeline SVG
@@ -689,9 +746,7 @@
     if (historyData?.length > 0) {
       const last = historyData[historyData.length - 1];
       html += `<tr><th>Status</th>
-        <td><span class="badge bg-${getStatusClass(
-          last.status
-        )}">${last.status.toLowerCase()}</span></td></tr>
+        <td>${renderHistoryStatusBadge(last)}</td></tr>
         <tr><th>Duration</th><td>${calculateDuration(historyData)}</td></tr>`;
     }
 
@@ -759,9 +814,7 @@
 
     historyData.forEach((h) => {
       html += `<tr>
-        <td><span class="badge bg-${getStatusClass(
-          h.status
-        )}">${h.status.toLowerCase()}</span></td>
+        <td>${renderHistoryStatusBadge(h)}</td>
         <td style="font-size:11px;">${formatUTCDate(h.timestamp)}</td>
         <td style="font-size:11px;">${buildRunnerHtml(h)}</td>
       </tr>`;
@@ -779,14 +832,6 @@
     const status = summary?.status || "";
     const dur = summary?.duration_seconds;
     const durTxt = dur != null ? `${dur.toFixed(2)}s` : "";
-    const statusClass =
-      {
-        SUCCESS: "bg-success",
-        FAILED: "bg-danger",
-        RUNNING: "bg-primary",
-        PENDING: "bg-secondary",
-        RETRYING: "bg-warning text-dark",
-      }[status] || "bg-secondary";
     const clickAttrs = runId
       ? `data-invocation-id="${invId}" data-trigger-run-id="${runId}"`
       : `data-invocation-id="${invId}"`;
@@ -799,7 +844,7 @@
       <div class="inv-summary-meta">
         ${
           status
-            ? `<span class="badge ${statusClass}" style="font-size:9px;">${status}</span>`
+            ? renderStatusBadge(status, "small", status)
             : ""
         }
         ${durTxt ? `<span class="inv-summary-duration">${durTxt}</span>` : ""}
@@ -1577,25 +1622,6 @@
         console.error("Error loading event details:", err);
         content.innerHTML = `<div class="alert alert-danger mb-0">Error loading event: ${err.message}</div>`;
       });
-  }
-
-  function getStatusClass(status) {
-    const map = {
-      REGISTERED: "secondary",
-      PENDING: "warning",
-      RUNNING: "info",
-      SUCCESS: "success",
-      FAILED: "danger",
-      RETRY: "secondary",
-      PAUSED: "primary",
-      REROUTED: "info",
-      CONCURRENCY_CONTROLLED: "warning",
-      CONCURRENCY_CONTROLLED_FINAL: "warning",
-      CANCELLED: "dark",
-      TIMEOUT: "danger",
-      SCHEDULED: "warning",
-    };
-    return map[(status || "").toUpperCase()] || "secondary";
   }
 
   function formatUTCDate(isoString) {

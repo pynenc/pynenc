@@ -20,6 +20,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from pynenc.app import AppInfo, Pynenc
+from pynmon.util.status_colors import (
+    DEFAULT_STATUS_STYLE,
+    STATUS_BADGE_TEXT_COLOR,
+    STATUS_COLORS,
+    STATUS_COLOR_STYLES,
+    get_status_colors,
+)
 
 
 # Standard library pattern: add NullHandler so that libraries using pynmon
@@ -30,6 +37,7 @@ from pynenc.app import AppInfo, Pynenc
 logging.getLogger("pynmon").addHandler(logging.NullHandler())
 
 logger = logging.getLogger("pynmon")
+STATIC_ASSET_VERSION = "20260704-status-badge-white"
 
 
 def configure_logging(log_level: str = "INFO") -> None:
@@ -163,6 +171,14 @@ app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 # Set up Jinja2 templates
 templates_dir = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(templates_dir))
+templates.env.globals.update(
+    DEFAULT_STATUS_STYLE=DEFAULT_STATUS_STYLE,
+    STATIC_ASSET_VERSION=STATIC_ASSET_VERSION,
+    STATUS_BADGE_TEXT_COLOR=STATUS_BADGE_TEXT_COLOR,
+    STATUS_COLORS=STATUS_COLORS,
+    STATUS_COLOR_STYLES=STATUS_COLOR_STYLES,
+    get_status_colors=get_status_colors,
+)
 
 # Global reference to the monitored Pynenc app instance.
 all_pynenc_instances: dict[str, Pynenc] = {}

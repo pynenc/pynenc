@@ -7,6 +7,7 @@ import json
 import logging
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
+from collections.abc import Sequence
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Request
@@ -34,6 +35,96 @@ def _shorten_id(value: str, *, head: int = 22, tail: int = 12) -> str:
     if len(value) <= head + tail + 1:
         return value
     return f"{value[:head]}...{value[-tail:]}"
+
+
+def _parse_context_summary(summary: str) -> dict[str, str]:
+    """Parse a compact ``key:value`` summary string into a token map."""
+    tokens: dict[str, str] = {}
+    for token in summary.split():
+        if ":" not in token:
+            continue
+        key, value = token.split(":", 1)
+        key = key.strip()
+        value = value.strip()
+        if not key or not value or key in tokens:
+            continue
+        tokens[key] = value
+    return tokens
+
+
+def _context_summary_items(summary: str) -> list[dict[str, Any]]:
+    """Build detail rows from a compact participant context summary."""
+    tokens = _parse_context_summary(summary)
+    items: list[dict[str, Any]] = []
+
+    status = tokens.get("status")
+    if status:
+        items.append(
+            {
+                "key": "statuses",
+                "label": "Status",
+                "render": "status_badges",
+                "statuses": [status.upper()],
+            }
+        )
+
+    task_id_key = tokens.get("task")
+    if task_id_key:
+        items.append(
+            {
+                "key": "task",
+                "label": "Task",
+                "value": task_id_key,
+                "multiline": False,
+                "render": "value",
+            }
+        )
+
+    exception_type = tokens.get("exception")
+    if exception_type:
+        items.append(
+            {
+                "key": "exception",
+                "label": "Exception",
+                "value": exception_type,
+                "multiline": False,
+                "render": "value",
+            }
+        )
+
+    return items
+
+
+def _source_inv_summary_from_participant(participant: object) -> dict[str, Any]:
+    """Build a lightweight invocation summary from participant snapshot data."""
+    context_summary = str(getattr(participant, "context_summary", "") or "")
+    tokens = _parse_context_summary(context_summary)
+    status = tokens.get("status")
+    if not status:
+        return {}
+
+    summary: dict[str, Any] = {"status": status.upper()}
+    task_id_key = tokens.get("task")
+    if task_id_key:
+        summary["task_id_key"] = task_id_key
+        summary["func_name"] = task_id_key.rsplit(".", 1)[-1]
+    return summary
+
+
+def _fill_source_invocation_summaries(
+    source_inv_summaries: dict[str, dict[str, Any]],
+    participants: Sequence[Any],
+) -> None:
+    """Backfill source-invocation summaries from participant snapshots."""
+    for participant in participants:
+        source_invocation_id = getattr(participant, "source_invocation_id", None)
+        if not source_invocation_id:
+            continue
+        if source_inv_summaries.get(source_invocation_id):
+            continue
+        fallback = _source_inv_summary_from_participant(participant)
+        if fallback:
+            source_inv_summaries[source_invocation_id] = fallback
 
 
 def _json_safe(value: Any) -> Any:
@@ -200,6 +291,15 @@ def _context_view_from_participant(
                         "emitted_by_invocation_id": event.emitted_by_invocation_id,
                     }
                 )
+            )
+    if summary:
+        summary_items = _context_summary_items(summary)
+        if summary_items:
+            existing_keys = {
+                str(item.get("key")) for item in items if item.get("key") is not None
+            }
+            items.extend(
+                item for item in summary_items if item["key"] not in existing_keys
             )
     return {
         "available": available,
@@ -425,6 +525,9 @@ async def trigger_run_api(trigger_run_id: str) -> JSONResponse:
         invocation_id: await asyncio.to_thread(_fetch_inv_summary, app, invocation_id)
         for invocation_id in invocation_ids
     }
+    _fill_source_invocation_summaries(
+        payload["invocation_summaries"], run.participants or []
+    )
     events: list[dict] = []
     event_timestamps: list[datetime] = []
     for event_id in run.event_ids or []:
@@ -492,6 +595,7 @@ async def trigger_run_detail(request: Request, trigger_run_id: str) -> HTMLRespo
     source_inv_summaries = {
         sid: await asyncio.to_thread(_fetch_inv_summary, app, sid) for sid in src_ids
     }
+    _fill_source_invocation_summaries(source_inv_summaries, run.participants or [])
 
     # Collect rich summaries for every event referenced on the run so the
     # Outcome panel can render pills with code + timestamp + outcome state.

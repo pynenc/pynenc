@@ -327,14 +327,9 @@ text[:22] }}...{{ text[-12:] }}{% else %}{{ text }}{% endif %} {%- endmacro %}
                       <div class="inv-summary-task">{{ s.func_name }}</div>
                       {% endif %}
                       <div class="inv-summary-meta">
-                        {% if s.get("status") %}
-                        <span
-                          class="badge {% if s.status == 'SUCCESS' %}bg-success{% elif s.status == 'FAILED' %}bg-danger{% elif s.status == 'RUNNING' %}bg-primary{% else %}bg-secondary{% endif %}"
-                          style="font-size: 9px"
-                          >{{ s.status }}</span
-                        >
-                        {% endif %} {% if s.get("duration_seconds") is not none
-                        %}
+                        {% if s.get("status") %} {{ status_badge(s.status,
+                        'small') }} {% endif %} {% if s.get("duration_seconds")
+                        is not none %}
                         <span class="inv-summary-duration"
                           >{{ "%.2f"|format(s.duration_seconds) }}s</span
                         >
@@ -405,14 +400,9 @@ text[:22] }}...{{ text[-12:] }}{% else %}{{ text }}{% endif %} {%- endmacro %}
                           <div class="inv-summary-task">{{ s.func_name }}</div>
                           {% endif %}
                           <div class="inv-summary-meta">
-                            {% if s.get("status") %}
-                            <span
-                              class="badge {% if s.status == 'SUCCESS' %}bg-success{% elif s.status == 'FAILED' %}bg-danger{% elif s.status == 'RUNNING' %}bg-primary{% else %}bg-secondary{% endif %}"
-                              style="font-size: 9px"
-                              >{{ s.status }}</span
-                            >
-                            {% endif %} {% if s.get("duration_seconds") is not
-                            none %}
+                            {% if s.get("status") %} {{ status_badge(s.status,
+                            'small') }} {% endif %} {% if
+                            s.get("duration_seconds") is not none %}
                             <span class="inv-summary-duration"
                               >{{ "%.2f"|format(s.duration_seconds) }}s</span
                             >
@@ -510,17 +500,9 @@ text[:22] }}...{{ text[-12:] }}{% else %}{{ text }}{% endif %} {%- endmacro %}
                           <div class="inv-summary-task">{{ s.func_name }}</div>
                           {% endif %}
                           <div class="inv-summary-meta">
-                            {% if s.status %} {% set status_class = { 'SUCCESS':
-                            'bg-success', 'FAILED': 'bg-danger', 'RUNNING':
-                            'bg-primary', 'PENDING': 'bg-secondary', 'RETRYING':
-                            'bg-warning text-dark', }.get(s.status,
-                            'bg-secondary') %}
-                            <span
-                              class="badge {{ status_class }}"
-                              style="font-size: 9px"
-                              >{{ s.status }}</span
-                            >
-                            {% endif %} {% if s.duration_seconds is not none %}
+                            {% if s.status %} {{ status_badge(s.status, 'small')
+                            }} {% endif %} {% if s.duration_seconds is not none
+                            %}
                             <span class="inv-summary-duration"
                               >{{ "%.2f"|format(s.duration_seconds) }}s</span
                             >
@@ -606,14 +588,9 @@ text[:22] }}...{{ text[-12:] }}{% else %}{{ text }}{% endif %} {%- endmacro %}
                         <div class="inv-summary-task">{{ s.func_name }}</div>
                         {% endif %}
                         <div class="inv-summary-meta">
-                          {% if s.get("status") %}
-                          <span
-                            class="badge {% if s.status == 'SUCCESS' %}bg-success{% elif s.status == 'FAILED' %}bg-danger{% elif s.status == 'RUNNING' %}bg-primary{% else %}bg-secondary{% endif %}"
-                            style="font-size: 9px"
-                            >{{ s.status }}</span
-                          >
-                          {% endif %} {% if s.get("duration_seconds") is not
-                          none %}
+                          {% if s.get("status") %} {{ status_badge(s.status,
+                          'small') }} {% endif %} {% if
+                          s.get("duration_seconds") is not none %}
                           <span class="inv-summary-duration"
                             >{{ "%.2f"|format(s.duration_seconds) }}s</span
                           >
@@ -693,14 +670,9 @@ text[:22] }}...{{ text[-12:] }}{% else %}{{ text }}{% endif %} {%- endmacro %}
                             </div>
                             {% endif %}
                             <div class="inv-summary-meta">
-                              {% if s.get("status") %}
-                              <span
-                                class="badge {% if s.status == 'SUCCESS' %}bg-success{% elif s.status == 'FAILED' %}bg-danger{% elif s.status == 'RUNNING' %}bg-primary{% else %}bg-secondary{% endif %}"
-                                style="font-size: 9px"
-                                >{{ s.status }}</span
-                              >
-                              {% endif %} {% if s.get("duration_seconds") is not
-                              none %}
+                              {% if s.get("status") %} {{ status_badge(s.status,
+                              'small') }} {% endif %} {% if
+                              s.get("duration_seconds") is not none %}
                               <span class="inv-summary-duration"
                                 >{{ "%.2f"|format(s.duration_seconds) }}s</span
                               >
@@ -790,12 +762,15 @@ text[:22] }}...{{ text[-12:] }}{% else %}{{ text }}{% endif %} {%- endmacro %}
             <div class="timeline compact-timeline">
               {% for entry in history %}
               <div class="timeline-item compact-timeline-item">
+                {% set entry_status = entry.get("status") or 'unknown' %} {% set
+                marker_colors = get_status_colors(entry_status) %}
                 <div
-                  class="timeline-marker {% if entry.status == 'SUCCESS' %}bg-success{% elif entry.status == 'FAILED' %}bg-danger{% elif entry.status == 'RUNNING' %}bg-info{% elif entry.status == 'PENDING' %}bg-warning{% elif entry.status == 'PAUSED' %}bg-primary{% elif entry.status == 'RETRY' %}bg-secondary{% else %}bg-dark{% endif %}"
+                  class="timeline-marker pynmon-status-marker"
+                  style="background-color: {{ marker_colors.hex_color }};"
                 ></div>
                 <div class="timeline-content compact-timeline-content">
                   <div class="timeline-title compact-timeline-title">
-                    {{ status_badge(entry.status) }}
+                    {{ status_badge(entry_status) }}
                   </div>
                   <div class="timeline-date metadata-text">
                     {{ entry.timestamp }}

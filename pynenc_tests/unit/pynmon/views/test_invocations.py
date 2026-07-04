@@ -1127,6 +1127,49 @@ def test_invocation_history_endpoint(app: "Pynenc") -> None:
         assert isinstance(data, list)
 
 
+def test_invocation_detail_status_timeline_renders_status_badges(
+    app: "Pynenc",
+) -> None:
+    """The full detail status timeline should show visible status labels."""
+    app.purge()
+    call: Call = Call(add_task, Arguments({"x": 1, "y": 2}))
+    invocation: DistributedInvocation = DistributedInvocation.isolated(call)
+    app.orchestrator.register_new_invocations([invocation])
+    runner_ctx = RunnerContext.from_runner(app.runner)
+    for status in (
+        InvocationStatus.PENDING,
+        InvocationStatus.RUNNING,
+        InvocationStatus.PAUSED,
+    ):
+        app.orchestrator.set_invocation_status(
+            invocation.invocation_id, status, runner_ctx
+        )
+
+    setup_routes()
+
+    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=app):
+        client = TestClient(pynmon_app)
+        detail_response = client.get(f"/invocations/{invocation.invocation_id}")
+        history_response = client.get(
+            f"/invocations/{invocation.invocation_id}/history"
+        )
+
+    assert detail_response.status_code == 200
+    content = detail_response.text
+    assert "Status timeline" in content
+    assert "pynmon-status-badge" in content
+    assert "background-color:" in content
+    assert "color: #ffffff;" in content
+    assert ">PENDING</span" in content
+    assert ">RUNNING</span" in content
+    assert ">PAUSED</span" in content
+
+    assert history_response.status_code == 200
+    history = history_response.json()
+    assert history
+    assert all(entry.get("status") for entry in history)
+
+
 # ################################################################################### #
 # PARAMETRIZED ERROR-CASE TESTS
 # ################################################################################### #

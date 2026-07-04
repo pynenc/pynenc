@@ -88,7 +88,7 @@ def test_trigger_run_detail_shows_condition_and_context_details(
     assert "Conditions (" not in response.text
     assert "TriggerCondition" not in response.text
     assert "ConditionContext" not in response.text
-    assert "bg-success" in response.text
+    assert "pynmon-status-badge" in response.text
     assert "SUCCESS" in response.text
     assert "ValidCondition ID" in response.text
     assert condition.condition_id in response.text
