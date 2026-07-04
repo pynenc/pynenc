@@ -227,6 +227,17 @@ body {
   font-weight: 500;
 }
 
+.badge-sm {
+  font-size: 9px;
+}
+
+.pynmon-status-badge {
+  background-color: var(--pynmon-status-bg, var(--bs-secondary));
+  color: #ffffff !important;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .bg-success {
   background-color: var(--success-green) !important;
 }

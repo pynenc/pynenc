@@ -1,8 +1,9 @@
 """
 Unified status color definitions for pynmon.
 
-This module provides consistent color mappings for invocation statuses across
-all pynmon components including SVG timelines, HTML templates, and JavaScript.
+This module is the canonical palette for invocation statuses across SVG, HTML
+and JavaScript renderers. The status-to-background mapping lives in one place,
+and status badges use one shared white foreground for readability.
 
 The color scheme follows a semantic approach:
 - Neutral states: Gray tones (REGISTERED, REROUTED)
@@ -18,12 +19,12 @@ Status visualization types:
 
 Key components:
 - STATUS_COLORS: Hex color mapping for SVG/CSS
-- STATUS_BOOTSTRAP_CLASSES: Bootstrap class mapping for HTML templates
 - SEGMENT_STATUSES: Statuses that occupy worker and show as segments
 - OUTCOME_STATUSES: Final execution outcomes that color the preceding segment
 """
 
 from dataclasses import dataclass
+from typing import Any
 
 
 # Hex color mapping for SVG and CSS direct styling
@@ -45,6 +46,7 @@ STATUS_COLORS: dict[str, str] = {
 }
 
 DEFAULT_STATUS_COLOR = "#7f8c8d"  # Gray for unknown statuses
+STATUS_BADGE_TEXT_COLOR = "#ffffff"
 
 
 # Statuses that occupy a worker and should be shown as segments (duration bars)
@@ -74,76 +76,66 @@ OUTCOME_STATUSES: frozenset[str] = frozenset(
     }
 )
 
-# Bootstrap class mapping for HTML template badges
-# Using bg-* classes for consistent Bootstrap 5 styling
-STATUS_BOOTSTRAP_CLASSES: dict[str, str] = {
-    "REGISTERED": "secondary",
-    "CONCURRENCY_CONTROLLED": "warning",
-    "CONCURRENCY_CONTROLLED_FINAL": "warning",
-    "REROUTED": "info",
-    "PENDING": "warning",
-    "PENDING_RECOVERY": "warning",
-    "RUNNING": "info",
-    "RUNNING_RECOVERY": "warning",
-    "PAUSED": "primary",
-    "KILLED": "danger",
-    "SUCCESS": "success",
-    "FAILED": "danger",
-    "RETRY": "secondary",
-}
-
-DEFAULT_BOOTSTRAP_CLASS = "secondary"
-
 
 @dataclass(frozen=True)
 class StatusColors:
     """
     Status color information for a specific status.
 
-    Provides both hex colors for SVG/CSS and Bootstrap classes for templates.
+    Provides the background color plus the foreground color used for badges.
 
     :param str hex_color: Hex color string (e.g., "#3498db")
-    :param str bootstrap_class: Bootstrap class name (e.g., "info")
+    :param str text_color: Shared foreground color for status badges.
     """
 
     hex_color: str
-    bootstrap_class: str
+    text_color: str
 
 
-def get_status_colors(status: str) -> StatusColors:
+def _normalize_status_name(status: Any) -> str:
+    """Return a canonical status name for color lookups."""
+    if status is None:
+        return ""
+    if hasattr(status, "name"):
+        status = status.name
+
+    status_upper = str(status).strip().upper()
+    # Some UI surfaces use RETRYING as a display-only label; normalize it to
+    # RETRY so both timeline and status-history views share the same purple.
+    return "RETRY" if status_upper == "RETRYING" else status_upper
+
+
+STATUS_COLOR_STYLES: dict[str, dict[str, str]] = {
+    status: {"background": hex_color} for status, hex_color in STATUS_COLORS.items()
+}
+DEFAULT_STATUS_STYLE: dict[str, str] = {
+    "background": DEFAULT_STATUS_COLOR,
+}
+
+
+def get_status_colors(status: Any) -> StatusColors:
     """
     Get color information for a status.
 
-    :param str status: Status name (case-insensitive)
-    :return: StatusColors with hex and bootstrap values
+    :param status: Status name or enum-like object (case-insensitive)
+    :return: StatusColors with background and contrast values
     """
-    status_upper = status.upper()
+    status_upper = _normalize_status_name(status)
+    style = STATUS_COLOR_STYLES.get(status_upper, DEFAULT_STATUS_STYLE)
     return StatusColors(
-        hex_color=STATUS_COLORS.get(status_upper, DEFAULT_STATUS_COLOR),
-        bootstrap_class=STATUS_BOOTSTRAP_CLASSES.get(
-            status_upper, DEFAULT_BOOTSTRAP_CLASS
-        ),
+        hex_color=style["background"],
+        text_color=STATUS_BADGE_TEXT_COLOR,
     )
 
 
-def get_hex_color(status: str) -> str:
+def get_hex_color(status: Any) -> str:
     """
     Get hex color for a status.
 
-    :param str status: Status name (case-insensitive)
+    :param status: Status name or enum-like object (case-insensitive)
     :return: Hex color string
     """
-    return STATUS_COLORS.get(status.upper(), DEFAULT_STATUS_COLOR)
-
-
-def get_bootstrap_class(status: str) -> str:
-    """
-    Get Bootstrap class for a status.
-
-    :param str status: Status name (case-insensitive)
-    :return: Bootstrap class name (without 'bg-' prefix)
-    """
-    return STATUS_BOOTSTRAP_CLASSES.get(status.upper(), DEFAULT_BOOTSTRAP_CLASS)
+    return STATUS_COLORS.get(_normalize_status_name(status), DEFAULT_STATUS_COLOR)
 
 
 def is_segment_status(status: str) -> bool:
@@ -156,7 +148,7 @@ def is_segment_status(status: str) -> bool:
     :param str status: Status name (case-insensitive)
     :return: True if status should be a segment, False for point-only
     """
-    return status.upper() in SEGMENT_STATUSES
+    return _normalize_status_name(status) in SEGMENT_STATUSES
 
 
 def is_point_only_status(status: str) -> bool:
@@ -166,59 +158,4 @@ def is_point_only_status(status: str) -> bool:
     :param str status: Status name (case-insensitive)
     :return: True if status is point-only, False if segment
     """
-    return status.upper() in POINT_ONLY_STATUSES
-
-
-# JavaScript constants for client-side status color mapping
-# This string can be included in templates
-JS_STATUS_COLORS = """
-const STATUS_COLORS = {
-  'REGISTERED': '#95a5a6',
-  'CONCURRENCY_CONTROLLED': '#e67e22',
-  'CONCURRENCY_CONTROLLED_FINAL': '#d35400',
-  'REROUTED': '#16a085',
-  'PENDING': '#f39c12',
-  'PENDING_RECOVERY': '#e67e22',
-  'RUNNING': '#3498db',
-  'RUNNING_RECOVERY': '#e67e22',
-  'PAUSED': '#1abc9c',
-  'KILLED': '#c0392b',
-  'SUCCESS': '#27ae60',
-  'FAILED': '#e74c3c',
-  'RETRY': '#9b59b6'
-};
-
-const STATUS_BOOTSTRAP_CLASSES = {
-  'REGISTERED': 'secondary',
-  'CONCURRENCY_CONTROLLED': 'warning',
-  'CONCURRENCY_CONTROLLED_FINAL': 'warning',
-  'REROUTED': 'info',
-  'PENDING': 'warning',
-  'PENDING_RECOVERY': 'warning',
-  'RUNNING': 'info',
-  'RUNNING_RECOVERY': 'warning',
-  'PAUSED': 'primary',
-  'KILLED': 'danger',
-  'SUCCESS': 'success',
-  'FAILED': 'danger',
-  'RETRY': 'secondary'
-};
-
-// Statuses that occupy worker time (rendered as segments)
-const SEGMENT_STATUSES = new Set(['RUNNING', 'PENDING']);
-
-// Statuses that are instantaneous (rendered as points)
-const POINT_ONLY_STATUSES = new Set(Object.keys(STATUS_COLORS).filter(s => !SEGMENT_STATUSES.has(s)));
-
-function getStatusClass(status) {
-  return STATUS_BOOTSTRAP_CLASSES[status] || 'secondary';
-}
-
-function getStatusColor(status) {
-  return STATUS_COLORS[status] || '#7f8c8d';
-}
-
-function isSegmentStatus(status) {
-  return SEGMENT_STATUSES.has(status);
-}
-"""
+    return _normalize_status_name(status) in POINT_ONLY_STATUSES

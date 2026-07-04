@@ -21,10 +21,22 @@
     />
 
     <!-- Custom Pynmon CSS -->
-    <link href="/static/css/pynmon.css" rel="stylesheet" />
-    <link href="/static/css/timeline.css" rel="stylesheet" />
-    <link href="/static/css/arguments.css" rel="stylesheet" />
-    <link href="/static/css/invocations.css" rel="stylesheet" />
+    <link
+      href="/static/css/pynmon.css?v={{ STATIC_ASSET_VERSION }}"
+      rel="stylesheet"
+    />
+    <link
+      href="/static/css/timeline.css?v={{ STATIC_ASSET_VERSION }}"
+      rel="stylesheet"
+    />
+    <link
+      href="/static/css/arguments.css?v={{ STATIC_ASSET_VERSION }}"
+      rel="stylesheet"
+    />
+    <link
+      href="/static/css/invocations.css?v={{ STATIC_ASSET_VERSION }}"
+      rel="stylesheet"
+    />
     {% block extra_css %}{% endblock %}
 
     <!-- HTMX for dynamic updates -->

@@ -11,6 +11,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Import discovery now registers modules before execution and scans module
   dictionaries directly, which makes app detection resilient to dataclass
   module execution and lazy `__getattr__` side effects.
+- Pynmon status rendering now uses one shared status palette for badges,
+  timeline markers, and status history, so the status views stay visually consistent.
 
 ## [0.3.0] - 2026-07-01
 
