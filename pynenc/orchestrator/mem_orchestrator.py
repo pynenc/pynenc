@@ -1,7 +1,7 @@
 import pickle
 import threading
 from collections import OrderedDict, defaultdict, deque
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from datetime import UTC, datetime, timedelta
 from time import time
 from typing import TYPE_CHECKING, Any
@@ -194,6 +194,7 @@ class MemOrchestrator(BaseOrchestrator):
         # Runner heartbeat tracking
         self.runner_creation_time: dict[str, float] = {}
         self.runner_last_heartbeat: dict[str, float] = {}
+        self.runner_consumed_queues: dict[str, tuple[str, ...]] = {}
         self.atomic_service_executions: list[AtomicServiceExecution] = []
         self._atomic_service_lock = threading.RLock()
         self.runner_atomic_service_eligible: dict[str, bool] = {}
@@ -529,10 +530,14 @@ class MemOrchestrator(BaseOrchestrator):
         ]
 
     def register_runner_heartbeats(
-        self, runner_ids: list[str], can_run_atomic_service: bool = False
+        self,
+        runner_ids: list[str],
+        can_run_atomic_service: bool = False,
+        consumed_queues: Sequence[str] | None = None,
     ) -> None:
         """Register or update heartbeat timestamps for one or more runners."""
         current_time = time()
+        queues = tuple(consumed_queues or ())
 
         for runner_id in runner_ids:
             # Only update heartbeat for existing runners, or create new ones
@@ -541,6 +546,8 @@ class MemOrchestrator(BaseOrchestrator):
 
             self.runner_last_heartbeat[runner_id] = current_time
             self.runner_atomic_service_eligible[runner_id] = can_run_atomic_service
+            if consumed_queues is not None:
+                self.runner_consumed_queues[runner_id] = queues
 
     def _get_active_runners(
         self, timeout_seconds: float, can_run_atomic_service: bool | None = None
@@ -567,6 +574,7 @@ class MemOrchestrator(BaseOrchestrator):
                     creation_time=creation_time,
                     last_heartbeat=datetime.fromtimestamp(last_heartbeat, tz=UTC),
                     allow_to_run_atomic_service=allow_to_run_atomic_service,
+                    consumed_queues=self.runner_consumed_queues.get(runner_id, ()),
                 )
             )
 
@@ -819,4 +827,5 @@ class MemOrchestrator(BaseOrchestrator):
 
         self.runner_creation_time.clear()
         self.runner_last_heartbeat.clear()
+        self.runner_consumed_queues.clear()
         self.atomic_service_executions.clear()

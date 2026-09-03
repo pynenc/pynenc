@@ -7,8 +7,9 @@ import pytest
 import yaml
 
 from pynenc import Pynenc
+from pynenc.conf.config_broker import DEFAULT_PRIORITY
 from pynenc.conf.config_task import ConcurrencyControlType, ConfigTask
-from pynenc.exceptions import InvalidTaskOptionsError
+from pynenc.exceptions import ConfigError, InvalidTaskOptionsError
 from pynenc.identifiers.task_id import TASK_ID_SEPARATOR, TaskId
 from pynenc.task import Task, WorkflowTask
 
@@ -30,6 +31,8 @@ class CustomException(Exception):
     call_result_cache=False,
     disable_cache_args=("*",),
     reroute_on_concurrency_control=False,
+    queue="payments",
+    priority=42.5,
 )
 def store_with_opt(id: int, value: int) -> None:
     del id, value
@@ -52,6 +55,58 @@ def test_task_config_from_decorator_options() -> None:
     assert store_with_opt.conf.registration_concurrency == ConcurrencyControlType.KEYS
     assert store_with_opt.conf.key_arguments == ("id",)
     assert store_with_opt.conf.on_diff_non_key_args_raise is True
+    assert store_with_opt.conf.queue == "payments"
+    assert store_with_opt.conf.priority == 42.5
+
+
+def test_task_priority_defaults_to_float_without_override() -> None:
+    conf = ConfigTask(TaskId("tests", "default_priority_task"))
+
+    assert conf.priority == DEFAULT_PRIORITY
+
+
+def test_task_priority_explicit_zero_is_concrete() -> None:
+    conf = ConfigTask(
+        TaskId("tests", "explicit_zero_priority_task"),
+        task_options={"priority": 0.0},
+    )
+
+    assert conf.priority == 0.0
+
+
+def test_task_priority_direct_assignment() -> None:
+    conf = ConfigTask(TaskId("tests", "assigned_priority_task"))
+
+    conf.priority = 0.0
+
+    assert conf.priority == 0.0
+
+
+def test_task_priority_env_override() -> None:
+    with patch.dict(os.environ, {"PYNENC__CONFIGTASK__PRIORITY": "7.5"}):
+        conf = ConfigTask(TaskId("tests", "env_priority_task"))
+
+    assert conf.priority == 7.5
+
+
+def test_task_priority_rejects_values_outside_configured_range() -> None:
+    for priority in (100.1, -100.1, -101.0, float("inf"), float("nan")):
+        with pytest.raises(ConfigError, match="between -100.0 and 100.0"):
+            _ = ConfigTask(
+                TaskId("tests", "invalid_priority_task"),
+                task_options={"priority": priority},
+            ).priority
+
+
+def test_task_priority_file_override() -> None:
+    fd, filepath = tempfile.mkstemp(suffix=".yaml")
+    content = yaml.dump({"task": {"priority": 12.5}})
+    with os.fdopen(fd, "w") as tmp:
+        tmp.write(content)
+
+    conf = ConfigTask(TaskId("tests", "file_priority_task"), config_filepath=filepath)
+
+    assert conf.priority == 12.5
 
 
 def test_all_config_field_checked() -> None:

@@ -21,6 +21,8 @@
             {{ svg_content|safe }}
           </div>
 
+          {% include "partials/histogram.html" %}
+
           {% if not svg_content or 'No data' in svg_content %}
             <div class="alert alert-warning mt-3">
               No invocations found for the selected time range.

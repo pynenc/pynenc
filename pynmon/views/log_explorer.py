@@ -19,6 +19,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 from pynmon.app import get_pynenc_instance, templates
+from pynmon.util.histogram import parse_histogram_categories
 from pynmon.util.log_parser import (
     EntityRef,
     ParsedLogLine,
@@ -37,6 +38,7 @@ from pynmon.views.log_explorer_resolve import (
 )
 from pynmon.views.log_explorer_svg import (
     LogSvgParams,
+    build_log_histogram,
     build_log_svg,
     compute_log_svg_time_range,
 )
@@ -105,6 +107,7 @@ class MultiLogAnalysis:
     all_entity_refs: list[EntityRef] = field(default_factory=list)
     has_valid: bool = False
     svg_content: str = ""
+    histogram: dict = field(default_factory=dict)
     ref_details: dict[str, dict[str, str]] = field(default_factory=dict)
 
 
@@ -112,6 +115,7 @@ class MultiLogAnalysis:
 async def log_explorer(
     request: Request,
     log: str = "",
+    histogram_status: str | None = None,
 ) -> HTMLResponse:
     """Display the log explorer with an optional parsed analysis.
 
@@ -120,7 +124,7 @@ async def log_explorer(
     :return: Rendered log explorer page
     """
     app = get_pynenc_instance()
-    analysis = await _analyse_logs(app, log) if log.strip() else None
+    analysis = await _analyse_logs(app, log, histogram_status) if log.strip() else None
     return templates.TemplateResponse(
         request,
         "log_explorer/index.html",
@@ -133,7 +137,9 @@ async def log_explorer(
     )
 
 
-async def _analyse_logs(app: "Pynenc", log: str) -> MultiLogAnalysis:
+async def _analyse_logs(
+    app: "Pynenc", log: str, histogram_status: str | None = None
+) -> MultiLogAnalysis:
     """Parse the log text block and resolve all components.
 
     :param Pynenc app: The Pynenc application instance
@@ -159,6 +165,9 @@ async def _analyse_logs(app: "Pynenc", log: str) -> MultiLogAnalysis:
     else:
         timeline_qs = build_shared_timeline_qs(parsed_lines)
     svg_content = await build_log_svg(svg_params)
+    histogram = await build_log_histogram(
+        svg_params, parse_histogram_categories(histogram_status)
+    )
     ref_details = _build_ref_details(lines)
     await enrich_extra_invocations(app, all_refs, ref_details)
     await enrich_trigger_entities(app, all_refs, ref_details)
@@ -169,6 +178,7 @@ async def _analyse_logs(app: "Pynenc", log: str) -> MultiLogAnalysis:
         all_entity_refs=all_refs,
         has_valid=has_valid,
         svg_content=svg_content,
+        histogram=histogram,
         ref_details=ref_details,
     )
 

@@ -434,6 +434,8 @@ class Pynenc:
         disable_cache_args: tuple[str, ...] | None = None,
         triggers: "TriggerBuilder | list[TriggerBuilder] | None" = None,
         reroute_on_concurrency_control: bool | None = None,
+        queue: str | None = None,
+        priority: float | None = None,
     ) -> "Task": ...
 
     @overload
@@ -452,6 +454,8 @@ class Pynenc:
         disable_cache_args: tuple[str, ...] | None = None,
         triggers: "TriggerBuilder | list[TriggerBuilder] | None" = None,
         reroute_on_concurrency_control: bool | None = None,
+        queue: str | None = None,
+        priority: float | None = None,
     ) -> Callable[["Func"], "Task"]: ...
 
     def task(
@@ -469,6 +473,8 @@ class Pynenc:
         disable_cache_args: tuple[str, ...] | None = None,
         triggers: "TriggerBuilder | list[TriggerBuilder] | None" = None,
         reroute_on_concurrency_control: bool | None = None,
+        queue: str | None = None,
+        priority: float | None = None,
     ) -> "Task | Callable[[Func], Task]":
         """
         The task decorator converts the function into an instance of a BaseTask. It accepts any kind of options,
@@ -500,6 +506,10 @@ class Pynenc:
         :param TriggerBuilder | list[TriggerBuilder] | None triggers:
             Trigger definitions that determine when this task should execute automatically.
             Can be a single TriggerBuilder or a list of builders for multiple trigger conditions.
+        :param str | None queue:
+            Broker queue used for invocations of this task. Defaults to ``default``.
+        :param float | None priority:
+            Optional task-level priority override.
         :return: A Task instance or a callable that when called returns a Task instance.
 
         :example:
@@ -557,6 +567,8 @@ class Pynenc:
             "call_result_cache": call_result_cache,
             "disable_cache_args": disable_cache_args,
             "reroute_on_concurrency_control": reroute_on_concurrency_control,
+            "queue": queue,
+            "priority": priority,
         }
         options = {k: v for k, v in options.items() if v is not None}
 
@@ -590,6 +602,8 @@ class Pynenc:
         disable_cache_args: tuple[str, ...] | None = None,
         triggers: "TriggerBuilder | list[TriggerBuilder] | None" = None,
         reroute_on_concurrency_control: bool | None = None,
+        queue: str | None = None,
+        priority: float | None = None,
     ) -> "WorkflowTask": ...
 
     @overload
@@ -608,6 +622,8 @@ class Pynenc:
         disable_cache_args: tuple[str, ...] | None = None,
         triggers: "TriggerBuilder | list[TriggerBuilder] | None" = None,
         reroute_on_concurrency_control: bool | None = None,
+        queue: str | None = None,
+        priority: float | None = None,
     ) -> Callable[["Func"], "WorkflowTask"]: ...
 
     def workflow(
@@ -625,6 +641,8 @@ class Pynenc:
         disable_cache_args: tuple[str, ...] | None = None,
         triggers: "TriggerBuilder | list[TriggerBuilder] | None" = None,
         reroute_on_concurrency_control: bool | None = None,
+        queue: str | None = None,
+        priority: float | None = None,
     ) -> "WorkflowTask | Callable[[Func], WorkflowTask]":
         """Decorate a function as an explicit workflow task."""
         options = {
@@ -638,6 +656,8 @@ class Pynenc:
             "call_result_cache": call_result_cache,
             "disable_cache_args": disable_cache_args,
             "reroute_on_concurrency_control": reroute_on_concurrency_control,
+            "queue": queue,
+            "priority": priority,
             "is_workflow_task": True,
         }
         options = {k: v for k, v in options.items() if v is not None}
@@ -676,6 +696,8 @@ class Pynenc:
         call_result_cache: bool | None = None,
         disable_cache_args: tuple[str, ...] | None = None,
         reroute_on_concurrency_control: bool | None = None,
+        queue: str | None = None,
+        priority: float | None = None,
     ) -> "Func": ...
 
     @overload
@@ -695,6 +717,8 @@ class Pynenc:
         call_result_cache: bool | None = None,
         disable_cache_args: tuple[str, ...] | None = None,
         reroute_on_concurrency_control: bool | None = None,
+        queue: str | None = None,
+        priority: float | None = None,
     ) -> "Func": ...
 
     @overload
@@ -714,6 +738,8 @@ class Pynenc:
         call_result_cache: bool | None = None,
         disable_cache_args: tuple[str, ...] | None = None,
         reroute_on_concurrency_control: bool | None = None,
+        queue: str | None = None,
+        priority: float | None = None,
     ) -> Callable[["Func[Params, Result]"], "Func[Params, Result]"]: ...
 
     def direct_task(
@@ -732,6 +758,8 @@ class Pynenc:
         call_result_cache: bool | None = None,
         disable_cache_args: tuple[str, ...] | None = None,
         reroute_on_concurrency_control: bool | None = None,
+        queue: str | None = None,
+        priority: float | None = None,
     ) -> (
         "Func[Params, Result] | Callable[[Func[Params, Result]], Func[Params, Result]]"
     ):
@@ -867,6 +895,8 @@ class Pynenc:
                 "call_result_cache": call_result_cache,
                 "disable_cache_args": disable_cache_args,
                 "reroute_on_concurrency_control": reroute_on_concurrency_control,
+                "queue": queue,
+                "priority": priority,
             }
             task_options = {k: v for k, v in task_options.items() if v is not None}
             task = self.task(func, **task_options)  # type: ignore

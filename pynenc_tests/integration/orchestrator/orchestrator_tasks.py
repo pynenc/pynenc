@@ -1,4 +1,5 @@
 from pynenc_tests.conftest import MockPynenc
+from pynenc.conf.config_task import ConcurrencyControlType
 
 mock_app = MockPynenc()
 
@@ -24,4 +25,12 @@ def dummy_mirror(arg: str) -> str:
 
 @mock_app.task
 def dummy_key_arg(key: str, arg: str) -> str:
+    return f"{key}:{arg}"
+
+
+@mock_app.task(
+    running_concurrency=ConcurrencyControlType.KEYS,
+    key_arguments=("key",),
+)
+def dummy_running_key_arg(key: str, arg: str) -> str:
     return f"{key}:{arg}"

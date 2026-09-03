@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 import importlib
 from logging import Logger
 import os
+import random
 import signal
 import socket
 import threading
@@ -13,10 +14,11 @@ from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
 from pynenc import context
+from pynenc.conf.config_runner import ConfigRunner, QueueSelectionStrategy
 from pynenc.conf.validation_atomic_service import (
     validate_atomic_service_config,
 )
-from pynenc.conf.config_runner import ConfigRunner
+from pynenc.conf.validate_broker import validate_runner_broker_queues
 from pynenc.exceptions import (
     InvocationStatusError,
     InvocationStatusTransitionError,
@@ -60,6 +62,7 @@ class BaseRunner(ABC):
         # Signalled when on_stop() completes so callers can wait for the run() loop to fully exit
         self._run_stopped = threading.Event()
         self._run_stopped.set()  # initially not running, so already "stopped"
+        self._queue_retrieval_index = 0
 
         # Set app relationship last, after all attributes are initialized
         self.app = app
@@ -74,6 +77,7 @@ class BaseRunner(ABC):
 
     def __setstate__(self, state: dict) -> None:
         self.__dict__.update(state)
+        self.__dict__.setdefault("_queue_retrieval_index", 0)
         self._run_stopped = threading.Event()
         self._run_stopped.set()
 
@@ -150,6 +154,7 @@ class BaseRunner(ABC):
             f"Starting {self.__class__.__name__} runner:{self.runner_id}"
         )
         validate_atomic_service_config(self.app.conf, self.conf)
+        validate_runner_broker_queues(self.app.broker.conf, self.conf)
         if threading.current_thread() is threading.main_thread():
             signal.signal(signal.SIGINT, self.stop_runner_loop)
             signal.signal(signal.SIGTERM, self.stop_runner_loop)
@@ -195,6 +200,34 @@ class BaseRunner(ABC):
         One iteration of the runner loop.
         Subclasses should implement this method to process invocations.
         """
+
+    def queue_names_for_retrieval(self) -> tuple[str, ...]:
+        """Return one finite queue-attempt order for the next broker lookup."""
+        queue_names = self.conf.queues or self.app.broker.conf.queues
+        if len(queue_names) <= 1:
+            return queue_names
+        match self.conf.queue_selection_strategy:
+            case QueueSelectionStrategy.ORDERED:
+                return queue_names
+            case QueueSelectionStrategy.RANDOM:
+                shuffled = list(queue_names)
+                random.shuffle(shuffled)
+                return tuple(shuffled)
+            case QueueSelectionStrategy.ROUND_ROBIN:
+                start = self._queue_retrieval_index % len(queue_names)
+                return queue_names[start:] + queue_names[:start]
+            case _:
+                raise ValueError(f"Unknown: {self.conf.queue_selection_strategy=}")
+
+    def note_queue_retrieved(self, queue_name: str) -> None:
+        """Advance round-robin state after a queue returns an invocation."""
+        if self.conf.queue_selection_strategy != QueueSelectionStrategy.ROUND_ROBIN:
+            return
+        queue_names = self.conf.queues or self.app.broker.conf.queues
+        if queue_name in queue_names:
+            self._queue_retrieval_index = (queue_names.index(queue_name) + 1) % len(
+                queue_names
+            )
 
     @abstractmethod
     def _on_stop_runner_loop(self) -> None:
@@ -460,7 +493,10 @@ class BaseRunner(ABC):
         :param RunnerContext child_context: The context of the child runner to register
         """
         self.app.state_backend.store_runner_context(child_context)
-        self.app.orchestrator.register_runner_heartbeats([child_context.runner_id])
+        self.app.orchestrator.register_runner_heartbeats(
+            [child_context.runner_id],
+            consumed_queues=self.conf.queues,
+        )
 
     def _report_child_runner_heartbeats(self) -> None:
         """
@@ -472,7 +508,10 @@ class BaseRunner(ABC):
         the child's own heartbeat thread.
         """
         if active_child_ids := self.get_active_child_runner_ids():
-            self.app.orchestrator.register_runner_heartbeats(active_child_ids)
+            self.app.orchestrator.register_runner_heartbeats(
+                active_child_ids,
+                consumed_queues=self.conf.queues,
+            )
 
 
 class DummyRunner(BaseRunner):

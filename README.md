@@ -42,13 +42,13 @@
 
 Pynenc is a Python task orchestration framework for distributed workers. It gives each task invocation a tracked lifecycle, lets the orchestrator enforce concurrency and retry rules, and keeps enough state to inspect what happened after the fact.
 
-## 🆕 What's New in v0.3.1
+## 🆕 What's New in v0.4.0
 
-- **Explicit workflow tasks**: `@app.workflow` now marks the task that defines a workflow or sub-workflow root
-- **Root workflow operations**: deterministic orchestration lives under `wf.root.uuid()`, `wf.root.random()`, `wf.root.utc_now()`, and `wf.root.execute_task(...)`
-- **Ordinary task behavior**: top-level `@app.task` calls are standalone task invocations unless they are called from inside a workflow
-- **Workflow scope errors**: invalid root-only workflow calls raise `DeterministicOperationScopeError` with invocation and workflow context
-- **Pynmon workflow markers**: timeline views outline workflow-defining invocations so workflow roots and sub-workflow roots are easier to spot
+- **Named queues**: route tasks to portable logical queues and choose which queues each runner consumes
+- **Broker priorities**: assign finite priorities from `-100.0` through `100.0`, with `0.0` as the concrete default
+- **Task-specific rules**: override task priorities centrally with task-id patterns
+- **Fair queue selection**: runners support ordered, round-robin, and random queue selection without starving lower-traffic queues
+- **Backend parity**: memory, SQLite, MongoDB, Redis, and RabbitMQ brokers share the same routing and retrieval contract
 
 See the [Changelog](https://docs.pynenc.org/changelog.html) for the complete list of changes.
 
@@ -139,6 +139,10 @@ See the [Changelog](https://docs.pynenc.org/changelog.html) for the complete lis
   - **Running Recovery**: Invocations owned by runners that stopped sending heartbeats are detected and re-queued.
   - **Atomic Service Scheduling**: A time-slot distribution algorithm ensures only one runner executes global services (trigger evaluation, recovery) per cycle, preventing race conditions in multi-runner deployments.
 
+- **Named Queues & Broker Priorities**: Route tasks to dedicated queues, assign
+  finite priorities from `-100.0` through `100.0`, and bind runners to all or selected
+  queues. Queue rotation is round-robin by default to avoid starving later queues.
+
 - **Automatic Task Prioritization**: The broker prioritizes tasks by counting how many other tasks depend on them. The task blocking the most others is selected first.
 
 - **Automatic Task Pausing**: Tasks waiting for dependencies are paused, freeing their runner slots. Higher-priority tasks (those with more dependents waiting) run instead, preventing thread-pool exhaustion and deadlocks.
@@ -159,7 +163,7 @@ See the [Changelog](https://docs.pynenc.org/changelog.html) for the complete lis
 
 Installing Pynenc is a simple process. The core package provides the framework, and you'll need to install backend plugins separately:
 
-### Core (supports Python 3.11+)
+### Core (supports Python 3.12+)
 
 ```bash
 pip install pynenc

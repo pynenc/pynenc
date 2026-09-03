@@ -153,3 +153,27 @@ def process_large_shared_arg(large_data: str) -> float:
         f"INI process_large_shared_arg invocation_id={process_large_shared_arg.invocation.invocation_id}"
     )
     return start_time
+
+
+@mock_app.task(queue="default")
+def broker_default_queue_task(label: str) -> str:
+    """Tiny task used by queue-routing integration tests."""
+    return f"default:{label}"
+
+
+@mock_app.task(queue="payments")
+def broker_payment_queue_task(label: str) -> str:
+    """Tiny task used by queue-routing integration tests."""
+    return f"payment:{label}"
+
+
+@mock_app.task(queue="payments", priority=100.0)
+def broker_urgent_payment_queue_task(label: str) -> str:
+    """Tiny task used by queue-priority integration tests."""
+    return f"urgent-payment:{label}"
+
+
+@mock_app.task(queue="payments", priority=0.0)
+def broker_zero_override_payment_queue_task(label: str) -> str:
+    """Task with a concrete default overridden by broker policy in tests."""
+    return f"zero-payment:{label}"

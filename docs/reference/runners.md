@@ -31,11 +31,54 @@ PynencBuilder().multi_thread_runner(min_threads=2, max_threads=8).build()
 
 These fields apply to all runner types via `ConfigRunner`:
 
-| Field                                    | Type    | Default | Description                                                       |
-| ---------------------------------------- | ------- | ------- | ----------------------------------------------------------------- |
-| `invocation_wait_results_sleep_time_sec` | `float` | `0.1`   | Delay between polls when waiting for dependent invocation results |
-| `runner_loop_sleep_time_sec`             | `float` | `0.1`   | Sleep between main loop iterations                                |
-| `min_parallel_slots`                     | `int`   | `1`     | Minimum number of concurrent execution slots                      |
+| Field                                    | Type    | Default         | Description                                                                            |
+| ---------------------------------------- | ------- | --------------- | -------------------------------------------------------------------------------------- |
+| `invocation_wait_results_sleep_time_sec` | `float` | `0.1`           | Delay between polls when waiting for dependent invocation results                      |
+| `runner_loop_sleep_time_sec`             | `float` | `0.1`           | Sleep between main loop iterations                                                     |
+| `min_parallel_slots`                     | `int`   | `1`             | Minimum number of concurrent execution slots                                           |
+| `queues`                                 | `tuple` | `()`            | Broker queues consumed by this runner. Empty follows all configured broker queues      |
+| `queue_selection_strategy`               | `str`   | `"round_robin"` | Queue selection across multiple consumed queues: `round_robin`, `random`, or `ordered` |
+
+### Queue Selection
+
+By default, runners consume every configured broker queue. Restrict a runner to
+one or more queues with runner configuration. Use the normal Pynenc
+configuration path for this: TOML, builder config, or environment variables.
+
+```toml
+[tool.pynenc]
+queues = ["default", "payments", "reports"]
+
+[tool.pynenc.runner]
+queues = ["payments", "reports"]
+```
+
+For a dedicated process, use the runner-specific environment override:
+
+```bash
+PYNENC__CONFIGRUNNER__QUEUES=payments,reports pynenc --app myapp.tasks.app runner start
+```
+
+The broker only dequeues one queue at a time. When a runner consumes more than
+one queue, `queue_selection_strategy` decides which queue the runner asks next:
+`round_robin` advances after each successful dequeue, `random` shuffles attempts
+for each retrieval, and `ordered` always starts from the configured order. Use
+`ordered` only when that dominance is intended, because later queues can starve
+if earlier queues keep receiving work.
+
+Priorities are applied within one broker queue. Tasks without a direct priority
+override use matching broker `priority_rules`; if no rule matches, the broker
+default priority is `0.0`.
+
+Runner queue selection is intentionally more flexible. A runner may consume a
+queue that is not listed in current broker config, which is useful for draining
+old queues after a deployment. Queue mismatch warnings or errors are controlled
+by broker config.
+
+Active runner heartbeats include consumed queues, so Pynmon can show which
+runners are attached to each queue and which queues currently have pending work
+without consumers. If a runner consumes an old queue that is no longer
+configured for new task routing, Pynmon marks that queue as `not configured`.
 
 ## Choosing a Runner
 

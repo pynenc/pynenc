@@ -20,7 +20,7 @@ def test_route_default(task_sum_io: "Task") -> None:
     """
     app = task_sum_io.app
     actual_invocations = [task_sum_io(i, i).invocation_id for i in range(2)]
-    # test that app.broker.route_invocation (MemBroker.route_invocation) has been called
+    # test that the invocations were routed through the broker
     stored_invocations = list(
         app.orchestrator.get_existing_invocations(task=task_sum_io)
     )

@@ -223,3 +223,9 @@ def test_log_explorer_renders(pynmon_client: "PynmonClient", task_fn: "Task") ->
 
     # References panel rendered with at least one section
     assert "refs-section" in content, f"No references panel for {label}"
+
+    # The same resolved invocation scope feeds the occupancy histogram.
+    assert "data-histogram-panel" in content, f"No histogram panel for {label}"
+    if task_fn.app.app_id == app_0.app_id:
+        assert "data-histogram-start" in content, f"No histogram SVG for {label}"
+        assert invocation_id in content, f"Histogram scope lost invocation for {label}"

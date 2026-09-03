@@ -4,7 +4,7 @@ This tutorial walks you through installing Pynenc, defining a task, executing it
 
 ## Prerequisites
 
-- Python 3.11 or later
+- Python 3.12 or later
 - pip (or any Python package manager)
 
 ## Step 1: Install Pynenc

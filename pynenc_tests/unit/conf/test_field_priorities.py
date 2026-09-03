@@ -24,6 +24,15 @@ def test_config_values_map() -> None:
     assert conf.field == 1
 
 
+def test_direct_assignment_updates_field() -> None:
+    """Direct config assignment updates the resolved field value."""
+    conf = SomeConfig()
+
+    conf.field = 1
+
+    assert conf.field == 1
+
+
 def test_config_specific_values_map() -> None:
     """Test that within a value map,
     specific Config class values overwrite general ones"""

@@ -37,7 +37,7 @@ from pynmon.util.status_colors import (
 logging.getLogger("pynmon").addHandler(logging.NullHandler())
 
 logger = logging.getLogger("pynmon")
-STATIC_ASSET_VERSION = "20260704-status-badge-white"
+STATIC_ASSET_VERSION = "20260902-histogram"
 
 
 def configure_logging(log_level: str = "INFO") -> None:

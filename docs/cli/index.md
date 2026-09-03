@@ -61,6 +61,22 @@ If auto-discovery finds more than one app, specify the one to run:
 pynenc --app myapp.tasks.app runner start
 ```
 
+Queue selection is configured through the normal Pynenc configuration system.
+By default, the runner uses `ConfigRunner.queues`, whose default is all broker
+queues.
+
+The broker dequeues one queue per request. If the runner consumes multiple
+queues, `ConfigRunner.queue_selection_strategy` decides which queue is asked
+next. The default is `round_robin`; `ordered` always starts from the first queue
+and can starve later queues if earlier queues are never empty.
+
+For a one-off dedicated runner process, use the runner-specific environment
+override:
+
+```bash
+PYNENC__CONFIGRUNNER__QUEUES=payments,reports pynenc --app myapp.tasks.app runner start
+```
+
 The runner type is determined by the application configuration (`runner_cls`). Using the default `DummyRunner` raises an error — configure a functional runner first.
 
 To stop the runner, send `SIGINT` (`Ctrl+C`) or `SIGTERM`. The runner shuts down gracefully.

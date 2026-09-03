@@ -127,12 +127,14 @@ def mock_active_runners() -> list[ActiveRunnerInfo]:
             creation_time=now,
             last_heartbeat=now,
             allow_to_run_atomic_service=True,
+            consumed_queues=("default", "payments"),
         ),
         ActiveRunnerInfo(
             runner_id="runner-2",
             creation_time=now,
             last_heartbeat=now,
             allow_to_run_atomic_service=False,
+            consumed_queues=("reports",),
         ),
     ]
 
@@ -196,6 +198,9 @@ def test_runners_overview_shows_active_runners(
         content = response.text
         assert "Active Runners" in content
         assert "runner-1" in content or "ThreadRunner" in content
+        assert "default" in content
+        assert "payments" in content
+        assert "reports" in content
 
 
 def test_runners_overview_shows_statistics(

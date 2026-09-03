@@ -296,7 +296,11 @@ class MultiThreadRunner(BaseRunner):
                 self._spawn_thread_runner_process()
                 current_processes = len(self.child_runner_ids)
         else:
-            queued_invocations = self.app.broker.count_invocations()
+            # An empty runner queue list means all queues declared by the broker.
+            # Explicit undeclared queues are still supported, but must be named
+            # in the runner configuration so scaling can count them.
+            queue_names = self.conf.queues or self.app.broker.conf.queues
+            queued_invocations = self.app.broker.count_invocations(queue_names)
             if (
                 queued_invocations > current_processes
                 and current_processes < self.max_processes

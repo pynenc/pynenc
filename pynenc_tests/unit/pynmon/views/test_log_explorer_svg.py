@@ -14,9 +14,11 @@ from pynenc.trigger.monitoring import (
 )
 from pynenc_tests.conftest import MockPynenc
 from pynmon.util.log_parser import EntityRef
+from pynmon.util.histogram import HistogramCategory
 from pynmon.views.log_explorer_svg import (
     LogSvgParams,
     _compute_time_range,
+    build_log_histogram,
     build_log_svg,
     compute_log_svg_time_range,
 )
@@ -125,12 +127,14 @@ def test_compute_time_range_should_scale_padding_for_larger_blocks() -> None:
 
 def test_log_svg_should_render_referenced_event_markers_and_relations() -> None:
     event_time = datetime(2026, 5, 18, 15, 28, 37, 800000, tzinfo=UTC)
+    source_inv = "11111111-1111-4111-8111-111111111111"
+    child_inv = "22222222-2222-4222-8222-222222222222"
     event = EventRecord(
         event_id="evt-1",
         event_code="result.any.captured",
         timestamp=event_time,
-        emitted_by_invocation_id="source-inv",
-        triggered_invocation_ids=["child-inv"],
+        emitted_by_invocation_id=source_inv,
+        triggered_invocation_ids=[child_inv],
     )
     run = TriggerRunRecord(
         trigger_run_id="run-1",
@@ -140,8 +144,8 @@ def test_log_svg_should_render_referenced_event_markers_and_relations() -> None:
         valid_condition_ids=["vc-1"],
         condition_ids=["c-1"],
         event_ids=[event.event_id],
-        source_invocation_ids=["source-inv"],
-        triggered_invocation_id="child-inv",
+        source_invocation_ids=[source_inv],
+        triggered_invocation_id=child_inv,
         claimed_at=event_time,
         executed_at=event_time,
         participants=[
@@ -162,14 +166,18 @@ def test_log_svg_should_render_referenced_event_markers_and_relations() -> None:
             # Emitter has a RUNNING segment around the event timestamp so
             # the strict marker anchor can resolve to its visible bar.
             _history(
-                "source-inv",
+                source_inv,
                 InvocationStatus.RUNNING,
                 event_time - timedelta(milliseconds=50),
             ),
-            _history("source-inv", InvocationStatus.SUCCESS, event_time),
-            _history("child-inv", InvocationStatus.REGISTERED, event_time),
+            _history(source_inv, InvocationStatus.SUCCESS, event_time),
+            _history(child_inv, InvocationStatus.REGISTERED, event_time),
         ],
     )
+    invocation = MagicMock()
+    invocation.task.task_id = "pkg.task"
+    invocation.task.is_workflow_root_task = False
+    app.state_backend.get_invocation = MagicMock(return_value=invocation)
     svg = asyncio.run(
         build_log_svg(
             LogSvgParams(
@@ -187,6 +195,19 @@ def test_log_svg_should_render_referenced_event_markers_and_relations() -> None:
     # would only repeat the bar placement and add visual noise.
     assert "event-origin-relation-line" not in svg
     assert "event-trigger-relation-line" in svg
+    histogram = asyncio.run(
+        build_log_histogram(
+            LogSvgParams(
+                app=app,
+                all_refs=[EntityRef(kind="event", value=event.event_id)],
+                utc_timestamps=[event_time],
+            ),
+            frozenset({HistogramCategory.RUNNING}),
+        )
+    )
+    assert 'data-left-margin="320"' in svg
+    assert 'data-histogram-left="320"' in histogram["svg"]
+    assert 'data-histogram-right="2000"' in histogram["svg"]
 
 
 def test_log_svg_should_backfill_referenced_invocations_outside_window() -> None:

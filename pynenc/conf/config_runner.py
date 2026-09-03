@@ -1,7 +1,50 @@
+from enum import StrEnum, auto
+from typing import Any, TypeVar
+
 from cistell import ConfigField
 
 from pynenc.conf.config_base import ConfigPynencBase
+from pynenc.conf.config_broker import runner_queue_names_config_mapper
 from pynenc.conf.config_sqlite import ConfigSQLite
+from pynenc.exceptions import ConfigError
+
+T = TypeVar("T")
+
+
+class QueueSelectionStrategy(StrEnum):
+    """How a runner selects among multiple queues it is configured to consume."""
+
+    ROUND_ROBIN = auto()
+    RANDOM = auto()
+    ORDERED = auto()
+
+
+def validate_queue_selection_strategy(value: Any) -> QueueSelectionStrategy:
+    """Validate and return a QueueSelectionStrategy."""
+    if isinstance(value, QueueSelectionStrategy):
+        return value
+    if isinstance(value, str):
+        try:
+            return QueueSelectionStrategy(value.strip().lower())
+        except ValueError as exc:
+            choices = ", ".join(strategy.value for strategy in QueueSelectionStrategy)
+            raise ConfigError(
+                f"Invalid queue_selection_strategy {value!r}. "
+                f"Expected one of: {choices}"
+            ) from exc
+    raise ConfigError(
+        "queue_selection_strategy must be a QueueSelectionStrategy or string"
+    )
+
+
+def queue_selection_strategy_mapper(value: Any, expected_type: type[T]) -> T:
+    """Normalize runner queue-selection strategy config values."""
+    queue_selection_strategy = validate_queue_selection_strategy(value)
+    if isinstance(queue_selection_strategy, expected_type):
+        return queue_selection_strategy
+    raise TypeError(
+        f"Expected {expected_type} for queue_selection_strategy, got {type(queue_selection_strategy)}"
+    )
 
 
 class ConfigRunner(ConfigPynencBase):
@@ -22,11 +65,31 @@ class ConfigRunner(ConfigPynencBase):
         Minimum number of parallel execution slots for tasks. This setting determines the minimum number of tasks
         that can run in parallel, regardless of the implementation (threads or processes). For instance, on a
         single-core machine, setting this to 2 would allow at least two tasks to run concurrently.
+
+    :cvar ConfigField[tuple[str, ...]] queues:
+        Queues this runner will consume invocations from. An empty tuple means
+        all queues currently configured by the broker.
+
+    :cvar ConfigField[QueueSelectionStrategy] queue_selection_strategy:
+        Defines how the runner consumes invocations when listening to multiple queues:
+
+        - ROUND_ROBIN: Consumes one invocation per queue in sequential order.
+        - RANDOM: Chooses a random queue to retrieve the next invocation.
+        - ORDERED: Always checks queues in a fixed order. This acts as a priority system
+          and may prevent tasks in later queues from ever being consumed if earlier queues
+          are never empty.
     """
 
     invocation_wait_results_sleep_time_sec = ConfigField(0.1)
     runner_loop_sleep_time_sec = ConfigField(0.1)
     min_parallel_slots = ConfigField(1)
+    queues: ConfigField[tuple[str, ...]] = ConfigField(
+        (), mapper=runner_queue_names_config_mapper
+    )
+    queue_selection_strategy: ConfigField[QueueSelectionStrategy] = ConfigField(
+        QueueSelectionStrategy.ROUND_ROBIN,
+        mapper=queue_selection_strategy_mapper,
+    )
 
 
 class ConfigThreadRunner(ConfigRunner):

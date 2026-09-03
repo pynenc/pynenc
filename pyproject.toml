@@ -1,6 +1,6 @@
 [project]
 name = "pynenc"
-version = "0.3.1"
+version = "0.4.0"
 description = "A task management system for complex distributed orchestration"
 authors = [{ name = "Luis Diaz", email = "code.luis.diaz@proton.me" }]
 license = { text = "MIT License" }
@@ -87,8 +87,8 @@ profile = "black"
 
 [tool.black]
 line-length = 88
-target-version = ['py311', 'py312', 'py313', 'py314']
-required-version = '23.11.0'
+target-version = ['py312', 'py313', 'py314']
+required-version = '26.3.1'
 exclude = '''
 /(
     \.mypy_cache

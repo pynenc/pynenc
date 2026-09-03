@@ -81,15 +81,17 @@ def test_broker_queue_shows_pending_invocations(app_broker: "Pynenc") -> None:
     invocation2: DistributedInvocation = DistributedInvocation.isolated(call2)
 
     # Manually route them to the broker to ensure they are queued
-    app_broker.broker.route_invocation(invocation1.invocation_id)
-    app_broker.broker.route_invocation(invocation2.invocation_id)
+    app_broker.orchestrator.route_invocation(invocation1)
+    app_broker.orchestrator.route_invocation(invocation2)
 
     # Test retrieve directly
     retrieved_id = app_broker.broker.retrieve_invocation()
 
     # Re-route for the actual test
     if retrieved_id:
-        app_broker.broker.route_invocation(retrieved_id)
+        app_broker.orchestrator.route_invocation(
+            app_broker.state_backend.get_invocation(retrieved_id)
+        )
 
     # Setup routes before creating test client
     setup_routes()

@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator, Sequence
 from datetime import datetime
 from functools import cached_property
 from time import time
@@ -493,14 +493,14 @@ class BaseOrchestrator(ABC):
 
     def set_invocation_retry(
         self,
-        invocation_id: "InvocationId",
+        invocation: "DistributedInvocation[Params, Result]",
         exception: Exception,
         runner_ctx: "RunnerContext",
     ) -> None:
         """
         Sets an invocation for retry in case of a retriable exception.
 
-        :param InvocationId invocation_id: The ID of the invocation to be retried.
+        :param DistributedInvocation invocation: The invocation to be retried.
         :param Exception exception: The exception that triggered the retry.
         """
         # TODO! on previous fail, this should still change status
@@ -509,10 +509,31 @@ class BaseOrchestrator(ABC):
 
         # TODO store Retry exception on Retry status
         self.app.orchestrator.set_invocation_status(
-            invocation_id, InvocationStatus.RETRY, runner_ctx
+            invocation.invocation_id, InvocationStatus.RETRY, runner_ctx
         )
-        self.app.orchestrator.increment_invocation_retries(invocation_id)
-        self.app.broker.route_invocation(invocation_id)
+        self.app.orchestrator.increment_invocation_retries(invocation.invocation_id)
+        self.route_invocation(invocation)
+
+    def route_invocation(
+        self, invocation: "DistributedInvocation[Params, Result]"
+    ) -> None:
+        """Route an invocation through the broker."""
+        self.app.broker.route_invocation(
+            invocation.invocation_id,
+            invocation.task.broker_queue,
+            invocation.task.broker_priority,
+        )
+
+    def route_invocations(
+        self, invocations: Sequence["DistributedInvocation[Params, Result]"]
+    ) -> None:
+        """Route multiple invocations through the broker."""
+        routes: dict[tuple[str, float], list[InvocationId]] = {}
+        for invocation in invocations:
+            route = (invocation.task.broker_queue, invocation.task.broker_priority)
+            routes.setdefault(route, []).append(invocation.invocation_id)
+        for (queue_name, priority), invocation_ids in routes.items():
+            self.app.broker.route_invocations(invocation_ids, queue_name, priority)
 
     def is_candidate_to_run_by_concurrency_control(
         self, invocation: "DistributedInvocation[Params, Result]"
@@ -635,6 +656,8 @@ class BaseOrchestrator(ABC):
         blocking_invocation_ids: set["InvocationId"],
         invocations_to_reroute: set["InvocationId"],
         runner_ctx: "RunnerContext",
+        queue_provider: Callable[[], Sequence[str]],
+        on_queue_retrieved: Callable[[str], None],
     ) -> Iterator["DistributedInvocation"]:
         """
         Retrieves additional invocations to run, considering those not blocked or already identified as blocking.
@@ -646,7 +669,13 @@ class BaseOrchestrator(ABC):
         :rtype: Iterator["DistributedInvocation"]
         """
         while missing_invocations > 0:
-            if invocation_id := self.app.broker.retrieve_invocation():
+            retrieved_invocation = False
+            for queue_name in queue_provider():
+                invocation_id = self.app.broker.retrieve_invocation(queue_name)
+                if not invocation_id:
+                    continue
+                retrieved_invocation = True
+                on_queue_retrieved(queue_name)
                 if invocation_id not in blocking_invocation_ids:
                     invocation_status = self.get_invocation_status(invocation_id)
                     if invocation_status.is_available_for_run():
@@ -669,7 +698,7 @@ class BaseOrchestrator(ABC):
                                     InvocationStatus.CONCURRENCY_CONTROLLED_FINAL,
                                     runner_ctx,
                                 )
-                            continue
+                            break
                         try:
                             self.set_invocation_status(
                                 invocation_id,
@@ -682,8 +711,9 @@ class BaseOrchestrator(ABC):
                             self.app.logger.warning(
                                 f"Could not set invocation:{invocation_id} to status:pending: {ex}"
                             )
-                            continue
-            else:
+                            break
+                break
+            if not retrieved_invocation:
                 break
 
     def reroute_invocations(
@@ -700,10 +730,15 @@ class BaseOrchestrator(ABC):
             self.set_invocation_status(
                 invocation_id, InvocationStatus.REROUTED, runner_ctx
             )
-            self.app.broker.route_invocation(invocation_id)
+            invocation = self.app.state_backend.get_invocation(invocation_id)
+            self.route_invocation(invocation)
 
     def get_invocations_to_run(
-        self, max_num_invocations: int, runner_ctx: "RunnerContext"
+        self,
+        max_num_invocations: int,
+        runner_ctx: "RunnerContext",
+        queue_provider: Callable[[], Sequence[str]] | None = None,
+        on_queue_retrieved: Callable[[str], None] | None = None,
     ) -> Iterator["DistributedInvocation"]:
         """
         Retrieves a set of invocations to run, considering blocking and concurrency control.
@@ -713,6 +748,8 @@ class BaseOrchestrator(ABC):
         :rtype: Iterator["DistributedInvocation"]
         """
         blocking_invocation_ids: set[InvocationId] = set()
+        queue_provider = queue_provider or self.app.runner.queue_names_for_retrieval
+        on_queue_retrieved = on_queue_retrieved or self.app.runner.note_queue_retrieved
         # Get blocking invocations as IDs but still need to yield actual invocations
         for blocking_invocation_id in self.get_blocking_invocations_to_run(
             max_num_invocations, blocking_invocation_ids, runner_ctx
@@ -729,6 +766,8 @@ class BaseOrchestrator(ABC):
             blocking_invocation_ids,
             invocations_to_reroute,
             runner_ctx,
+            queue_provider,
+            on_queue_retrieved,
         )
         self.reroute_invocations(invocations_to_reroute, runner_ctx)
 
@@ -749,7 +788,7 @@ class BaseOrchestrator(ABC):
         inv_ids = [invocation.invocation_id for invocation in invocations]
         self.app.state_backend.add_histories(invocations, status_record, runner_ctx)
         self.app.trigger.report_tasks_status(inv_ids, status_record.status)
-        self.app.broker.route_invocations(inv_ids)
+        self.route_invocations(invocations)
         for invocation in invocations:
             task_key = invocation.call.task.task_id.key
             inv_id = invocation.invocation_id
@@ -901,6 +940,7 @@ class BaseOrchestrator(ABC):
         self,
         runner_ids: list[str],
         can_run_atomic_service: bool = False,
+        consumed_queues: Sequence[str] | None = None,
     ) -> None:
         """
         Register or update heartbeat timestamps for one or more runners.
@@ -915,6 +955,7 @@ class BaseOrchestrator(ABC):
 
         :param list[str] runner_ids: List of runner_ids to register/update heartbeats for.
         :param bool can_run_atomic_service: Whether these runners are eligible to run atomic services.
+        :param Sequence[str] | None consumed_queues: Queue selection consumed by these runners.
         """
 
     @abstractmethod
@@ -1006,8 +1047,14 @@ class BaseOrchestrator(ABC):
         different membership snapshots while workers are starting/stopping.
         """
         conf = self.app.conf
+        current_runner = context.get_current_runner(self.app.app_id)
+        consumed_queues = (
+            current_runner.conf.queues if current_runner is not None else None
+        )
         self.register_runner_heartbeats(
-            [runner_ctx.runner_id], can_run_atomic_service=True
+            [runner_ctx.runner_id],
+            can_run_atomic_service=True,
+            consumed_queues=consumed_queues,
         )
         now = time()
         claim = decide_atomic_service_claim(

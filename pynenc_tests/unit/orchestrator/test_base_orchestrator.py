@@ -26,10 +26,13 @@ def test_route_default() -> None:
     mock_base_app.orchestrator._register_new_invocations.return_value = (
         InvocationStatusRecord(status=InvocationStatus.REGISTERED)
     )
-    invocation = add(1, 3)
+    with patch.object(mock_base_app.broker, "_route_invocations") as route_invocations:
+        invocation = add(1, 3)
     assert isinstance(invocation, DistributedInvocation)
-    # test that app.broker.route_invocation (MockBroker.route_invocation) has been called
-    mock_base_app.broker.route_invocations.assert_called_once()
+    # test that the broker queued the invocation
+    route_invocations.assert_called_once_with(
+        [invocation.invocation_id], "default", 0.0
+    )
     # test that app.orchestrator.set_invocation_status (MockBaseOrchestrator.set_invocation_status)
     # has been called with (result, InvocationStatus.REGISTERED)
     mock_base_app.orchestrator._register_new_invocations.assert_called_once_with(

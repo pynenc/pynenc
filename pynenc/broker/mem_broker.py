@@ -1,4 +1,5 @@
-from collections import deque
+from collections import defaultdict, deque
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from pynenc.broker.base_broker import BaseBroker
@@ -25,32 +26,38 @@ class MemBroker(BaseBroker):
     """
 
     def __init__(self, app: "Pynenc") -> None:
-        self._queue: deque = deque()
+        self._queues: dict[str, dict[float, deque[InvocationId]]] = defaultdict(
+            lambda: defaultdict(deque)
+        )
         super().__init__(app)
 
-    def route_invocation(self, invocation_id: "InvocationId") -> None:
+    def _route_invocation(
+        self, invocation_id: "InvocationId", queue_name: str, priority: float
+    ) -> None:
         """
         Route an invocation id by adding it to the in-memory queue.
 
         This method appends the invocation ID to the deque, effectively queuing it for processing.
 
         :param InvocationId invocation_id: The ID of the invocation to be queued.
+        :param str queue_name: The queue where the invocation should be routed.
+        :param float priority: The queue priority for this invocation.
         """
-        self._queue.append(invocation_id)
+        self._queues[queue_name][priority].append(invocation_id)
 
-    def route_invocations(self, invocation_ids: list["InvocationId"]) -> None:
-        """
-        Routes multiple invocation IDs at once.
-
-        :param list[InvocationId] invocation_ids: The invocation IDs to be routed.
-        """
+    def _route_invocations(
+        self,
+        invocation_ids: Sequence["InvocationId"],
+        queue_name: str,
+        priority: float,
+    ) -> None:
+        """Route multiple invocation IDs in memory."""
         for invocation_id in invocation_ids:
-            self.route_invocation(invocation_id)
+            self._route_invocation(invocation_id, queue_name, priority)
 
-        if invocation_ids:
-            self.app.logger.debug(f"Batch routed {len(invocation_ids)} invocations")
-
-    def retrieve_invocation(self) -> "InvocationId | None":
+    def retrieve_invocation(
+        self, queue_name: str | None = None
+    ) -> "InvocationId | None":
         """
         Retrieve the next invocation id from the queue.
 
@@ -60,15 +67,24 @@ class MemBroker(BaseBroker):
         :return: The next invocation id from the queue, or None if the queue is empty.
         :rtype: InvocationId | None
         """
-        if self._queue:
-            return self._queue.popleft()
+        queue = self.conf.queues[0] if queue_name is None else queue_name
+        self._validate_queue_names((queue,))
+        for priority in sorted(self._queues[queue], reverse=True):
+            if self._queues[queue][priority]:
+                return self._queues[queue][priority].popleft()
         return None
 
-    def count_invocations(self) -> int:
+    def count_invocations(self, queue_names: Sequence[str] | None = None) -> int:
         """
         Get the number of invocations in the in-memory queue.
         """
-        return len(self._queue)
+        queues = self.conf.queues if queue_names is None else queue_names
+        self._validate_queue_names(queues)
+        return sum(
+            len(invocations)
+            for queue_name in queues
+            for invocations in self._queues[queue_name].values()
+        )
 
     def purge(self) -> None:
         """
@@ -76,4 +92,4 @@ class MemBroker(BaseBroker):
 
         This method empties the deque, removing all pending invocations.
         """
-        return self._queue.clear()
+        self._queues.clear()

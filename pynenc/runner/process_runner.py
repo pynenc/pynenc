@@ -342,7 +342,12 @@ class ProcessRunner(BaseRunner):
             reserved_ctx = self.runner_context.new_child_context("ProcessRunnerWorker")
             # Try to get an invocation for this reserved context
             invocations = list(
-                self.app.orchestrator.get_invocations_to_run(1, reserved_ctx)
+                self.app.orchestrator.get_invocations_to_run(
+                    1,
+                    reserved_ctx,
+                    queue_provider=self.app.runner.queue_names_for_retrieval,
+                    on_queue_retrieved=self.app.runner.note_queue_retrieved,
+                )
             )
             if not invocations:
                 break

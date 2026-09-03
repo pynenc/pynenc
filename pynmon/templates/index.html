@@ -93,6 +93,62 @@
   </div>
 </div>
 
+<!-- Broker Queue Health -->
+<div class="row g-3 mb-4">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header">
+        <span class="material-icons align-middle me-1" style="font-size: 18px"
+          >queue</span
+        >
+        Broker Queue Health
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-sm table-hover mb-0">
+            <thead>
+              <tr>
+                <th>Queue</th>
+                <th class="text-end">Pending</th>
+                <th class="text-end">Active Consumers</th>
+                <th>Status</th>
+                <th>Consumers</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in queue_summary %}
+              <tr>
+                <td><code>{{ row.queue }}</code></td>
+                <td class="text-end">{{ row.pending }}</td>
+                <td class="text-end">{{ row.active_consumers }}</td>
+                <td>
+                  {% if row.status == "not_configured" %}
+                  <span class="badge bg-warning text-dark">not configured</span>
+                  {% elif row.status == "not_consumed" %}
+                  <span class="badge bg-warning text-dark">not consumed</span>
+                  {% else %}
+                  <span class="badge bg-success">consuming</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if row.consumer_ids %}
+                  <small class="text-muted">
+                    {{ row.consumer_ids | join(", ") }}
+                  </small>
+                  {% else %}
+                  <small class="text-muted">-</small>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Invocation Status Summary -->
 <div class="row g-3 mb-4">
   <div class="col-12">
