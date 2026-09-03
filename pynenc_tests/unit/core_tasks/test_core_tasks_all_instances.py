@@ -158,13 +158,18 @@ def test_recover_pending_invocations_handles_multiple(
 # RUNNING Invocation Recovery Tests (recover_running_invocations)
 # ============================================================================
 
+RUNNER_RECOVERY_TIMEOUT_MINUTES = 0.005
+RUNNER_RECOVERY_SLEEP_SECONDS = 0.4
+
 
 def test_recover_running_invocations_dead_runner(
     app_instance: "Pynenc",
 ) -> None:
     """Test that recover_running_invocations reroutes invocations from dead runners."""
     original_timeout = app_instance.conf.runner_considered_dead_after_minutes
-    app_instance.conf.runner_considered_dead_after_minutes = 0.001
+    app_instance.conf.runner_considered_dead_after_minutes = (
+        RUNNER_RECOVERY_TIMEOUT_MINUTES
+    )
     dummy_task.app = app_instance
 
     try:
@@ -185,7 +190,7 @@ def test_recover_running_invocations_dead_runner(
             inv.invocation_id, InvocationStatus.RUNNING, runner_dead
         )
 
-        sleep(0.1)  # Wait for runner_dead to become inactive
+        sleep(RUNNER_RECOVERY_SLEEP_SECONDS)
 
         # Keep runner_alive alive
         app_instance.orchestrator.register_runner_heartbeats([runner_alive.runner_id])
@@ -232,7 +237,9 @@ def test_recover_running_invocations_multiple(
 ) -> None:
     """Test handling of multiple invocations from dead runners."""
     original_timeout = app_instance.conf.runner_considered_dead_after_minutes
-    app_instance.conf.runner_considered_dead_after_minutes = 0.001
+    app_instance.conf.runner_considered_dead_after_minutes = (
+        RUNNER_RECOVERY_TIMEOUT_MINUTES
+    )
     dummy_task.app = app_instance
 
     try:
@@ -257,7 +264,7 @@ def test_recover_running_invocations_multiple(
                 inv.invocation_id, InvocationStatus.RUNNING, runner_dead
             )
 
-        sleep(0.1)
+        sleep(RUNNER_RECOVERY_SLEEP_SECONDS)
 
         app_instance.orchestrator.register_runner_heartbeats([runner_alive.runner_id])
 
@@ -286,7 +293,9 @@ def test_recover_running_invocations_mixed(
 ) -> None:
     """Test recovery only affects invocations from dead runners, not alive ones."""
     original_timeout = app_instance.conf.runner_considered_dead_after_minutes
-    app_instance.conf.runner_considered_dead_after_minutes = 0.001
+    app_instance.conf.runner_considered_dead_after_minutes = (
+        RUNNER_RECOVERY_TIMEOUT_MINUTES
+    )
     dummy_task.app = app_instance
 
     try:
@@ -317,7 +326,7 @@ def test_recover_running_invocations_mixed(
             inv_dead.invocation_id, InvocationStatus.RUNNING, runner_dead
         )
 
-        sleep(0.1)
+        sleep(RUNNER_RECOVERY_SLEEP_SECONDS)
 
         app_instance.orchestrator.register_runner_heartbeats([runner_alive.runner_id])
 
