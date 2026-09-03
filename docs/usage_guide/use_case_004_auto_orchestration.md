@@ -14,7 +14,7 @@ The focus of this scenario is to illustrate Pynenc's ability to handle complex t
 
 ### Requirements
 
-- Python 3.11 or higher.
+- Python 3.12 or higher.
 - Pynenc library installed.
 
 ### Project Files

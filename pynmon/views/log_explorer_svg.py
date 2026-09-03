@@ -16,6 +16,8 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from pynenc.identifiers.invocation_id import InvocationId
+from pynmon.util.histogram import HistogramCategory
+from pynmon.util.histogram_monitor import histogram_context
 from pynmon.util.log_parser import EntityRef
 from pynmon.util.status_colors import is_segment_status
 from pynmon.util.svg.atomic_service import AtomicServiceWindow
@@ -114,6 +116,41 @@ async def build_log_svg(params: LogSvgParams) -> str:
         start,
         end,
     )
+
+
+async def build_log_histogram(
+    params: LogSvgParams,
+    selected_categories: frozenset[HistogramCategory],
+) -> dict:
+    """Build a compact histogram from the same resolved log scope as the SVG."""
+    inv_ids, event_ids, trigger_run_ids, trigger_ids, atomic_service_run_ids = (
+        _extract_reference_sets(params.all_refs)
+    )
+    start, end = params.time_range or _compute_time_range(params.utc_timestamps)
+
+    def build() -> dict:
+        scope = _resolve_log_svg_scope(
+            params.app,
+            inv_ids,
+            event_ids,
+            trigger_run_ids,
+            trigger_ids,
+            atomic_service_run_ids,
+            start,
+            end,
+        )
+        return histogram_context(
+            params.app,
+            scope.inv_ids,
+            scope.start,
+            scope.end,
+            selected_categories,
+            common_params={"inv_ids": ",".join(sorted(scope.inv_ids))},
+            link_path="/invocations/timeline",
+            compact=True,
+        )
+
+    return await asyncio.to_thread(build)
 
 
 async def compute_log_svg_time_range(
@@ -295,9 +332,10 @@ def _build_sync(
     if not data.lanes and not data.event_markers and not data.atomic_service_windows:
         return ""
     svg = TimelineSVGRenderer().render(data)
-    # Render at native pixel width (like the main timeline) so it scrolls
-    # horizontally instead of scaling down and making labels unreadable.
-    return svg.replace('width="100%"', f'width="{_MINI_CONFIG.width}"', 1)
+    # Keep the mini-timeline responsive so it uses the same physical width as
+    # the occupancy histogram below it. Both SVGs retain the same viewBox
+    # coordinates and therefore stay horizontally aligned at every viewport.
+    return svg
 
 
 def _resolve_log_svg_scope(

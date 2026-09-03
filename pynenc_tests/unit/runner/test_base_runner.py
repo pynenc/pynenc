@@ -6,12 +6,21 @@ from unittest.mock import Mock, patch
 import pytest
 
 from pynenc.conf.validation_atomic_service import AtomicServiceConfigError
+from pynenc.conf.config_runner import QueueSelectionStrategy
 from pynenc.exceptions import RunnerNotExecutableError
 from pynenc.runner.base_runner import DummyRunner
 from pynenc_tests.conftest import MockPynenc
 from pynenc_tests.util import capture_logs
 
 mock_base_app = MockPynenc.with_id("pynenc_tests/unit/runner/test_base_runner.py")
+queue_validation_app = MockPynenc.with_id(
+    "pynenc_tests/unit/runner/test_base_runner_queue_validation.py"
+)
+
+
+@queue_validation_app.task(queue="payments")
+def queued_payment_task() -> None:
+    pass
 
 
 def test_run() -> None:
@@ -70,6 +79,91 @@ def test_runner_start_validates_atomic_service_config() -> None:
         app.runner.on_start()
 
     app.runner._on_start.assert_not_called()
+
+
+def test_runner_start_does_not_validate_task_queues() -> None:
+    queue_validation_app.runner.on_start()
+
+    queue_validation_app.runner._on_start.assert_called_once()
+    queue_validation_app.runner.on_stop()
+
+
+def test_runner_start_keeps_queue_selection_permissive() -> None:
+    app = MockPynenc.with_id(
+        "pynenc_tests/unit/runner/test_base_runner_unknown_consumed_queue.py"
+    )
+    app.runner.conf.queues = ("undeclared",)
+
+    with capture_logs(app.logger) as log_buffer:
+        app.runner.on_start()
+
+    assert app.runner.conf.queues == ("undeclared",)
+    assert "not configured in broker.queues" not in log_buffer.getvalue()
+    app.runner._on_start.assert_called_once()
+    app.runner.on_stop()
+
+
+def test_runner_queue_selection_round_robin_remembers_latest_queue() -> None:
+    app = MockPynenc.with_id("test_runner_queue_selection_round_robin")
+    runner = DummyRunner(app)
+    app.broker.conf.queues = ("default", "payments", "reports")
+    runner.conf.queues = ("default", "payments", "reports")
+    runner.conf.queue_selection_strategy = QueueSelectionStrategy.ROUND_ROBIN
+
+    assert runner.queue_names_for_retrieval() == ("default", "payments", "reports")
+    runner.note_queue_retrieved("default")
+    assert runner.queue_names_for_retrieval() == ("payments", "reports", "default")
+    runner.note_queue_retrieved("reports")
+    assert runner.queue_names_for_retrieval() == ("default", "payments", "reports")
+
+
+def test_runner_queue_selection_round_robin_advances_only_after_success() -> None:
+    app = MockPynenc.with_id("test_runner_queue_selection_round_robin_no_success")
+    runner = DummyRunner(app)
+    app.broker.conf.queues = ("default", "payments", "reports")
+    runner.conf.queues = ("default", "payments", "reports")
+    runner.conf.queue_selection_strategy = QueueSelectionStrategy.ROUND_ROBIN
+
+    assert runner.queue_names_for_retrieval() == ("default", "payments", "reports")
+    assert runner.queue_names_for_retrieval() == ("default", "payments", "reports")
+    runner.note_queue_retrieved("payments")
+    assert runner.queue_names_for_retrieval() == ("reports", "default", "payments")
+
+
+def test_runner_empty_queue_selection_uses_broker_queue_order() -> None:
+    app = MockPynenc.with_id("test_runner_queue_selection_default_broker_queues")
+    runner = DummyRunner(app)
+    app.broker.conf.queues = ("default", "payments", "reports")
+    runner.conf.queues = ()
+    runner.conf.queue_selection_strategy = QueueSelectionStrategy.ROUND_ROBIN
+
+    assert runner.queue_names_for_retrieval() == ("default", "payments", "reports")
+    runner.note_queue_retrieved("default")
+    assert runner.queue_names_for_retrieval() == ("payments", "reports", "default")
+
+
+def test_runner_queue_selection_ordered_always_starts_first_queue() -> None:
+    app = MockPynenc.with_id("test_runner_queue_selection_ordered")
+    runner = DummyRunner(app)
+    app.broker.conf.queues = ("default", "payments", "reports")
+    runner.conf.queues = ("default", "payments", "reports")
+    runner.conf.queue_selection_strategy = QueueSelectionStrategy.ORDERED
+
+    assert runner.queue_names_for_retrieval() == ("default", "payments", "reports")
+    runner.note_queue_retrieved("default")
+    assert runner.queue_names_for_retrieval() == ("default", "payments", "reports")
+
+
+def test_runner_queue_selection_random_shuffles_queue_attempts() -> None:
+    app = MockPynenc.with_id("test_runner_queue_selection_random")
+    runner = DummyRunner(app)
+    app.broker.conf.queues = ("default", "payments", "reports")
+    runner.conf.queues = ("default", "payments", "reports")
+    runner.conf.queue_selection_strategy = QueueSelectionStrategy.RANDOM
+
+    with patch("pynenc.runner.base_runner.random.shuffle") as mock_shuffle:
+        mock_shuffle.side_effect = lambda queues: queues.reverse()
+        assert runner.queue_names_for_retrieval() == ("reports", "payments", "default")
 
 
 def test_dummy_runner() -> None:

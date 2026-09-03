@@ -39,6 +39,11 @@ broker_cls = "RedisBroker"
 state_backend_cls = "RedisStateBackend"
 runner_cls = "MultiThreadRunner"
 serializer_cls = "JsonPickleSerializer"
+queues = ["default", "payments", "reports"]
+priority_rules = [
+  { task_id = "billing.*", priority = 50.0 },
+  { task_id = "reports.*", priority = -10.0 },
+]
 
 [tool.pynenc.orchestrator]
 max_pending_seconds = 300
@@ -46,6 +51,7 @@ max_pending_seconds = 300
 [tool.pynenc.runner]
 min_threads = 2
 max_threads = 8
+queues = ["payments", "reports"]
 
 [tool.pynenc.task]
 running_concurrency = "task"
@@ -63,6 +69,9 @@ orchestrator:
 runner:
   min_threads: 4
   max_threads: 16
+  queues:
+    - payments
+    - reports
 ```
 
 Load with:
@@ -148,6 +157,43 @@ trigger_task_modules = ["tasks"]
 scheduler_interval_seconds = 60
 ```
 
+## ConfigBroker Fields
+
+Broker configuration (`pynenc.conf.config_broker.ConfigBroker`).
+
+| Field                     | Type    | Default        | Description                                                                         |
+| ------------------------- | ------- | -------------- | ----------------------------------------------------------------------------------- |
+| `queue_timeout_sec`       | `float` | `0.1`          | Broker-specific blocking timeout for polling transports                             |
+| `queues`                  | `tuple` | `("default",)` | Declared broker queues. `default` is added automatically when omitted               |
+| `priority_rules`          | `tuple` | `()`           | Task-id wildcard rules that override task priority                                  |
+| `warn_on_queue_mismatch`  | `bool`  | `True`         | Log a warning when routing or consuming queues not declared in `broker.queues`      |
+| `raise_on_queue_mismatch` | `bool`  | `False`        | Raise `ConfigError` instead of allowing queue mismatches when strict mode is needed |
+
+Priority rules are structured values with `task_id` and `priority`.
+`task_id` uses shell-style wildcards such as `billing.*`. Matching rules
+override the task priority; the highest priority wins when several rules match.
+When no rule matches, the task's concrete priority is used.
+
+```toml
+[tool.pynenc]
+queues = ["default", "payments", "reports"]
+priority_rules = [
+  { task_id = "billing.*", priority = 50.0 },
+  { task_id = "reports.*", priority = -10.0 },
+]
+```
+
+Priority is applied within one queue. The broker receives one queue per dequeue
+request; if a runner consumes several queues, `queue_selection_strategy` decides
+which queue the runner asks next. `round_robin` is the default and advances after
+each successful dequeue, `random` shuffles queue attempts for each retrieval, and
+`ordered` always starts from the configured queue order. With `ordered`, later
+queues can starve if earlier queues keep receiving work.
+
+Queue mismatches are flexible by default. A task can route to a queue that is not
+currently listed in `broker.queues`, and a runner can consume an explicitly
+named undeclared queue. Set `raise_on_queue_mismatch = true` for strict deployments.
+
 ## ConfigTask Fields
 
 Per-task configuration (`pynenc.conf.config_task.ConfigTask`). Configurable globally or per-task.
@@ -165,6 +211,8 @@ Per-task configuration (`pynenc.conf.config_task.ConfigTask`). Configurable glob
 | `disable_cache_args`             | `tuple` | `()`            | Arguments to exclude from cache key                                       |
 | `is_workflow_task`               | `bool`  | `False`         | Internal marker used by `@app.workflow` to define workflow roots          |
 | `reroute_on_concurrency_control` | `bool`  | `False`         | Reroute blocked tasks instead of marking final                            |
+| `queue`                          | `str`   | `"default"`     | Broker queue used to route invocations of this task                       |
+| `priority`                       | `float` | `0.0`           | Task-level priority; matching broker rules override this concrete value   |
 
 ```{important}
 `is_workflow_task` is documented because it is the internal switch that makes a
@@ -209,20 +257,61 @@ task:
 **Task decorator**:
 
 ```python
-@app.task(max_retries=5, running_concurrency="task")
-def my_task(x: int) -> int:
-    return x * 2
+@app.task(
+    max_retries=5,
+    running_concurrency="task",
+    queue="payments",
+    priority=75.0,
+)
+def charge_card(payment_id: str) -> str:
+    return payment_id
 ```
+
+Task queue names are validated as portable queue names when configured. Queue
+alignment with `broker.queues` is checked by the broker when routing or
+consuming, according to `warn_on_queue_mismatch` and
+`raise_on_queue_mismatch`.
+
+Task and broker-rule priorities use finite floats from `-100.0` through
+`100.0`. Higher values run first within the same queue, and equal priorities
+remain FIFO. Task priority is always concrete and defaults to `0.0`. Matching
+broker `priority_rules` override the task value; the highest matching rule wins.
+Non-finite and out-of-range values are rejected before routing. Backends with a
+narrower native priority model may normalize this range and must document the
+resulting ordering precision.
 
 ## ConfigRunner Fields
 
 Base runner configuration (`pynenc.conf.config_runner.ConfigRunner`).
 
-| Field                                    | Type    | Default | Description                               |
-| ---------------------------------------- | ------- | ------- | ----------------------------------------- |
-| `invocation_wait_results_sleep_time_sec` | `float` | `0.1`   | Sleep time between result polling checks  |
-| `runner_loop_sleep_time_sec`             | `float` | `0.1`   | Sleep time between runner loop iterations |
-| `min_parallel_slots`                     | `int`   | `1`     | Minimum parallel execution slots          |
+| Field                                    | Type    | Default         | Description                                                                            |
+| ---------------------------------------- | ------- | --------------- | -------------------------------------------------------------------------------------- |
+| `invocation_wait_results_sleep_time_sec` | `float` | `0.1`           | Sleep time between result polling checks                                               |
+| `runner_loop_sleep_time_sec`             | `float` | `0.1`           | Sleep time between runner loop iterations                                              |
+| `min_parallel_slots`                     | `int`   | `1`             | Minimum parallel execution slots                                                       |
+| `queues`                                 | `tuple` | `()`            | Queues consumed by this runner. Empty means current broker queues                      |
+| `queue_selection_strategy`               | `str`   | `"round_robin"` | Queue selection across multiple consumed queues: `round_robin`, `random`, or `ordered` |
+
+Runner queue selection uses the same configuration and environment-variable
+override mechanisms as other runner fields. Leave `queues` empty to consume the
+current broker queues, or set explicit queue names for a dedicated worker.
+
+The broker dequeues only one queue at a time. When `queues` resolves to multiple
+queues, `queue_selection_strategy` controls the order in which the runner asks
+for them. Prefer `round_robin` for general workers. Use `ordered` only when the
+first configured queue should dominate; it can starve later queues if the first
+queues are never empty.
+
+For a runner-only environment override, use the class-qualified config name:
+
+```bash
+PYNENC__CONFIGRUNNER__QUEUES=payments,reports pynenc runner start
+```
+
+Runners may also consume queues that are no longer declared in broker config.
+The broker applies the configured mismatch warning or error policy when those
+queues are consumed, and Pynmon marks them as `not configured`; this keeps old
+queues drainable after deployments.
 
 ### ThreadRunner Configuration
 

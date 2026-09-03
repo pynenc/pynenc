@@ -8,6 +8,7 @@ from pynenc_tests.integration.orchestrator.orchestrator_tasks import (
     dummy_concat,
     dummy_key_arg,
     dummy_mirror,
+    dummy_running_key_arg,
     dummy_sum,
     dummy_task,
 )
@@ -45,6 +46,12 @@ def task_mirror_io(app_instance: "Pynenc") -> "Task":
 def task_key_arg_io(app_instance: "Pynenc") -> "Task":
     dummy_key_arg.app = app_instance
     return dummy_key_arg
+
+
+@pytest.fixture
+def task_running_key_arg_io(app_instance: "Pynenc") -> "Task":
+    dummy_running_key_arg.app = app_instance
+    return dummy_running_key_arg
 
 
 @pytest.fixture

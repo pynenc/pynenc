@@ -6,15 +6,27 @@ It includes listing all workflows, viewing workflow runs, and workflow details.
 """
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse
 
 from pynenc.identifiers.task_id import TaskId
 
 from pynmon.app import get_pynenc_instance, templates
 from pynmon.util.formatting import format_task_extra_info
+from pynmon.util.histogram import (
+    HistogramCategory,
+    HistogramData,
+    build_histogram,
+    parse_histogram_categories,
+    serialize_histogram_categories,
+)
+from pynmon.util.histogram_monitor import (
+    histogram_context_from_data,
+    histogram_window_for_entries,
+    history_entries_for_invocations,
+)
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
@@ -23,6 +35,8 @@ if TYPE_CHECKING:
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
 logger = logging.getLogger("pynmon.views.workflows")
+
+_MAX_WORKFLOW_HISTOGRAMS = 10
 
 
 def _workflow_run_rows(
@@ -53,6 +67,67 @@ def _workflow_run_rows(
             }
         )
     return rows
+
+
+def _selected_workflow_ids(
+    rows: list[dict[str, Any]], requested: list[str] | None
+) -> set[str]:
+    """Return an explicit bounded selection, or the latest three runs."""
+    available = {str(row["workflow_id"]) for row in rows}
+    if requested is None:
+        return {str(row["workflow_id"]) for row in rows[:3]}
+    return {workflow_id for workflow_id in requested if workflow_id in available}
+
+
+def _workflow_histograms(
+    app: "Pynenc",
+    rows: list[dict[str, Any]],
+    selected_ids: set[str],
+    categories: frozenset[HistogramCategory],
+) -> list[dict[str, Any]]:
+    """Build at most ten run-lifetime histograms for the workflow detail page."""
+    histogram_data: list[tuple[dict[str, Any], HistogramData]] = []
+    for row in rows:
+        workflow_id = str(row["workflow_id"])
+        if (
+            workflow_id not in selected_ids
+            or len(histogram_data) >= _MAX_WORKFLOW_HISTOGRAMS
+        ):
+            continue
+        invocation_ids = {
+            str(invocation_id)
+            for invocation_id in app.state_backend.get_invocation_ids_by_workflow(
+                workflow_id=workflow_id
+            )
+        }
+        invocation_ids.add(workflow_id)
+        entries = history_entries_for_invocations(app, invocation_ids)
+        window = histogram_window_for_entries(entries)
+        if window is None:
+            continue
+        histogram_data.append(
+            (
+                row,
+                build_histogram(entries, *window, categories),
+            )
+        )
+    shared_max = max((data.max_count for _, data in histogram_data), default=0)
+    return [
+        {
+            "workflow_id": str(row["workflow_id"]),
+            "short_id": str(row["workflow_id"])[:8],
+            "histogram": histogram_context_from_data(
+                data,
+                common_params={
+                    "workflow_id": str(row["workflow_id"]),
+                    "workflow_type": str(row["workflow_type"]),
+                },
+                compact=True,
+                y_axis_max=shared_max,
+            ),
+        }
+        for row, data in histogram_data
+    ]
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -192,7 +267,12 @@ async def refresh_workflow_runs_list(request: Request) -> HTMLResponse:
 # Important: This route must come AFTER all specific routes like '/refresh' and '/runs/refresh'
 # because FastAPI matches routes in order and '/{workflow_type_key}' would match anything
 @router.get("/{workflow_type_key}", response_class=HTMLResponse)
-async def workflow_detail(request: Request, workflow_type_key: str) -> HTMLResponse:
+async def workflow_detail(
+    request: Request,
+    workflow_type_key: str,
+    histogram_workflow: Annotated[list[str] | None, Query()] = None,
+    histogram_status: str | None = None,
+) -> HTMLResponse:
     """Display details for a specific workflow type."""
     app = get_pynenc_instance()
     logger.info(f"Retrieving workflow details for: {workflow_type_key}")
@@ -215,6 +295,11 @@ async def workflow_detail(request: Request, workflow_type_key: str) -> HTMLRespo
         # Create additional task information for template
         task_extra = format_task_extra_info(task) if task else None
 
+        run_rows = _workflow_run_rows(app, sorted_runs)
+        selected_ids = _selected_workflow_ids(run_rows, histogram_workflow)
+        for row in run_rows:
+            row["histogram_selected"] = str(row["workflow_id"]) in selected_ids
+        categories = parse_histogram_categories(histogram_status)
         return templates.TemplateResponse(
             request,
             "workflows/detail.html",
@@ -222,7 +307,14 @@ async def workflow_detail(request: Request, workflow_type_key: str) -> HTMLRespo
                 "title": "Workflow Details",
                 "app_id": app.app_id,
                 "workflow_type": workflow_type,
-                "workflow_runs": _workflow_run_rows(app, sorted_runs),
+                "workflow_runs": run_rows,
+                "selected_histogram_workflows": selected_ids,
+                "histogram_status": serialize_histogram_categories(categories),
+                "workflow_histograms": _workflow_histograms(
+                    app, run_rows, selected_ids, categories
+                ),
+                "histogram_selection_capped": len(selected_ids)
+                > _MAX_WORKFLOW_HISTOGRAMS,
                 "task": task,
                 "task_extra": task_extra,
             },
@@ -248,7 +340,10 @@ async def workflow_detail(request: Request, workflow_type_key: str) -> HTMLRespo
 
 @router.get("/{workflow_type_key}/refresh", response_class=HTMLResponse)
 async def refresh_workflow_detail(
-    request: Request, workflow_type_key: str
+    request: Request,
+    workflow_type_key: str,
+    histogram_workflow: Annotated[list[str] | None, Query()] = None,
+    histogram_status: str | None = None,
 ) -> HTMLResponse:
     """Refresh the workflow detail for HTMX partial updates."""
     app = get_pynenc_instance()
@@ -272,12 +367,24 @@ async def refresh_workflow_detail(
         # Create additional task information for template
         task_extra = format_task_extra_info(task) if task else None
 
+        run_rows = _workflow_run_rows(app, sorted_runs)
+        selected_ids = _selected_workflow_ids(run_rows, histogram_workflow)
+        for row in run_rows:
+            row["histogram_selected"] = str(row["workflow_id"]) in selected_ids
+        categories = parse_histogram_categories(histogram_status)
         return templates.TemplateResponse(
             request,
             "workflows/partials/detail_content.html",
             context={
                 "workflow_type": workflow_type,
-                "workflow_runs": _workflow_run_rows(app, sorted_runs),
+                "workflow_runs": run_rows,
+                "selected_histogram_workflows": selected_ids,
+                "histogram_status": serialize_histogram_categories(categories),
+                "workflow_histograms": _workflow_histograms(
+                    app, run_rows, selected_ids, categories
+                ),
+                "histogram_selection_capped": len(selected_ids)
+                > _MAX_WORKFLOW_HISTOGRAMS,
                 "task": task,
                 "task_extra": task_extra,
             },

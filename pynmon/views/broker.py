@@ -49,7 +49,7 @@ async def queue_view(
 
     for invocation in pending_invocations:
         # Re-route the invocation back to the broker
-        app.broker.route_invocation(invocation.invocation_id)
+        app.orchestrator.route_invocation(invocation)
 
     return templates.TemplateResponse(
         request,

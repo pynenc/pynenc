@@ -26,6 +26,24 @@ Trigger activity is drawn on the same timeline. Event markers sit in a dedicated
 
 The timeline toolbar exposes a magnifying-glass tool. Toggle it on, then drag across the SVG to draw a selection rectangle over the moment you want to inspect; releasing the pointer reloads the page scoped to the selected `start_date` / `end_date` at a finer resolution. Press `Esc` to cancel without zooming. Combine it with the time-range filter for fast drill-down from "last hour" to a sub-second incident.
 
+#### Task occupancy histogram
+
+The compact histogram directly below the timeline counts how many invocations
+occupied registered, pending, and running states during each time bucket. A
+long-running task contributes to every bucket it overlaps, so the chart shows
+load and backlog rather than only transitions. Toggle status categories to
+narrow the chart; bars are stacked by task type with a stable task legend. Bars
+are capped at the timeline marker diameter and the legend shows up to 12 task
+types before aggregating the tail as neutral-grey `Other`. Hover a bar for
+exact UTC bounds and task counts, or select a bar to open the
+invocation list with matching time, status, workflow, task, and invocation
+filters.
+
+Workflow detail pages show the same occupancy view for the latest three runs by
+default and let you compare up to ten selected runs. The Log Explorer places a
+scoped histogram below its mini-timeline using only the invocations resolved
+from the pasted log block.
+
 ### Family Tree
 
 Navigate the full hierarchy of task calls as an interactive graph. When a grandparent task spawns parents that spawn children, the family tree displays the entire chain. Selecting a node cross-highlights it on the timeline, and vice versa — making it trivial to understand both the logical structure and the physical execution of complex workflows.
@@ -96,7 +114,7 @@ Pynmon provides real-time visibility into your distributed task execution throug
 pip install pynenc[monitor]
 ```
 
-Requires Python < 3.13 (FastAPI/Pydantic v2 dependency constraint).
+Pynmon supports the same Python versions declared by Pynenc.
 
 ## Starting the Monitor
 

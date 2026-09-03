@@ -6,6 +6,12 @@ from typing import Any, TypeVar, TYPE_CHECKING
 from cistell import ConfigField
 
 from pynenc.conf.config_base import ConfigPynencBase
+from pynenc.conf.config_broker import (
+    DEFAULT_PRIORITY,
+    DEFAULT_QUEUE,
+    validate_priority,
+    validate_queue_name,
+)
 from pynenc.conf.constants import ENV_PREFIX, ENV_SEPARATOR
 from pynenc.exceptions import RetryError
 
@@ -165,6 +171,14 @@ class ConfigTask(ConfigPynencBase):
         Only enable this if you have safeguards against unbounded task accumulation.
         ```
 
+    :cvar ConfigField[str] queue:
+        Broker queue used to route invocations of this task.
+
+    :cvar ConfigField[float] priority:
+        Task priority. Values must be finite floats between ``-100.0`` and
+        ``100.0``. The default is ``0.0``. Matching broker wildcard rules
+        override this value.
+
     Examples
     --------
     Using environment variables to configure tasks:
@@ -213,6 +227,8 @@ class ConfigTask(ConfigPynencBase):
     disable_cache_args: ConfigField[tuple[str, ...]] = ConfigField(())
     is_workflow_task = ConfigField(False)
     reroute_on_concurrency_control = ConfigField(False)
+    queue = ConfigField(DEFAULT_QUEUE)
+    priority: ConfigField[float] = ConfigField(DEFAULT_PRIORITY)
 
     def __init__(
         self,
@@ -227,6 +243,8 @@ class ConfigTask(ConfigPynencBase):
         if task_options:
             config_values.update(task_options)
         super().__init__(config_values, config_filepath)
+        validate_queue_name(self.queue)
+        validate_priority(self.priority, label="Task priority")
 
     def options_to_json(self) -> str:
         """:return: the serialized options"""

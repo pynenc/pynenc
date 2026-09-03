@@ -111,6 +111,18 @@ class Task(Generic[Params, Result]):
         )
 
     @property
+    def broker_queue(self) -> str:
+        """Broker queue where invocations of this task should be routed."""
+        return self.conf.queue
+
+    @property
+    def broker_priority(self) -> float:
+        """Effective broker priority for invocations of this task."""
+        return self.app.broker.conf.get_priority_for_task(
+            self.task_id.key, self.conf.priority
+        )
+
+    @property
     def logger(self) -> Logger:
         """The logger for the task"""
         return self.app.logger

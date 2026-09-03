@@ -14,7 +14,7 @@ The `sync_unit_testing` scenario is designed to illustrate how tasks defined wit
 
 ### Requirements
 
-- Python 3.11 or higher.
+- Python 3.12 or higher.
 - Pynenc library installed.
 
 ### Project Files

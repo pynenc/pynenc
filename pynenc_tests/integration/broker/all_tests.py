@@ -4,6 +4,8 @@
 # Plugins should import: from pynenc_tests.integration.broker.all_tests import *
 
 from pynenc_tests.integration.broker.test_subclasses_routing import *
+from pynenc_tests.integration.broker.test_queue_mismatch_policy import *
+from pynenc_tests.integration.broker.test_queue_selection_strategies import *
 
 # Files in this folder that are NOT exported to plugins
 IGNORED_FILES: set[str] = set()

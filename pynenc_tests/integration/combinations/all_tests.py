@@ -10,6 +10,8 @@ from pynenc_tests.integration.combinations.test_parallelize_performance import *
 from pynenc_tests.integration.combinations.test_performance import *
 from pynenc_tests.integration.combinations.test_core_tasks_combinations import *
 from pynenc_tests.integration.combinations.test_status_owner_coherence import *
+from pynenc_tests.integration.combinations.test_broker_queue_priority import *
+from pynenc_tests.integration.combinations.test_broker_queue_flexibility import *
 from pynenc_tests.integration.orchestrator.test_status_transitions_integrity import *
 
 # Files in this folder that are NOT exported to plugins

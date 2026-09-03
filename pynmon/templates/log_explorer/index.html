@@ -128,7 +128,8 @@
       <div class="log-svg-container" id="log-svg-container">
         {{ analysis.svg_content|safe }}
       </div>
-      {# Detail panel shown on SVG element click #}
+      {% set histogram = analysis.histogram %} {% include
+      "partials/histogram.html" %} {# Detail panel shown on SVG element click #}
       <div class="log-inv-detail" id="log-inv-detail">
         <span class="detail-close material-icons">close</span>
         <div class="detail-row">

@@ -81,7 +81,7 @@ def test_reroute_on_thread_start_failure(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setattr(
         runner.app.orchestrator,
         "get_invocations_to_run",
-        lambda max_num_invocations, runner_ctx: [dummy],
+        lambda max_num_invocations, runner_ctx, **kwargs: [dummy],
     )
 
     # Run one loop iteration. When the thread fails to start, it should trigger reroute.

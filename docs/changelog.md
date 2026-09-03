@@ -4,6 +4,40 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-08-31
+
+### Added
+
+- **Monitoring occupancy histograms.** Invocation timelines, workflow details,
+  and the Log Explorer now visualize registered, pending, and running occupancy
+  with status selectors, task-colored stacks and legends, aligned SVG buckets,
+  hover details, and filtered invocation drill-down links.
+
+- **Named broker queues.** Broker configuration can now declare queues, tasks
+  can route invocations with `@app.task(queue="payments")`, and runners can
+  consume all queues or selected queues through config/env overrides.
+- **Broker priority rules.** Broker config can define wildcard `priority_rules`
+  by task id, and tasks define a concrete priority with
+  `@app.task(priority=75.0)`. Matching rules override the task value; tasks
+  without a matching rule use their configured priority, defaulting to `0.0`.
+- **Queue observability in Pynmon.** Active runner heartbeats now include the
+  queues they consume. The dashboard shows pending counts, active consumers,
+  and queues with pending work but no consumer.
+
+### Changed
+
+- Broker storage now records queue and priority metadata. Existing applications
+  without explicit queue configuration continue to use the `default` queue.
+- Task priority is a finite float from `-100.0` through `100.0` and defaults to
+  `0.0`. Broker rules are policy overrides; no configuration-provenance sentinel
+  is used.
+- Broker batch routing now queues a sequence of invocation IDs to one validated
+  queue with one validated priority, keeping broker implementations minimal
+  while preserving optimized batch paths.
+- Broker routing and consumption apply the configured queue mismatch warning or
+  error policy. Explicit undeclared runner queues appear as `not configured` in
+  Pynmon.
+
 ## [0.3.1] - 2026-07-04
 
 ### Fixed

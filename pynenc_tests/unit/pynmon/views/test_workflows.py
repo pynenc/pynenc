@@ -1,5 +1,6 @@
 """Unit tests for pynmon workflow views."""
 
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import patch
@@ -10,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from pynenc.identifiers.invocation_id import InvocationId
 from pynenc.identifiers.task_id import TaskId
+from pynenc.invocation.status import InvocationStatus
 from pynenc.workflow.workflow_identity import WorkflowIdentity
 from pynmon.app import app as pynmon_app
 from pynmon.app import setup_routes
@@ -55,11 +57,15 @@ class _StateBackend:
         runs_by_type: dict[str, list[Any]] | None = None,
         all_runs: list[Any] | None = None,
         parent_invocations: dict[str, Any] | None = None,
+        workflow_invocations: dict[str, list[str]] | None = None,
+        histories: dict[str, list[Any]] | None = None,
     ) -> None:
         self.workflow_types = workflow_types or []
         self.runs_by_type = runs_by_type or {}
         self.all_runs = all_runs or []
         self.parent_invocations = parent_invocations or {}
+        self.workflow_invocations = workflow_invocations or {}
+        self.histories = histories or {}
 
     def get_all_workflow_types(self) -> Any:
         return iter(self.workflow_types)
@@ -75,6 +81,12 @@ class _StateBackend:
             return self.parent_invocations[str(invocation_id)]
         except KeyError as exc:
             raise LookupError(invocation_id) from exc
+
+    def get_invocation_ids_by_workflow(self, *, workflow_id: str) -> Any:
+        return iter(self.workflow_invocations.get(workflow_id, []))
+
+    def get_history(self, invocation_id: InvocationId) -> list[Any]:
+        return self.histories.get(str(invocation_id), [])
 
 
 @pytest.fixture
@@ -98,9 +110,9 @@ def _run(
     run = SimpleNamespace(
         workflow_id=InvocationId(workflow_id),
         workflow_type=workflow_type,
-        parent_workflow_id=InvocationId(parent_workflow_id)
-        if parent_workflow_id
-        else None,
+        parent_workflow_id=(
+            InvocationId(parent_workflow_id) if parent_workflow_id else None
+        ),
     )
     if created_at is not None:
         run.created_at = created_at
@@ -222,3 +234,56 @@ def test_workflow_detail_invalid_key_renders_not_found(
     assert call["name"] == "shared/error.html"
     assert call["status_code"] == 404
     assert call["context"]["error_title"] == "Workflow Not Found"
+
+
+def test_workflow_detail_builds_selected_histograms_with_shared_scale(
+    template_recorder: _TemplateRecorder,
+) -> None:
+    workflow_type = TaskId("tests.workflows", "daily_import")
+    first_run = _run("wf-first", workflow_type, created_at="2026-09-02T12:00:00")
+    second_run = _run("wf-second", workflow_type, created_at="2026-09-02T11:00:00")
+    start = datetime(2026, 9, 2, 12, 0, tzinfo=UTC)
+
+    def history(invocation_id: str) -> list[Any]:
+        return [
+            SimpleNamespace(
+                timestamp=start,
+                status_record=SimpleNamespace(status=InvocationStatus.RUNNING),
+            ),
+            SimpleNamespace(
+                timestamp=start + timedelta(seconds=5),
+                status_record=SimpleNamespace(status=InvocationStatus.SUCCESS),
+            ),
+        ]
+
+    invocations = {
+        invocation_id: SimpleNamespace(
+            task=SimpleNamespace(task_id=TaskId("tests.tasks", invocation_id))
+        )
+        for invocation_id in ("wf-first", "wf-second")
+    }
+    app = _app(
+        _StateBackend(
+            runs_by_type={workflow_type.key: [first_run, second_run]},
+            parent_invocations=invocations,
+            workflow_invocations={"wf-first": [], "wf-second": []},
+            histories={
+                "wf-first": history("wf-first"),
+                "wf-second": history("wf-second"),
+            },
+        )
+    )
+
+    with patch("pynmon.views.workflows.get_pynenc_instance", return_value=app):
+        response = TestClient(pynmon_app).get(
+            f"/workflows/{workflow_type.key}?histogram_status=running"
+        )
+
+    assert response.status_code == 200
+    context = template_recorder.last_call["context"]
+    assert context["histogram_status"] == "running"
+    assert len(context["workflow_histograms"]) == 2
+    assert all(
+        'data-statuses="running"' in item["histogram"]["svg"]
+        for item in context["workflow_histograms"]
+    )

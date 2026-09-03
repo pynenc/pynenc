@@ -17,6 +17,20 @@ from pynmon.app import app as pynmon_app, setup_routes
 
 setup_routes()
 
+queue_app = (
+    PynencBuilder()
+    .app_id("home-queue-dashboard")
+    .memory()
+    .custom_config(queues=("default", "payments", "reports"))
+    .build()
+)
+
+
+@queue_app.task(queue="reports")
+def dashboard_report_task() -> str:
+    return "report"
+
+
 if TYPE_CHECKING:
     from pynenc import Pynenc
 
@@ -79,6 +93,54 @@ def test_home_displays_event_activity(app_instance: "Pynenc") -> None:
     assert "Matched" in content
     assert "Triggered" in content
     assert "Trigger Runs" in content
+
+
+def test_home_displays_queue_health() -> None:
+    """Dashboard shows pending queues and active queue consumers."""
+    queue_app.purge()
+    _ = dashboard_report_task()
+    queue_app.orchestrator.register_runner_heartbeats(
+        ["payments-runner"],
+        consumed_queues=("payments",),
+    )
+
+    with patch("pynmon.views.home.get_active_app", return_value=queue_app):
+        with patch(
+            "pynmon.views.home.get_all_apps",
+            return_value={queue_app.app_id: queue_app},
+        ):
+            client = TestClient(pynmon_app)
+            response = client.get("/")
+
+    assert response.status_code == 200
+    content = response.text
+    assert "Broker Queue Health" in content
+    assert "reports" in content
+    assert "not consumed" in content
+    assert "payments-runner" in content
+
+
+def test_home_displays_unknown_runner_queue_warning() -> None:
+    """Dashboard shows runners consuming old queues not configured for new routing."""
+    queue_app.purge()
+    queue_app.orchestrator.register_runner_heartbeats(
+        ["legacy-runner"],
+        consumed_queues=("undeclared",),
+    )
+
+    with patch("pynmon.views.home.get_active_app", return_value=queue_app):
+        with patch(
+            "pynmon.views.home.get_all_apps",
+            return_value={queue_app.app_id: queue_app},
+        ):
+            client = TestClient(pynmon_app)
+            response = client.get("/")
+
+    assert response.status_code == 200
+    content = response.text
+    assert "legacy" in content
+    assert "not configured" in content
+    assert "legacy-runner" in content
 
 
 def test_home_displays_multiple_apps() -> None:

@@ -216,6 +216,28 @@ def test_invocations_list_with_status_filter(app: "Pynenc") -> None:
         )
 
 
+def test_invocations_list_history_status_filter_matches_completed_invocation(
+    app: "Pynenc",
+) -> None:
+    """Histogram status links match a final invocation through its history."""
+    app.purge()
+    _, success_invocation, failed_invocation = _create_invocations_with_statuses(app)
+
+    setup_routes()
+
+    with patch("pynmon.views.invocations.get_pynenc_instance", return_value=app):
+        client = TestClient(pynmon_app)
+        response = client.get(
+            "/invocations/"
+            f"?inv_ids={success_invocation.invocation_id}"
+            "&status=pending&status_mode=history"
+        )
+
+    assert response.status_code == 200
+    assert str(success_invocation.invocation_id) in response.text
+    assert str(failed_invocation.invocation_id) not in response.text
+
+
 def test_invocations_list_with_task_filter(app: "Pynenc") -> None:
     """Test that invocations list actually filters by task."""
     # Clear any existing invocations
@@ -433,6 +455,17 @@ def test_invocations_timeline_scoped_workflow_list_renders_histories(
     assert "No invocations found for the selected time range." not in response.text
     assert str(root_invocation.invocation_id) in response.text
     assert str(workflow_member.invocation_id) in response.text
+    assert "data-histogram-start=" in response.text
+    assert "data-bucket-start=" in response.text
+    assert 'data-statuses="pending,running"' in response.text
+    assert 'stroke="#e9ecef"' in response.text
+    assert 'data-left-margin="320"' in response.text
+    assert 'data-histogram-left="320"' in response.text
+    assert 'data-histogram-right="2000"' in response.text
+    timeline_position = response.text.index('id="timeline-container"')
+    histogram_position = response.text.index("data-histogram-panel")
+    details_position = response.text.index('id="invocation-details-panel"')
+    assert timeline_position < histogram_position < details_position
 
 
 def test_invocations_timeline_explicit_scope_backfills_segment_without_points(

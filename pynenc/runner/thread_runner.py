@@ -149,7 +149,10 @@ class ThreadRunner(BaseRunner):
         Handles the execution and monitoring of task invocations in separate threads.
         """
         invocations = self.app.orchestrator.get_invocations_to_run(
-            self._reclaim_available_slots(), self.runner_context
+            self._reclaim_available_slots(),
+            self.runner_context,
+            queue_provider=self.app.runner.queue_names_for_retrieval,
+            on_queue_retrieved=self.app.runner.note_queue_retrieved,
         )
 
         for invocation in invocations:

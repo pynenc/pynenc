@@ -14,7 +14,7 @@ The primary goal of the `mem_unit_testing` scenario is to showcase unit testing 
 
 ### Requirements
 
-- Python 3.11 or higher.
+- Python 3.12 or higher.
 - Pynenc library installed.
 
 ### Project Files

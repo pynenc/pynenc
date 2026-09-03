@@ -5,6 +5,7 @@ This module provides a SQLite-based broker implementation that enables
 true cross-process coordination for testing process runners.
 """
 
+from collections.abc import Sequence
 from functools import cached_property
 from typing import TYPE_CHECKING
 
@@ -62,13 +63,15 @@ class SQLiteBroker(BaseBroker):
                 CREATE TABLE IF NOT EXISTS {self.tables.QUEUE} (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     invocation_id TEXT NOT NULL,
+                    queue_name TEXT NOT NULL,
+                    priority REAL NOT NULL,
                     created_at REAL NOT NULL DEFAULT (julianday('now'))
                 )
             """
             )
             conn.execute(
                 f"""
-                CREATE INDEX IF NOT EXISTS idx_{self.tables.QUEUE}_created_at ON {self.tables.QUEUE}(created_at)
+                CREATE INDEX IF NOT EXISTS idx_{self.tables.QUEUE}_route ON {self.tables.QUEUE}(queue_name, priority DESC, created_at ASC, id ASC)
             """
             )
             conn.commit()
@@ -80,48 +83,100 @@ class SQLiteBroker(BaseBroker):
             config_filepath=self.app.config_filepath,
         )
 
-    def send_message(self, invocation_id: "InvocationId") -> None:
+    def send_message(
+        self, invocation_id: "InvocationId", queue_name: str, priority: float
+    ) -> None:
         """Send a message (invocation ID) to the queue."""
         with sqlite_conn(self.sqlite_db_path) as conn:
             conn.execute(
-                f"INSERT INTO {self.tables.QUEUE} (invocation_id, created_at) VALUES (?, julianday('now'))",
-                (invocation_id,),
+                f"""
+                INSERT INTO {self.tables.QUEUE}
+                    (invocation_id, queue_name, priority, created_at)
+                VALUES (?, ?, ?, julianday('now'))
+                """,
+                (
+                    str(invocation_id),
+                    queue_name,
+                    priority,
+                ),
             )
             conn.commit()
 
-    def route_invocation(self, invocation_id: "InvocationId") -> None:
+    def _route_invocation(
+        self, invocation_id: "InvocationId", queue_name: str, priority: float
+    ) -> None:
         """Route a single invocation ID by sending it to the message queue."""
-        self.send_message(invocation_id)
+        self.send_message(invocation_id, queue_name, priority)
 
-    def route_invocations(self, invocation_ids: list["InvocationId"]) -> None:
-        """Route multiple invocation IDs by sending them to the message queue."""
-        for invocation_id in invocation_ids:
-            self.route_invocation(invocation_id)
+    def _route_invocations(
+        self,
+        invocation_ids: Sequence["InvocationId"],
+        queue_name: str,
+        priority: float,
+    ) -> None:
+        """Route multiple invocation IDs in one SQLite transaction."""
+        if not invocation_ids:
+            return
+        with sqlite_conn(self.sqlite_db_path) as conn:
+            conn.executemany(
+                f"""
+                INSERT INTO {self.tables.QUEUE}
+                    (invocation_id, queue_name, priority, created_at)
+                VALUES (?, ?, ?, julianday('now'))
+                """,
+                (
+                    (str(invocation_id), queue_name, priority)
+                    for invocation_id in invocation_ids
+                ),
+            )
+            conn.commit()
 
-    def retrieve_invocation(self) -> "InvocationId | None":
+    def retrieve_invocation(
+        self, queue_name: str | None = None
+    ) -> "InvocationId | None":
         """
         Atomically retrieve and remove a single invocation from the queue.
         Ensures that no two processes can retrieve the same invocation.
         :return: The next invocation ID in the queue, or None if empty.
         """
+        queue = self.conf.queues[0] if queue_name is None else queue_name
+        self._validate_queue_names((queue,))
         with sqlite_conn(self.sqlite_db_path) as conn:
             conn.execute("BEGIN IMMEDIATE")  # Lock for atomicity
             cursor = conn.execute(
-                f"SELECT id, invocation_id FROM {self.tables.QUEUE} ORDER BY created_at ASC LIMIT 1"
+                f"""
+                SELECT id, invocation_id
+                FROM {self.tables.QUEUE}
+                WHERE queue_name = ?
+                ORDER BY priority DESC, created_at ASC, id ASC
+                LIMIT 1
+                """,
+                (queue,),
             )
             row = cursor.fetchone()
             cursor.close()
-            if not row:
-                return None
-            message_id, invocation_id = row
-            conn.execute(f"DELETE FROM {self.tables.QUEUE} WHERE id = ?", (message_id,))
+            if row:
+                message_id, invocation_id = row
+                conn.execute(
+                    f"DELETE FROM {self.tables.QUEUE} WHERE id = ?", (message_id,)
+                )
+                conn.commit()
+                return InvocationId(invocation_id)
             conn.commit()
-            return InvocationId(invocation_id)
+            return None
 
-    def count_invocations(self) -> int:
+    def count_invocations(self, queue_names: Sequence[str] | None = None) -> int:
         """Count the number of invocations in the queue."""
+        query_params = self.conf.queues if queue_names is None else tuple(queue_names)
+        self._validate_queue_names(query_params)
+        if not query_params:
+            return 0
+        placeholders = ",".join("?" for _ in query_params)
         with sqlite_conn(self.sqlite_db_path) as conn:
-            cursor = conn.execute(f"SELECT COUNT(*) FROM {self.tables.QUEUE}")
+            cursor = conn.execute(
+                f"SELECT COUNT(*) FROM {self.tables.QUEUE} WHERE queue_name IN ({placeholders})",
+                query_params,
+            )
             return cursor.fetchone()[0]
 
     def purge(self) -> None:

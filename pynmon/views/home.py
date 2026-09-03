@@ -13,6 +13,7 @@ from pynmon.app import get_active_app, get_all_apps
 
 if TYPE_CHECKING:
     from pynenc.app import Pynenc
+    from pynenc.orchestrator.atomic_service import ActiveRunnerInfo
 
 logger = logging.getLogger("pynmon.views.home")
 router = APIRouter()
@@ -153,6 +154,43 @@ def _collect_event_summary(app: "Pynenc") -> dict[str, int]:
     return summary
 
 
+def _collect_queue_summary(
+    app: "Pynenc", active_runners: list["ActiveRunnerInfo"]
+) -> list[dict[str, object]]:
+    """Collect per-queue pending counts and active consumers."""
+    consumers_by_queue: dict[str, list[str]] = {
+        queue_name: [] for queue_name in app.broker.conf.queues
+    }
+    for runner in active_runners:
+        for queue_name in runner.consumed_queues:
+            consumers_by_queue.setdefault(queue_name, []).append(runner.runner_id)
+
+    queue_rows: list[dict[str, object]] = []
+    configured_queues = tuple(app.broker.conf.queues)
+    all_queue_names = tuple(dict.fromkeys((*configured_queues, *consumers_by_queue)))
+    for queue_name in all_queue_names:
+        pending = app.broker.count_invocations((queue_name,))
+        consumers = consumers_by_queue.get(queue_name, [])
+        is_configured = queue_name in configured_queues
+        if not is_configured:
+            status = "not_configured"
+        elif pending > 0 and not consumers:
+            status = "not_consumed"
+        else:
+            status = "consuming"
+        queue_rows.append(
+            {
+                "queue": queue_name,
+                "configured": is_configured,
+                "pending": pending,
+                "active_consumers": len(consumers),
+                "consumer_ids": consumers,
+                "status": status,
+            }
+        )
+    return queue_rows
+
+
 @router.get("/", response_class=HTMLResponse, tags=["Dashboard"])
 async def index(request: Request) -> HTMLResponse:
     """Dashboard home page."""
@@ -175,6 +213,9 @@ async def index(request: Request) -> HTMLResponse:
     # Lightweight counts: broker pending + active runners
     broker_pending = active_app.broker.count_invocations()
     active_runners = active_app.orchestrator.get_active_runners()
+    queue_summary = await asyncio.to_thread(
+        _collect_queue_summary, active_app, active_runners
+    )
 
     # Invocation status summary (offload to thread since it hits the orchestrator)
     invocation_summary = await asyncio.to_thread(
@@ -195,6 +236,7 @@ async def index(request: Request) -> HTMLResponse:
             "config_summary": config_summary,
             "broker_pending": broker_pending,
             "active_runner_count": len(active_runners),
+            "queue_summary": queue_summary,
             "invocation_summary": invocation_summary,
             "event_summary": event_summary,
             "registered_tasks": registered_tasks,

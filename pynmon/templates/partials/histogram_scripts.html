@@ -1,0 +1,80 @@
+<script>
+  (function () {
+    function ensureTooltip() {
+      let tooltip = document.getElementById("histogram-tooltip");
+      if (!tooltip) {
+        tooltip = document.createElement("div");
+        tooltip.id = "histogram-tooltip";
+        tooltip.className = "histogram-tooltip";
+        document.body.appendChild(tooltip);
+      }
+      return tooltip;
+    }
+
+    function setInvocationHighlight(bucket, enabled) {
+      const ids = (bucket.dataset.invocationIds || "")
+        .split(/\s+/)
+        .filter(Boolean);
+      ids.forEach(function (id) {
+        document
+          .querySelectorAll('[data-invocation-id="' + CSS.escape(id) + '"]')
+          .forEach(function (element) {
+            if (!element.closest(".histogram-bucket")) {
+              element.classList.toggle("invocation-highlight", enabled);
+            }
+          });
+      });
+    }
+
+    function bindHistogram(root) {
+      root.querySelectorAll(".histogram-bucket").forEach(function (bucket) {
+        if (bucket.dataset.histogramBound) return;
+        bucket.dataset.histogramBound = "1";
+        const tooltip = ensureTooltip();
+        bucket.addEventListener("mouseenter", function (event) {
+          tooltip.textContent = bucket.dataset.tooltip || "";
+          tooltip.style.display = "block";
+          tooltip.style.left =
+            Math.min(event.clientX + 12, window.innerWidth - 440) + "px";
+          tooltip.style.top = Math.max(8, event.clientY - 38) + "px";
+          setInvocationHighlight(bucket, true);
+        });
+        bucket.addEventListener("mousemove", function (event) {
+          tooltip.style.left =
+            Math.min(event.clientX + 12, window.innerWidth - 440) + "px";
+          tooltip.style.top = Math.max(8, event.clientY - 38) + "px";
+        });
+        bucket.addEventListener("mouseleave", function () {
+          tooltip.style.display = "none";
+          setInvocationHighlight(bucket, false);
+        });
+      });
+
+      root
+        .querySelectorAll(".histogram-status-toggle")
+        .forEach(function (toggle) {
+          if (toggle.dataset.histogramBound) return;
+          toggle.dataset.histogramBound = "1";
+          toggle.addEventListener("change", function () {
+            const panel = toggle.closest("[data-histogram-panel]");
+            const selected = Array.from(
+              panel.querySelectorAll(".histogram-status-toggle:checked")
+            ).map(function (input) {
+              return input.value;
+            });
+            const url = new URL(window.location.href);
+            url.searchParams.set("histogram_status", selected.join(","));
+            window.location.assign(url.toString());
+          });
+        });
+    }
+
+    function bindAll() {
+      document
+        .querySelectorAll("[data-histogram-panel]")
+        .forEach(bindHistogram);
+    }
+    document.addEventListener("DOMContentLoaded", bindAll);
+    document.body.addEventListener("htmx:afterSwap", bindAll);
+  })();
+</script>

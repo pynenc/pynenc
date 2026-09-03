@@ -84,6 +84,68 @@
   <span class="badge bg-primary">{{ workflow_runs|length }} Total Runs</span>
 </div>
 {% endif %} {% if workflow_runs %}
+<section class="mb-3" aria-labelledby="workflow-histograms-title">
+  <div class="d-flex justify-content-between align-items-end gap-3 mb-2">
+    <div>
+      <h6 id="workflow-histograms-title" class="section-header mb-1">
+        Run occupancy
+      </h6>
+      <span class="text-muted small"
+        >Compare task states over each selected workflow lifetime.</span
+      >
+    </div>
+    <form method="get" class="d-flex align-items-end gap-2">
+      <input
+        type="hidden"
+        name="histogram_status"
+        value="{{ histogram_status }}"
+      />
+      <label class="small">
+        Workflow runs
+        <select
+          name="histogram_workflow"
+          class="form-select form-select-sm"
+          multiple
+          size="3"
+          style="min-width: 240px"
+        >
+          {% for run in workflow_runs %}
+          <option
+            value="{{ run.workflow_id }}"
+            {%
+            if
+            run.histogram_selected
+            %}selected{%
+            endif
+            %}
+          >
+            {{ run.workflow_id|truncate(34, True) }}
+          </option>
+          {% endfor %}
+        </select>
+      </label>
+      <button type="submit" class="btn btn-sm btn-outline-primary">
+        Apply
+      </button>
+    </form>
+  </div>
+  {% if histogram_selection_capped %}
+  <div class="alert alert-warning py-1 px-2 small">
+    Only the first 10 selected runs are rendered.
+  </div>
+  {% endif %} {% for workflow_histogram in workflow_histograms %}
+  <div class="border rounded p-2 mb-2">
+    <div
+      class="small fw-semibold mb-1"
+      title="{{ workflow_histogram.workflow_id }}"
+    >
+      Run {{ workflow_histogram.short_id }}
+    </div>
+    {% set histogram = workflow_histogram.histogram %} {% include
+    "partials/histogram.html" %}
+  </div>
+  {% endfor %}
+</section>
 <div class="table-responsive">
   <table class="table table-hover pynmon-table">
     <thead>

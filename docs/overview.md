@@ -96,7 +96,7 @@ Four modes are available: `DISABLED`, `TASK` (one instance per task), `ARGUMENTS
 
 | Component             | Responsibility                                                                         | Implementations                                                                      |
 | --------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| **Broker**            | Routes invocation IDs through queues; prioritizes by dependency count                  | MemBroker, SQLiteBroker, + plugins                                                   |
+| **Broker**            | Routes invocation IDs through named queues and applies task priority                   | MemBroker, SQLiteBroker, + plugins                                                   |
 | **Orchestrator**      | Manages invocation lifecycle, concurrency control, blocking/waiting, runner heartbeats | MemOrchestrator, SQLiteOrchestrator, + plugins                                       |
 | **State Backend**     | Persists invocation data, results, exceptions, history, workflow state                 | MemStateBackend, SQLiteStateBackend, + plugins                                       |
 | **Runner**            | Retrieves invocations from broker and executes them                                    | ThreadRunner, MultiThreadRunner, ProcessRunner, PersistentProcessRunner, DummyRunner |

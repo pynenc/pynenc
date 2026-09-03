@@ -10,6 +10,7 @@
         <th>Created</th>
         <th>Last Heartbeat</th>
         <th>Age</th>
+        <th>Queues</th>
         <th>Atomic Service</th>
         <th>Actions</th>
       </tr>
@@ -105,6 +106,14 @@
             >{{ (runner_data.age.hours)|int }}h {{ (runner_data.age.minutes %
             60) }}m</span
           >
+          {% endif %}
+        </td>
+        <td>
+          {% if runner_data.runner_info.consumed_queues %} {% for queue in
+          runner_data.runner_info.consumed_queues %}
+          <span class="badge bg-light text-dark">{{ queue }}</span>
+          {% endfor %} {% else %}
+          <span class="text-muted">-</span>
           {% endif %}
         </td>
         <td>

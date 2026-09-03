@@ -5,10 +5,10 @@ import time
 import traceback
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Annotated, Any
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from pynenc.exceptions import InvocationNotFoundError
@@ -17,6 +17,8 @@ from pynenc.identifiers.task_id import TaskId
 from pynenc.invocation.status import InvocationStatus
 from pynmon.app import get_pynenc_instance, templates
 from pynmon.util.formatting import RunnerContextInfo
+from pynmon.util.histogram import HistogramCategory, parse_histogram_categories
+from pynmon.util.histogram_monitor import histogram_context
 from pynmon.util.time_ranges import parse_time_range, parse_resolution
 from pynmon.util.timeline_zoom import (
     calculate_timeline_zoom_window,
@@ -204,10 +206,15 @@ def _workflow_role_for_invocation(
 @router.get("/", response_class=HTMLResponse)
 async def invocations_list(
     request: Request,
-    status: str | None = None,
+    status: Annotated[list[str] | None, Query()] = None,
+    status_mode: str | None = None,
     task_id: str | None = None,
     workflow_id: str | None = None,
     workflow_type: str | None = None,
+    time_range: str | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    inv_ids: str | None = None,
     limit: int = 50,
     page: int = 1,
 ) -> HTMLResponse:
@@ -217,52 +224,123 @@ async def invocations_list(
     app = get_pynenc_instance()
     parsed_task_id = TaskId.from_key(task_id) if task_id else None
 
-    # Convert status to list format for consistent processing
-    status_list = None
-    if status:
-        status_list = [status]
+    status_list = [
+        item.strip().lower()
+        for value in status or []
+        for item in value.split(",")
+        if item.strip()
+    ]
+    status_mode_value = "history" if status_mode == "history" else "current"
+    history_status_mode = status_mode_value == "history"
 
     # Convert status strings to InvocationStatus enum values
-    statuses = None
-    if status_list:
-        statuses = [
-            InvocationStatus[s.upper()]
-            for s in status_list
-            if hasattr(InvocationStatus, s.upper())
-        ]
+    statuses = [
+        InvocationStatus[item.upper()]
+        for item in status_list
+        if item.upper() in InvocationStatus.__members__
+    ] or None
+    invalid_status_filter = bool(status_list) and statuses is None
 
     # Pre-load workflow-filtered invocation IDs if workflow filters active
     workflow_inv_ids = _load_workflow_invocation_ids(app, workflow_id, workflow_type)
 
-    total_count = await asyncio.to_thread(
-        app.orchestrator.count_invocations,
-        task_id=parsed_task_id,
-        statuses=statuses,
-    )
-    total_pages = max(1, (total_count + limit - 1) // limit)
-    page = min(page, total_pages)
-    offset = (page - 1) * limit
+    scoped_ids: set[str] | None = None
+    if inv_ids is not None:
+        scoped_ids = {item.strip() for item in inv_ids.split(",") if item.strip()}
+    if scoped_ids is None and time_range == "custom" and start_date and end_date:
+        range_start, range_end = parse_time_range(time_range, start_date, end_date)
+        time_ids = {
+            str(entry.invocation_id)
+            for batch in app.state_backend.iter_history_in_timerange(
+                range_start, range_end, batch_size=2000
+            )
+            for entry in batch
+        }
+        scoped_ids = time_ids
+    if scoped_ids is None and history_status_mode:
+        scoped_ids = {
+            str(invocation_id)
+            for task_id in app.tasks
+            for invocation_id in app.orchestrator.get_task_invocation_ids(task_id)
+        }
+    if invalid_status_filter:
+        scoped_ids = set()
+    if workflow_inv_ids is not None:
+        scoped_ids = (
+            workflow_inv_ids if scoped_ids is None else scoped_ids & workflow_inv_ids
+        )
+
+    if scoped_ids is None:
+        total_count = await asyncio.to_thread(
+            app.orchestrator.count_invocations,
+            task_id=parsed_task_id,
+            statuses=statuses,
+        )
+        total_pages = max(1, (total_count + limit - 1) // limit)
+        page = min(page, total_pages)
+        offset = (page - 1) * limit
+    else:
+        offset = 0
 
     # Offload heavy DB queries to a thread so the event loop stays free
     def _fetch_invocations() -> tuple[list["DistributedInvocation"], int]:
+        if scoped_ids is not None:
+            matches = []
+            for invocation_id in scoped_ids:
+                typed_id = InvocationId(invocation_id)
+                try:
+                    invocation = app.state_backend.get_invocation(typed_id)
+                    history = app.state_backend.get_history(typed_id)
+                    current_status = app.orchestrator.get_invocation_status(typed_id)
+                except Exception:
+                    continue
+                if parsed_task_id and invocation.task.task_id != parsed_task_id:
+                    continue
+                if statuses and (
+                    not any(item.status_record.status in statuses for item in history)
+                    if history_status_mode
+                    else current_status not in statuses
+                ):
+                    continue
+                matches.append(invocation)
+            matches.sort(
+                key=lambda invocation: max(
+                    (
+                        item.timestamp
+                        for item in app.state_backend.get_history(
+                            invocation.invocation_id
+                        )
+                    ),
+                    default=datetime.min.replace(tzinfo=UTC),
+                ),
+                reverse=True,
+            )
+            count = len(matches)
+            scoped_page = min(page, max(1, (count + limit - 1) // limit))
+            start = (scoped_page - 1) * limit
+            return matches[start : start + limit], count
         ids = app.orchestrator.get_invocation_ids_paginated(
             task_id=parsed_task_id,
             statuses=statuses,
             limit=limit,
             offset=offset,
         )
-        # Apply workflow filter if active
-        if workflow_inv_ids is not None:
-            ids = [i for i in ids if str(i) in workflow_inv_ids]
         invocations = [app.state_backend.get_invocation(inv_id) for inv_id in ids]
         return invocations, total_count
 
     all_invocations, total_count = await asyncio.to_thread(_fetch_invocations)
+    total_pages = max(1, (total_count + limit - 1) // limit)
+    page = min(page, total_pages)
     current_filters = {
         "status": status_list or [],
+        "status_mode": status_mode_value,
         "task_id": task_id or "",
         "workflow_id": workflow_id or "",
         "workflow_type": workflow_type or "",
+        "time_range": time_range or "",
+        "start_date": start_date or "",
+        "end_date": end_date or "",
+        "inv_ids": inv_ids or "",
         "limit": limit,
     }
     invocation_timeline_urls = {
@@ -307,6 +385,13 @@ async def invocations_list(
                 "has_prev": page > 1,
                 "has_next": page < total_pages,
             },
+            "pagination_query": urlencode(
+                [
+                    (key, value)
+                    for key, value in request.query_params.multi_items()
+                    if key != "page"
+                ]
+            ),
         },
     )
 
@@ -561,7 +646,7 @@ def _load_trigger_runs(req: TimelineRequest) -> "list":
     return runs
 
 
-def _build_svg_timeline(req: TimelineRequest) -> str:
+def _build_timeline_data(req: TimelineRequest) -> tuple["TimelineData", _IterState]:
     """
     Build SVG timeline from a TimelineRequest.
 
@@ -647,9 +732,39 @@ def _build_svg_timeline(req: TimelineRequest) -> str:
     data.event_markers = markers
     t_build = time.time()
     logger.info(f"SVG data built in {t_build - t_hist:.2f}s")
+    return data, state
+
+
+def _build_svg_timeline(req: TimelineRequest) -> str:
+    """Build only the timeline SVG, retained for focused callers and tests."""
+    data, _ = _build_timeline_data(req)
     svg = TimelineSVGRenderer().render(data)
-    logger.info(f"SVG rendered in {time.time() - t_build:.2f}s ({len(svg):,} chars)")
+    logger.info(f"SVG rendered ({len(svg):,} chars)")
     return svg
+
+
+def _build_timeline_visuals(
+    req: TimelineRequest,
+    selected_categories: frozenset[HistogramCategory],
+    common_params: dict[str, str],
+) -> tuple[str, dict]:
+    """Build the timeline and its aligned histogram from one collected scope."""
+    data, state = _build_timeline_data(req)
+    svg = TimelineSVGRenderer().render(data)
+    histogram = histogram_context(
+        req.app,
+        (str(invocation_id) for invocation_id in state.invocations_seen),
+        data.bounds.start_time,
+        data.bounds.end_time,
+        selected_categories,
+        common_params=common_params,
+        left_margin=data.config.left_margin,
+        right_margin=data.config.width
+        - data.config.left_margin
+        - data.config.content_width,
+    )
+    logger.info(f"SVG rendered ({len(svg):,} chars)")
+    return svg, histogram
 
 
 def _register_event_runner_contexts(
@@ -1120,6 +1235,7 @@ async def invocations_timeline(
     focus_event: str | None = None,
     selected: str | None = None,
     inv_ids: str | None = None,  # comma-separated invocation IDs to scope the view
+    histogram_status: str | None = None,
 ) -> HTMLResponse:
     """Display a visual SVG timeline of invocations with filters."""
     app = get_pynenc_instance()
@@ -1174,7 +1290,22 @@ async def invocations_timeline(
             show_system_tasks=show_system != "0",
             show_atomic_service=show_atomic_service != "0",
         )
-        svg_content = await asyncio.to_thread(_build_svg_timeline, req)
+        selected_categories = parse_histogram_categories(histogram_status)
+        histogram_params = {
+            key: value
+            for key, value in {
+                "task_id": task_id or "",
+                "workflow_id": workflow_id or "",
+                "workflow_type": workflow_type or "",
+            }.items()
+            if value
+        }
+        svg_content, histogram = await asyncio.to_thread(
+            _build_timeline_visuals,
+            req,
+            selected_categories,
+            histogram_params,
+        )
 
         # Get all available task IDs for the dropdown
         all_task_ids = list(app.tasks.keys())
@@ -1191,6 +1322,7 @@ async def invocations_timeline(
                 "title": "Invocations Timeline",
                 "app_id": app.app_id,
                 "svg_content": svg_content,
+                "histogram": histogram,
                 "all_task_ids": all_task_ids,
                 "all_workflow_types": all_workflow_types,
                 "start_datetime": start_datetime,
@@ -1210,6 +1342,7 @@ async def invocations_timeline(
                     "focus_event": focus_event or "",
                     "selected": selected or "",
                     "inv_ids": inv_ids or "",
+                    "histogram_status": histogram_status,
                     "scope_clear_url": _timeline_filter_clear_url(request, "inv_ids"),
                     "task_clear_url": _timeline_filter_clear_url(request, "task_id"),
                     "workflow_type_clear_url": _timeline_filter_clear_url(
@@ -1964,10 +2097,15 @@ async def rerun_invocation(invocation_id: "InvocationId") -> JSONResponse:
 @router.get("/table", response_class=HTMLResponse)
 async def invocations_table(
     request: Request,
-    status: str | None = None,
+    status: Annotated[list[str] | None, Query()] = None,
+    status_mode: str | None = None,
     task_id: str | None = None,
     workflow_id: str | None = None,
     workflow_type: str | None = None,
+    time_range: str | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    inv_ids: str | None = None,
     limit: int = 50,
 ) -> HTMLResponse:
     """Return just the invocations table for HTMX refresh."""
@@ -1977,22 +2115,75 @@ async def invocations_table(
     parsed_task_id = TaskId.from_key(task_id) if task_id else None
     workflow_inv_ids = _load_workflow_invocation_ids(app, workflow_id, workflow_type)
 
-    # Parse status parameter
-    status_list = None
-    if status:
-        status_list = [status]
+    status_list = [
+        item.strip().lower()
+        for value in status or []
+        for item in value.split(",")
+        if item.strip()
+    ]
+    statuses = [
+        InvocationStatus[item.upper()]
+        for item in status_list
+        if item.upper() in InvocationStatus.__members__
+    ] or None
+    history_status_mode = status_mode == "history"
 
-    # Convert to InvocationStatus objects
-    statuses = None
-    if status_list:
-        statuses = []
-        for status_str in status_list:
-            try:
-                statuses.append(InvocationStatus[status_str.upper()])
-            except KeyError:
-                continue
+    scoped_ids: set[str] | None = None
+    if inv_ids is not None:
+        scoped_ids = {item.strip() for item in inv_ids.split(",") if item.strip()}
+    if scoped_ids is None and time_range == "custom" and start_date and end_date:
+        range_start, range_end = parse_time_range(time_range, start_date, end_date)
+        scoped_ids = {
+            str(entry.invocation_id)
+            for batch in app.state_backend.iter_history_in_timerange(
+                range_start, range_end, batch_size=2000
+            )
+            for entry in batch
+        }
+    if scoped_ids is None and history_status_mode:
+        scoped_ids = {
+            str(invocation_id)
+            for task_key in app.tasks
+            for invocation_id in app.orchestrator.get_task_invocation_ids(task_key)
+        }
+    if workflow_inv_ids is not None:
+        scoped_ids = (
+            workflow_inv_ids if scoped_ids is None else scoped_ids & workflow_inv_ids
+        )
 
     def _fetch_table_invocations() -> list["DistributedInvocation"]:
+        if scoped_ids is not None:
+            matches = []
+            for invocation_id in scoped_ids:
+                typed_id = InvocationId(invocation_id)
+                try:
+                    invocation = app.state_backend.get_invocation(typed_id)
+                    history = app.state_backend.get_history(typed_id)
+                    current_status = app.orchestrator.get_invocation_status(typed_id)
+                except Exception:
+                    continue
+                if parsed_task_id and invocation.task.task_id != parsed_task_id:
+                    continue
+                if statuses and (
+                    not any(item.status_record.status in statuses for item in history)
+                    if history_status_mode
+                    else current_status not in statuses
+                ):
+                    continue
+                matches.append(invocation)
+            matches.sort(
+                key=lambda invocation: max(
+                    (
+                        item.timestamp
+                        for item in app.state_backend.get_history(
+                            invocation.invocation_id
+                        )
+                    ),
+                    default=datetime.min.replace(tzinfo=UTC),
+                ),
+                reverse=True,
+            )
+            return matches[:limit]
         result_ids: list[InvocationId] = []
         if parsed_task_id:
             if parsed_task_id in app.tasks:
@@ -2025,9 +2216,15 @@ async def invocations_table(
 
     all_invocations = await asyncio.to_thread(_fetch_table_invocations)
     current_filters = {
+        "status": status_list or [],
+        "status_mode": "history" if history_status_mode else "current",
         "task_id": task_id or "",
         "workflow_id": workflow_id or "",
         "workflow_type": workflow_type or "",
+        "time_range": time_range or "",
+        "start_date": start_date or "",
+        "end_date": end_date or "",
+        "inv_ids": inv_ids or "",
         "limit": limit,
     }
     invocation_timeline_urls = {

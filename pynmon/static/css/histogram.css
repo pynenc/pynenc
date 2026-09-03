@@ -1,0 +1,93 @@
+.histogram-panel {
+  border-top: 1px solid #e5e7eb;
+  margin-top: 0.35rem;
+  padding-top: 0.4rem;
+}
+
+.histogram-toolbar {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  min-height: 28px;
+}
+
+.histogram-title {
+  color: #495057;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.histogram-status-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.65rem;
+}
+
+.histogram-status-option {
+  align-items: center;
+  color: #495057;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 11px;
+  gap: 0.2rem;
+}
+
+.histogram-status-option input {
+  height: 13px;
+  margin: 0;
+  width: 13px;
+}
+
+.histogram-svg-container {
+  line-height: 0;
+  overflow-x: auto;
+  width: 100%;
+}
+
+.histogram-svg-container svg {
+  display: block;
+  min-width: 0;
+}
+
+.histogram-bucket {
+  cursor: pointer;
+  outline: none;
+}
+
+.histogram-bucket rect {
+  opacity: 0.86;
+}
+
+.histogram-bucket:hover rect,
+.histogram-bucket:focus rect,
+.histogram-bucket.invocation-highlight rect {
+  filter: brightness(0.9);
+  opacity: 1;
+  stroke: #212529;
+  stroke-width: 0.8px;
+}
+
+.histogram-empty {
+  color: #6c757d;
+  font-size: 11px;
+  min-height: 44px;
+  padding: 0.8rem 0.25rem;
+}
+
+.histogram-panel-compact .histogram-toolbar {
+  min-height: 24px;
+}
+
+.histogram-tooltip {
+  background: rgba(33, 37, 41, 0.96);
+  border-radius: 4px;
+  color: #fff;
+  display: none;
+  font-size: 11px;
+  max-width: 430px;
+  padding: 0.35rem 0.5rem;
+  pointer-events: none;
+  position: fixed;
+  z-index: 1090;
+}

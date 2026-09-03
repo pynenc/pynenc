@@ -16,7 +16,7 @@ This scenario illustrates the simplest use case of Pynenc, where tasks are defin
 
 ### Requirements
 
-- Python 3.11 or higher.
+- Python 3.12 or higher.
 - Pynenc library installed.
 
 ### Project Files

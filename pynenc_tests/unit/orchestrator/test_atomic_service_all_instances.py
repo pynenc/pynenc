@@ -89,13 +89,18 @@ def create_active_runner_info(
 
 def test_decide_atomic_service_claim_should_return_true_when_single_runner() -> None:
     """A single eligible runner is always assigned its own slot."""
-    runner = create_active_runner_info("runner-1")
+    current_time = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
+    runner = atomic_service.ActiveRunnerInfo(
+        runner_id="runner-1",
+        creation_time=current_time,
+        last_heartbeat=current_time,
+    )
     active_runners = [runner]
 
     result = atomic_service.decide_atomic_service_claim(
         runner_id=runner.runner_id,
         active_runners=active_runners,
-        current_time=time(),
+        current_time=current_time.timestamp(),
         service_interval_minutes=5.0,
         spread_margin_minutes=1.0,
         membership_stabilization_seconds=0.0,

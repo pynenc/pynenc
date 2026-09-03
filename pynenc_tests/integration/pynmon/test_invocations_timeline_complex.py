@@ -66,6 +66,7 @@ def child_task(family_id: str) -> None:
 
 
 @pytest.mark.slow
+@pytest.mark.timeout(90)
 def test_complex_timeline(pynmon_client: "PynmonClient") -> None:
     """Test The complex timeline."""
     # Purge any existing data

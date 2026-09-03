@@ -114,6 +114,7 @@ class ActiveRunnerInfo(NamedTuple):
     creation_time: datetime
     last_heartbeat: datetime
     allow_to_run_atomic_service: bool = False
+    consumed_queues: tuple[str, ...] = ()
 
 
 class AtomicServiceExecutionStatus(StrEnum):

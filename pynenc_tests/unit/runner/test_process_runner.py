@@ -82,9 +82,11 @@ def test_on_stop(
         InvocationStatusRecord(status=InvocationStatus.RUNNING)
     )
 
-    runner._on_stop()
+    with patch.object(runner.app.orchestrator, "reroute_invocations") as mock_reroute:
+        runner._on_stop()
 
     mock_process.kill.assert_called_once()
+    mock_reroute.assert_called_once()
 
 
 def test_runner_loop_iteration(

@@ -37,6 +37,10 @@
       href="/static/css/invocations.css?v={{ STATIC_ASSET_VERSION }}"
       rel="stylesheet"
     />
+    <link
+      href="/static/css/histogram.css?v={{ STATIC_ASSET_VERSION }}"
+      rel="stylesheet"
+    />
     {% block extra_css %}{% endblock %}
 
     <!-- HTMX for dynamic updates -->
@@ -349,6 +353,7 @@
     </script>
 
     <!-- Extra JavaScript block for child templates -->
-    {% block extra_js %}{% endblock %}
+    {% include "partials/histogram_scripts.html" %} {% block extra_js %}{%
+    endblock %}
   </body>
 </html>

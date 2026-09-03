@@ -7,7 +7,8 @@ SQLite provides ACID transactions and handles concurrent access automatically.
 """
 
 import sqlite3
-from collections.abc import Iterator
+import json
+from collections.abc import Iterator, Sequence
 from datetime import UTC, datetime, timedelta
 from functools import cached_property
 from time import time
@@ -230,7 +231,8 @@ class SQLiteOrchestrator(BaseOrchestrator):
                     runner_id TEXT PRIMARY KEY,
                     creation_timestamp REAL NOT NULL,
                     allow_to_run_atomic_service INTEGER NOT NULL,
-                    last_heartbeat REAL NOT NULL
+                    last_heartbeat REAL NOT NULL,
+                    consumed_queues TEXT NOT NULL DEFAULT '[]'
                 )
             """
             )
@@ -676,28 +678,35 @@ class SQLiteOrchestrator(BaseOrchestrator):
             return invocation_ids
 
     def register_runner_heartbeats(
-        self, runner_ids: list[str], can_run_atomic_service: bool = False
+        self,
+        runner_ids: list[str],
+        can_run_atomic_service: bool = False,
+        consumed_queues: Sequence[str] | None = None,
     ) -> None:
         """Register or update heartbeat timestamps for one or more runners."""
         if not runner_ids:
             return
         current_time = time()
+        queues_json = json.dumps(tuple(consumed_queues or ()))
         with sqlite_conn(self.sqlite_db_path) as conn:
             for runner_id in runner_ids:
                 conn.execute(
                     f"""
                     INSERT INTO {self.tables.RUNNER_HEARTBEATS} (
-                        runner_id, creation_timestamp, last_heartbeat, allow_to_run_atomic_service
-                    ) VALUES (?, ?, ?, ?)
+                        runner_id, creation_timestamp, last_heartbeat,
+                        allow_to_run_atomic_service, consumed_queues
+                    ) VALUES (?, ?, ?, ?, ?)
                     ON CONFLICT(runner_id) DO UPDATE SET
                         last_heartbeat = excluded.last_heartbeat,
-                        allow_to_run_atomic_service = excluded.allow_to_run_atomic_service
+                        allow_to_run_atomic_service = excluded.allow_to_run_atomic_service,
+                        consumed_queues = excluded.consumed_queues
                     """,
                     (
                         runner_id,
                         current_time,
                         current_time,
                         int(can_run_atomic_service),
+                        queues_json,
                     ),
                 )
             conn.commit()
@@ -713,7 +722,7 @@ class SQLiteOrchestrator(BaseOrchestrator):
             cursor = conn.execute(
                 f"""
                 SELECT runner_id, creation_timestamp, last_heartbeat,
-                       allow_to_run_atomic_service
+                       allow_to_run_atomic_service, consumed_queues
                 FROM {self.tables.RUNNER_HEARTBEATS}
                 WHERE last_heartbeat >= ?
                 AND (? IS NULL OR allow_to_run_atomic_service = ?)
@@ -730,15 +739,18 @@ class SQLiteOrchestrator(BaseOrchestrator):
                 creation_ts,
                 last_hb,
                 allow_to_run_atomic_service,
+                consumed_queues,
             ) in cursor_rows:
                 creation_time = datetime.fromtimestamp(creation_ts, tz=UTC)
                 allow = bool(allow_to_run_atomic_service)
+                queues = tuple(json.loads(consumed_queues or "[]"))
                 active_runners.append(
                     ActiveRunnerInfo(
                         runner_id=runner_id,
                         creation_time=creation_time,
                         last_heartbeat=datetime.fromtimestamp(last_hb, tz=UTC),
                         allow_to_run_atomic_service=allow,
+                        consumed_queues=queues,
                     )
                 )
 

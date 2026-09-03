@@ -70,7 +70,14 @@ def persistent_process_main(
     invocation_id: str | None = None
     try:
         while not stop_event.is_set():
-            invocations = list(app.orchestrator.get_invocations_to_run(1, runner_ctx))
+            invocations = list(
+                app.orchestrator.get_invocations_to_run(
+                    1,
+                    runner_ctx,
+                    queue_provider=app.runner.queue_names_for_retrieval,
+                    on_queue_retrieved=app.runner.note_queue_retrieved,
+                )
+            )
             if not invocations:
                 continue
             invocation = invocations[0]

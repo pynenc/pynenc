@@ -85,6 +85,14 @@
           el.classList.toggle("invocation-highlight", on);
         });
     }
+    // Histogram buckets carry the invocation scope as a whitespace-delimited
+    // data attribute because one bucket can contain many invocations.
+    document.querySelectorAll('.histogram-bucket').forEach((bucket) => {
+      const ids = splitIds(bucket.getAttribute('data-invocation-ids'));
+      if (ids.includes(String(invocationId))) {
+        bucket.classList.toggle('invocation-highlight', on);
+      }
+    });
     // Family-tree SVG (uses data-inv-id)
     const ftBody = document.getElementById("ft-float-body");
     if (ftBody) {
