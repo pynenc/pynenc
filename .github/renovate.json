@@ -1,0 +1,10 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "schedule:monthly"],
+  "minimumReleaseAge": "15 days",
+  "internalChecksFilter": "strict",
+  "prConcurrentLimit": 10,
+  "commitMessagePrefix": "chore(deps):",
+  "labels": ["dependencies", "chore"],
+  "enabledManagers": ["pep621"]
+}
