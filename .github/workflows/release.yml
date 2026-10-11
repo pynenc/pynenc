@@ -15,17 +15,17 @@ jobs:
       tag: ${{ steps.check-version.outputs.tag }}
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 2
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v7
         with:
           version: "latest"
 
@@ -37,7 +37,7 @@ jobs:
       - name: Detect and tag new version
         id: check-version
         if: steps.check-parent-commit.outputs.sha
-        uses: salsify/action-detect-and-tag-new-version@v2.0.1
+        uses: salsify/action-detect-and-tag-new-version@v2.0.3
         with:
           tag-template: "v{VERSION}"
           version-command: |
@@ -66,15 +66,15 @@ jobs:
     needs: check-version
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v7
 
       - name: Apply dev version
         if: needs.check-version.outputs.is_release == 'false'
@@ -88,7 +88,7 @@ jobs:
         run: uv build
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: dist
           path: dist/
@@ -105,13 +105,13 @@ jobs:
       id-token: write # For trusted publishing
     steps:
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: dist
           path: dist/
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v7
 
       - name: Publish package
         run: uv publish
@@ -136,13 +136,13 @@ jobs:
       url: https://test.pypi.org/project/pynenc/${{ needs.check-version.outputs.version }}/
     steps:
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: dist
           path: dist/
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v7
 
       - name: Publish package
         run: uv publish --publish-url https://test.pypi.org/legacy/
@@ -167,7 +167,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Publish release notes
-        uses: release-drafter/release-drafter@v5.23.0
+        uses: release-drafter/release-drafter@v7.7.0
         with:
           publish: true
           tag: ${{ needs.check-version.outputs.tag }}
