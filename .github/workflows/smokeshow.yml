@@ -14,14 +14,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
       - run: pip install smokeshow
 
       - name: Download coverage artifact
-        uses: dawidd6/action-download-artifact@v4
+        uses: dawidd6/action-download-artifact@v25
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           workflow: combined_tests.yml
