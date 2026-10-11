@@ -1,12 +1,36 @@
+# Version updates wait 15 days after a release (cooldown); security updates
+# are not delayed. Minor and patch bumps come grouped in one pull request per
+# ecosystem; major bumps come one per pull request.
 version: 2
 updates:
-  - package-ecosystem: "pip"
+  - package-ecosystem: "uv"
     directory: "/"
     schedule:
       interval: "monthly"
+    cooldown:
+      default-days: 15
     open-pull-requests-limit: 10
+    groups:
+      python-dependencies:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
     commit-message:
       prefix: "chore(deps)"
     labels:
       - "dependencies"
-      - "chore"
+      - "python"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    cooldown:
+      default-days: 15
+    groups:
+      github-actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "ci"
+    labels:
+      - "ci"
+      - "skip-changelog"
