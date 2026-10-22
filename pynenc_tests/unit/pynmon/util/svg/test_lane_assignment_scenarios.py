@@ -217,7 +217,7 @@ def test_real_external_runner_scenario(base_time: datetime) -> None:
 
     Based on actual data showing points spread over ~1.1 seconds.
     """
-    external_runner = "ExternalRunner@Krossovers-MacBook-Pro.local-1504"
+    external_runner = "ExternalRunner@runner-host.local-1504"
 
     # Times from actual data (millisecond precision)
     times_ms = [
@@ -263,7 +263,7 @@ def test_real_thread_runner_scenario(base_time: datetime) -> None:
 
     Some segments overlap (parallel execution), others are sequential.
     """
-    thread_runner = "ThreadRunner@Krossovers-MacBook-Pro.local-1504"
+    thread_runner = "ThreadRunner@runner-host.local-1504"
 
     # Simplified: 3 overlapping segments, 1 sequential
     elements = [

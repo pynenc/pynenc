@@ -160,13 +160,13 @@ def create_entry(ts: datetime, status: str) -> RunnerEntry:
 @pytest.fixture
 def real_data_external_runner() -> str:
     """Real data external runner ID."""
-    return "ExternalRunner@Krossovers-MacBook-Pro.local-1504"
+    return "ExternalRunner@runner-host.local-1504"
 
 
 @pytest.fixture
 def real_data_thread_runner() -> str:
     """Real data thread runner ID."""
-    return "ThreadRunner@Krossovers-MacBook-Pro.local-1504"
+    return "ThreadRunner@runner-host.local-1504"
 
 
 @pytest.fixture
